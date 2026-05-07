@@ -36,20 +36,28 @@ async def test_create_document(client: AsyncClient, owner_id: uuid.UUID):
 
 @pytest.mark.asyncio
 async def test_get_document(client: AsyncClient, owner_id: uuid.UUID):
+    token = _make_jwt(str(owner_id))
     create_resp = await client.post(
         "/api/v1/documents/",
         json={"title": "Doc", "content": "Body", "owner_id": str(owner_id)},
     )
     doc_id = create_resp.json()["id"]
 
-    resp = await client.get(f"/api/v1/documents/{doc_id}")
+    resp = await client.get(
+        f"/api/v1/documents/{doc_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert resp.status_code == 200
     assert resp.json()["id"] == doc_id
 
 
 @pytest.mark.asyncio
 async def test_get_document_not_found(client: AsyncClient):
-    resp = await client.get(f"/api/v1/documents/{uuid.uuid4()}")
+    token = _make_jwt(str(uuid.uuid4()))
+    resp = await client.get(
+        f"/api/v1/documents/{uuid.uuid4()}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert resp.status_code == 404
 
 
@@ -132,7 +140,10 @@ async def test_delete_document(client: AsyncClient, owner_id: uuid.UUID):
     resp = await client.delete(f"/api/v1/documents/{doc_id}")
     assert resp.status_code == 204
 
-    resp = await client.get(f"/api/v1/documents/{doc_id}")
+    resp = await client.get(
+        f"/api/v1/documents/{doc_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert resp.status_code == 404
 
 
@@ -149,7 +160,10 @@ async def test_document_versions(client: AsyncClient, owner_id: uuid.UUID):
         json={"title": "Versioned", "content": "v2"},
     )
 
-    resp = await client.get(f"/api/v1/documents/{doc_id}/versions")
+    resp = await client.get(
+        f"/api/v1/documents/{doc_id}/versions",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert resp.status_code == 200
     versions = resp.json()
     assert len(versions) == 2
@@ -170,7 +184,10 @@ async def test_restore_version(client: AsyncClient, owner_id: uuid.UUID):
         json={"title": "Changed", "content": "Changed body"},
     )
 
-    versions_resp = await client.get(f"/api/v1/documents/{doc_id}/versions")
+    versions_resp = await client.get(
+        f"/api/v1/documents/{doc_id}/versions",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     v1_id = versions_resp.json()[-1]["id"]  # first version
 
     resp = await client.post(f"/api/v1/documents/{doc_id}/versions/{v1_id}/restore")
