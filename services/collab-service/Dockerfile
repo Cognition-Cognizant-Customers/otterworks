@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.json ./
@@ -6,7 +6,7 @@ RUN npm ci
 COPY src ./src
 RUN npm run build
 
-FROM node:20-alpine
+FROM node:22-alpine
 RUN apk --no-cache add curl
 WORKDIR /app
 COPY --from=builder /app/dist ./dist
