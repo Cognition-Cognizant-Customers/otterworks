@@ -36,6 +36,11 @@ initialize: |
   yes | $SDKM --licenses >/dev/null
   $SDKM "platform-tools" "emulator" "platforms;android-36" "build-tools;36.0.0" "system-images;android-36;google_apis;x86_64"
   echo "no" | $ANDROID_HOME/cmdline-tools/latest/bin/avdmanager create avd -n otter -k "system-images;android-36;google_apis;x86_64" -d pixel_6 --force
+  # Shrink the display (720x1600 @320dpi, no device frame) to conserve GPU/RAM in the microVM.
+  AVD_CFG=$HOME/.android/avd/otter.avd/config.ini
+  sed -i -E 's|^hw.lcd.width *=.*|hw.lcd.width = 720|; s|^hw.lcd.height *=.*|hw.lcd.height = 1600|; s|^hw.lcd.density *=.*|hw.lcd.density = 320|; s|^showDeviceFrame *=.*|showDeviceFrame = no|' "$AVD_CFG"
+  grep -q '^skin.name' "$AVD_CFG" || echo 'skin.name = 720x1600' >> "$AVD_CFG"
+  grep -q '^skin.path' "$AVD_CFG" || echo 'skin.path = _no_skin' >> "$AVD_CFG"
   echo "ANDROID_HOME=$HOME/Android/Sdk" >> $ENVRC
   echo "ANDROID_SDK_ROOT=$HOME/Android/Sdk" >> $ENVRC
   echo 'PATH=$HOME/Android/Sdk/platform-tools:$HOME/Android/Sdk/emulator:$HOME/Android/Sdk/cmdline-tools/latest/bin:$PATH' >> $ENVRC
@@ -50,6 +55,42 @@ initialize: |
   (cd /tmp/gradle-wrapper-gen && $HOME/gradle-dist/gradle-8.14.3/bin/gradle wrapper --gradle-version 8.14.3)
   cp /tmp/gradle-wrapper-gen/gradle/wrapper/gradle-wrapper.jar \
      frontend/client-app/mobile/android/gradle/wrapper/gradle-wrapper.jar
+
+  # Warm the Gradle build cache once (persists on the microVM filesystem) so runtime
+  # `make dev-android` builds are incremental. Needs the synced Capacitor Android project,
+  # which requires node deps + the web bundle first.
+  export ANDROID_HOME=$HOME/Android/Sdk ANDROID_SDK_ROOT=$HOME/Android/Sdk
+  export PATH=$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+  # JAVA_HOME is only written to $ENVRC (for later sessions), not exported in this shell,
+  # so set it here for the assembleDebug compile below (Capacitor 8 / AGP need JDK 21).
+  export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+  nvm use default
+  # Collab URL is irrelevant here (only affects the JS bundle at runtime); the runtime
+  # `make dev-android` rebuilds with the correct port. We just need a synced project.
+  (cd frontend/client-app && npm install && npm install --no-save @rolldown/binding-linux-x64-gnu@1.1.5 \
+     && npm run build && npx cap sync android)
+  (cd frontend/client-app/mobile/android && ./gradlew --no-daemon assembleDebug)
+
+  # Boot the emulator once headlessly, disable animations, and save a "clean" snapshot so
+  # runtime launches resume from saved state (with a window) instead of cold-booting.
+  # Best-effort: this is only a speed optimization, so if the emulator can't boot at build
+  # time (e.g. no /dev/kvm) we warn and continue rather than failing the whole build; runtime
+  # then just cold-boots. The wait is still bounded so it never hangs the build.
+  sudo chmod 666 /dev/kvm || true
+  emulator -avd otter -no-window -no-audio -no-snapshot -gpu swiftshader_indirect &
+  EMU_PID=$!
+  if timeout 120 adb wait-for-device \
+     && timeout 240 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 3; done'; then
+    adb shell settings put global window_animation_scale 0 || true
+    adb shell settings put global transition_animation_scale 0 || true
+    adb shell settings put global animator_duration_scale 0 || true
+    adb emu avd snapshot save clean || true
+    adb emu kill || true
+  else
+    echo "WARN: emulator did not boot at build time; skipping snapshot warm-up (runtime will cold-boot)."
+  fi
+  kill $EMU_PID 2>/dev/null || true
+  wait $EMU_PID 2>/dev/null || true
 
   # --- Seed the golden "RetailCo enterprise drive" dataset --------------------
   # Bring the whole stack up transiently and populate a deep, browsable enterprise
@@ -86,6 +127,15 @@ initialize: |
     --gateway http://localhost:8080 \
     --email drive@retailco.example --password 'DriveDemo!2024' \
     --departments all --scale 1.0 --workers 6 --register
+
+  # Seed admin-service's own tables. Its Dockerfile CMD runs `rails db:migrate` but never
+  # `rails db:seed`, so without this every admin-dashboard screen (Users, Feature Flags,
+  # Audit Logs, Analytics) renders empty while the web app is data-rich. db/seeds.rb is
+  # idempotent (find_or_create_by!) and lands in the postgres volume baked into the snapshot.
+  # Best-effort: a seed failure must not sink the whole build.
+  for i in $(seq 1 90); do [ "$(docker inspect -f '{{.State.Health.Status}}' otterworks-admin-service 2>/dev/null)" = healthy ] && break; sleep 2; done
+  docker exec otterworks-admin-service bundle exec rails db:seed || echo "WARN: admin-service db:seed failed; admin dashboard will show empty tables."
+
   # Bake seeded S3 objects into the localstack volume (LocalStack community does not
   # persist S3); localstack-restore.sh re-hydrates these buckets on the next boot.
   docker exec otterworks-localstack sh -lc \
@@ -94,6 +144,7 @@ initialize: |
      done'
   # Remove containers but KEEP the seeded volumes so they are captured in the snapshot.
   $COMPOSE down
+# Install project dependencies (runs during builds, surfaced to agent at session start).
 maintenance: |
   export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"; nvm use default >/dev/null
   # Include the linux rolldown native binding (npm optional-deps bug omits it -> Vite build fails)
@@ -114,12 +165,39 @@ knowledge:
         /tmp/seed/bin/python testdata/generated/retail-drive/generate_drive.py \
           --gateway http://localhost:8080 --email drive@retailco.example \
           --password 'DriveDemo!2024' --departments all --scale 1.0 --register
+  - name: run admin dashboard
+    contents: |
+      `make up` already serves the Angular admin dashboard at http://localhost:4200 from the
+      prebuilt admin-dashboard nginx container - no dev server needed. nginx proxies /api to
+      api-gateway:8080, which fronts admin-service (Rails, :8089).
+      Login is a CLIENT-SIDE MOCK (frontend/admin-dashboard/src/app/core/services/auth.service.ts):
+      any email + any non-empty password returns a hardcoded admin JWT. It does NOT call
+      auth-service, so the RetailCo web-app credentials are not required here.
+      Admin data (Users, Feature Flags, Audit Logs, Analytics) comes from admin-service's own
+      tables, seeded at init via `rails db:seed`. To re-seed a running stack:
+        docker exec otterworks-admin-service bundle exec rails db:seed
+      Note: `make dev-admin` (HMR) is NOT pre-warmed - frontend/admin-dashboard/node_modules is
+      absent, so the first run pays a full Angular `npm ci`.
   - name: run android app
     contents: |
+      # Free resources before launching the emulator (virtualized microVM).
+      pkill -f chrome 2>/dev/null || true
+      sudo systemctl stop snapd unattended-upgrades cron 2>/dev/null || true
+      sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null
       sudo chmod 666 /dev/kvm    # /dev/kvm perms reset each boot
-      emulator -avd otter -no-snapshot -no-audio -no-window -gpu swiftshader_indirect &
+      # Resume the "clean" snapshot baked in at init (visible window; faster than cold boot).
+      # If the snapshot is missing it just cold-boots; -no-snapshot-save keeps it pristine.
+      DISPLAY=:0 emulator -avd otter -no-audio -gpu swiftshader_indirect -snapshot clean -no-snapshot-save &
       adb wait-for-device
+      # Use Node 22 (Vite 8 needs >=20.19; the system node is 20.18 and fails the build).
+      export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"; nvm use default >/dev/null
       make dev-android   # builds (with the correct collab port) + cap sync + cap run on the emulator
+      # `make dev-android` passes --target $ANDROID_TARGET (default emulator-5554) so cap run is
+      # non-interactive; a lone emulator is otherwise enumerated twice and cap stalls on a
+      # "Please choose a target device" prompt under a non-TTY shell. Override for a real device:
+      #   make dev-android ANDROID_TARGET=<device-id>   (list with: adb devices)
+      # A "Nested virtualization" warning dialog appears on first boot - dismiss it with OK via
+      # computer use, otherwise it can block GUI interaction with the app.
       # App calls the gateway at http://10.0.2.2:8080/api/v1 (debug build allows cleartext to 10.0.2.2).
   - name: run electron desktop app
     contents: |
@@ -131,3 +209,95 @@ knowledge:
   - name: lint
     contents: |
       make lint
+---
+runs-on: windows
+# Windows: OtterWorks Electron desktop app (frontend/client-app/desktop).
+# Node is preinstalled on the Windows image (Vite 8 needs Node >=20.19; image ships 20.19+).
+# Pre-installing deps, pre-building the web bundle + Electron shell, and pre-downloading the
+# Electron binary here lets a session boot the app immediately instead of paying ~3-4 min on
+# first launch.
+#
+# IMPORTANT: run npm/vite via  cmd /c "(...) 2>&1".  The snapshot build runner turns any text a
+# child process writes to stderr (npm's EBADENGINE/deprecation warnings, vite's chunk-size notice)
+# into a terminating NativeCommandError and fails the build -- even though the commands exit 0.
+# cmd's OS-level 2>&1 merges child stderr into stdout so nothing reaches PowerShell's error
+# stream; $LASTEXITCODE still reflects genuine failures, which the explicit checks surface.
+initialize: |
+  $ErrorActionPreference = 'Continue'
+  $env:npm_config_audit = 'false'; $env:npm_config_fund = 'false'; $env:npm_config_loglevel = 'error'
+
+  # Prefer Node >=22. Vite 8 is happy on the image's 20.19, but electron@43 and its toolchain
+  # (@electron/get, @electron/rebuild, node-abi) declare engines >=22.12 and spray EBADENGINE
+  # warnings -- today only warnings, but a latent breakage. Best-effort and fully guarded: if no
+  # package manager is present the existing Node is kept and the build continues unchanged.
+  try {
+    $major = [int]((((& node -v) -replace '^v','') -split '\.')[0])
+    if ($major -lt 22) {
+      if (Get-Command winget -ErrorAction SilentlyContinue) {
+        cmd /c "winget install --id OpenJS.NodeJS.LTS -e --silent --accept-source-agreements --accept-package-agreements 2>&1"
+      } elseif (Get-Command choco -ErrorAction SilentlyContinue) {
+        cmd /c "choco install nodejs-lts -y --no-progress 2>&1"
+      } else {
+        Write-Output "No winget/choco available; keeping Node $major (EBADENGINE warnings expected)."
+      }
+    }
+  } catch { Write-Output "Node upgrade skipped: $_" }
+
+  # Web client: deps + production bundle. The Electron shell serves frontend/client-app/dist.
+  cmd /c "(cd frontend\client-app && npm ci && npm run build) 2>&1"
+  if ($LASTEXITCODE -ne 0) { throw "client-app setup failed (exit $LASTEXITCODE)" }
+
+  # Electron desktop shell: deps + TypeScript build (src -> build).
+  cmd /c "(cd frontend\client-app\desktop && npm ci && npm run build) 2>&1"
+  if ($LASTEXITCODE -ne 0) { throw "desktop setup failed (exit $LASTEXITCODE)" }
+
+  # npm ci does NOT fetch the Electron binary (its download is deferred to first launch), so
+  # pre-download it via Electron's own installer to keep the snapshot boot fast.
+  cmd /c "(cd frontend\client-app\desktop && node node_modules\electron\install.js) 2>&1"
+  if ($LASTEXITCODE -ne 0) { throw "electron binary download failed (exit $LASTEXITCODE)" }
+maintenance: |
+  # Incremental dependency refresh. Do NOT use npm ci here: at runtime a booted electron.exe
+  # locks node_modules\electron\dist and the wipe-and-reinstall fails with EPERM.
+  $ErrorActionPreference = 'Continue'
+  $env:npm_config_audit = 'false'; $env:npm_config_fund = 'false'; $env:npm_config_loglevel = 'error'
+  cmd /c "(cd frontend\client-app && npm install) 2>&1"
+  if ($LASTEXITCODE -ne 0) { throw "client-app npm install failed (exit $LASTEXITCODE)" }
+  cmd /c "(cd frontend\client-app\desktop && npm install) 2>&1"
+  if ($LASTEXITCODE -ne 0) { throw "desktop npm install failed (exit $LASTEXITCODE)" }
+
+  # Re-assert the build artifacts the launch step depends on. `initialize` builds these too, but
+  # sessions have started with dist/ and desktop/build/ (and the electron binary) missing, which
+  # forces a ~4 min manual rebuild. Rebuilding here on every snapshot build makes the artifacts
+  # far more likely to be captured, and is a no-op cost when they are already current.
+  if (-not (Test-Path frontend\client-app\dist\index.html)) {
+    cmd /c "(cd frontend\client-app && npm run build) 2>&1"
+    if ($LASTEXITCODE -ne 0) { throw "client-app build failed (exit $LASTEXITCODE)" }
+  }
+  if (-not (Test-Path frontend\client-app\desktop\build\main.js)) {
+    cmd /c "(cd frontend\client-app\desktop && npm run build) 2>&1"
+    if ($LASTEXITCODE -ne 0) { throw "desktop build failed (exit $LASTEXITCODE)" }
+  }
+  if (-not (Test-Path frontend\client-app\desktop\node_modules\electron\dist\electron.exe)) {
+    cmd /c "(cd frontend\client-app\desktop && node node_modules\electron\install.js) 2>&1"
+    if ($LASTEXITCODE -ne 0) { throw "electron binary download failed (exit $LASTEXITCODE)" }
+  }
+knowledge:
+  - name: run electron desktop app (windows)
+    contents: |
+      # Boots the prebuilt shell; embedded server on :34117 proxies /api/v1 to the gateway.
+      cd frontend\client-app\desktop; node scripts/launch.js
+      # Quick non-interactive verification (loads the app, exits): node scripts/launch.js --smoke-test
+      # If web sources changed, rebuild the bundle first: (cd ..; npm run build)
+      #
+      # IMPORTANT - a backend is required for anything beyond rendering. The 11 microservices run
+      # under docker-compose on LINUX, never on this Windows box, so http://localhost:8080 is empty
+      # here. Point the app at a reachable gateway before launching:
+      #   $env:API_GATEWAY_URL = "http://<linux-host-or-tenant>:8080"
+      # Without it the embedded proxy returns 502 {"error":"bad_gateway"} and the sign-in form
+      # reports a generic "Invalid email or password".
+      #
+      # If dist/, desktop/build/ or node_modules are missing (prebuilt artifacts occasionally do
+      # not survive into the snapshot), rebuild with:
+      #   cmd /c "(cd frontend\client-app && npm ci && npm run build) 2>&1"
+      #   cmd /c "(cd frontend\client-app\desktop && npm ci && npm run build) 2>&1"
+      #   cmd /c "(cd frontend\client-app\desktop && node node_modules\electron\install.js) 2>&1"

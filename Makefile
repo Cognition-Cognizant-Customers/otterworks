@@ -47,6 +47,11 @@ COMPOSE := docker compose -f docker-compose.infra.yml -f docker-compose.yml
 # Collab websocket as exposed by docker-compose (host port 8084); source builds
 # otherwise default to :8085, which only matches the k8s dev environment.
 COLLAB_WS_URL := ws://localhost:8084
+# Android deploy target for `cap run`. A single running emulator is enumerated twice
+# (by AVD name and by serial), so without --target cap stops on an interactive
+# "Please choose a target device" prompt and stalls under a non-TTY shell.
+# Override for a physical device: make dev-android ANDROID_TARGET=<id> (see: adb devices).
+ANDROID_TARGET ?= emulator-5554
 
 dev-backend: ## Start the Dockerized backend (all services except the frontend containers)
 	$(COMPOSE) up -d $$($(COMPOSE) config --services | grep -vE '^(web-app|admin-dashboard)$$')
@@ -61,10 +66,10 @@ dev-admin: dev-backend ## Start the admin dashboard dev server (HMR) on :4200
 	@$(COMPOSE) stop admin-dashboard 2>/dev/null || true
 	cd frontend/admin-dashboard && { [ -d node_modules ] || npm ci; } && npm start
 
-dev-android: dev-backend ## Build the web bundle and run the Android app on an emulator/device
+dev-android: dev-backend ## Build the web bundle and run the Android app on an emulator/device (override target: ANDROID_TARGET=<id>)
 	cd frontend/client-app && { [ -d node_modules ] || npm ci; } && \
 		VITE_COLLAB_WS_URL=ws://10.0.2.2:8084 npm run build && \
-		npx cap sync android && npx cap run android
+		npx cap sync android && npx cap run android --target $(ANDROID_TARGET)
 
 dev-electron: dev-backend ## Build the web bundle and launch the Electron desktop app
 	cd frontend/client-app && { [ -d node_modules ] || npm ci; } && \
