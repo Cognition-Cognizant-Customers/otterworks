@@ -165,7 +165,8 @@ initialize: |
   # pre-download it via Electron's own installer to keep the snapshot boot fast.
   (cd frontend/client-app/desktop && node node_modules/electron/install.js) || { echo "electron binary download failed"; exit 1; }
 maintenance: |
-  (cd frontend/client-app && npm install)
+  # Include the win32 rolldown native binding (npm optional-deps bug omits it -> Vite build fails)
+  (cd frontend/client-app && npm install && npm install --no-save @rolldown/binding-win32-x64-msvc@1.1.5)
   (cd frontend/client-app/desktop && npm install)
 knowledge:
   - name: run electron desktop app
