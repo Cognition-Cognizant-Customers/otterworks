@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed dev-backend dev-web dev-admin dev-android dev-electron
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed dev-backend dev-web dev-admin dev-android dev-electron demo-single-pane
 
 SHELL := /bin/bash
 
@@ -70,6 +70,11 @@ dev-electron: dev-backend ## Build the web bundle and launch the Electron deskto
 	cd frontend/client-app && { [ -d node_modules ] || npm ci; } && \
 		VITE_COLLAB_WS_URL=$(COLLAB_WS_URL) npm run build
 	cd frontend/client-app/desktop && { [ -d node_modules ] || npm ci; } && npm start
+
+# --- Demos ---
+
+demo-single-pane: ## Build the "Single Pane of Glass" demo dashboard (stack + DRIVE_* creds required; ARGS="--skip-portal" to skip the browser leg)
+	python3 demo/single-pane-of-glass/run.py $(ARGS)
 
 # --- Per-Service Builds ---
 

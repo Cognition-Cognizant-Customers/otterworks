@@ -1,0 +1,3 @@
+# The Python workflow uses only the standard library (urllib, json).
+# The browser leg (connectors/web_portal.mjs) reuses the Playwright install
+# already present in frontend/client-app/node_modules — no extra pip deps.
