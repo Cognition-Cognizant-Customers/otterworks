@@ -19,6 +19,7 @@ import {
 import { AppShell } from "@/components/layout/app-shell";
 import { Breadcrumb, type BreadcrumbItem } from "@/components/layout/breadcrumb";
 import { FileCard } from "@/components/files/file-card";
+import { FilePreviewModal } from "@/components/files/file-preview";
 import { FolderCard } from "@/components/files/folder-card";
 import { FileUploadDropzone } from "@/components/files/file-upload-dropzone";
 import type { FileUploadDropzoneHandle } from "@/components/files/file-upload-dropzone";
@@ -30,7 +31,7 @@ import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { filesApi } from "@/lib/api";
 import { useUIStore } from "@/stores/ui-store";
 import { cn } from "@/lib/utils";
-import type { ViewMode, SortField } from "@/types";
+import type { ViewMode, SortField, FileItem } from "@/types";
 
 // Run a delete operation over a list of ids, tallying successes and failures
 // so a single failure doesn't abort the rest of a bulk action.
@@ -61,6 +62,7 @@ function FileBrowserContent() {
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [shareFileId, setShareFileId] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectionActive, setSelectionActive] = useState(false);
 
@@ -495,6 +497,7 @@ function FileBrowserContent() {
                     onShare={(id) => setShareFileId(id)}
                     onRename={(id, name) => renameFileMutation.mutate({ id, name })}
                     onDownload={handleDownload}
+                    onPreview={(f) => setPreviewFile(f)}
                     selected={selectedIds.has(file.id)}
                     onSelect={toggleSelect}
                     selectionActive={selectionActive}
@@ -504,6 +507,9 @@ function FileBrowserContent() {
             </section>
           )}
         </div>
+      )}
+      {previewFile && (
+        <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
       )}
       {shareFileId && (() => {
         const shareFile = files.find((f) => f.id === shareFileId);

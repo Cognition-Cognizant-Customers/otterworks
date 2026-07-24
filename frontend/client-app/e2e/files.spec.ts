@@ -44,4 +44,27 @@ test.describe("Files Page", () => {
       await expect(buttons.first()).toBeVisible();
     }
   });
+
+  test("offers file preview and opens/closes a preview dialog when signed in", async ({
+    page,
+  }) => {
+    const heading = page.getByRole("heading", { name: /Files|My Files/i });
+    const loginHeading = page.getByText("Sign in to your account");
+    await expect(heading.or(loginHeading)).toBeVisible({ timeout: 10_000 });
+
+    // Only meaningful when a seeded/signed-in session renders the Files page.
+    if (!(await heading.isVisible().catch(() => false))) return;
+
+    const previewBtn = page.getByRole("button", { name: /Preview/i }).first();
+    if (!(await previewBtn.isVisible().catch(() => false))) return;
+
+    await previewBtn.click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    await expect(dialog.getByRole("button", { name: /Download/i })).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 10_000 });
+    await expect(heading).toBeVisible();
+  });
 });

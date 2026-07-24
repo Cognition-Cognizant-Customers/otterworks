@@ -16,6 +16,7 @@ import {
   Check,
   X,
   Star,
+  Eye,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { FileItem } from "@/types";
@@ -50,6 +51,7 @@ interface FileCardProps {
   onShare?: (id: string) => void;
   onRename?: (id: string, name: string) => void;
   onDownload?: (id: string, name: string) => void;
+  onPreview?: (file: FileItem) => void;
   view?: "grid" | "list";
   selected?: boolean;
   onSelect?: (id: string) => void;
@@ -63,6 +65,7 @@ export function FileCard({
   onShare,
   onRename,
   onDownload,
+  onPreview,
   view = "grid",
   selected = false,
   onSelect,
@@ -118,6 +121,13 @@ export function FileCard({
     onSelect?.(file.id);
   };
 
+  const handlePreviewClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onPreview?.(file);
+  };
+  const canPreview = !file.isFolder && !!onPreview;
+
   if (view === "list") {
     return (
       <div className="flex items-center gap-4 px-4 py-2.5 hover:bg-gray-50 rounded-lg transition group border-b border-gray-100 last:border-0">
@@ -166,6 +176,16 @@ export function FileCard({
             {file.isFolder ? "\u2014" : formatFileSize(file.size)}
           </span>
         </Link>
+        {canPreview && (
+          <button
+            onClick={handlePreviewClick}
+            className="p-1 rounded hover:bg-gray-200 text-gray-400 opacity-0 group-hover:opacity-100 transition flex-shrink-0"
+            aria-label="Preview"
+            title="Preview"
+          >
+            <Eye size={16} />
+          </button>
+        )}
         <button
           onClick={handleStarClick}
           className="p-1 rounded hover:bg-gray-200 transition flex-shrink-0"
@@ -195,6 +215,7 @@ export function FileCard({
               onShare={onShare}
               onRename={() => { renameDoneRef.current = false; setIsRenaming(true); setRenameValue(file.name); }}
               onDownload={onDownload}
+              onPreview={onPreview ? () => onPreview(file) : undefined}
             />
           )}
         </div>
@@ -223,6 +244,16 @@ export function FileCard({
             <Icon size={24} className="text-otter-600" />
           </div>
           <div className="flex items-center gap-1">
+            {canPreview && (
+              <button
+                onClick={handlePreviewClick}
+                className="p-1 rounded hover:bg-gray-100 text-gray-400 opacity-0 group-hover:opacity-100 transition"
+                aria-label="Preview"
+                title="Preview"
+              >
+                <Eye size={16} />
+              </button>
+            )}
             <button
               onClick={handleStarClick}
               className="p-1 rounded hover:bg-gray-100 transition"
@@ -252,6 +283,7 @@ export function FileCard({
                   onShare={onShare}
                   onDownload={onDownload}
                   onRename={() => { renameDoneRef.current = false; setIsRenaming(true); setRenameValue(file.name); }}
+                  onPreview={onPreview ? () => onPreview(file) : undefined}
                 />
               )}
             </div>
@@ -293,6 +325,7 @@ function FileMenu({
   onShare,
   onRename,
   onDownload,
+  onPreview,
 }: {
   file: FileItem;
   onClose: () => void;
@@ -300,11 +333,26 @@ function FileMenu({
   onShare?: (id: string) => void;
   onRename?: () => void;
   onDownload?: (id: string, name: string) => void;
+  onPreview?: () => void;
 }) {
   return (
     <>
       <div className="fixed inset-0 z-10" onClick={onClose} />
       <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+        {!file.isFolder && onPreview && (
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onPreview();
+              onClose();
+            }}
+            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            <Eye size={14} />
+            Preview
+          </button>
+        )}
         <button
           onClick={(e) => {
             e.preventDefault();

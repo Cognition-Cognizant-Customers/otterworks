@@ -1,4 +1,4 @@
-import { apiClient } from "./api-client";
+import { apiClient, API_BASE_URL } from "./api-client";
 import type {
   User,
   AuthTokens,
@@ -154,6 +154,30 @@ function normalizeFileItem(raw: Record<string, unknown>): FileItem {
   } as FileItem;
 }
 
+// Authenticated raw fetch against the same-origin inline-content endpoint.
+// We bypass the axios client here because its response interceptor rewrites
+// object keys and would corrupt binary (blob/arraybuffer) bodies.
+async function fetchFileContent(
+  id: string,
+  init?: { range?: string; signal?: AbortSignal }
+): Promise<Response> {
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem("otter_access_token") : null;
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (init?.range) headers.Range = init.range;
+
+  const res = await fetch(`${API_BASE_URL}/files/${id}/content`, {
+    headers,
+    signal: init?.signal,
+  });
+  // 206 = partial content when a Range was honored.
+  if (!res.ok && res.status !== 206) {
+    throw new Error(`Failed to load file content (HTTP ${res.status})`);
+  }
+  return res;
+}
+
 // ── Files ─────────────────────────────────────────────────────
 export const filesApi = {
   list: async (
@@ -239,6 +263,37 @@ export const filesApi = {
     // Presigned URLs from S3/LocalStack use the internal Docker hostname.
     // Rewrite to localhost so the browser can reach the endpoint.
     return data.url.replace("://localstack:", "://localhost:");
+  },
+  // Same-origin, authenticated inline preview of file bytes. Returns an object
+  // URL usable as an <img>/<iframe>/<video>/<audio> src (caller must revoke it).
+  getContentBlobUrl: async (
+    id: string,
+    opts?: { signal?: AbortSignal }
+  ): Promise<string> => {
+    const res = await fetchFileContent(id, { signal: opts?.signal });
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  },
+  // Fetches up to `maxBytes` of a file as text (for text/code/csv previews).
+  getContentText: async (
+    id: string,
+    maxBytes = 500_000,
+    opts?: { signal?: AbortSignal }
+  ): Promise<{ text: string; truncated: boolean }> => {
+    const res = await fetchFileContent(id, {
+      range: `bytes=0-${maxBytes - 1}`,
+      signal: opts?.signal,
+    });
+    const text = await res.text();
+    return { text, truncated: res.status === 206 };
+  },
+  // Fetches the full file as an ArrayBuffer (for spreadsheet parsing).
+  getContentArrayBuffer: async (
+    id: string,
+    opts?: { signal?: AbortSignal }
+  ): Promise<ArrayBuffer> => {
+    const res = await fetchFileContent(id, { signal: opts?.signal });
+    return res.arrayBuffer();
   },
   delete: async (id: string): Promise<void> => {
     await apiClient.post(`/files/${id}/trash`);

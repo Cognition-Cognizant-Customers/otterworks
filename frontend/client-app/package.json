@@ -37,6 +37,7 @@
     "react-router-dom": "^7.18.1",
     "socket.io-client": "^4.7.4",
     "tailwindcss": "^3.4.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "y-prosemirror": "^1.2.5",
     "y-websocket": "^2.0.3",
     "yjs": "^13.6.14",

@@ -371,6 +371,119 @@ pub async fn download_file(
     }))
 }
 
+/// Maps a stored MIME type to the type we are willing to serve **inline** for
+/// preview. Media/PDF/known-text types keep (or are coerced to) a safe type;
+/// any `text/*` subtype is coerced to `text/plain` so it can never execute as
+/// HTML. Everything else returns `None` and is served as an attachment.
+fn preview_content_type(mime: &str) -> Option<String> {
+    let m = mime.trim().to_ascii_lowercase();
+    // SVG can carry scripts that execute when rendered as a document, so it is
+    // never served inline (it still renders safely via an <img> element).
+    if m == "image/svg+xml" {
+        return None;
+    }
+    if m.starts_with("image/") || m.starts_with("video/") || m.starts_with("audio/") {
+        return Some(m);
+    }
+    match m.as_str() {
+        "application/pdf"
+        | "text/plain"
+        | "text/csv"
+        | "text/markdown"
+        | "application/json"
+        | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        | "application/vnd.ms-excel" => Some(m),
+        _ if m.starts_with("text/") => Some("text/plain".to_string()),
+        _ => None,
+    }
+}
+
+/// Parses a single-range `Range: bytes=start-end` header into an inclusive
+/// `(start, end)` pair clamped to the object size. Returns `None` for absent,
+/// malformed, multi-range, or unsatisfiable ranges (caller then serves 200).
+fn parse_byte_range(header: &str, total: usize) -> Option<(usize, usize)> {
+    if total == 0 {
+        return None;
+    }
+    let spec = header.trim().strip_prefix("bytes=")?;
+    if spec.contains(',') {
+        return None;
+    }
+    let (start_s, end_s) = spec.split_once('-')?;
+    let start: usize = start_s.trim().parse().ok()?;
+    let end: usize = if end_s.trim().is_empty() {
+        total - 1
+    } else {
+        end_s.trim().parse().ok()?
+    };
+    if start > end || start >= total {
+        return None;
+    }
+    Some((start, end.min(total - 1)))
+}
+
+/// Streams file bytes through the (authenticated) gateway for inline preview.
+///
+/// Unlike `download_file` (which returns a presigned S3 URL), this endpoint is
+/// same-origin, so browser `fetch()`/media elements can read it without CORS,
+/// and the server controls the `Content-Type`/`Content-Disposition` — unsafe
+/// types are forced to `attachment` and sniffing is disabled via `nosniff`.
+pub async fn get_file_content(
+    req: HttpRequest,
+    s3: web::Data<S3Client>,
+    meta: web::Data<MetadataClient>,
+    path: web::Path<String>,
+) -> Result<HttpResponse, ServiceError> {
+    use actix_web::http::header;
+
+    let file_id: Uuid = path
+        .into_inner()
+        .parse()
+        .map_err(|e| ServiceError::BadRequest(format!("invalid file id: {e}")))?;
+
+    let file = meta.get_file(&file_id).await?;
+    let bytes = s3.download_object(&file.s3_key).await?;
+    let total = bytes.len();
+
+    let (content_type, disposition) = match preview_content_type(&file.mime_type) {
+        Some(ct) => (ct, "inline"),
+        None => ("application/octet-stream".to_string(), "attachment"),
+    };
+    let safe_name: String = file
+        .name
+        .chars()
+        .filter(|c| *c != '"' && *c != '\r' && *c != '\n')
+        .collect();
+    let content_disposition = format!("{disposition}; filename=\"{safe_name}\"");
+
+    let range = req
+        .headers()
+        .get(header::RANGE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|r| parse_byte_range(r, total));
+
+    if let Some((start, end)) = range {
+        let slice = bytes.slice(start..end + 1);
+        return Ok(HttpResponse::PartialContent()
+            .insert_header((header::CONTENT_TYPE, content_type))
+            .insert_header((header::CONTENT_DISPOSITION, content_disposition))
+            .insert_header((header::ACCEPT_RANGES, "bytes"))
+            .insert_header((
+                header::CONTENT_RANGE,
+                format!("bytes {start}-{end}/{total}"),
+            ))
+            .insert_header(("X-Content-Type-Options", "nosniff"))
+            .body(slice));
+    }
+
+    Ok(HttpResponse::Ok()
+        .insert_header((header::CONTENT_TYPE, content_type))
+        .insert_header((header::CONTENT_DISPOSITION, content_disposition))
+        .insert_header((header::ACCEPT_RANGES, "bytes"))
+        .insert_header(("X-Content-Type-Options", "nosniff"))
+        .body(bytes))
+}
+
 pub async fn move_file(
     meta: web::Data<MetadataClient>,
     events: web::Data<EventPublisher>,
@@ -721,5 +834,62 @@ mod tests {
     async fn test_metrics_endpoint() {
         let resp = metrics().await;
         assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+    }
+
+    #[test]
+    fn preview_content_type_allows_safe_types() {
+        assert_eq!(
+            preview_content_type("application/pdf").as_deref(),
+            Some("application/pdf")
+        );
+        assert_eq!(
+            preview_content_type("IMAGE/PNG").as_deref(),
+            Some("image/png")
+        );
+        assert_eq!(
+            preview_content_type(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            .as_deref(),
+            Some("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        );
+    }
+
+    #[test]
+    fn preview_content_type_coerces_text_and_blocks_unsafe() {
+        // Any text/* subtype (incl. text/html) is coerced to text/plain.
+        assert_eq!(
+            preview_content_type("text/html").as_deref(),
+            Some("text/plain")
+        );
+        assert_eq!(
+            preview_content_type("text/csv").as_deref(),
+            Some("text/csv")
+        );
+        // Unsafe / unknown types are not served inline.
+        // SVG is never served inline (script-in-SVG risk).
+        assert_eq!(preview_content_type("image/svg+xml"), None);
+        assert_eq!(preview_content_type("application/octet-stream"), None);
+        assert_eq!(
+            preview_content_type(
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn parse_byte_range_handles_common_cases() {
+        assert_eq!(parse_byte_range("bytes=0-99", 1000), Some((0, 99)));
+        // open-ended range clamps to last byte
+        assert_eq!(parse_byte_range("bytes=10-", 1000), Some((10, 999)));
+        // end past EOF clamps
+        assert_eq!(parse_byte_range("bytes=0-5000", 1000), Some((0, 999)));
+        // invalid / unsatisfiable / multi-range
+        assert_eq!(parse_byte_range("bytes=2000-3000", 1000), None);
+        assert_eq!(parse_byte_range("bytes=100-50", 1000), None);
+        assert_eq!(parse_byte_range("bytes=0-10,20-30", 1000), None);
+        assert_eq!(parse_byte_range("bogus", 1000), None);
+        assert_eq!(parse_byte_range("bytes=0-99", 0), None);
     }
 }
