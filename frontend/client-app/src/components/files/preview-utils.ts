@@ -52,9 +52,32 @@ export async function fetchOfficeBuffer(url: string): Promise<ArrayBuffer> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const contentLength = Number(res.headers.get("content-length"));
   if (contentLength > MAX_OFFICE_PREVIEW_SIZE) {
+    res.body?.cancel();
     throw new PreviewTooLargeError();
   }
-  return res.arrayBuffer();
+  if (!res.body) return res.arrayBuffer();
+
+  // Enforce the cap while streaming, since Content-Length may be absent.
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.length;
+    if (received > MAX_OFFICE_PREVIEW_SIZE) {
+      await reader.cancel();
+      throw new PreviewTooLargeError();
+    }
+    chunks.push(value);
+  }
+  const buffer = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buffer.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return buffer.buffer;
 }
 
 export function capSpreadsheetRows<T>(rows: T[]): {

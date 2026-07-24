@@ -373,6 +373,14 @@ pub fn is_inline_safe(mime_type: &str) -> bool {
     mime_type.starts_with("text/") && mime_type != "text/html"
 }
 
+/// Strips characters that could break out of a quoted Content-Disposition
+/// filename parameter (quotes, backslashes, and control characters).
+pub fn sanitize_disposition_filename(name: &str) -> String {
+    name.chars()
+        .filter(|c| !c.is_control() && *c != '"' && *c != '\\')
+        .collect()
+}
+
 pub async fn download_file(
     s3: web::Data<S3Client>,
     meta: web::Data<MetadataClient>,
@@ -387,7 +395,10 @@ pub async fn download_file(
     let file = meta.get_file(&file_id).await?;
     let disposition = match query.disposition.as_deref() {
         Some("inline") if is_inline_safe(&file.mime_type) => "inline".to_string(),
-        _ => format!("attachment; filename=\"{}\"", file.name.replace('"', "")),
+        _ => format!(
+            "attachment; filename=\"{}\"",
+            sanitize_disposition_filename(&file.name)
+        ),
     };
     let url = s3
         .presigned_download_url_with_content_type(&file.s3_key, 3600, &file.mime_type, &disposition)
@@ -760,6 +771,19 @@ mod tests {
         assert!(is_inline_safe("application/json"));
         assert!(is_inline_safe("text/plain"));
         assert!(is_inline_safe("text/csv"));
+    }
+
+    #[test]
+    fn test_sanitize_disposition_filename() {
+        assert_eq!(
+            sanitize_disposition_filename("report \"Q2\".pdf"),
+            "report Q2.pdf"
+        );
+        assert_eq!(
+            sanitize_disposition_filename("evil\r\nX-Injected: 1.pdf"),
+            "evilX-Injected: 1.pdf"
+        );
+        assert_eq!(sanitize_disposition_filename("a\\b.txt"), "ab.txt");
     }
 
     #[test]
