@@ -74,6 +74,35 @@ impl S3Client {
         Ok(body.into_bytes())
     }
 
+    /// Download a byte range `[start, end]` (inclusive) of an S3 object.
+    ///
+    /// Passes the range to S3 so only the requested slice is transferred and
+    /// buffered, rather than materializing the whole object in memory.
+    pub async fn download_object_range(
+        &self,
+        key: &str,
+        start: usize,
+        end: usize,
+    ) -> Result<Bytes, ServiceError> {
+        let resp = self
+            .client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .range(format!("bytes={start}-{end}"))
+            .send()
+            .await
+            .map_err(|e| ServiceError::S3Error(format!("ranged download failed: {e}")))?;
+
+        let body = resp
+            .body
+            .collect()
+            .await
+            .map_err(|e| ServiceError::S3Error(format!("body read failed: {e}")))?;
+
+        Ok(body.into_bytes())
+    }
+
     /// Generate a presigned download URL.
     pub async fn presigned_download_url(
         &self,

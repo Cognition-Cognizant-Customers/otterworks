@@ -371,6 +371,11 @@ pub async fn download_file(
     }))
 }
 
+/// Upper bound on the number of bytes served in a single inline-preview
+/// response. Bounds server memory: full (non-range) requests above this are
+/// rejected with 413, and range requests are clamped to at most this many bytes.
+const MAX_PREVIEW_BYTES: usize = 25 * 1024 * 1024; // 25 MB
+
 /// Maps a stored MIME type to the type we are willing to serve **inline** for
 /// preview. Media/PDF/known-text types keep (or are coerced to) a safe type;
 /// any `text/*` subtype is coerced to `text/plain` so it can never execute as
@@ -442,8 +447,7 @@ pub async fn get_file_content(
         .map_err(|e| ServiceError::BadRequest(format!("invalid file id: {e}")))?;
 
     let file = meta.get_file(&file_id).await?;
-    let bytes = s3.download_object(&file.s3_key).await?;
-    let total = bytes.len();
+    let total = file.size_bytes as usize;
 
     let (content_type, disposition) = match preview_content_type(&file.mime_type) {
         Some(ct) => (ct, "inline"),
@@ -462,8 +466,11 @@ pub async fn get_file_content(
         .and_then(|v| v.to_str().ok())
         .and_then(|r| parse_byte_range(r, total));
 
-    if let Some((start, end)) = range {
-        let slice = bytes.slice(start..end + 1);
+    if let Some((start, mut end)) = range {
+        // Bound the slice we buffer per response so an open-ended range on a huge
+        // object (e.g. `bytes=0-`) can't materialize the whole file in memory.
+        end = end.min(start + MAX_PREVIEW_BYTES - 1);
+        let slice = s3.download_object_range(&file.s3_key, start, end).await?;
         return Ok(HttpResponse::PartialContent()
             .insert_header((header::CONTENT_TYPE, content_type))
             .insert_header((header::CONTENT_DISPOSITION, content_disposition))
@@ -476,6 +483,20 @@ pub async fn get_file_content(
             .body(slice));
     }
 
+    // No range: refuse to buffer very large objects fully. Clients preview these
+    // via the download link instead.
+    if total > MAX_PREVIEW_BYTES {
+        return Ok(HttpResponse::PayloadTooLarge()
+            .insert_header((header::ACCEPT_RANGES, "bytes"))
+            .insert_header(("X-Content-Type-Options", "nosniff"))
+            .json(serde_json::json!({
+                "error": "file too large to preview inline",
+                "size_bytes": file.size_bytes,
+                "max_bytes": MAX_PREVIEW_BYTES,
+            })));
+    }
+
+    let bytes = s3.download_object(&file.s3_key).await?;
     Ok(HttpResponse::Ok()
         .insert_header((header::CONTENT_TYPE, content_type))
         .insert_header((header::CONTENT_DISPOSITION, content_disposition))

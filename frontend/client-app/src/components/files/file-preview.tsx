@@ -14,6 +14,10 @@ import { formatFileSize } from "@/lib/utils";
 
 const MAX_PREVIEW_SIZE = 500_000; // 500 KB — truncate beyond this
 const MAX_SPREADSHEET_BYTES = 15_000_000; // 15 MB — skip client-side parse beyond this
+// Image/PDF/video/audio load the whole file into the browser as a blob, so cap
+// the size we buffer and offer a download fallback beyond it. Kept in sync with
+// the file-service MAX_PREVIEW_BYTES (which rejects larger full requests with 413).
+const MAX_MEDIA_BYTES = 25 * 1024 * 1024; // 25 MB
 const MAX_SHEET_ROWS = 1000;
 const MAX_SHEET_COLS = 50;
 
@@ -27,11 +31,12 @@ export interface PreviewFile {
 
 // Loads file bytes from the same-origin content endpoint as an object URL and
 // revokes it on cleanup. Used for image/pdf/video/audio inline rendering.
-function useContentBlobUrl(fileId: string) {
+function useContentBlobUrl(fileId: string, enabled = true) {
   const [url, setUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     let created: string | null = null;
     const controller = new AbortController();
@@ -58,9 +63,36 @@ function useContentBlobUrl(fileId: string) {
       controller.abort();
       if (created) URL.revokeObjectURL(created);
     };
-  }, [fileId]);
+  }, [fileId, enabled]);
 
   return { url, status };
+}
+
+// Shown when a file exceeds the inline-preview size cap; offers a download.
+function PreviewTooLarge({
+  file,
+  onDownload,
+}: {
+  file: PreviewFile;
+  onDownload: () => void;
+}) {
+  return (
+    <div className="text-center py-10">
+      <AlertCircle size={48} className="text-gray-300 mx-auto mb-3" />
+      <p className="text-sm text-gray-600 font-medium">{file.name}</p>
+      <p className="text-xs text-gray-400 mt-1">{formatFileSize(file.size)}</p>
+      <p className="text-sm text-gray-500 mt-3">
+        This file is too large to preview here. Download it to view the full contents.
+      </p>
+      <button
+        onClick={onDownload}
+        className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm text-white bg-otter-600 rounded-lg hover:bg-otter-700 transition"
+      >
+        <Download size={16} />
+        Download
+      </button>
+    </div>
+  );
 }
 
 function PreviewSpinner({ label = "Loading preview…" }: { label?: string }) {
@@ -283,8 +315,16 @@ export function ImageFilePreview({ presignedUrl, fileName }: ImageFilePreviewPro
 // Content-Type + inline disposition, avoiding the CORS/octet-stream issues of
 // cross-origin presigned S3 URLs.
 
-function ContentImagePreview({ file }: { file: PreviewFile }) {
-  const { url, status } = useContentBlobUrl(file.id);
+function ContentImagePreview({
+  file,
+  onDownload,
+}: {
+  file: PreviewFile;
+  onDownload: () => void;
+}) {
+  const tooLarge = !!file.size && file.size > MAX_MEDIA_BYTES;
+  const { url, status } = useContentBlobUrl(file.id, !tooLarge);
+  if (tooLarge) return <PreviewTooLarge file={file} onDownload={onDownload} />;
   if (status === "loading") return <PreviewSpinner />;
   if (status === "error" || !url) return <PreviewError message="Image preview not available" />;
   return (
@@ -296,8 +336,16 @@ function ContentImagePreview({ file }: { file: PreviewFile }) {
   );
 }
 
-function ContentPdfPreview({ file }: { file: PreviewFile }) {
-  const { url, status } = useContentBlobUrl(file.id);
+function ContentPdfPreview({
+  file,
+  onDownload,
+}: {
+  file: PreviewFile;
+  onDownload: () => void;
+}) {
+  const tooLarge = !!file.size && file.size > MAX_MEDIA_BYTES;
+  const { url, status } = useContentBlobUrl(file.id, !tooLarge);
+  if (tooLarge) return <PreviewTooLarge file={file} onDownload={onDownload} />;
   if (status === "loading") return <PreviewSpinner />;
   if (status === "error" || !url) return <PreviewError message="PDF preview not available" />;
   return (
@@ -312,8 +360,18 @@ function ContentPdfPreview({ file }: { file: PreviewFile }) {
   );
 }
 
-function ContentMediaPreview({ file, kind }: { file: PreviewFile; kind: "video" | "audio" }) {
-  const { url, status } = useContentBlobUrl(file.id);
+function ContentMediaPreview({
+  file,
+  kind,
+  onDownload,
+}: {
+  file: PreviewFile;
+  kind: "video" | "audio";
+  onDownload: () => void;
+}) {
+  const tooLarge = !!file.size && file.size > MAX_MEDIA_BYTES;
+  const { url, status } = useContentBlobUrl(file.id, !tooLarge);
+  if (tooLarge) return <PreviewTooLarge file={file} onDownload={onDownload} />;
   if (status === "loading") return <PreviewSpinner />;
   if (status === "error" || !url) {
     return <PreviewError message={`${kind === "video" ? "Video" : "Audio"} preview not available`} />;
@@ -573,13 +631,13 @@ export function FilePreview({
   const kind = getPreviewKind(file.mimeType, file.name);
   switch (kind) {
     case "image":
-      return <ContentImagePreview file={file} />;
+      return <ContentImagePreview file={file} onDownload={onDownload} />;
     case "pdf":
-      return <ContentPdfPreview file={file} />;
+      return <ContentPdfPreview file={file} onDownload={onDownload} />;
     case "video":
-      return <ContentMediaPreview file={file} kind="video" />;
+      return <ContentMediaPreview file={file} kind="video" onDownload={onDownload} />;
     case "audio":
-      return <ContentMediaPreview file={file} kind="audio" />;
+      return <ContentMediaPreview file={file} kind="audio" onDownload={onDownload} />;
     case "text":
       return <ContentTextPreview file={file} />;
     case "spreadsheet":
