@@ -1,5 +1,7 @@
 # https://docs.devin.ai/onboard-devin/environment-yaml
 # Docker + Compose v2 preinstalled; app + mobile + desktop toolchains set up here.
+# One YAML document per platform (see the `---` separated windows document below).
+runs-on: default
 initialize: |
   # Pre-pull infra images and pre-build all service/frontend images (layers persist; containers do not).
   docker compose -f docker-compose.infra.yml pull
@@ -131,3 +133,45 @@ knowledge:
   - name: lint
     contents: |
       make lint
+---
+# Windows sessions for the Electron desktop shell. Windows runs blueprint commands in
+# bash (Git Bash), the same as Linux, so this document must be bash - not PowerShell.
+runs-on: windows
+initialize: |
+  export npm_config_audit=false npm_config_fund=false npm_config_loglevel=error
+
+  # Prefer Node >=22. Vite 8 is happy on the image's 20.19, but electron@43 and its toolchain
+  # (@electron/get, @electron/rebuild, node-abi) declare engines >=22.12 and spray EBADENGINE
+  # warnings -- today only warnings, but a latent breakage. Best-effort and fully guarded: if no
+  # package manager is present the existing Node is kept and the build continues unchanged.
+  major=$(node -v 2>/dev/null | sed 's/^v//' | cut -d. -f1)
+  if [ -n "$major" ] && [ "$major" -lt 22 ]; then
+    if command -v winget >/dev/null 2>&1; then
+      winget install --id OpenJS.NodeJS.LTS -e --silent --accept-source-agreements --accept-package-agreements || true
+    elif command -v choco >/dev/null 2>&1; then
+      choco install nodejs-lts -y --no-progress || true
+    else
+      echo "No winget/choco available; keeping Node $major (EBADENGINE warnings expected)."
+    fi
+  fi
+
+  # Web client: deps + production bundle. The Electron shell serves frontend/client-app/dist.
+  (cd frontend/client-app && npm ci && npm run build) || { echo "client-app setup failed"; exit 1; }
+
+  # Electron desktop shell: deps + TypeScript build (src -> build).
+  (cd frontend/client-app/desktop && npm ci && npm run build) || { echo "desktop setup failed"; exit 1; }
+
+  # npm ci does NOT fetch the Electron binary (its download is deferred to first launch), so
+  # pre-download it via Electron's own installer to keep the snapshot boot fast.
+  (cd frontend/client-app/desktop && node node_modules/electron/install.js) || { echo "electron binary download failed"; exit 1; }
+maintenance: |
+  (cd frontend/client-app && npm install)
+  (cd frontend/client-app/desktop && npm install)
+knowledge:
+  - name: run electron desktop app
+    contents: |
+      (cd frontend/client-app/desktop && npm start)   # builds then launches the Electron shell
+      # Embedded server on :34117 proxies /api/v1 to a gateway; run with Node 22.
+  - name: build web bundle
+    contents: |
+      (cd frontend/client-app && npm run build)   # Electron serves frontend/client-app/dist
