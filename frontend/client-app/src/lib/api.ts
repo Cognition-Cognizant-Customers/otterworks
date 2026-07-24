@@ -285,7 +285,14 @@ export const filesApi = {
       signal: opts?.signal,
     });
     const text = await res.text();
-    return { text, truncated: res.status === 206 };
+    // The server returns 206 for any satisfiable Range, even one that spans the
+    // whole file, so derive truncation from the Content-Range total (bytes .../<total>)
+    // rather than the status code.
+    const total = Number(
+      /\/(\d+)\s*$/.exec(res.headers.get("Content-Range") ?? "")?.[1]
+    );
+    const truncated = Number.isFinite(total) ? total > maxBytes : res.status === 206;
+    return { text, truncated };
   },
   // Fetches the full file as an ArrayBuffer (for spreadsheet parsing).
   getContentArrayBuffer: async (
