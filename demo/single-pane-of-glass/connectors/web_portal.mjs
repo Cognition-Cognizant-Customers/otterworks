@@ -57,7 +57,11 @@ async function main() {
 
     // Log in through the UI if the form is present (session may already exist).
     const emailField = page.locator("#email");
-    if (await emailField.isVisible({ timeout: 8000 }).catch(() => false)) {
+    const formVisible = await emailField
+      .waitFor({ state: "visible", timeout: 8000 })
+      .then(() => true)
+      .catch(() => false);
+    if (formVisible) {
       log("filling login form");
       await emailField.fill(EMAIL);
       await page.locator("#password").fill(PASSWORD);
