@@ -1,5 +1,5 @@
 # https://docs.devin.ai/onboard-devin/environment-yaml
-# Docker + Compose v2 preinstalled; app + mobile + desktop toolchains set up here.
+# One-time setup (e.g., install system tools, global CLIs).
 initialize: |
   # Pre-pull infra images and pre-build all service/frontend images (layers persist; containers do not).
   docker compose -f docker-compose.infra.yml pull
@@ -146,6 +146,9 @@ initialize: |
   $COMPOSE down
 # Install project dependencies (runs during builds, surfaced to agent at session start).
 maintenance: |
+  # Keep the Rust toolchain current: services/file-service's Cargo.lock pulls crates
+  # whose manifests need a newer Cargo than the baked-in 1.83 (edition2024 feature).
+  rustup update stable >/dev/null 2>&1 || true
   export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"; nvm use default >/dev/null
   # Include the linux rolldown native binding (npm optional-deps bug omits it -> Vite build fails)
   (cd frontend/client-app && npm install && npm install --no-save @rolldown/binding-linux-x64-gnu@1.1.5)
