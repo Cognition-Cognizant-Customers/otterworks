@@ -70,7 +70,8 @@ def run_portal(output_dir):
         _warn(f"browser leg skipped: {e}")
         return {}
     if proc.returncode != 0:
-        _warn(f"browser leg failed: {proc.stderr.strip().splitlines()[-1:]}")
+        tail = proc.stderr.strip().splitlines()
+        _warn(f"browser leg failed: {tail[-1] if tail else '(no stderr output)'}")
         return {}
     try:
         data = json.loads(proc.stdout.strip())
