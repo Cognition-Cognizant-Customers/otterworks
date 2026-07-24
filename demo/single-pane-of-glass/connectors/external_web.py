@@ -18,13 +18,23 @@ TIMEOUT = 20
 UA = "OtterWorks-SinglePaneDemo/1.0 (+https://otterworks.app)"
 
 
+def _assert_http(url):
+    """Only allow http(s) — blocks file://, ftp:// etc. before any fetch."""
+    scheme = urllib.parse.urlparse(url).scheme.lower()
+    if scheme not in ("http", "https"):
+        raise ValueError(f"refusing non-http(s) URL scheme: {scheme!r}")
+
+
 def _fetch_indicator(base, country, indicator_id):
     url = (
         f"{base}/country/{country}/indicator/{indicator_id}"
         + "?"
         + urllib.parse.urlencode({"format": "json", "per_page": 5, "mrnev": 1})
     )
+    _assert_http(url)
     req = urllib.request.Request(url, headers={"User-Agent": UA})
+    # URL scheme is allowlisted above (http/https only); base is trusted config.
+    # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
     with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
         payload = json.load(resp)
     # World Bank returns [metadata, [observations...]]

@@ -25,6 +25,11 @@ const { chromium } = require("playwright");
 
 const WEB_URL = process.env.OTTER_WEB_URL || "http://localhost:3000";
 const CDP_URL = process.env.OTTER_CDP_URL || "http://localhost:29229";
+
+// Only navigate to http(s) targets — reject anything else before any goto.
+if (!/^https?:\/\//i.test(WEB_URL)) {
+  throw new Error(`OTTER_WEB_URL must be an http(s) URL, got: ${WEB_URL}`);
+}
 const EMAIL = process.env.DRIVE_EMAIL || "";
 const PASSWORD = process.env.DRIVE_PASSWORD || "";
 const OUTPUT_DIR =
@@ -46,6 +51,8 @@ async function main() {
   try {
     await page.setViewportSize({ width: 1440, height: 1024 });
     log(`opening ${WEB_URL}/login`);
+    // WEB_URL scheme is allowlisted above (http/https only), from trusted config.
+    // nosemgrep: javascript.playwright.security.audit.playwright-goto-injection.playwright-goto-injection
     await page.goto(`${WEB_URL}/login`, { waitUntil: "domcontentloaded" });
 
     // Log in through the UI if the form is present (session may already exist).
@@ -59,6 +66,7 @@ async function main() {
 
     log("waiting for dashboard");
     await page.waitForURL(/\/dashboard/, { timeout: 20000 }).catch(() => {});
+    // nosemgrep: javascript.playwright.security.audit.playwright-goto-injection.playwright-goto-injection
     await page.goto(`${WEB_URL}/dashboard`, { waitUntil: "domcontentloaded" });
     // Wait for the recent-files cards to render (real content, not the skeleton).
     await page.locator('a[href^="/files/"]').first().waitFor({ timeout: 20000 });

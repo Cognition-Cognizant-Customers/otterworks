@@ -19,12 +19,22 @@ import config  # noqa: E402
 TIMEOUT = 30
 
 
+def _assert_http(url):
+    """Only allow http(s) — blocks file://, ftp:// etc. before any fetch."""
+    scheme = urllib.parse.urlparse(url).scheme.lower()
+    if scheme not in ("http", "https"):
+        raise ValueError(f"refusing non-http(s) URL scheme: {scheme!r}")
+
+
 def _request(method, url, token=None, body=None):
+    _assert_http(url)
     data = json.dumps(body).encode() if body is not None else None
     headers = {"Content-Type": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    # URL scheme is allowlisted above (http/https only); host is trusted config.
+    # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
     with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
         return json.load(resp)
 

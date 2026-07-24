@@ -117,9 +117,29 @@ def main():
     html_path = render.write(data, output_dir, generated_at)
     _ok(f"dashboard: {html_path}")
 
+    png_path = _snapshot(html_path, output_dir)
+    if png_path:
+        _ok(f"shareable image: {png_path}")
+
     live = sum(1 for s in data["sources"] if s["status"] == "ok")
     print(f"\n\033[1mDone.\033[0m {live}/3 systems live \u2192 "
           f"file://{html_path}\n")
+
+
+def _snapshot(html_path, output_dir):
+    """Best-effort full-page PNG of the dashboard via the CDP browser."""
+    png_path = os.path.join(output_dir, "dashboard_full.png")
+    script = os.path.join(HERE, "screenshot.mjs")
+    env = dict(os.environ)
+    env["NODE_PATH"] = NODE_MODULES
+    try:
+        proc = subprocess.run(
+            ["node", script, html_path, png_path],
+            capture_output=True, text=True, env=env, timeout=90,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+    return png_path if proc.returncode == 0 and os.path.exists(png_path) else None
 
 
 if __name__ == "__main__":
