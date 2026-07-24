@@ -15,6 +15,17 @@ make_bucket otterworks-files
 make_bucket otterworks-data-lake
 make_bucket otterworks-audit-archive
 
+# CORS on the files bucket so the web app can fetch presigned URLs
+# cross-origin (in-browser preview rendering reads the object bytes).
+awslocal s3api put-bucket-cors --bucket otterworks-files --cors-configuration '{
+  "CORSRules": [{
+    "AllowedOrigins": ["*"],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["Content-Length", "Content-Type", "Content-Disposition", "Content-Range", "ETag"]
+  }]
+}'
+
 # SQS Queue (create-queue is idempotent for an existing queue with the same name)
 awslocal sqs create-queue --queue-name otterworks-notifications
 awslocal sqs create-queue --queue-name otterworks-audit-events-queue

@@ -44,7 +44,7 @@ test.describe("File Preview (OTD-12)", () => {
     await uploadFile(page, "notes.md", "text/markdown", "# Hello\npreview line two");
     await page.goto("/files");
     await page.getByText("notes.md").first().click();
-    await expect(page.getByText("Preview")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Preview" })).toBeVisible();
     await expect(page.getByText("preview line two")).toBeVisible({
       timeout: 15_000,
     });
@@ -96,7 +96,7 @@ test.describe("File Preview (OTD-12)", () => {
       page,
       "broken.xlsx",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "these are not xlsx bytes"
+      Buffer.from("PK\u0003\u0004 corrupt zip payload \u0000\u0001\u0002", "binary")
     );
     await page.goto(`/files/${id}`);
     await expect(page.getByText("Could not load preview")).toBeVisible({
