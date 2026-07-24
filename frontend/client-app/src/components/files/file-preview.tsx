@@ -2,7 +2,12 @@ import { useState, useEffect, useRef } from "react";
 import { File, AlertCircle } from "lucide-react";
 import { read, utils } from "xlsx";
 import { renderAsync } from "docx-preview";
-import { capSpreadsheetRows, SPREADSHEET_ROW_CAP } from "./preview-utils";
+import {
+  capSpreadsheetRows,
+  fetchOfficeBuffer,
+  PreviewTooLargeError,
+  SPREADSHEET_ROW_CAP,
+} from "./preview-utils";
 
 const MAX_PREVIEW_SIZE = 500_000; // 500 KB — truncate beyond this
 
@@ -230,7 +235,7 @@ export function SpreadsheetFilePreview({ presignedUrl, fileName }: SpreadsheetFi
   const [sheets, setSheets] = useState<{ name: string; rows: string[][] }[] | null>(null);
   const [activeSheet, setActiveSheet] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!presignedUrl) {
@@ -241,13 +246,11 @@ export function SpreadsheetFilePreview({ presignedUrl, fileName }: SpreadsheetFi
     let cancelled = false;
     setLoading(true);
     setSheets(null);
-    setError(false);
+    setError(null);
     setActiveSheet(0);
 
-    fetch(presignedUrl)
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const buffer = await res.arrayBuffer();
+    fetchOfficeBuffer(presignedUrl)
+      .then((buffer) => {
         const workbook = read(buffer);
         const parsed = workbook.SheetNames.map((name) => ({
           name,
@@ -260,8 +263,13 @@ export function SpreadsheetFilePreview({ presignedUrl, fileName }: SpreadsheetFi
         if (parsed.length === 0) throw new Error("empty workbook");
         if (!cancelled) setSheets(parsed);
       })
-      .catch(() => {
-        if (!cancelled) setError(true);
+      .catch((e) => {
+        if (!cancelled)
+          setError(
+            e instanceof PreviewTooLargeError
+              ? "File is too large to preview inline. Use the Download button."
+              : "Could not load preview"
+          );
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -274,7 +282,7 @@ export function SpreadsheetFilePreview({ presignedUrl, fileName }: SpreadsheetFi
 
   if (loading) return <PreviewSpinner />;
   if (!presignedUrl) return <PreviewError message="No download URL available" />;
-  if (error || !sheets) return <PreviewError message="Could not load preview" />;
+  if (error || !sheets) return <PreviewError message={error ?? "Could not load preview"} />;
 
   const sheet = sheets[activeSheet];
   const { rows, truncated } = capSpreadsheetRows(sheet.rows);
@@ -356,7 +364,7 @@ interface DocxFilePreviewProps {
 export function DocxFilePreview({ presignedUrl, fileName }: DocxFilePreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!presignedUrl) {
@@ -366,20 +374,23 @@ export function DocxFilePreview({ presignedUrl, fileName }: DocxFilePreviewProps
 
     let cancelled = false;
     setLoading(true);
-    setError(false);
+    setError(null);
 
-    fetch(presignedUrl)
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const buffer = await res.arrayBuffer();
+    fetchOfficeBuffer(presignedUrl)
+      .then(async (buffer) => {
         if (cancelled || !containerRef.current) return;
         containerRef.current.innerHTML = "";
         await renderAsync(buffer, containerRef.current, undefined, {
           inWrapper: false,
         });
       })
-      .catch(() => {
-        if (!cancelled) setError(true);
+      .catch((e) => {
+        if (!cancelled)
+          setError(
+            e instanceof PreviewTooLargeError
+              ? "File is too large to preview inline. Use the Download button."
+              : "Could not load preview"
+          );
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -391,7 +402,7 @@ export function DocxFilePreview({ presignedUrl, fileName }: DocxFilePreviewProps
   }, [presignedUrl]);
 
   if (!presignedUrl && !loading) return <PreviewError message="No download URL available" />;
-  if (error) return <PreviewError message="Could not load preview" />;
+  if (error) return <PreviewError message={error} />;
 
   return (
     <div className="w-full">

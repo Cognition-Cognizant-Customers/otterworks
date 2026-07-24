@@ -43,6 +43,20 @@ export function getPreviewKind(mimeType: string): PreviewKind {
 /** Maximum spreadsheet rows rendered before truncation. */
 export const SPREADSHEET_ROW_CAP = 500;
 
+export const MAX_OFFICE_PREVIEW_SIZE = 20 * 1024 * 1024; // 20 MB
+
+export class PreviewTooLargeError extends Error {}
+
+export async function fetchOfficeBuffer(url: string): Promise<ArrayBuffer> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const contentLength = Number(res.headers.get("content-length"));
+  if (contentLength > MAX_OFFICE_PREVIEW_SIZE) {
+    throw new PreviewTooLargeError();
+  }
+  return res.arrayBuffer();
+}
+
 export function capSpreadsheetRows<T>(rows: T[]): {
   rows: T[];
   truncated: boolean;
