@@ -19,7 +19,7 @@ make_bucket otterworks-audit-archive
 # cross-origin (in-browser preview rendering reads the object bytes).
 awslocal s3api put-bucket-cors --bucket otterworks-files --cors-configuration '{
   "CORSRules": [{
-    "AllowedOrigins": ["*"],
+    "AllowedOrigins": ["http://localhost:3000", "http://localhost:4200"],
     "AllowedMethods": ["GET", "HEAD"],
     "AllowedHeaders": ["*"],
     "ExposeHeaders": ["Content-Length", "Content-Type", "Content-Disposition", "Content-Range", "ETag"]
