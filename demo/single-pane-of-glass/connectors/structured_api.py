@@ -104,7 +104,7 @@ def _all_documents(gateway, token):
     while True:
         resp = _get(
             gateway, token, "/api/v1/documents",
-            {"page": page, "pageSize": size},
+            {"page": page, "size": size},
         )
         batch = resp.get("items", [])
         docs.extend(batch)
