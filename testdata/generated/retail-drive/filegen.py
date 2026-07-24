@@ -11,6 +11,7 @@ plain-text stand-in with the correct extension so the drive still populates.
 """
 from __future__ import annotations
 
+import base64
 import io
 import json
 import random
@@ -51,6 +52,8 @@ MIME = {
     "json": "application/json",
     "png": "image/png",
     "jpg": "image/jpeg",
+    "mp4": "video/mp4",
+    "mp3": "audio/mpeg",
 }
 
 _PRODUCTS = [
@@ -271,9 +274,69 @@ def _lorem(r: random.Random, n: int) -> str:
     return " ".join(words) + "."
 
 
+# A tiny (2s, 64x48) H.264/MP4 test-pattern clip, embedded so video files are
+# genuinely playable without requiring an encoder at generation time.
+_TINY_MP4_B64 = (
+    "AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAANMbW9vdgAAAGxtdmhkAAAAAAAAAAAA"
+    "AAAAAAAD6AAAB9AAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAA"
+    "AABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAnZ0cmFrAAAAXHRraGQAAAADAAAA"
+    "AAAAAAAAAAABAAAAAAAAB9AAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAA"
+    "AAAAAAAAAABAAAAAAEAAAAAwAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAfQAAAAAAABAAAA"
+    "AAHubWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAoAAAAUABVxAAAAAAALWhkbHIAAAAAAAAAAHZp"
+    "ZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABmW1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAA"
+    "ACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAVlzdGJsAAAAuXN0c2QAAAAAAAAA"
+    "AQAAAKlhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAEAAMABIAAAASAAAAAAAAAABAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAAL2F2Y0MBQsAK/+EAF2dCwArZBHsBEAAA"
+    "AwAQAAADAKDxImSAAQAFaMuA5LIAAAAQcGFzcAAAAAEAAAABAAAAFGJ0cnQAAAAAAAAV1AAAFdQA"
+    "AAAYc3R0cwAAAAAAAAABAAAACgAACAAAAAAUc3RzcwAAAAAAAAABAAAAAQAAABxzdHNjAAAAAAAA"
+    "AAEAAAABAAAACgAAAAEAAAA8c3RzegAAAAAAAAAAAAAACgAAA8UAAAAdAAAAMgAAADIAAAA8AAAA"
+    "MgAAADQAAAA4AAAAMAAAACUAAAAUc3RjbwAAAAAAAAABAAADfAAAAGJ1ZHRhAAAAWm1ldGEAAAAA"
+    "AAAAIWhkbHIAAAAAAAAAAG1kaXJhcHBsAAAAAAAAAAAAAAAALWlsc3QAAAAlqXRvbwAAAB1kYXRh"
+    "AAAAAQAAAABMYXZmNTguNzYuMTAwAAAACGZyZWUAAAV9bWRhdAAAAnAGBf//bNxF6b3m2Ui3lizY"
+    "INkj7u94MjY0IC0gY29yZSAxNjMgcjMwNjAgNWRiNmFhNiAtIEguMjY0L01QRUctNCBBVkMgY29k"
+    "ZWMgLSBDb3B5bGVmdCAyMDAzLTIwMjEgLSBodHRwOi8vd3d3LnZpZGVvbGFuLm9yZy94MjY0Lmh0"
+    "bWwgLSBvcHRpb25zOiBjYWJhYz0wIHJlZj0zIGRlYmxvY2s9MTowOjAgYW5hbHlzZT0weDE6MHgx"
+    "MTEgbWU9aGV4IHN1Ym1lPTcgcHN5PTEgcHN5X3JkPTEuMDA6MC4wMCBtaXhlZF9yZWY9MSBtZV9y"
+    "YW5nZT0xNiBjaHJvbWFfbWU9MSB0cmVsbGlzPTEgOHg4ZGN0PTAgY3FtPTAgZGVhZHpvbmU9MjEs"
+    "MTEgZmFzdF9wc2tpcD0xIGNocm9tYV9xcF9vZmZzZXQ9LTIgdGhyZWFkcz0xIGxvb2thaGVhZF90"
+    "aHJlYWRzPTEgc2xpY2VkX3RocmVhZHM9MCBucj0wIGRlY2ltYXRlPTEgaW50ZXJsYWNlZD0wIGJs"
+    "dXJheV9jb21wYXQ9MCBjb25zdHJhaW5lZF9pbnRyYT0wIGJmcmFtZXM9MCB3ZWlnaHRwPTAga2V5"
+    "aW50PTI1MCBrZXlpbnRfbWluPTUgc2NlbmVjdXQ9NDAgaW50cmFfcmVmcmVzaD0wIHJjX2xvb2th"
+    "aGVhZD00MCByYz1jcmYgbWJ0cmVlPTEgY3JmPTQwLjAgcWNvbXA9MC42MCBxcG1pbj0wIHFwbWF4"
+    "PTY5IHFwc3RlcD00IGlwX3JhdGlvPTEuNDAgYXE9MToxLjAwAIAAAAFNZYiE/+ReUsbFAB8UMN+z"
+    "wBalMMiTBE+CAARs2EguNeAKluGYxjqBQ1VKoDEpYABIABfz//wyGAaGAATAgFTO//7B/37/+/wM"
+    "OIwcAAkAAIC3BgEAAQKYMAAaL88IJpTHEBnzyxxQ+ARn6q7r0c2CkwqYACCABHQBQRF/X8AMw5lM"
+    "DN+ug/7Qh/8EWGCvs9/n3FR5mT5T/p/9h8oj3/D92Okf8IHkhyL9iQ+eqrfIjLXl9YOBDgQFzgYF"
+    "zUh0EZcvwon9AqDKQqAyksMMY52jE9VcRwAoBhJ69bO8FfLfDFnDCQLB0EZCwGJLEHpVD+HcAok8"
+    "CZYEP57vAMAA/h+IH7y226nOZgYAAoH0MGsA+AdpDwGZZIF8cgWgsG0hQG0hcGjXHH9oBlD/qG4v"
+    "L71NheDba/AsiGgAFkIATJqBSvmlCn44BMigePBNLFxbAAAAGUGaOeJ4fJqqrq6//Tz763+Cbu8d"
+    "aOj/r5gAAAAuQZpUeJ8LExdRhlF9Hfpptm/z6lq2TWanf/wtxWfveTfbbTEd+GvN+k6bbY93HgAA"
+    "AC5BmmFxPhbqpqTziNUXyd+3pptt/OQf35aX+Fu7nx+8jc3p2200/njVEFNM+v34AAAAOEGagXE+"
+    "HuT9xWN+v6O/MZTfr9+GicVjKOIhMirTT/4X6i6rwGUeqbK7bZNj+F/F4W+47n451HHAAAAALkGa"
+    "oJxPhbq6vv9NNsf6X/5ATk3do+dvwsXEvVKyvljOTx5fr1C/VVX/Fsxmuv4AAAAwQZrAnE+eaC2j"
+    "BR6Vmpu3+Fybu75O1tndjLQQmYW/+f75TI1JGgj+F+qquOy/xbluAAAANEGa4NxPhbu7vgnP9Ofc"
+    "v8K1Ifb8/Zx/DPVRjJTMZbOatnqTf4X6pjnv86EzJee6/qmQZfsAAAAsQZsARxPn3xVxb+PcdGpA"
+    "sAE/gOwFaSvhog7hl74bqv7Tn3/4Z6i5/81U28AAAAAhQZsgZxPn08/bWfZv/RZvzkGqIJOmb5vJ"
+    "/wU9V1dV9GOA"
+)
+
+
+def _mp4(name: str, r: random.Random) -> bytes:
+    return base64.b64decode(_TINY_MP4_B64)
+
+
+def _mp3(name: str, r: random.Random) -> bytes:
+    # Valid silent MPEG-1 Layer III stream (44.1 kHz, 128 kbps): each 417-byte
+    # frame is a bare frame header followed by zeroed payload (~26 ms each).
+    frame = bytes([0xFF, 0xFB, 0x90, 0x64]) + bytes(413)
+    seconds = r.randint(2, 5)
+    return frame * (38 * seconds)
+
+
 _BUILDERS = {
     "xlsx": _xlsx, "docx": _docx, "pptx": _pptx, "pdf": _pdf, "csv": _csv,
     "json": _json, "md": _md, "txt": _txt, "png": _png, "jpg": _jpg,
+    "mp4": _mp4, "mp3": _mp3,
 }
 
 

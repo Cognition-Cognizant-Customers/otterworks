@@ -109,6 +109,32 @@ impl S3Client {
         Ok(())
     }
 
+    /// Generate a presigned download URL that instructs S3 to serve the object
+    /// with the given content type inline, regardless of the stored object's
+    /// Content-Type metadata.
+    pub async fn presigned_download_url_with_content_type(
+        &self,
+        key: &str,
+        expires_in_secs: u64,
+        content_type: &str,
+    ) -> Result<String, ServiceError> {
+        let presigning = PresigningConfig::expires_in(Duration::from_secs(expires_in_secs))
+            .map_err(|e| ServiceError::S3Error(format!("presign config error: {e}")))?;
+
+        let presigned = self
+            .client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .response_content_type(content_type)
+            .response_content_disposition("inline")
+            .presigned(presigning)
+            .await
+            .map_err(|e| ServiceError::S3Error(format!("presign failed: {e}")))?;
+
+        Ok(presigned.uri().to_string())
+    }
+
     /// Copy an object within S3 (used for versioning).
     pub async fn copy_object(&self, source_key: &str, dest_key: &str) -> Result<(), ServiceError> {
         let copy_source = format!("{}/{}", self.bucket, source_key);
@@ -123,5 +149,51 @@ impl S3Client {
 
         tracing::info!(source = %source_key, dest = %dest_key, "Copied object in S3");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::AwsConfig;
+
+    async fn test_client() -> S3Client {
+        std::env::set_var("AWS_ACCESS_KEY_ID", "test");
+        std::env::set_var("AWS_SECRET_ACCESS_KEY", "test");
+        S3Client::new(&AwsConfig {
+            region: "us-east-1".to_string(),
+            endpoint_url: Some("http://localhost:4566".to_string()),
+            s3_bucket: "otterworks-files".to_string(),
+            dynamodb_table: "t".to_string(),
+            dynamodb_folders_table: "t".to_string(),
+            dynamodb_versions_table: "t".to_string(),
+            dynamodb_shares_table: "t".to_string(),
+        })
+        .await
+    }
+
+    // AC-03/BDD-03: presigned URL must override the served content type so
+    // objects stored without accurate Content-Type metadata still render inline.
+    #[tokio::test]
+    async fn presigned_url_with_content_type_sets_response_overrides() {
+        let s3 = test_client().await;
+        let url = s3
+            .presigned_download_url_with_content_type("files/u/f", 3600, "application/pdf")
+            .await
+            .expect("presign should succeed");
+
+        assert!(url.contains("response-content-type=application%2Fpdf"));
+        assert!(url.contains("response-content-disposition=inline"));
+    }
+
+    #[tokio::test]
+    async fn plain_presigned_url_has_no_response_overrides() {
+        let s3 = test_client().await;
+        let url = s3
+            .presigned_download_url("files/u/f", 3600)
+            .await
+            .expect("presign should succeed");
+
+        assert!(!url.contains("response-content-type"));
     }
 }

@@ -90,6 +90,8 @@ DEPARTMENTS: dict[str, list[dict]] = {
         _s("Campaigns/Briefs", "{campaign} {year} Brief", "docx", ["campaign", "year"]),
         _s("Campaigns/Assets", "{campaign} Hero Banner", "png", ["campaign"]),
         _s("Campaigns/Assets", "{campaign} Social Tile", "jpg", ["campaign"]),
+        _s("Campaigns/Assets", "{campaign} Promo Video", "mp4", ["campaign"]),
+        _s("Campaigns/Assets", "{campaign} Radio Spot", "mp3", ["campaign"]),
         _s("Campaigns/Performance", "{campaign} {year} Results", "xlsx", ["campaign", "year"]),
         _s("Brand", "Brand Guidelines {year}", "pdf", ["year"]),
         _s("Email", "{quarter} {year} Email Calendar", "xlsx", ["year", "quarter"]),

@@ -1,5 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { File, AlertCircle } from "lucide-react";
+import { read, utils } from "xlsx";
+import { renderAsync } from "docx-preview";
+import { capSpreadsheetRows, SPREADSHEET_ROW_CAP } from "./preview-utils";
 
 const MAX_PREVIEW_SIZE = 500_000; // 500 KB — truncate beyond this
 
@@ -197,5 +200,229 @@ export function ImageFilePreview({ presignedUrl, fileName }: ImageFilePreviewPro
       className="max-w-full max-h-[500px] rounded-lg shadow-sm"
       onError={() => setError(true)}
     />
+  );
+}
+
+function PreviewSpinner() {
+  return (
+    <div className="w-full text-center py-8">
+      <div className="w-6 h-6 border-2 border-otter-600 border-t-transparent rounded-full animate-spin mx-auto" />
+      <p className="text-xs text-gray-400 mt-2">Loading preview…</p>
+    </div>
+  );
+}
+
+function PreviewError({ message }: Readonly<{ message: string }>) {
+  return (
+    <div className="text-center py-8">
+      <AlertCircle size={48} className="text-gray-300 mx-auto mb-3" />
+      <p className="text-sm text-gray-500">{message}</p>
+    </div>
+  );
+}
+
+interface SpreadsheetFilePreviewProps {
+  presignedUrl?: string;
+  fileName: string;
+}
+
+export function SpreadsheetFilePreview({ presignedUrl, fileName }: SpreadsheetFilePreviewProps) {
+  const [sheets, setSheets] = useState<{ name: string; rows: string[][] }[] | null>(null);
+  const [activeSheet, setActiveSheet] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!presignedUrl) {
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setSheets(null);
+    setError(false);
+    setActiveSheet(0);
+
+    fetch(presignedUrl)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const buffer = await res.arrayBuffer();
+        const workbook = read(buffer);
+        const parsed = workbook.SheetNames.map((name) => ({
+          name,
+          rows: utils.sheet_to_json<string[]>(workbook.Sheets[name], {
+            header: 1,
+            raw: false,
+            defval: "",
+          }),
+        }));
+        if (parsed.length === 0) throw new Error("empty workbook");
+        if (!cancelled) setSheets(parsed);
+      })
+      .catch(() => {
+        if (!cancelled) setError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [presignedUrl]);
+
+  if (loading) return <PreviewSpinner />;
+  if (!presignedUrl) return <PreviewError message="No download URL available" />;
+  if (error || !sheets) return <PreviewError message="Could not load preview" />;
+
+  const sheet = sheets[activeSheet];
+  const { rows, truncated } = capSpreadsheetRows(sheet.rows);
+  const [headerRow, ...bodyRows] = rows;
+
+  return (
+    <div className="w-full">
+      <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200">
+          <span className="text-xs font-medium text-gray-500 truncate">{fileName}</span>
+          <span className="text-xs text-gray-400">
+            {sheet.rows.length} row{sheet.rows.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+        {sheets.length > 1 && (
+          <div className="flex items-center gap-1 px-2 py-1.5 bg-gray-50 border-b border-gray-200 overflow-x-auto">
+            {sheets.map((s, i) => (
+              <button
+                key={s.name}
+                onClick={() => setActiveSheet(i)}
+                className={
+                  i === activeSheet
+                    ? "px-3 py-1 text-xs rounded-md bg-otter-600 text-white"
+                    : "px-3 py-1 text-xs rounded-md text-gray-600 hover:bg-gray-200"
+                }
+              >
+                {s.name}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="overflow-auto max-h-[600px]">
+          <table className="w-full border-collapse text-sm">
+            {headerRow && (
+              <thead>
+                <tr className="bg-gray-50 sticky top-0">
+                  {headerRow.map((cell, i) => (
+                    <th
+                      key={i}
+                      className="px-3 py-2 text-left font-medium text-gray-600 border-b border-r border-gray-200 whitespace-nowrap"
+                    >
+                      {cell}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+            )}
+            <tbody>
+              {bodyRows.map((row, i) => (
+                <tr key={i} className="hover:bg-gray-50">
+                  {row.map((cell, j) => (
+                    <td
+                      key={j}
+                      className="px-3 py-1.5 text-gray-800 border-b border-r border-gray-100 whitespace-nowrap"
+                    >
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {truncated && (
+        <p className="text-xs text-amber-600 mt-2 text-center">
+          Showing first {SPREADSHEET_ROW_CAP} rows. Download the file to see full contents.
+        </p>
+      )}
+    </div>
+  );
+}
+
+interface DocxFilePreviewProps {
+  presignedUrl?: string;
+  fileName: string;
+}
+
+export function DocxFilePreview({ presignedUrl, fileName }: DocxFilePreviewProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!presignedUrl) {
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setError(false);
+
+    fetch(presignedUrl)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const buffer = await res.arrayBuffer();
+        if (cancelled || !containerRef.current) return;
+        containerRef.current.innerHTML = "";
+        await renderAsync(buffer, containerRef.current, undefined, {
+          inWrapper: false,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [presignedUrl]);
+
+  if (!presignedUrl && !loading) return <PreviewError message="No download URL available" />;
+  if (error) return <PreviewError message="Could not load preview" />;
+
+  return (
+    <div className="w-full">
+      {loading && <PreviewSpinner />}
+      <div className="rounded-lg border border-gray-200 bg-white overflow-hidden" hidden={loading}>
+        <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+          <span className="text-xs font-medium text-gray-500 truncate">{fileName}</span>
+        </div>
+        <div
+          ref={containerRef}
+          className="overflow-auto max-h-[600px] p-6 prose prose-sm max-w-none"
+        />
+      </div>
+    </div>
+  );
+}
+
+interface AudioFilePreviewProps {
+  presignedUrl?: string;
+  fileName: string;
+}
+
+export function AudioFilePreview({ presignedUrl, fileName }: AudioFilePreviewProps) {
+  if (!presignedUrl) return <PreviewError message="No download URL available" />;
+
+  return (
+    <div className="w-full max-w-xl text-center">
+      <audio src={presignedUrl} controls className="w-full">
+        <track kind="captions" />
+      </audio>
+      <p className="text-xs text-gray-400 mt-2">{fileName}</p>
+    </div>
   );
 }

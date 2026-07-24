@@ -363,7 +363,9 @@ pub async fn download_file(
         .map_err(|e| ServiceError::BadRequest(format!("invalid file id: {e}")))?;
 
     let file = meta.get_file(&file_id).await?;
-    let url = s3.presigned_download_url(&file.s3_key, 3600).await?;
+    let url = s3
+        .presigned_download_url_with_content_type(&file.s3_key, 3600, &file.mime_type)
+        .await?;
 
     Ok(HttpResponse::Ok().json(DownloadResponse {
         url,
