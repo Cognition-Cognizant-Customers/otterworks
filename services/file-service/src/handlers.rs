@@ -352,10 +352,16 @@ pub async fn delete_file(
     Ok(HttpResponse::NoContent().finish())
 }
 
+#[derive(serde::Deserialize)]
+pub struct DownloadQuery {
+    pub disposition: Option<String>,
+}
+
 pub async fn download_file(
     s3: web::Data<S3Client>,
     meta: web::Data<MetadataClient>,
     path: web::Path<String>,
+    query: web::Query<DownloadQuery>,
 ) -> Result<HttpResponse, ServiceError> {
     let file_id: Uuid = path
         .into_inner()
@@ -363,8 +369,12 @@ pub async fn download_file(
         .map_err(|e| ServiceError::BadRequest(format!("invalid file id: {e}")))?;
 
     let file = meta.get_file(&file_id).await?;
+    let disposition = match query.disposition.as_deref() {
+        Some("inline") => "inline".to_string(),
+        _ => format!("attachment; filename=\"{}\"", file.name.replace('"', "")),
+    };
     let url = s3
-        .presigned_download_url_with_content_type(&file.s3_key, 3600, &file.mime_type)
+        .presigned_download_url_with_content_type(&file.s3_key, 3600, &file.mime_type, &disposition)
         .await?;
 
     Ok(HttpResponse::Ok().json(DownloadResponse {

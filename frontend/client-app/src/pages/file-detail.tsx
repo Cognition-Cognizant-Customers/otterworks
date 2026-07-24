@@ -56,8 +56,8 @@ function FileDetailContent() {
   });
 
   const { data: presignedUrl, isLoading: isUrlLoading } = useQuery({
-    queryKey: ["files", fileId, "download-url"],
-    queryFn: () => filesApi.getDownloadUrl(fileId),
+    queryKey: ["files", fileId, "download-url", "inline"],
+    queryFn: () => filesApi.getDownloadUrl(fileId, "inline"),
     enabled: !!file,
     staleTime: 30 * 60 * 1000,
   });

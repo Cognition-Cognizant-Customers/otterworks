@@ -110,13 +110,14 @@ impl S3Client {
     }
 
     /// Generate a presigned download URL that instructs S3 to serve the object
-    /// with the given content type inline, regardless of the stored object's
-    /// Content-Type metadata.
+    /// with the given content type and disposition, regardless of the stored
+    /// object's metadata.
     pub async fn presigned_download_url_with_content_type(
         &self,
         key: &str,
         expires_in_secs: u64,
         content_type: &str,
+        content_disposition: &str,
     ) -> Result<String, ServiceError> {
         let presigning = PresigningConfig::expires_in(Duration::from_secs(expires_in_secs))
             .map_err(|e| ServiceError::S3Error(format!("presign config error: {e}")))?;
@@ -127,7 +128,7 @@ impl S3Client {
             .bucket(&self.bucket)
             .key(key)
             .response_content_type(content_type)
-            .response_content_disposition("inline")
+            .response_content_disposition(content_disposition)
             .presigned(presigning)
             .await
             .map_err(|e| ServiceError::S3Error(format!("presign failed: {e}")))?;
@@ -178,12 +179,34 @@ mod tests {
     async fn presigned_url_with_content_type_sets_response_overrides() {
         let s3 = test_client().await;
         let url = s3
-            .presigned_download_url_with_content_type("files/u/f", 3600, "application/pdf")
+            .presigned_download_url_with_content_type(
+                "files/u/f",
+                3600,
+                "application/pdf",
+                "inline",
+            )
             .await
             .expect("presign should succeed");
 
         assert!(url.contains("response-content-type=application%2Fpdf"));
         assert!(url.contains("response-content-disposition=inline"));
+    }
+
+    // Explicit downloads keep attachment semantics.
+    #[tokio::test]
+    async fn presigned_url_supports_attachment_disposition() {
+        let s3 = test_client().await;
+        let url = s3
+            .presigned_download_url_with_content_type(
+                "files/u/f",
+                3600,
+                "application/pdf",
+                "attachment; filename=\"report.pdf\"",
+            )
+            .await
+            .expect("presign should succeed");
+
+        assert!(url.contains("response-content-disposition=attachment"));
     }
 
     #[tokio::test]
