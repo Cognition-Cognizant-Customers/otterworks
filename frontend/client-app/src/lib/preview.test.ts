@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { capRows, getPreviewKind, MAX_TABLE_ROWS, parseCsv, sanitizeDocHtml } from "./preview";
 

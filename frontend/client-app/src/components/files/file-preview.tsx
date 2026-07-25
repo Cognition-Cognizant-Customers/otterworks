@@ -112,7 +112,11 @@ export function TextFilePreview({ presignedUrl, fileName }: TextFilePreviewProps
         const text = await res.text();
         if (cancelled) return;
         setContent(text);
-        setTruncated(res.status === 206);
+        // 206 alone isn't enough — servers return it for any Range request,
+        // even when the range covers the whole object. Compare against the
+        // full size from Content-Range ("bytes 0-n/total").
+        const totalSize = Number(res.headers.get("Content-Range")?.split("/")[1] ?? 0);
+        setTruncated(res.status === 206 && totalSize > MAX_PREVIEW_SIZE);
       })
       .catch(() => {
         if (!cancelled) setUseIframeFallback(true);
@@ -421,7 +425,9 @@ export function SpreadsheetFilePreview({ presignedUrl, fileName, fallback }: Spr
             defval: "",
           }).map((row) => row.map((cell) => String(cell ?? ""))),
         }));
-        if (!cancelled) setSheets(parsed);
+        if (cancelled) return;
+        if (parsed.length === 0) setParseFailed(true);
+        else setSheets(parsed);
       })
       .catch(() => {
         if (!cancelled) setParseFailed(true);

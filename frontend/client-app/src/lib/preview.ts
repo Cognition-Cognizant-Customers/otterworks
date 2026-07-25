@@ -1,3 +1,5 @@
+import DOMPurify from "dompurify";
+
 export type PreviewKind =
   | "image"
   | "video"
@@ -87,16 +89,13 @@ export function capRows<T>(
 }
 
 /**
- * Defense-in-depth sanitiser for converted document HTML (mammoth output):
- * drops active content (script/style/iframe/object/embed), inline event
- * handlers, and javascript: URLs. String-based so it also runs in tests.
+ * Sanitises converted document HTML (mammoth output) before it is injected
+ * into the DOM: strips scripts, inline event handlers, javascript: URLs and
+ * other active content via DOMPurify.
  */
 export function sanitizeDocHtml(html: string): string {
-  return html
-    .replace(/<(script|style|iframe|object|embed)\b[\s\S]*?<\/\1\s*>/gi, "")
-    .replace(/<(script|style|iframe|object|embed)\b[^>]*\/?>/gi, "")
-    .replace(/\son\w+\s*=\s*"[^"]*"/gi, "")
-    .replace(/\son\w+\s*=\s*'[^']*'/gi, "")
-    .replace(/\son\w+\s*=\s*[^\s>]+/gi, "")
-    .replace(/(href|src)\s*=\s*(["']?)\s*javascript:[^"'>\s]*\2/gi, '$1="#"');
+  return DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    FORBID_TAGS: ["style", "form"],
+  });
 }
