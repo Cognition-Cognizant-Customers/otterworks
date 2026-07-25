@@ -362,7 +362,7 @@ interface DocxFilePreviewProps {
 }
 
 export function DocxFilePreview({ presignedUrl, fileName }: DocxFilePreviewProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [srcDoc, setSrcDoc] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -374,15 +374,22 @@ export function DocxFilePreview({ presignedUrl, fileName }: DocxFilePreviewProps
 
     let cancelled = false;
     setLoading(true);
+    setSrcDoc(null);
     setError(null);
 
     fetchOfficeBuffer(presignedUrl)
       .then(async (buffer) => {
-        if (cancelled || !containerRef.current) return;
-        containerRef.current.innerHTML = "";
-        await renderAsync(buffer, containerRef.current, undefined, {
-          inWrapper: false,
-        });
+        // Render into detached nodes, then serialize into a sandboxed
+        // iframe so document-derived markup never runs in the app origin.
+        const body = document.createElement("div");
+        const styles = document.createElement("div");
+        await renderAsync(buffer, body, styles, { inWrapper: false });
+        if (cancelled) return;
+        setSrcDoc(
+          `<!DOCTYPE html><html><head><meta charset="utf-8">${styles.innerHTML}` +
+            `<style>body{margin:1.5rem;font-family:sans-serif}</style></head>` +
+            `<body>${body.innerHTML}</body></html>`
+        );
       })
       .catch((e) => {
         if (!cancelled)
@@ -401,19 +408,21 @@ export function DocxFilePreview({ presignedUrl, fileName }: DocxFilePreviewProps
     };
   }, [presignedUrl]);
 
-  if (!presignedUrl && !loading) return <PreviewError message="No download URL available" />;
-  if (error) return <PreviewError message={error} />;
+  if (loading) return <PreviewSpinner />;
+  if (!presignedUrl) return <PreviewError message="No download URL available" />;
+  if (error || srcDoc === null) return <PreviewError message={error ?? "Could not load preview"} />;
 
   return (
     <div className="w-full">
-      {loading && <PreviewSpinner />}
-      <div className="rounded-lg border border-gray-200 bg-white overflow-hidden" hidden={loading}>
+      <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
         <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
           <span className="text-xs font-medium text-gray-500 truncate">{fileName}</span>
         </div>
-        <div
-          ref={containerRef}
-          className="overflow-auto max-h-[600px] p-6 prose prose-sm max-w-none"
+        <iframe
+          srcDoc={srcDoc}
+          sandbox=""
+          title={`Preview of ${fileName}`}
+          className="w-full h-[600px] bg-white"
         />
       </div>
     </div>
