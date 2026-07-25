@@ -16,12 +16,14 @@ import {
   Check,
   X,
   Star,
+  Eye,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { FileItem } from "@/types";
 import { formatFileSize, formatRelativeTime } from "@/lib/utils";
 import { starredApi } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
+import { FilePreviewModal } from "@/components/files/file-preview-modal";
 
 const iconMap: Record<string, typeof File> = {
   file: File,
@@ -90,9 +92,25 @@ export function FileCard({
   }, [userId, file.id, file.isFolder, onStarToggle]);
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(file.name);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renameDoneRef = useRef(false);
   const Icon = file.isFolder ? Folder : getIconComponent(file.mimeType);
+
+  const openPreview = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setPreviewOpen(true);
+  }, []);
+
+  const previewModal =
+    !file.isFolder && previewOpen ? (
+      <FilePreviewModal
+        file={file}
+        onClose={() => setPreviewOpen(false)}
+        onDownload={onDownload}
+      />
+    ) : null;
 
   useEffect(() => {
     if (isRenaming && renameInputRef.current) {
@@ -131,6 +149,7 @@ export function FileCard({
             />
           </div>
         )}
+        {previewModal}
         <Link
           to={file.isFolder ? `/files?folder=${file.id}` : `/files/${file.id}`}
           className="flex items-center gap-4 flex-1 min-w-0"
@@ -166,6 +185,16 @@ export function FileCard({
             {file.isFolder ? "\u2014" : formatFileSize(file.size)}
           </span>
         </Link>
+        {!file.isFolder && (
+          <button
+            onClick={openPreview}
+            className="p-1 rounded hover:bg-gray-200 text-gray-400 opacity-0 group-hover:opacity-100 transition flex-shrink-0"
+            aria-label="Preview"
+            title="Preview"
+          >
+            <Eye size={16} />
+          </button>
+        )}
         <button
           onClick={handleStarClick}
           className="p-1 rounded hover:bg-gray-200 transition flex-shrink-0"
@@ -195,6 +224,7 @@ export function FileCard({
               onShare={onShare}
               onRename={() => { renameDoneRef.current = false; setIsRenaming(true); setRenameValue(file.name); }}
               onDownload={onDownload}
+              onPreview={() => setPreviewOpen(true)}
             />
           )}
         </div>
@@ -204,6 +234,7 @@ export function FileCard({
 
   return (
     <div className="group relative flex flex-col rounded-xl border border-gray-200 bg-white hover:shadow-md transition p-4">
+      {previewModal}
       {selectionActive && (
         <div className="absolute top-2 left-2 z-10" onClick={handleCheckboxClick}>
           <input
@@ -223,6 +254,16 @@ export function FileCard({
             <Icon size={24} className="text-otter-600" />
           </div>
           <div className="flex items-center gap-1">
+            {!file.isFolder && (
+              <button
+                onClick={openPreview}
+                className="p-1 rounded hover:bg-gray-100 text-gray-400 opacity-0 group-hover:opacity-100 transition"
+                aria-label="Preview"
+                title="Preview"
+              >
+                <Eye size={16} />
+              </button>
+            )}
             <button
               onClick={handleStarClick}
               className="p-1 rounded hover:bg-gray-100 transition"
@@ -252,6 +293,7 @@ export function FileCard({
                   onShare={onShare}
                   onDownload={onDownload}
                   onRename={() => { renameDoneRef.current = false; setIsRenaming(true); setRenameValue(file.name); }}
+                  onPreview={() => setPreviewOpen(true)}
                 />
               )}
             </div>
@@ -293,6 +335,7 @@ function FileMenu({
   onShare,
   onRename,
   onDownload,
+  onPreview,
 }: {
   file: FileItem;
   onClose: () => void;
@@ -300,11 +343,26 @@ function FileMenu({
   onShare?: (id: string) => void;
   onRename?: () => void;
   onDownload?: (id: string, name: string) => void;
+  onPreview?: () => void;
 }) {
   return (
     <>
       <div className="fixed inset-0 z-10" onClick={onClose} />
       <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+        {!file.isFolder && (
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onPreview?.();
+              onClose();
+            }}
+            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            <Eye size={14} />
+            Preview
+          </button>
+        )}
         <button
           onClick={(e) => {
             e.preventDefault();

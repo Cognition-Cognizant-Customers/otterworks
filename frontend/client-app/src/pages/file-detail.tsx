@@ -22,7 +22,7 @@ import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { PageLoader } from "@/components/ui/loading-spinner";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { ShareDialog } from "@/components/files/share-dialog";
-import { TextFilePreview, PdfFilePreview, ImageFilePreview } from "@/components/files/file-preview";
+import { FilePreview } from "@/components/files/file-preview";
 import { filesApi, authApi } from "@/lib/api";
 import { formatFileSize, formatRelativeTime, getInitials, generateColor } from "@/lib/utils";
 
@@ -111,18 +111,6 @@ function FileDetailContent() {
     );
   }
 
-  const isImage = file.mimeType.startsWith("image/");
-  const isVideo = file.mimeType.startsWith("video/");
-  const isPdf = file.mimeType === "application/pdf";
-  const isText =
-    file.mimeType.startsWith("text/") ||
-    file.mimeType === "application/json" ||
-    file.mimeType === "application/xml" ||
-    file.mimeType === "application/javascript" ||
-    file.mimeType === "application/typescript" ||
-    file.mimeType === "application/x-yaml" ||
-    file.mimeType === "application/x-sh";
-
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <Breadcrumb
@@ -205,14 +193,11 @@ function FileDetailContent() {
               </h2>
             </div>
             <div className="p-8 flex items-center justify-center min-h-[300px] bg-gray-50">
-              <FilePreviewContent
-                isImage={isImage}
-                isVideo={isVideo}
-                isPdf={isPdf}
-                isText={isText}
-                isUrlLoading={isUrlLoading}
-                presignedUrl={presignedUrl}
+              <FilePreview
                 fileName={file.name}
+                mimeType={file.mimeType}
+                presignedUrl={presignedUrl}
+                isUrlLoading={isUrlLoading}
               />
             </div>
           </div>
@@ -396,59 +381,6 @@ function InfoRow({
         <p className="text-xs text-gray-400">{label}</p>
         <p className="text-sm text-gray-700 break-all">{value}</p>
       </div>
-    </div>
-  );
-}
-
-function FilePreviewContent({
-  isImage,
-  isVideo,
-  isPdf,
-  isText,
-  isUrlLoading,
-  presignedUrl,
-  fileName,
-}: Readonly<{
-  isImage: boolean;
-  isVideo: boolean;
-  isPdf: boolean;
-  isText: boolean;
-  isUrlLoading: boolean;
-  presignedUrl: string | undefined;
-  fileName: string;
-}>) {
-  if ((isImage || isVideo || isText || isPdf) && isUrlLoading) {
-    return (
-      <div className="w-full text-center py-8">
-        <div className="w-6 h-6 border-2 border-otter-600 border-t-transparent rounded-full animate-spin mx-auto" />
-      </div>
-    );
-  }
-
-  if (isImage) {
-    return <ImageFilePreview presignedUrl={presignedUrl} fileName={fileName} />;
-  }
-
-  if (isVideo && presignedUrl) {
-    return (
-      <video src={presignedUrl} controls className="max-w-full max-h-[500px] rounded-lg">
-        <track kind="captions" />
-      </video>
-    );
-  }
-
-  if (isPdf) {
-    return <PdfFilePreview presignedUrl={presignedUrl} />;
-  }
-
-  if (isText) {
-    return <TextFilePreview presignedUrl={presignedUrl} fileName={fileName} />;
-  }
-
-  return (
-    <div className="text-center">
-      <File size={64} className="text-gray-300 mx-auto mb-3" />
-      <p className="text-sm text-gray-500">Preview not available for this file type</p>
     </div>
   );
 }
