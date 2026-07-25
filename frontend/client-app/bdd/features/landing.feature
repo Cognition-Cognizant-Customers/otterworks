@@ -1,26 +1,29 @@
 Feature: Landing Page
-  As a visitor
-  I want to see the OtterWorks landing page
-  So that I can learn about the product and sign up
+  As a prospective enterprise customer
+  I want to see the OtterWorks corporate landing page
+  So that I can learn about the company and sign up
 
-  Scenario: Visitor sees the hero section
+  # AC-01 / BDD-01
+  Scenario: Visitor sees the corporate hero with the otter logo
     Given I am on the landing page
     Then I should see the heading "OtterWorks"
-    And I should see the text "Collaborative document and file management"
+    And I should see the otter logo
+    And I should see the text "Enterprise retail products for otters"
 
   Scenario: Visitor sees navigation CTAs
     Given I am on the landing page
     Then I should see a link "Sign In"
     And I should see a link "Create Account"
 
-  Scenario: Visitor sees all feature cards
+  # AC-03 / BDD-07
+  Scenario: Visitor sees the full corporate identity sections
     Given I am on the landing page
-    Then I should see the text "File Management"
-    And I should see the text "Document Editing"
-    And I should see the text "Real-time Collaboration"
-    And I should see the text "Powerful Search"
-    And I should see the text "Secure Sharing"
-    And I should see the text "Instant Notifications"
+    Then I should see the text "Our Story"
+    And I should see the text "Leadership"
+    And I should see the text "Departments"
+    And I should see the text "Products"
+    And I should see the text "Newsroom"
+    And I should see the text "Careers"
 
   Scenario: Sign In link navigates to login
     Given I am on the landing page
@@ -32,6 +35,16 @@ Feature: Landing Page
     When I click the link "Create Account"
     Then the URL should contain "/register"
 
-  Scenario: Footer is visible
+  # AC-02c / BDD-06
+  Scenario: Corporate footer is visible with legal links
     Given I am on the landing page
-    Then I should see the text "Collaborative document & file management platform"
+    Then I should see the text "© OtterWorks, Inc."
+    And I should see a link "Terms"
+    And I should see a link "Privacy"
+
+  # AC-02c / BDD-06
+  Scenario: Terms and Privacy static pages are reachable
+    Given I navigate to "/terms"
+    Then I should see the heading "Terms of Service"
+    Given I navigate to "/privacy"
+    Then I should see the heading "Privacy Policy"

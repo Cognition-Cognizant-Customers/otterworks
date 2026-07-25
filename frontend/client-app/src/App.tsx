@@ -17,6 +17,8 @@ import SettingsPage from "@/pages/settings";
 import SharedPage from "@/pages/shared";
 import StarredPage from "@/pages/starred";
 import TrashPage from "@/pages/trash";
+import TermsPage from "@/pages/terms";
+import PrivacyPage from "@/pages/privacy";
 
 function NotFound() {
   return (
@@ -49,6 +51,8 @@ export default function App() {
           <Route path="/shared" element={<SharedPage />} />
           <Route path="/starred" element={<StarredPage />} />
           <Route path="/trash" element={<TrashPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </AuthProvider>

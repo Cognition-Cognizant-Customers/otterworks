@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Populate the RetailCo enterprise drive via the OtterWorks API gateway.
+"""Populate the OtterWorks enterprise drive via the OtterWorks API gateway.
 
-Creates a deep department/subfolder tree, uploads realistic multi-format files
-(xlsx/docx/pptx/pdf/csv/txt/md/json/png/jpg), and creates rich-text documents —
+Creates a deep department/subfolder tree, uploads realistic multimodal files
+(xlsx/docx/pptx/pdf/csv/txt/md/json/png/jpg/svg + committed mp4 clips), and
+creates rich-text documents —
 all owned by one shared "drive" account so the result is a single browsable
 enterprise drive in the web UI.
 
@@ -13,7 +14,7 @@ collision (each department is an independent top-level subtree).
 Example (one department):
     python generate_drive.py \
         --gateway http://<gw-host>:8080 \
-        --email drive@retailco.example --password '****' \
+        --email "$DRIVE_EMAIL" --password "$DRIVE_PASSWORD" \
         --departments Finance --scale 1.0
 
 Example (all departments):
@@ -28,6 +29,7 @@ import itertools
 import json
 import re
 import sys
+from pathlib import Path
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -40,7 +42,7 @@ import taxonomy
 # Per-axis breadth at --scale 1.0 (bounded so volume stays reasonable).
 AXIS_BASE = {
     "year": 4, "quarter": 4, "month": 6, "region": 6,
-    "store": 8, "vendor": 8, "campaign": 8, "category": 8,
+    "store": 8, "vendor": 8, "campaign": 8, "category": 8, "sku": 10,
 }
 
 
@@ -59,7 +61,7 @@ class Client:
         self.token = None
         self.owner_id = None
 
-    def register(self, display_name="RetailCo Enterprise Drive"):
+    def register(self, display_name="OtterWorks Enterprise Drive"):
         """Create the shared drive account (no-op if it already exists)."""
         self.s.post(f"{self.gw}/api/v1/auth/register", json={
             "displayName": display_name, "email": self.email,
@@ -219,7 +221,7 @@ def expand_specs(dept: str, scale: float):
             folder = spec["folder"].format(**subs)
             name = spec["name"].format(**subs)
             parts = tuple([dept] + [p for p in folder.split("/") if p])
-            yield parts, f"{name}.{spec['type']}", spec["type"]
+            yield parts, f"{name}.{spec['type']}", spec["type"], spec.get("kind")
 
 
 def run_department(client: Client, cache: FolderCache, dept: str, scale: float,
@@ -231,20 +233,20 @@ def run_department(client: Client, cache: FolderCache, dept: str, scale: float,
     # Pre-create the full folder set (serialized via cache) to avoid races,
     # and prefetch existing file names per folder for idempotency.
     existing = {}
-    for parts, _, _ in files:
+    for parts, _, _, _ in files:
         fid = cache.resolve(parts)
         if fid not in existing:
             existing[fid] = client._retry(lambda f=fid: client.list_file_names(f))
     lock = threading.Lock()
 
     def do_upload(item):
-        parts, filename, ext = item
+        parts, filename, ext, kind = item
         folder_id = cache.resolve(parts)
         with lock:  # skip if already present (re-run / overlapping shard safe)
             if filename in existing[folder_id]:
                 return 0
             existing[folder_id].add(filename)
-        data, mime = filegen.build(ext, filename.rsplit(".", 1)[0], seed)
+        data, mime = filegen.build(ext, filename.rsplit(".", 1)[0], seed, kind=kind)
         client._retry(lambda: client.upload(folder_id, filename, data, mime))
         return 1
 
@@ -267,8 +269,35 @@ def run_department(client: Client, cache: FolderCache, dept: str, scale: float,
     return uploaded, docs
 
 
+ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+
+
+def upload_assets(client: Client, cache: FolderCache, depts: list[str]) -> int:
+    """Upload the committed media clips (idempotent, like generated files).
+
+    Only placements whose top-level folder is in ``depts`` are uploaded, so
+    per-department shard runs never write outside their own subtree.
+    """
+    uploaded = 0
+    for filename, folder_parts in taxonomy.ASSET_PLACEMENTS:
+        if folder_parts[0] not in depts:
+            continue
+        path = ASSETS_DIR / filename
+        if not path.is_file():
+            print(f"[drive] WARN missing committed asset: {path}")
+            continue
+        folder_id = cache.resolve(folder_parts)
+        if filename in client._retry(lambda f=folder_id: client.list_file_names(f)):
+            continue
+        ext = filename.rsplit(".", 1)[-1].lower()
+        mime = filegen.MIME.get(ext, "application/octet-stream")
+        client._retry(lambda: client.upload(folder_id, filename, path.read_bytes(), mime))
+        uploaded += 1
+    return uploaded
+
+
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Populate the RetailCo enterprise drive.")
+    ap = argparse.ArgumentParser(description="Populate the OtterWorks enterprise drive.")
     ap.add_argument("--gateway", required=True)
     ap.add_argument("--email", required=True)
     ap.add_argument("--password", required=True)
@@ -312,6 +341,9 @@ def main(argv=None):
         grand_files += nf
         grand_docs += nd
         print(f"[drive] {d:28s} files={nf:4d} docs={nd:2d} ({time.time()-t0:5.1f}s)")
+    na = upload_assets(client, cache, depts)
+    grand_files += na
+    print(f"[drive] {'committed assets':28s} files={na:4d}")
     print(f"[drive] DONE files={grand_files} docs={grand_docs}")
     return 0
 

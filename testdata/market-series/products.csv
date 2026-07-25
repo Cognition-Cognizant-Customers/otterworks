@@ -1,0 +1,41 @@
+sku,name,category,commodity_series_code,content_kg,freight_kg,overhead_pct,list_price_usd,supplier
+SLM-001,Atlantic Salmon Fillet,Seafood,SALMON_NOK_KG,1.3623,1.5033,13.11,32.65,NordicCatch AS
+SLM-002,Smoked Salmon Slices,Seafood,SALMON_NOK_KG,0.3687,0.4337,16.48,37.14,SweetCane Traders
+SLM-003,Salmon Portions Skin-On,Seafood,SALMON_NOK_KG,0.6643,0.8293,20.46,24.54,GreenFields Supply
+SLM-004,Salmon Burger Patties,Seafood,SALMON_NOK_KG,1.1465,1.3110,20.15,22.39,PacificHarvest Co
+SLM-005,Hot-Smoked Salmon Flakes,Seafood,SALMON_NOK_KG,1.3017,1.4401,13.63,34.12,SweetCane Traders
+SLM-006,Salmon Poke Cubes,Seafood,SALMON_NOK_KG,1.0242,1.1321,16.49,39.21,SweetCane Traders
+SLM-007,Cold-Smoked Salmon Trim,Seafood,SALMON_NOK_KG,0.7085,0.8774,21.32,22.99,PacificHarvest Co
+SLM-008,Salmon Belly Strips,Seafood,SALMON_NOK_KG,0.9676,1.1219,15.32,17.51,SweetCane Traders
+SLM-009,Marinated Salmon Skewers,Seafood,SALMON_NOK_KG,1.3614,1.6741,17.78,28.44,PacificHarvest Co
+SLM-010,Salmon Gravlax,Seafood,SALMON_NOK_KG,0.8209,1.0070,17.13,27.77,SweetCane Traders
+SLM-011,Salmon Loin Center-Cut,Seafood,SALMON_NOK_KG,0.4748,0.5834,15.37,41.34,GreenFields Supply
+SLM-012,Teriyaki Salmon Bites,Seafood,SALMON_NOK_KG,1.2578,1.3333,18.66,19.52,GreenFields Supply
+SHR-001,Peeled Shrimp 16/20,Seafood,SHRIMP_USD_KG,0.5660,0.6361,15.99,11.91,FiberWorks Ltd
+SHR-002,Cooked Shrimp Ring,Seafood,SHRIMP_USD_KG,0.7146,0.8375,16.06,14.54,SweetCane Traders
+SHR-003,Breaded Shrimp Butterfly,Seafood,SHRIMP_USD_KG,0.5656,0.7025,15.02,11.60,GreenFields Supply
+SHR-004,Shrimp Skewers Garlic,Seafood,SHRIMP_USD_KG,0.3524,0.4262,16.33,16.95,BlueFjord Foods
+SHR-005,Raw Shrimp EZ-Peel,Seafood,SHRIMP_USD_KG,0.8279,1.0305,14.94,16.54,PacificHarvest Co
+SHR-006,Shrimp Dumpling Filling,Seafood,SHRIMP_USD_KG,0.4016,0.4618,15.07,16.91,NordicCatch AS
+OIL-001,Omega-3 Blend Oil 500ml,Pantry,SOYBEAN_OIL_USD_KG,0.4776,0.5856,14.54,12.99,BlueFjord Foods
+OIL-002,Cooking Oil Blend 1L,Pantry,SOYBEAN_OIL_USD_KG,1.4633,1.6514,12.95,14.64,GreenFields Supply
+OIL-003,Fish Oil Softgels 120ct,Pantry,SOYBEAN_OIL_USD_KG,0.8075,0.8758,11.32,8.87,GreenFields Supply
+OIL-004,Salad Oil Infused 750ml,Pantry,SOYBEAN_OIL_USD_KG,0.5849,0.6165,11.16,6.97,FiberWorks Ltd
+OIL-005,Omega Drizzle Oil 250ml,Pantry,SOYBEAN_OIL_USD_KG,0.5891,0.7325,13.11,6.74,SweetCane Traders
+OIL-006,High-Oleic Fry Oil 2L,Pantry,SOYBEAN_OIL_USD_KG,1.6844,1.8217,13.56,12.30,PacificHarvest Co
+SGR-001,Cane Sugar 1kg,Pantry,SUGAR_USD_KG,0.9546,1.1463,12.00,8.60,BlueFjord Foods
+SGR-002,Golden Caster Sugar 750g,Pantry,SUGAR_USD_KG,0.9145,0.9685,10.30,5.44,GreenFields Supply
+SGR-003,Demerara Cubes 500g,Pantry,SUGAR_USD_KG,0.9297,1.0591,13.11,3.79,DeltaAgri Group
+SGR-004,Icing Sugar 1kg,Pantry,SUGAR_USD_KG,1.0765,1.1558,7.22,10.57,BlueFjord Foods
+SGR-005,Vanilla Sugar Sachets,Pantry,SUGAR_USD_KG,1.6178,1.9461,8.88,7.66,NordicCatch AS
+SGR-006,Brown Sugar Soft 1kg,Pantry,SUGAR_USD_KG,1.7771,2.1055,11.90,3.13,BlueFjord Foods
+SGR-007,Baking Sugar Fine 2kg,Pantry,SUGAR_USD_KG,1.2859,1.4147,13.07,6.87,DeltaAgri Group
+SGR-008,Sugar Syrup Bottle 700ml,Pantry,SUGAR_USD_KG,2.2523,2.5297,10.54,11.55,FiberWorks Ltd
+CTN-001,Otter Logo Tee,Apparel,COTTON_USD_KG,0.8519,0.9778,19.76,26.32,GreenFields Supply
+CTN-002,Canvas Tote Bag,Apparel,COTTON_USD_KG,0.7580,0.8381,25.50,14.09,FiberWorks Ltd
+CTN-003,Baby Onesie Organic,Apparel,COTTON_USD_KG,0.4293,0.4585,29.93,19.12,GreenFields Supply
+CTN-004,Crew Socks 3-Pack,Apparel,COTTON_USD_KG,0.8239,0.9373,26.53,18.52,PacificHarvest Co
+CTN-005,Kitchen Towel Set,Apparel,COTTON_USD_KG,0.4809,0.5448,25.47,8.26,NordicCatch AS
+CTN-006,Hoodie Classic Fit,Apparel,COTTON_USD_KG,0.7760,0.9236,23.79,19.17,GreenFields Supply
+CTN-007,Bandana Print,Apparel,COTTON_USD_KG,0.8237,0.8869,21.45,12.78,SweetCane Traders
+CTN-008,Apron Heavy Duty,Apparel,COTTON_USD_KG,0.4686,0.5715,26.68,28.70,NordicCatch AS

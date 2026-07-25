@@ -1,12 +1,12 @@
-# RetailCo enterprise-drive seed loader.
+# OtterWorks enterprise-drive seed loader.
 #
 # Runs testdata/generated/retail-drive/generate_drive.py against the in-cluster
 # API gateway so a freshly spun-up (or re-seeded) OtterWorks environment gets the
-# full, browsable retail drive. Idempotent: safe to re-run.
+# full, browsable multimodal drive. Idempotent: safe to re-run.
 #
 #   # 1. create the credentials secret (once)
 #   kubectl -n otterworks create secret generic retail-drive-seed \
-#       --from-literal=DRIVE_EMAIL=drive@retailco.example \
+#       --from-literal=DRIVE_EMAIL='<drive-account-email>' \
 #       --from-literal=DRIVE_PASSWORD='<pick-a-password>'
 #
 #   # 2. run the loader

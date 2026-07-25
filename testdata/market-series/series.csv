@@ -1,0 +1,8 @@
+series_code,name,unit,currency,category
+SALMON_NOK_KG,NASDAQ Salmon Index,NOK/kg,NOK,commodity
+SHRIMP_USD_KG,White Shrimp 16/20 (proxy),USD/kg,USD,commodity
+SOYBEAN_OIL_USD_KG,Soybean Oil (fish-oil proxy),USD/kg,USD,commodity
+SUGAR_USD_KG,Sugar No.11,USD/kg,USD,commodity
+COTTON_USD_KG,Cotton No.2,USD/kg,USD,commodity
+DREWRY_WCI_USD_FEU,Drewry World Container Index,USD/FEU,USD,freight
+USD_NOK,USD/NOK exchange rate,NOK per USD,NOK,fx

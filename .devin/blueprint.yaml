@@ -55,7 +55,7 @@ initialize: |
   # Bring the whole stack up transiently and populate a deep, browsable enterprise
   # drive (~2,445 files across 15 department folders + 60 rich-text docs) via the
   # public API gateway, all owned by one synthetic account
-  # (drive@retailco.example / 'DriveDemo!2024'). Postgres (documents), DynamoDB
+  # (email/password from the DRIVE_EMAIL / DRIVE_PASSWORD secrets). Postgres (documents), DynamoDB
   # (folders + file metadata, persisted via PERSISTENCE=1) and MeiliSearch land in
   # docker volumes that persist into the snapshot. LocalStack does NOT persist S3
   # objects, so we additionally bake the S3 objects into the localstack volume and
@@ -84,7 +84,7 @@ initialize: |
   /tmp/retail-seed-venv/bin/pip install -q -r testdata/generated/retail-drive/requirements.txt
   /tmp/retail-seed-venv/bin/python testdata/generated/retail-drive/generate_drive.py \
     --gateway http://localhost:8080 \
-    --email drive@retailco.example --password 'DriveDemo!2024' \
+    --email "$DRIVE_EMAIL" --password "$DRIVE_PASSWORD" \
     --departments all --scale 1.0 --workers 6 --register
   # Bake seeded S3 objects into the localstack volume (LocalStack community does not
   # persist S3); localstack-restore.sh re-hydrates these buckets on the next boot.
@@ -109,11 +109,11 @@ knowledge:
       The web app (:3000) comes pre-seeded with the "RetailCo enterprise drive":
       ~2,445 files across 15 department folders (nested 3-4 levels) + 60 rich-text
       documents, owned by one synthetic account. Log in at http://localhost:3000 as
-      drive@retailco.example / 'DriveDemo!2024'. To (re)seed a fresh stack:
+      the account in the DRIVE_EMAIL / DRIVE_PASSWORD secrets. To (re)seed a fresh stack:
         python3 -m venv /tmp/seed && /tmp/seed/bin/pip install -r testdata/generated/retail-drive/requirements.txt
         /tmp/seed/bin/python testdata/generated/retail-drive/generate_drive.py \
-          --gateway http://localhost:8080 --email drive@retailco.example \
-          --password 'DriveDemo!2024' --departments all --scale 1.0 --register
+          --gateway http://localhost:8080 --email "$DRIVE_EMAIL" \
+          --password "$DRIVE_PASSWORD" --departments all --scale 1.0 --register
   - name: run android app
     contents: |
       sudo chmod 666 /dev/kvm    # /dev/kvm perms reset each boot

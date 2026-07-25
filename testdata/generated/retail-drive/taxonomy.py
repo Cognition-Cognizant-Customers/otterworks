@@ -1,9 +1,15 @@
-"""RetailCo enterprise-drive taxonomy.
+"""OtterWorks enterprise-drive taxonomy.
 
-A data-driven description of a large retail company's shared drive: departments
-(top-level folders), a deep nested subfolder structure, and file templates that
-expand over axes (years, quarters, regions, stores, vendors, campaigns, ...) to
-produce a realistic, high-volume, multi-format corpus.
+A data-driven description of the OtterWorks company shared drive — an
+enterprise retailer of products for otters (SalmonSnax, shrimp treats,
+fish-oil supplements, kelp snacks, otter apparel and grooming textiles).
+Departments are top-level folders with a deep nested subfolder structure, and
+file templates expand over axes (years, quarters, regions, stores, suppliers,
+campaigns, skus, ...) to produce a realistic, high-volume, multimodal corpus.
+
+Suppliers, categories and SKUs come from the shared product catalog
+(``catalog.py``, backed by the OTD-15 ``testdata/market-series/`` contract) so
+every artifact draws figures from one canonical source.
 
 ``DEPARTMENTS`` maps a department name to a list of *file specs*. Each spec:
 
@@ -12,6 +18,7 @@ produce a realistic, high-volume, multi-format corpus.
       "name":   "{q} {year} Income Statement",     # template (see AXES)
       "type":   "xlsx",                            # file extension
       "expand": ["year", "quarter"],               # axes to cartesian-expand
+      "kind":   "chart",                           # optional builder variant
     }
 
 The generator (`generate_drive.py`) creates every folder in every spec's path
@@ -19,22 +26,22 @@ and one file per expansion tuple. ``SCALE`` multiplies list-axis breadth.
 """
 from __future__ import annotations
 
+import catalog
+
 YEARS = [2023, 2024, 2025, 2026]
 QUARTERS = ["Q1", "Q2", "Q3", "Q4"]
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 REGIONS = ["Northeast", "Southeast", "Midwest", "Southwest", "West", "Pacific-NW"]
 STORES = [f"Store-{1000 + i}" for i in range(24)]
-VENDORS = [
-    "Atlas-Textiles", "Beacon-Electronics", "Cedar-Home", "Delta-Foods",
-    "Everest-Outdoor", "Forge-Hardware", "Grove-Organics", "Halo-Beauty",
-]
+
+# Suppliers and categories come from the shared catalog (OTD-15 contract).
+SUPPLIERS = catalog.suppliers()
+CATEGORIES = catalog.categories()
+SKUS = [s.name.replace(" ", "-").replace("/", "-") for s in catalog.skus()]
+
 CAMPAIGNS = [
-    "Spring-Refresh", "Summer-Blowout", "Back-to-School", "Holiday-Cheer",
-    "Black-Friday", "Clearance-Event", "Loyalty-Days", "New-Arrivals",
-]
-CATEGORIES = [
-    "Apparel", "Electronics", "Home-&-Kitchen", "Grocery", "Outdoor",
-    "Beauty", "Toys", "Footwear",
+    "River-Days", "Salmon-Run-Sale", "Kelp-Forest-Fest", "Tidepool-Treats",
+    "Winter-Coat-Drive", "Pup-Season-Picks", "Streamside-Clearance", "New-Rafts",
 ]
 
 # Axis name -> value list (used for {placeholder} substitution + expansion).
@@ -44,14 +51,18 @@ AXES = {
     "month": MONTHS,
     "region": REGIONS,
     "store": STORES,
-    "vendor": VENDORS,
+    "vendor": SUPPLIERS,
     "campaign": CAMPAIGNS,
     "category": CATEGORIES,
+    "sku": SKUS,
 }
 
 
-def _s(folder, name, type, expand=None):
-    return {"folder": folder, "name": name, "type": type, "expand": expand or []}
+def _s(folder, name, type, expand=None, kind=None):
+    spec = {"folder": folder, "name": name, "type": type, "expand": expand or []}
+    if kind:
+        spec["kind"] = kind
+    return spec
 
 
 DEPARTMENTS: dict[str, list[dict]] = {
@@ -61,7 +72,8 @@ DEPARTMENTS: dict[str, list[dict]] = {
         _s("Financial Statements/Annual", "{year} Annual Report", "pdf", ["year"]),
         _s("Budgeting/Department Budgets", "{year} {category} Budget", "xlsx", ["year", "category"]),
         _s("Budgeting/Forecasts", "{quarter} {year} Revenue Forecast", "xlsx", ["year", "quarter"]),
-        _s("Accounts Payable/Invoices", "Invoice {vendor} {quarter} {year}", "pdf", ["vendor", "quarter"]),
+        _s("Accounts Payable/Invoices", "Invoice {vendor} {quarter} {year}", "pdf", ["vendor", "quarter"], kind="invoice"),
+        _s("Market Charts", "{quarter} {year} Margin Trend", "png", ["year", "quarter"], kind="chart"),
         _s("Tax/Filings", "{year} Corporate Tax Filing", "pdf", ["year"]),
         _s("Policies", "Expense Reimbursement Policy", "docx"),
         _s("Board Reports", "{quarter} {year} Board Financial Review", "pptx", ["year", "quarter"]),
@@ -78,7 +90,7 @@ DEPARTMENTS: dict[str, list[dict]] = {
         _s("Headcount", "{region} Headcount {quarter} {year}", "xlsx", ["region", "quarter"]),
     ],
     "Legal": [
-        _s("Contracts/Vendors", "MSA {vendor}", "pdf", ["vendor"]),
+        _s("Contracts/Suppliers", "MSA {vendor}", "pdf", ["vendor"], kind="contract"),
         _s("Contracts/Leases", "Lease {store}", "pdf", ["store"]),
         _s("Compliance", "{year} Compliance Audit", "pdf", ["year"]),
         _s("Policies", "Data Privacy Policy", "docx"),
@@ -93,6 +105,8 @@ DEPARTMENTS: dict[str, list[dict]] = {
         _s("Campaigns/Assets", "{campaign} Promo Video", "mp4", ["campaign"]),
         _s("Campaigns/Assets", "{campaign} Radio Spot", "mp3", ["campaign"]),
         _s("Campaigns/Performance", "{campaign} {year} Results", "xlsx", ["campaign", "year"]),
+        _s("Product Art", "{sku} Product Art", "png", ["sku"], kind="product_art"),
+        _s("Product Art", "{sku} Logo Sticker", "svg", ["sku"]),
         _s("Brand", "Brand Guidelines {year}", "pdf", ["year"]),
         _s("Email", "{quarter} {year} Email Calendar", "xlsx", ["year", "quarter"]),
         _s("Analytics", "{quarter} {year} Web Traffic", "csv", ["year", "quarter"]),
@@ -103,7 +117,8 @@ DEPARTMENTS: dict[str, list[dict]] = {
         _s("Planograms/{category}", "{category} Planogram {region}", "pdf", ["category", "region"]),
         _s("Pricing", "{category} Price List {quarter} {year}", "xlsx", ["category", "quarter"]),
         _s("Markdowns", "{quarter} {year} Markdown Schedule", "xlsx", ["year", "quarter"]),
-        _s("Vendor Catalogs", "{vendor} Catalog {year}", "pdf", ["vendor", "year"]),
+        _s("Supplier Catalogs", "{vendor} Catalog {year}", "pdf", ["vendor", "year"]),
+        _s("Spec Sheets", "{sku} Spec Sheet", "pdf", ["sku"], kind="spec_sheet"),
         _s("Seasonal", "{campaign} Merchandising Guide", "pptx", ["campaign"]),
     ],
     "Store Operations": [
@@ -120,12 +135,14 @@ DEPARTMENTS: dict[str, list[dict]] = {
         _s("Distribution Centers", "DC {region} Throughput {quarter} {year}", "xlsx", ["region", "quarter"]),
         _s("Shipping/Carriers", "Carrier Rate Card {vendor} {year}", "xlsx", ["vendor", "year"]),
         _s("Demand Planning", "{category} Demand Forecast {quarter} {year}", "xlsx", ["category", "quarter"]),
+        _s("Freight", "{quarter} {year} Freight Index Chart", "png", ["year", "quarter"], kind="chart"),
         _s("Returns", "{quarter} {year} Returns Analysis", "xlsx", ["year", "quarter"]),
         _s("SOPs", "Warehouse Safety SOP", "pdf"),
     ],
     "E-Commerce": [
         _s("Site Content/Product Pages", "{category} PDP Copy", "docx", ["category"]),
         _s("Merch/Homepage", "{campaign} Homepage Layout", "png", ["campaign"]),
+        _s("Product Media", "{sku} Listing Image", "png", ["sku"], kind="product_art"),
         _s("Analytics/Funnel", "{quarter} {year} Conversion Funnel", "csv", ["year", "quarter"]),
         _s("Catalog", "{category} Product Feed", "json", ["category"]),
         _s("A-B Tests", "{campaign} Test Results", "xlsx", ["campaign"]),
@@ -142,9 +159,10 @@ DEPARTMENTS: dict[str, list[dict]] = {
         _s("Configs", "service-config", "json"),
     ],
     "Procurement": [
-        _s("Vendors/Profiles", "{vendor} Vendor Profile", "docx", ["vendor"]),
-        _s("Vendors/Scorecards", "{vendor} Scorecard {year}", "xlsx", ["vendor", "year"]),
-        _s("Purchase Orders", "PO {vendor} {quarter} {year}", "pdf", ["vendor", "quarter"]),
+        _s("Suppliers/Profiles", "{vendor} Supplier Profile", "docx", ["vendor"]),
+        _s("Suppliers/Scorecards", "{vendor} Scorecard {year}", "xlsx", ["vendor", "year"]),
+        _s("Purchase Orders", "PO {vendor} {quarter} {year}", "pdf", ["vendor", "quarter"], kind="invoice"),
+        _s("Contracts", "Supply Agreement {vendor} {year}", "pdf", ["vendor", "year"], kind="contract"),
         _s("RFPs", "{category} Sourcing RFP {year}", "docx", ["category", "year"]),
         _s("Savings", "{year} Cost Savings Tracker", "xlsx", ["year"]),
     ],
@@ -172,6 +190,8 @@ DEPARTMENTS: dict[str, list[dict]] = {
     ],
     "Analytics & Insights": [
         _s("Dashboards/Sales", "{quarter} {year} Sales Dashboard", "xlsx", ["year", "quarter"]),
+        _s("Market Charts", "{quarter} {year} Salmon Price Chart", "png", ["year", "quarter"], kind="chart"),
+        _s("Market Charts", "{category} Margin Trend {year}", "png", ["category", "year"], kind="chart"),
         _s("Reports/Category", "{category} Performance {quarter} {year}", "xlsx", ["category", "quarter"]),
         _s("Customer", "{year} Customer Segmentation", "csv", ["year"]),
         _s("Datasets", "{region} Transactions {month}", "csv", ["region", "month"]),
@@ -186,6 +206,15 @@ DEPARTMENTS: dict[str, list[dict]] = {
         _s("Communications", "All-Hands {quarter} {year}", "pptx", ["year", "quarter"]),
     ],
 }
+
+
+# Committed MP4 clips (testdata/generated/retail-drive/assets/) -> drive folders.
+# Uploaded idempotently by generate_drive.py with mime video/mp4.
+ASSET_PLACEMENTS: list[tuple[str, tuple[str, ...]]] = [
+    ("salmon-run-sale-promo.mp4", ("Marketing", "Campaigns", "Videos")),
+    ("river-days-teaser.mp4", ("Marketing", "Campaigns", "Videos")),
+    ("kelp-forest-fest-spot.mp4", ("E-Commerce", "Product Media", "Videos")),
+]
 
 
 # Rich text documents (doc-service) per department: (title, body-topic).
