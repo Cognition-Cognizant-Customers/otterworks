@@ -22,7 +22,17 @@ import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { PageLoader } from "@/components/ui/loading-spinner";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { ShareDialog } from "@/components/files/share-dialog";
-import { TextFilePreview, PdfFilePreview, ImageFilePreview } from "@/components/files/file-preview";
+import {
+  TextFilePreview,
+  PdfFilePreview,
+  ImageFilePreview,
+  AudioFilePreview,
+  CsvFilePreview,
+  SpreadsheetFilePreview,
+  DocxFilePreview,
+  FallbackFilePreview,
+} from "@/components/files/file-preview";
+import { getPreviewKind } from "@/lib/preview";
 import { filesApi, authApi } from "@/lib/api";
 import { formatFileSize, formatRelativeTime, getInitials, generateColor } from "@/lib/utils";
 
@@ -111,17 +121,26 @@ function FileDetailContent() {
     );
   }
 
-  const isImage = file.mimeType.startsWith("image/");
-  const isVideo = file.mimeType.startsWith("video/");
-  const isPdf = file.mimeType === "application/pdf";
-  const isText =
-    file.mimeType.startsWith("text/") ||
-    file.mimeType === "application/json" ||
-    file.mimeType === "application/xml" ||
-    file.mimeType === "application/javascript" ||
-    file.mimeType === "application/typescript" ||
-    file.mimeType === "application/x-yaml" ||
-    file.mimeType === "application/x-sh";
+  const previewKind = getPreviewKind(file.mimeType);
+
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    try {
+      const downloadUrl = await filesApi.getDownloadUrl(file.id);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = file.name;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      toast.success(`Downloading ${file.name}`);
+    } catch {
+      toast.error("Download failed. Please try again.");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -154,24 +173,7 @@ function FileDetailContent() {
         <div className="flex items-center gap-2">
           <button
             disabled={isDownloading}
-            onClick={async () => {
-              setIsDownloading(true);
-              try {
-                const downloadUrl = await filesApi.getDownloadUrl(file.id);
-                const a = document.createElement("a");
-                a.href = downloadUrl;
-                a.download = file.name;
-                a.rel = "noopener";
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                toast.success(`Downloading ${file.name}`);
-              } catch {
-                toast.error("Download failed. Please try again.");
-              } finally {
-                setIsDownloading(false);
-              }
-            }}
+            onClick={handleDownload}
             className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isDownloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
@@ -206,13 +208,13 @@ function FileDetailContent() {
             </div>
             <div className="p-8 flex items-center justify-center min-h-[300px] bg-gray-50">
               <FilePreviewContent
-                isImage={isImage}
-                isVideo={isVideo}
-                isPdf={isPdf}
-                isText={isText}
+                previewKind={previewKind}
                 isUrlLoading={isUrlLoading}
                 presignedUrl={presignedUrl}
                 fileName={file.name}
+                mimeType={file.mimeType}
+                sizeBytes={file.size}
+                onDownload={handleDownload}
               />
             </div>
           </div>
@@ -401,23 +403,23 @@ function InfoRow({
 }
 
 function FilePreviewContent({
-  isImage,
-  isVideo,
-  isPdf,
-  isText,
+  previewKind,
   isUrlLoading,
   presignedUrl,
   fileName,
+  mimeType,
+  sizeBytes,
+  onDownload,
 }: Readonly<{
-  isImage: boolean;
-  isVideo: boolean;
-  isPdf: boolean;
-  isText: boolean;
+  previewKind: ReturnType<typeof getPreviewKind>;
   isUrlLoading: boolean;
   presignedUrl: string | undefined;
   fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  onDownload: () => void;
 }>) {
-  if ((isImage || isVideo || isText || isPdf) && isUrlLoading) {
+  if (previewKind !== "fallback" && isUrlLoading) {
     return (
       <div className="w-full text-center py-8">
         <div className="w-6 h-6 border-2 border-otter-600 border-t-transparent rounded-full animate-spin mx-auto" />
@@ -425,32 +427,61 @@ function FilePreviewContent({
     );
   }
 
-  if (isImage) {
-    return <ImageFilePreview presignedUrl={presignedUrl} fileName={fileName} />;
-  }
-
-  if (isVideo && presignedUrl) {
-    return (
-      <video src={presignedUrl} controls className="max-w-full max-h-[500px] rounded-lg">
-        <track kind="captions" />
-      </video>
-    );
-  }
-
-  if (isPdf) {
-    return <PdfFilePreview presignedUrl={presignedUrl} />;
-  }
-
-  if (isText) {
-    return <TextFilePreview presignedUrl={presignedUrl} fileName={fileName} />;
-  }
-
-  return (
-    <div className="text-center">
-      <File size={64} className="text-gray-300 mx-auto mb-3" />
-      <p className="text-sm text-gray-500">Preview not available for this file type</p>
-    </div>
+  const parseFallback = (
+    <FallbackFilePreview
+      fileName={fileName}
+      mimeType={mimeType}
+      sizeBytes={sizeBytes}
+      note="Could not render a preview of this file."
+      onDownload={onDownload}
+    />
   );
+
+  switch (previewKind) {
+    case "image":
+      return <ImageFilePreview presignedUrl={presignedUrl} fileName={fileName} />;
+    case "video":
+      return presignedUrl ? (
+        <video src={presignedUrl} controls className="max-w-full max-h-[500px] rounded-lg">
+          <track kind="captions" />
+        </video>
+      ) : (
+        parseFallback
+      );
+    case "audio":
+      return <AudioFilePreview presignedUrl={presignedUrl} fileName={fileName} />;
+    case "pdf":
+      return <PdfFilePreview presignedUrl={presignedUrl} />;
+    case "csv":
+      return <CsvFilePreview presignedUrl={presignedUrl} fileName={fileName} />;
+    case "spreadsheet":
+      return (
+        <SpreadsheetFilePreview
+          presignedUrl={presignedUrl}
+          fileName={fileName}
+          fallback={parseFallback}
+        />
+      );
+    case "docx":
+      return (
+        <DocxFilePreview
+          presignedUrl={presignedUrl}
+          fileName={fileName}
+          fallback={parseFallback}
+        />
+      );
+    case "text":
+      return <TextFilePreview presignedUrl={presignedUrl} fileName={fileName} />;
+    default:
+      return (
+        <FallbackFilePreview
+          fileName={fileName}
+          mimeType={mimeType}
+          sizeBytes={sizeBytes}
+          onDownload={onDownload}
+        />
+      );
+  }
 }
 
 function FileIcon({ mimeType }: Readonly<{ mimeType: string }>) {

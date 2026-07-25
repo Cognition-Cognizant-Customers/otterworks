@@ -15,6 +15,18 @@ make_bucket otterworks-files
 make_bucket otterworks-data-lake
 make_bucket otterworks-audit-archive
 
+# CORS on the files bucket: the web app fetches file bytes directly from S3
+# via presigned URLs (file previews), which is a cross-origin browser request.
+awslocal s3api put-bucket-cors --bucket otterworks-files --cors-configuration '{
+  "CORSRules": [{
+    "AllowedOrigins": ["http://localhost:3000"],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["Content-Length", "Content-Range", "ETag"],
+    "MaxAgeSeconds": 3600
+  }]
+}'
+
 # SQS Queue (create-queue is idempotent for an existing queue with the same name)
 awslocal sqs create-queue --queue-name otterworks-notifications
 awslocal sqs create-queue --queue-name otterworks-audit-events-queue
