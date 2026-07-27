@@ -5,8 +5,8 @@ uploaded objects are real, openable files of the correct type rather than empty
 placeholders. Non-financial variety is derived deterministically from the file
 name + a seeded ``random.Random`` so re-runs are reproducible; every financial
 figure (prices, costs, margins, revenue) comes from the shared product catalog
-(``catalog.py``, backed by the OTD-15 ``testdata/market-series/`` contract) so
-all artifacts and the margins analytics dashboard show consistent numbers.
+(``catalog.py``, backed by the OTD-15 ``market-series/`` contract CSVs in
+this directory) so all artifacts show consistent numbers.
 
 Heavy office formats (xlsx/docx/pptx/pdf/png/jpg) use optional third-party
 libraries. If a library is missing the generator degrades gracefully to a

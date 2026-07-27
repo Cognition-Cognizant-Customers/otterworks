@@ -1,18 +1,17 @@
 """Shared OtterWorks product catalog + market-series price model.
 
 Single source of truth for every financial figure in the seeded drive. Loads
-the committed OTD-15 contract CSVs from ``testdata/market-series/`` (series
-registry, daily baseline price history, ~40-SKU product catalog) and exposes
-deterministic ``price_on`` / ``cogs`` / ``margin_pct`` implementing the margin
-model locked by OTD-15, so drive artifacts and the margins analytics dashboard
-show identical numbers.
+the committed OTD-15 contract CSVs from ``market-series/`` next to this file
+(series registry, daily baseline price history, ~40-SKU product catalog) and
+exposes deterministic ``price_on`` / ``cogs`` / ``margin_pct`` implementing
+the margin model locked by OTD-15, so drive artifacts are internally
+consistent across runs.
 
-Dates past the committed baseline are extended with the same seeded random
-walk the analytics-service ``MarketSeeder`` uses: per-day
-``java.util.Random(seed)`` with ``seed = series_code.hashCode ^ epochDay`` and
-a fixed per-series daily sigma (see ``DAILY_SIGMA``). ``_JavaRandom`` below is
-a bit-exact reimplementation of ``java.util.Random.nextGaussian`` so both
-sides produce identical values.
+Dates past the committed baseline are extended with a seeded random walk:
+per-day ``java.util.Random(seed)`` with ``seed = series_code.hashCode ^
+epochDay`` and a fixed per-series daily sigma (see ``DAILY_SIGMA``).
+``_JavaRandom`` below is a bit-exact reimplementation of
+``java.util.Random.nextGaussian`` so repeated runs produce identical values.
 
 Fails fast with :class:`MarketSeriesMissingError` when the contract CSVs are
 absent — figures must never silently fall back to random values.
@@ -27,10 +26,9 @@ from decimal import ROUND_HALF_UP, Decimal
 from functools import lru_cache
 from pathlib import Path
 
-# testdata/generated/retail-drive/ -> testdata/market-series/
-MARKET_SERIES_DIR = Path(__file__).resolve().parent.parent.parent / "market-series"
+MARKET_SERIES_DIR = Path(__file__).resolve().parent / "market-series"
 
-# Locked by OTD-15 (see testdata/market-series/README.md).
+# Locked by OTD-15 (see market-series/README.md).
 DAILY_SIGMA = {
     "SALMON_NOK_KG": 0.012,
     "SHRIMP_USD_KG": 0.008,
@@ -112,7 +110,8 @@ def _read_csv(name: str) -> list[dict[str, str]]:
         raise MarketSeriesMissingError(
             f"Market-series contract file not found: {path}. "
             "The shared catalog/baseline CSVs are owned by OTD-15 and must be "
-            "present in testdata/market-series/ (series.csv, baseline_prices.csv, "
+            "present in testdata/generated/retail-drive/market-series/ "
+            "(series.csv, baseline_prices.csv, "
             "products.csv). Refusing to fall back to synthetic figures."
         )
     with path.open(newline="", encoding="utf-8") as fh:

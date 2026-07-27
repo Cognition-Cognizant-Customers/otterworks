@@ -8,8 +8,8 @@ file templates expand over axes (years, quarters, regions, stores, suppliers,
 campaigns, skus, ...) to produce a realistic, high-volume, multimodal corpus.
 
 Suppliers, categories and SKUs come from the shared product catalog
-(``catalog.py``, backed by the OTD-15 ``testdata/market-series/`` contract) so
-every artifact draws figures from one canonical source.
+(``catalog.py``, backed by the OTD-15 ``market-series/`` contract CSVs in
+this directory) so every artifact draws figures from one canonical source.
 
 ``DEPARTMENTS`` maps a department name to a list of *file specs*. Each spec:
 

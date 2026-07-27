@@ -1,14 +1,8 @@
 # Shared market-series & product-catalog seed data (OTD-15 contract)
 
-Committed reference dataset for the margins analytics feature. **Owned by
-OTD-15**; consumed by the analytics-service startup seeder and by OTD-14 (the
-drive-spreadsheet seed) so both surfaces show the same numbers.
-
-The analytics-service Docker build context is `services/analytics-service`
-only, so these files are duplicated at
-`services/analytics-service/src/main/resources/seed/market-series/`.
-`MarketSeedResourcesSpec` asserts the two copies are checksum-identical —
-if you change one, change both.
+Committed reference dataset **owned by OTD-15**; consumed by OTD-14 (the
+drive-spreadsheet seed, `catalog.py` in the parent directory) so every seeded
+drive artifact draws figures from one canonical source.
 
 ## Files & schemas
 
@@ -41,11 +35,11 @@ if you change one, change both.
 | `list_price_usd` | decimal(10,2) | |
 | `supplier` | string | synthetic supplier name |
 
-## Deterministic extension rule (implemented by `MarketSeeder`)
+## Deterministic extension rule (implemented by `catalog.py`)
 
 Baseline history ends at the last `price_date` in `baseline_prices.csv`. From
-the next day up to "today" the service extends each series with a **seeded
-random walk** so every environment generates identical values:
+the next day onward each series is extended with a **seeded random walk** so
+every environment generates identical values:
 
 - RNG: `java.util.Random(seed)` per step, where
   `seed = series_code.hashCode ^ epochDay` (epochDay of the date generated).
@@ -54,8 +48,6 @@ random walk** so every environment generates identical values:
   `SALMON_NOK_KG 0.012, SHRIMP_USD_KG 0.008, SOYBEAN_OIL_USD_KG 0.010,
   SUGAR_USD_KG 0.011, COTTON_USD_KG 0.009, DREWRY_WCI_USD_FEU 0.015,
   USD_NOK 0.004`.
-- Rows are inserted with `source='synthetic'` and never overwrite existing
-  rows (`ON CONFLICT DO NOTHING`), so manually pulled values win.
 
 ## Margin model (locked by OTD-15)
 

@@ -27,7 +27,7 @@ drive. The data is **synthetic** — no real people, customers, or PII.
 - `catalog.py` — the shared ~40-SKU product catalog + market price model.
   Loads the committed OTD-15 contract CSVs (see below) and exposes
   `price_on` / `cogs_usd` / `margin_pct`. **Fails fast** if
-  `testdata/market-series/` is missing — figures never fall back to random.
+  `testdata/generated/retail-drive/market-series/` is missing — figures never fall back to random.
 - `taxonomy.py` — the department/subfolder/file-template definition (data-driven;
   templates expand over years, quarters, regions, stores, suppliers, campaigns,
   categories, skus). Suppliers/categories/SKUs come from `catalog.py`. Edit this
@@ -48,16 +48,15 @@ drive. The data is **synthetic** — no real people, customers, or PII.
 
 ## Shared market-series contract (OTD-15)
 
-All prices/costs/margins derive from `testdata/market-series/`
+All prices/costs/margins derive from `testdata/generated/retail-drive/market-series/`
 (`series.csv`, `baseline_prices.csv`, `products.csv`), the committed dataset
-**owned by OTD-15** and also consumed by the analytics-service margins
-dashboard. `catalog.py` reads the CSVs verbatim and reimplements the
+**owned by OTD-15**. `catalog.py` reads the CSVs verbatim and implements the
 documented deterministic extension: past the last baseline date each series is
 extended with a per-day seeded random walk using a bit-exact port of
 `java.util.Random.nextGaussian` with `seed = series_code.hashCode ^ epochDay`
 and the fixed per-series daily sigmas from the market-series README — so the
-drive artifacts and the analytics dashboard produce **identical numbers** for
-any date. The margin model is likewise the one locked by OTD-15:
+drive artifacts produce **identical numbers** for any date across runs. The
+margin model is likewise the one locked by OTD-15:
 
 ```
 commodity_cost_usd = commodity_price(native) × fx_to_usd × content_kg

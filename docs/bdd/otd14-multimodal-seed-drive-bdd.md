@@ -2,7 +2,7 @@
 
 Feature: upgrade the pre-seeded enterprise drive (`testdata/generated/retail-drive/`)
 to OtterWorks-themed multimodal content driven by the shared ~40-SKU catalog in
-`testdata/market-series/` (owned by OTD-15).
+`testdata/generated/retail-drive/market-series/` (owned by OTD-15).
 
 ## BDD-01: OtterWorks theme end-to-end, zero RetailCo remnants
 **Traces to:** AC-01   **Category:** FUNC
@@ -15,7 +15,7 @@ to OtterWorks-themed multimodal content driven by the shared ~40-SKU catalog in
 
 ## BDD-02: Shared catalog drives all figures consistently
 **Traces to:** AC-02   **Category:** FUNC
-**Given** `testdata/market-series/` CSVs are present
+**Given** `testdata/generated/retail-drive/market-series/` CSVs are present
 **When** two different artifacts referencing the same SKU are generated
 **Then** both show identical list price / COGS / margin from `catalog.py`; no `_PRODUCTS` or `uniform()` money paths remain
 ### Testing Flow
@@ -67,7 +67,7 @@ to OtterWorks-themed multimodal content driven by the shared ~40-SKU catalog in
 **Traces to:** AC-04   **Category:** FUNC
 **Given** OTD-15's committed baseline + documented deterministic walk
 **When** `catalog.py` derives a price/margin for any date
-**Then** it consumes `testdata/market-series/` CSVs verbatim, reimplements the documented `java.util.Random` walk (seed = `series_code.hashCode ^ epochDay`), and repeated calls return identical values; the contract is documented in the README
+**Then** it consumes `testdata/generated/retail-drive/market-series/` CSVs verbatim, reimplements the documented `java.util.Random` walk (seed = `series_code.hashCode ^ epochDay`), and repeated calls return identical values; the contract is documented in the README
 ### Testing Flow
 1. pytest: `price_on(series, d)` twice → identical; matches the raw baseline CSV value for an in-baseline date
 2. README review: contract + margin model documented
@@ -108,7 +108,7 @@ to OtterWorks-themed multimodal content driven by the shared ~40-SKU catalog in
 
 ## BDD-13: Missing market-series CSVs fail fast
 **Traces to:** AC-08   **Category:** ERR
-**Given** `testdata/market-series/` is absent
+**Given** `testdata/generated/retail-drive/market-series/` is absent
 **When** the generator (or catalog import) runs
 **Then** it fails immediately with an actionable error naming the missing path and OTD-15 ownership — no silent random fallback
 ### Testing Flow
@@ -139,7 +139,7 @@ to OtterWorks-themed multimodal content driven by the shared ~40-SKU catalog in
 - Unmapped AC-IDs: NONE
 
 ## Data Dependencies
-- Inputs: `testdata/market-series/series.csv`, `baseline_prices.csv` (daily, 2024-08-01…2026-06-30), `products.csv` (~40 SKUs) — OTD-15 contract, read-only
+- Inputs: `testdata/generated/retail-drive/market-series/series.csv`, `baseline_prices.csv` (daily, 2024-08-01…2026-06-30), `products.csv` (~40 SKUs) — OTD-15 contract, read-only
 - Endpoints: `POST/GET /api/v1/folders` (DynamoDB), `POST /api/v1/files/upload` + `GET /api/v1/files` (S3+DynamoDB via LocalStack), `POST/GET /api/v1/documents` (Postgres)
 - Flow: `catalog.py` → `taxonomy.py` → `filegen.py` → `generate_drive.py` → API gateway :8080 → file-service / document-service
 - Preview surface: `frontend/client-app/src/pages/file-detail.tsx` (image/*, video/*, application/pdf, text/*) — unchanged
