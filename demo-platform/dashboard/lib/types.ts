@@ -39,6 +39,9 @@ export interface Tenant {
   expiresAt: number;
   lastSeenAt: number;
   note?: string;
+  // Perpetual tenant: exempt from the reaper and from idle-suspend, and not
+  // checkin-able or bug-injectable without explicitly clearing the flag first.
+  persistent?: boolean;
   live?: TenantLiveState;
 }
 
@@ -60,6 +63,8 @@ export type AuditAction =
   | "reap"
   | "inject"
   | "reset"
+  | "redeploy"
+  | "persist"
   | "login_ok"
   | "login_fail";
 
@@ -76,6 +81,10 @@ export interface ReaperConfig {
   graceSeconds: number;
   enabled: boolean;
   sweepOrphans: boolean;
+  suspendIdle: boolean;
+  idleAfterSeconds: number;
+  sweepInfra: boolean;
+  sweepInfraDelete: boolean;
   updatedAt?: number;
   updatedBy?: string;
 }
@@ -100,6 +109,16 @@ export interface CheckoutRequest {
   tier?: TenantTier;
   ttl?: string;
   image_tag?: string;
+  persistent?: boolean;
+}
+
+export interface RedeployRequest {
+  image_tag?: string;
+  branch?: string;
+}
+
+export interface PersistRequest {
+  persistent: boolean;
 }
 
 export interface ExtendRequest {
@@ -115,4 +134,8 @@ export interface ReaperUpdateRequest {
   grace_seconds: number;
   enabled: boolean;
   sweep_orphans: boolean;
+  suspend_idle: boolean;
+  idle_after_seconds: number;
+  sweep_infra: boolean;
+  sweep_infra_delete: boolean;
 }

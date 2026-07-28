@@ -14,6 +14,21 @@ locals {
     Module  = "vpc"
     Project = var.project
   }
+
+  # Karpenter's EC2NodeClass finds where to launch nodes by this tag, so it goes
+  # on the subnets nodes actually belong in -- private when there is a NAT
+  # gateway to reach the internet through, public otherwise, matching what the
+  # root module hands the node group. Tagging both would let Karpenter place a
+  # node in a private subnet with no route out, where it would fail to pull
+  # images or register with the cluster.
+  #
+  # It lives in the subnet's own tag set rather than in a separate aws_ec2_tag
+  # resource because aws_subnet owns the whole set and strips anything else on
+  # the next apply.
+  karpenter_discovery = { "karpenter.sh/discovery" = var.cluster_name }
+
+  karpenter_discovery_public  = var.enable_nat_gateway ? {} : local.karpenter_discovery
+  karpenter_discovery_private = var.enable_nat_gateway ? local.karpenter_discovery : {}
 }
 
 # --- VPC ---
@@ -48,10 +63,10 @@ resource "aws_subnet" "public" { # nosemgrep: terraform.aws.security.aws-subnet-
   availability_zone       = local.azs[count.index]
   map_public_ip_on_launch = true
 
-  tags = merge(local.common_tags, {
-    Name                                           = "${var.project}-public-${local.azs[count.index]}"
-    "kubernetes.io/role/elb"                        = "1"
-    "kubernetes.io/cluster/${var.cluster_name}"     = "shared"
+  tags = merge(local.common_tags, local.karpenter_discovery_public, {
+    Name                                        = "${var.project}-public-${local.azs[count.index]}"
+    "kubernetes.io/role/elb"                    = "1"
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
   })
 }
 
@@ -64,10 +79,10 @@ resource "aws_subnet" "private" {
   cidr_block        = cidrsubnet(var.vpc_cidr, 8, count.index + 1)
   availability_zone = local.azs[count.index]
 
-  tags = merge(local.common_tags, {
-    Name                                           = "${var.project}-private-${local.azs[count.index]}"
-    "kubernetes.io/role/internal-elb"               = "1"
-    "kubernetes.io/cluster/${var.cluster_name}"     = "shared"
+  tags = merge(local.common_tags, local.karpenter_discovery_private, {
+    Name                                        = "${var.project}-private-${local.azs[count.index]}"
+    "kubernetes.io/role/internal-elb"           = "1"
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
   })
 }
 

@@ -82,6 +82,6 @@ ENV HOME=/home/runner \
     CONTROL_TABLE=otterworks-demo-control \
     AWS_REGION=us-east-1 \
     EKS_CLUSTER=otterworks-dev \
-    HOST_SUFFIX=demo.otterworks.xyz
+    HOST_SUFFIX=demo.otterworks.app
 
 ENTRYPOINT ["/workspace/demo-platform/runner/entrypoint.sh"]

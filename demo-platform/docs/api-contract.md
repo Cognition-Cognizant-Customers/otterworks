@@ -1,7 +1,7 @@
 # Demo Ops Dashboard — API contract
 
 The dashboard is a **Next.js** app (server + UI in one deployable) in namespace
-`otterworks-platform`, served at `https://ops.otterworks.xyz`. All routes below are Next.js
+`otterworks-platform`, served at `https://ops.otterworks.app`. All routes below are Next.js
 **server** route handlers (`app/api/...`) — enforcement is server-side, never trust the client.
 
 ## Auth (passcode, server-side)
@@ -17,17 +17,31 @@ The dashboard is a **Next.js** app (server + UI in one deployable) in namespace
 - `GET /api/tenants` → `Tenant[]` — control-table items **joined with live cluster state**
   (namespace phase, ready/total pods, per-service status, url). Cached ~5s.
 - `GET /api/tenants/:id` → `Tenant` + `pods[]` + recent `audit[]`.
-- `POST /api/tenants/checkout` `{ id?, branch, owner, tier?, ttl?, image_tag? }` →
+- `POST /api/tenants/checkout` `{ id?, branch, owner, tier?, ttl?, image_tag?, persistent? }` →
   atomic lock (409 if taken), upsert `TENANT#`, enqueue a **deploy runner Job**, status
-  `deploying`. Returns the `Tenant`.
+  `deploying`. Returns the `Tenant`. `ttl: "never"` and `persistent: true` mean the same thing
+  and are accepted only for an id in `PERPETUAL_TENANT_IDS` (403 otherwise).
+- `POST /api/tenants/:id/redeploy` `{ branch?, image_tag? }` → enqueue a **deploy runner Job**
+  for a tenant that is already checked out. This is the CD entry point. Keeps the owner, the
+  branch and the **remaining TTL** — a push must never extend an environment's life. 409 if the
+  tenant is `free`/`draining`, if `branch` is not the branch the tenant was checked out from, or
+  if a deploy is already running for it.
 - `POST /api/tenants/:id/checkin` → enqueue **teardown runner Job**, status `draining`.
+  409 for a persistent tenant; clear the flag first (there is deliberately no force flag).
 - `POST /api/tenants/:id/extend` `{ ttl }` → bump `expires_at`.
-- `POST /api/tenants/:id/inject` `{ scenario }` / `POST /api/tenants/:id/reset` → drive the bug
-  catalog via a runner Job (optional; nice-to-have).
+- `POST /api/tenants/:id/persist` `{ persistent, ttl? }` → mark a tenant perpetual, or return it
+  to the TTL regime with `ttl` (default `24h`). Setting the flag is allowed only for an id in
+  `PERPETUAL_TENANT_IDS`; clearing it is always allowed. The flag and `expires_at` are written
+  in one update.
+- `POST /api/tenants/:id/inject` `{ scenario }` → drive the bug catalog via a runner Job.
+  409 for a persistent tenant: the perpetual environment exists precisely not to be broken.
+- `POST /api/tenants/:id/reset` → clear injected scenarios. Allowed for every tenant, including
+  the perpetual one, because it only restores.
 
 ## Reaper
 - `GET /api/reaper` → `CONFIG#reaper`.
-- `PUT /api/reaper` `{ schedule_cron, grace_seconds, enabled, sweep_orphans }` → update config
+- `PUT /api/reaper` `{ schedule_cron, grace_seconds, enabled, sweep_orphans, suspend_idle,
+  idle_after_seconds, sweep_infra, sweep_infra_delete }` → update config
   (the reaper CronJob reads this each run; changing the cron also patches the CronJob schedule).
 - `GET /api/reaper/orphans` → resources with no matching tenant (preview before sweep).
 
@@ -41,6 +55,9 @@ interface Tenant {
   id: string; status: TenantStatus; owner?: string; branch?: string; tier: "A"|"B";
   imageTag?: string; url?: string; apiUrl?: string; dbName: string; namespace: string;
   createdAt: number; expiresAt: number; lastSeenAt: number; note?: string;
+  // Perpetual: exempt from the reaper and from idle-suspend, not checkin-able
+  // and not injectable. At most one tenant (`main`) is normally persistent.
+  persistent?: boolean;
   live?: { phase: string; readyPods: number; totalPods: number;
            services: { name: string; ready: boolean; restarts: number }[] };
 }

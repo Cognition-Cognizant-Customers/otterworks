@@ -22,11 +22,27 @@ export const PUT = withSession(async (req: NextRequest, { actor }) => {
   if (!Number.isFinite(graceSeconds) || graceSeconds < 0) {
     return error(400, "invalid grace_seconds");
   }
+  const idleAfterSeconds = Number(body.idle_after_seconds);
+  if (!Number.isFinite(idleAfterSeconds) || idleAfterSeconds <= 0) {
+    return error(400, "invalid idle_after_seconds");
+  }
   const enabled = Boolean(body.enabled);
   const sweepOrphans = Boolean(body.sweep_orphans);
+  const suspendIdle = Boolean(body.suspend_idle);
+  const sweepInfra = Boolean(body.sweep_infra);
+  const sweepInfraDelete = Boolean(body.sweep_infra_delete);
 
   const cfg = await putReaperConfig(
-    { scheduleCron, graceSeconds, enabled, sweepOrphans },
+    {
+      scheduleCron,
+      graceSeconds,
+      enabled,
+      sweepOrphans,
+      suspendIdle,
+      idleAfterSeconds,
+      sweepInfra,
+      sweepInfraDelete,
+    },
     actor,
   );
   return json(cfg);

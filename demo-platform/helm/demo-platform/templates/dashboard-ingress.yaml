@@ -13,7 +13,7 @@ metadata:
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   rules:
-    - host: {{ .Values.dashboard.host | default "ops.otterworks.xyz" | quote }}
+    - host: {{ .Values.dashboard.host | default "ops.otterworks.app" | quote }}
       http:
         paths:
           - path: /

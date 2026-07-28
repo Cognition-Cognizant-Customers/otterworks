@@ -3,14 +3,22 @@
 @tailwind utilities;
 
 :root {
-  --primary: #0066cc;
-  --primary-dark: #004d99;
+  --primary: #1f3a5f;
+  --primary-dark: #152a45;
   --secondary: #6c757d;
+  --accent: #c9862b;
   --success: #28a745;
   --warning: #ffc107;
   --danger: #dc3545;
-  --background: #f8f9fa;
+  --background: #f4f5f7;
   --surface: #ffffff;
   --text-primary: #212529;
   --text-secondary: #6c757d;
+}
+
+body {
+  font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 13.5px;
+  background-color: var(--background);
+  color: var(--text-primary);
 }

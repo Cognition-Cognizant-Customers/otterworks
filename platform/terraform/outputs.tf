@@ -63,3 +63,18 @@ output "ecr_repository_urls" {
   description = "Map of service name to ECR repository URL"
   value       = module.ecr.repository_urls
 }
+
+output "karpenter_controller_role_arn" {
+  description = "IAM role ARN the Karpenter controller assumes via IRSA"
+  value       = module.eks.karpenter_controller_role_arn
+}
+
+output "karpenter_node_instance_profile" {
+  description = "Instance profile Karpenter launches nodes with"
+  value       = module.eks.karpenter_node_instance_profile
+}
+
+output "karpenter_interruption_queue" {
+  description = "SQS queue carrying Spot interruption and rebalance notices"
+  value       = module.eks.karpenter_interruption_queue
+}

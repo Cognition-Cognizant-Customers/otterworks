@@ -21,6 +21,10 @@ ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 ECR_PREFIX="otterworks/"
 IMAGE_TAG="${IMAGE_TAG:-$(git -C "$(dirname "$0")/.." rev-parse --short HEAD)-$(date +%s)}"
 DB_PASSWORD="${DB_PASSWORD:-}"
+# Host suffix for the golden app's ingress records. The frontends and the API
+# are published through the SHARED ingress controller (one NLB for the whole
+# cluster) rather than a LoadBalancer Service each -- see build_helm_args.
+GOLDEN_HOST_SUFFIX="${GOLDEN_HOST_SUFFIX:-otterworks.app}"
 # Shared JWT signing secret. MUST be identical across the gateway and every
 # service that validates tokens. Generated once if not supplied; pass a stable
 # value (JWT_SECRET=...) across redeploys so previously issued tokens stay valid.
@@ -125,6 +129,16 @@ aws eks update-kubeconfig --name "${EKS_CLUSTER}" --region "${AWS_REGION}" --ali
 log "Ensuring namespace ${NAMESPACE} exists..."
 kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
+# ---------- Step 4b: Shared ingress controller ----------
+
+# The frontends and the gateway are published as Ingresses (see build_helm_args),
+# which do nothing at all without a controller to act on them. Installing it here
+# rather than assuming it means a deploy onto a freshly built cluster is reachable
+# on the URLs this script prints, instead of silently having no entry point.
+# shellcheck source=lib/ingress-nginx.sh
+source "${SCRIPT_DIR}/lib/ingress-nginx.sh"
+ensure_ingress_nginx
+
 # ---------- Step 5: ECR Login ----------
 
 log "Logging into ECR..."
@@ -208,6 +222,31 @@ load_infra_outputs() {
   if [ -z "${RDS_HOST}" ]; then
     warn "Terraform outputs unavailable; services will deploy without wired config."
   fi
+  resolve_db_endpoint
+}
+
+# Where the services send their SQL, as opposed to RDS_HOST, which stays pointed
+# at the instance for administrative work. The golden app shares the one RDS
+# instance with every tenant, so it goes through the same pooler rather than
+# holding raw connections against a ~112-connection ceiling. Falls back to the
+# instance when the pooler is not installed; DB_VIA_PGBOUNCER=false forces it.
+# Mirrors resolve_db_endpoint in scripts/lib/tenant-common.sh.
+resolve_db_endpoint() {
+  DB_ENDPOINT_HOST="${RDS_HOST}"
+  DB_ENDPOINT_PORT="${RDS_PORT}"
+  DB_SESSION_PORT="${RDS_PORT}"
+
+  [ "${DB_VIA_PGBOUNCER:-true}" = "true" ] || return 0
+  kubectl -n "${PGBOUNCER_NAMESPACE:-otterworks-platform}" get svc pgbouncer >/dev/null 2>&1 || {
+    warn "pgbouncer not found; wiring services straight to RDS (install with demo-platform/scripts/install-pgbouncer.sh)"
+    return 0
+  }
+
+  DB_ENDPOINT_HOST="pgbouncer.${PGBOUNCER_NAMESPACE:-otterworks-platform}.svc.cluster.local"
+  DB_ENDPOINT_PORT=6432
+  # Migrations hold session-level advisory locks and cannot go through a
+  # transaction pooler; 6433 is the same pooler in session mode.
+  DB_SESSION_PORT=6433
 }
 
 irsa_arn() { echo "${IRSA_JSON:-{}}" | jq -r --arg s "$1" '.[$s] // empty' 2>/dev/null; }
@@ -222,6 +261,32 @@ add_secret() { SECRET_KV+=("$1" "$2"); }
 # contain @ : / # % ? in a connection string). Uses jq's @uri filter.
 urlencode() { jq -rn --arg s "$1" '$s|@uri'; }
 
+# Public hostname for a golden-app service on the shared ingress.
+golden_host() {
+  case "$1" in
+    web-app)         echo "app.${GOLDEN_HOST_SUFFIX}" ;;
+    admin-dashboard) echo "admin.${GOLDEN_HOST_SUFFIX}" ;;
+    api-gateway)     echo "api.${GOLDEN_HOST_SUFFIX}" ;;
+    *)               echo "$1.${GOLDEN_HOST_SUFFIX}" ;;
+  esac
+}
+
+# Fail the deploy if anything in this namespace owns a LoadBalancer Service.
+# Those create ELBs outside Terraform's knowledge, which is how load balancers
+# get stranded when a Service or cluster goes away. The single shared
+# ingress-nginx controller (in its own namespace) is the only allowed exception.
+assert_no_loadbalancer_services() {
+  local found
+  found="$(kubectl -n "${NAMESPACE}" get svc -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.name}{"\n"}{end}' 2>/dev/null)"
+  if [ -n "${found}" ]; then
+    err "LoadBalancer Services found in ${NAMESPACE}; these create untracked ELBs:"
+    err "${found}"
+    err "Route them through the shared ingress controller instead, then delete them:"
+    err "  kubectl -n ${NAMESPACE} delete svc ${found//$'\n'/ }"
+    return 1
+  fi
+}
+
 # Build the per-service Helm --set flags into the global EXTRA_ARGS array, and
 # secret values into the global SECRET_KV array.
 build_helm_args() {
@@ -234,16 +299,37 @@ build_helm_args() {
     EXTRA_ARGS+=(--set resources.requests.memory=512Mi --set resources.limits.memory=1024Mi --set resources.limits.cpu=1000m)
   fi
 
+  # Frontends are reached through the shared ingress controller. They must never
+  # be LoadBalancer Services: each one would mint a Classic ELB that Terraform
+  # does not track and that outlives the cluster if the Service is removed while
+  # the cloud-controller is down (this stranded 3 ELBs + 1 NLB in the past).
   case "$service" in
     web-app|admin-dashboard)
-      EXTRA_ARGS+=(--set service.type=LoadBalancer --set ingress.enabled=false)
+      EXTRA_ARGS+=(--set service.type=ClusterIP)
+      EXTRA_ARGS+=(--set ingress.enabled=true --set ingress.className=nginx)
+      EXTRA_ARGS+=(--set-string "ingress.hosts[0].host=$(golden_host "${service}")")
+      EXTRA_ARGS+=(--set-string 'ingress.hosts[0].paths[0].path=/')
+      EXTRA_ARGS+=(--set-string 'ingress.hosts[0].paths[0].pathType=Prefix')
+      EXTRA_ARGS+=(--set 'ingress.tls=null')
       EXTRA_ARGS+=(--set-string config.API_GATEWAY_URL=http://api-gateway:8080)
       return 0 ;;
+    api-gateway)
+      EXTRA_ARGS+=(--set service.type=ClusterIP)
+      EXTRA_ARGS+=(--set ingress.enabled=true --set ingress.className=nginx)
+      EXTRA_ARGS+=(--set-string "ingress.hosts[0].host=$(golden_host "${service}")")
+      EXTRA_ARGS+=(--set-string 'ingress.hosts[0].paths[0].path=/')
+      EXTRA_ARGS+=(--set-string 'ingress.hosts[0].paths[0].pathType=Prefix')
+      EXTRA_ARGS+=(--set 'ingress.tls=null') ;;
   esac
 
   local port="${CONTAINER_PORT[$service]:-}"
   if [ -n "$port" ]; then EXTRA_ARGS+=(--set "service.port=${port}" --set "service.targetPort=${port}"); fi
-  EXTRA_ARGS+=(--set ingress.enabled=false)
+  # Backends are cluster-internal. api-gateway falls through the case above to
+  # pick up its JWT secret but keeps the Ingress that block gave it; Helm honors
+  # the last --set, so disabling here unconditionally would silently strip it.
+  if [ "$service" != "api-gateway" ]; then
+    EXTRA_ARGS+=(--set ingress.enabled=false)
+  fi
 
   if [ -n "${JWT_SECRET}" ]; then
     case "$service" in
@@ -256,8 +342,13 @@ build_helm_args() {
     api-gateway) : ;; # backend service URLs default to the correct in-cluster DNS
     auth-service)
       EXTRA_ARGS+=(--set-string "config.SPRING_PROFILES_ACTIVE=prod")
-      EXTRA_ARGS+=(--set-string "config.SPRING_DATASOURCE_URL=jdbc:postgresql://${RDS_HOST}:${RDS_PORT}/${DB_NAME}")
+      EXTRA_ARGS+=(--set-string "config.SPRING_DATASOURCE_URL=jdbc:postgresql://${DB_ENDPOINT_HOST}:${DB_ENDPOINT_PORT}/${DB_NAME}")
       EXTRA_ARGS+=(--set-string "config.SPRING_DATASOURCE_USERNAME=${DB_USER}")
+      # Flyway's migration lock is session-level, so it needs the session-mode
+      # pooler port; the application's own queries stay on the transaction one.
+      EXTRA_ARGS+=(--set-string "config.SPRING_FLYWAY_URL=jdbc:postgresql://${DB_ENDPOINT_HOST}:${DB_SESSION_PORT}/${DB_NAME}")
+      EXTRA_ARGS+=(--set-string "config.SPRING_FLYWAY_USER=${DB_USER}")
+      add_secret SPRING_FLYWAY_PASSWORD "${DB_PASSWORD}"
       add_secret SPRING_DATASOURCE_PASSWORD "${DB_PASSWORD}" ;;
     file-service)
       EXTRA_ARGS+=(--set-string "config.AWS_REGION=${AWS_REGION}")
@@ -272,7 +363,7 @@ build_helm_args() {
       EXTRA_ARGS+=(--set-string "config.REDIS_HOST=${REDIS_HOST}" --set-string "config.REDIS_PORT=6379")
       EXTRA_ARGS+=(--set-string "config.DOC_SVC_AWS_REGION=${AWS_REGION}")
       EXTRA_ARGS+=(--set-string "config.DOC_SVC_SNS_TOPIC_ARN=${SNS_TOPIC}")
-      add_secret DOC_SVC_DATABASE_URL "postgresql+asyncpg://$(urlencode "${DB_USER}"):$(urlencode "${DB_PASSWORD}")@${RDS_HOST}:${RDS_PORT}/${DB_NAME}" ;;
+      add_secret DOC_SVC_DATABASE_URL "postgresql+asyncpg://$(urlencode "${DB_USER}"):$(urlencode "${DB_PASSWORD}")@${DB_ENDPOINT_HOST}:${DB_ENDPOINT_PORT}/${DB_NAME}" ;;
     collab-service)
       EXTRA_ARGS+=(--set-string "config.HTTP_PORT=8084" --set-string "config.NODE_ENV=production")
       EXTRA_ARGS+=(--set-string "config.REDIS_HOST=${REDIS_HOST}" --set-string "config.REDIS_PORT=6379") ;;
@@ -291,11 +382,17 @@ build_helm_args() {
     analytics-service)
       EXTRA_ARGS+=(--set-string "config.AWS_REGION=${AWS_REGION}")
       EXTRA_ARGS+=(--set-string "config.ANALYTICS_HOST=0.0.0.0" --set-string "config.PORT=8088")
-      EXTRA_ARGS+=(--set-string "config.DATABASE_URL=jdbc:postgresql://${RDS_HOST}:${RDS_PORT}/${DB_NAME}")
+      # Flyway again, from the same URL as the Slick pool (AnalyticsDb.migrate),
+      # and a failed migration silently falls back to the in-memory store --
+      # so the session port for the whole service, as with Rails.
+      EXTRA_ARGS+=(--set-string "config.DATABASE_URL=jdbc:postgresql://${DB_ENDPOINT_HOST}:${DB_SESSION_PORT}/${DB_NAME}")
       EXTRA_ARGS+=(--set-string "config.DATABASE_USER=${DB_USER}")
       add_secret DATABASE_PASSWORD "${DB_PASSWORD}" ;;
     admin-service)
-      EXTRA_ARGS+=(--set-string "config.DATABASE_HOST=${RDS_HOST}" --set-string "config.DATABASE_PORT=${RDS_PORT}")
+      # `rails db:migrate` runs from the image's CMD and takes a session-level
+      # advisory lock, and Rails has one connection URL for both, so the whole
+      # service uses the session-mode pooler port.
+      EXTRA_ARGS+=(--set-string "config.DATABASE_HOST=${DB_ENDPOINT_HOST}" --set-string "config.DATABASE_PORT=${DB_SESSION_PORT}")
       EXTRA_ARGS+=(--set-string "config.DATABASE_USER=${DB_USER}")
       EXTRA_ARGS+=(--set-string "config.RAILS_ENV=production" --set-string "config.RAILS_LOG_TO_STDOUT=true")
       add_secret DATABASE_PASSWORD "${DB_PASSWORD}"
@@ -305,7 +402,7 @@ build_helm_args() {
       EXTRA_ARGS+=(--set-string "config.Aws__DynamoDbTable=${DDB_AUDIT}")
       EXTRA_ARGS+=(--set-string "config.Aws__S3ArchiveBucket=${S3_AUDIT_BUCKET}") ;;
     report-service)
-      EXTRA_ARGS+=(--set-string "config.DB_HOST=${RDS_HOST}" --set-string "config.DB_PORT=${RDS_PORT}")
+      EXTRA_ARGS+=(--set-string "config.DB_HOST=${DB_ENDPOINT_HOST}" --set-string "config.DB_PORT=${DB_ENDPOINT_PORT}")
       EXTRA_ARGS+=(--set-string "config.DB_NAME=${DB_NAME}" --set-string "config.DB_USER=${DB_USER}")
       add_secret DB_PASSWORD "${DB_PASSWORD}" ;;
   esac
@@ -426,7 +523,14 @@ if [ ${#FAILED[@]} -gt 0 ]; then
   exit 1
 fi
 
+assert_no_loadbalancer_services || exit 1
+
 log "Deployment complete! All services deployed to ${EKS_CLUSTER}/${NAMESPACE}"
+echo ""
+log "Golden app URLs (shared ingress):"
+echo "  web-app:         https://$(golden_host web-app)"
+echo "  admin-dashboard: https://$(golden_host admin-dashboard)"
+echo "  api-gateway:     https://$(golden_host api-gateway)"
 echo ""
 log "Useful commands:"
 echo "  kubectl get pods -n ${NAMESPACE}"

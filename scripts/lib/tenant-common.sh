@@ -38,6 +38,25 @@ BACKEND_SERVICES=(
 FRONTEND_SERVICES=(web-app admin-dashboard)
 ALL_SERVICES=("${BACKEND_SERVICES[@]}" "${FRONTEND_SERVICES[@]}")
 
+# Service profiles. A full tenant is ~1.5 vCPU / 3.5GiB of requests, which does
+# not multiply to 100 tenants affordably -- but few labs exercise all 13
+# services. "core" is the subset a browser session actually touches (~0.5 vCPU).
+#
+# "full" remains the default: "core" deliberately omits admin-service, whose
+# planted crash-loop bug is the subject of the bug-hunt labs, so switching the
+# default would silently break them. Opt in with --profile core when a lab is
+# known not to need the whole estate.
+PROFILE_CORE_SERVICES=(api-gateway auth-service file-service document-service web-app)
+
+# Echo the service list for a profile.
+profile_services() {
+  case "$1" in
+    core) printf '%s\n' "${PROFILE_CORE_SERVICES[@]}" ;;
+    full) printf '%s\n' "${ALL_SERVICES[@]}" ;;
+    *)    err "unknown profile '$1' (expected core or full)"; return 1 ;;
+  esac
+}
+
 # The gateway proxies each route to http://<service>:<containerPort>, so every
 # backend Service must be exposed on its container port (mirrors deploy-dev.sh).
 declare -A CONTAINER_PORT=(
@@ -49,10 +68,47 @@ JVM_SERVICES=" auth-service report-service notification-service analytics-servic
 
 # Naming ----------------------------------------------------------------------
 # Namespace must be RFC-1123 (lowercase alnum + '-'); DB name uses '_'.
+#
+# Must match sanitizeId() in demo-platform/dashboard/lib/util.ts exactly, down
+# to the collapsing and the 40-character cut: the dashboard creates the tenant
+# under its own version of this id, and a tag or namespace derived from a
+# different one points at nothing.
 sanitize_id() {
-  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/^-*//; s/-*$//'
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' |
+    sed 's/[^a-z0-9-]/-/g; s/-\{2,\}/-/g; s/^-*//; s/-*$//' |
+    cut -c1-40 | sed 's/-*$//'
 }
 tenant_namespace() { printf 'otterworks-%s' "$(sanitize_id "$1")"; }
+
+# Git branch -> the Docker tag CI publishes that branch's images under. Docker
+# tags allow [a-zA-Z0-9._-] only, so `feature/x` cannot be used verbatim.
+branch_tag_slug() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/-/g'
+}
+
+# The tag a tenant's own build is published under. Keyed by tenant id, not by
+# branch: several repositories (this one and its forks) push to one registry and
+# would otherwise both claim `branch-demo-x`, each serving the other's build.
+# Tenant ids are already namespaced per repository by TENANT_PREFIX, so keying
+# on them makes the tag say exactly which environment it belongs to. CI and
+# deploy-tenant.sh must agree exactly or a tenant silently falls back to the
+# golden image, so both call this.
+tenant_image_tag() { printf 'tenant-%s' "$(sanitize_id "$1")"; }
+
+# Tenant id for a branch: `workshop-derek` and `demo-derek` both own tenant
+# `derek`. The dashboard rejects a redeploy whose branch does not match the one
+# the tenant was checked out from, so the collision cannot silently hijack.
+#
+# TENANT_PREFIX namespaces a whole repository's environments: a fork sets it so
+# that its `demo-derek` is tenant `<prefix>-derek` with its own namespace,
+# database and hostname, rather than redeploying the upstream repo's `derek`
+# out from under whoever is using it. Unset upstream, where the bare id is the
+# one people already know.
+branch_tenant_id() {
+  local id
+  id="$(printf '%s' "$1" | sed -E 's#^(workshop|demo)[-/]##')"
+  sanitize_id "${TENANT_PREFIX:+${TENANT_PREFIX}-}${id}"
+}
 tenant_db_name()   { printf 'otterworks_%s' "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g; s/^_*//; s/_*$//')"; }
 
 require_bins() {
@@ -82,6 +138,40 @@ load_infra_outputs() {
   if [ -z "${RDS_HOST}" ]; then
     warn "Terraform outputs unavailable; services will deploy without wired config."
   fi
+  resolve_db_endpoint
+}
+
+# Where the *application* services send their SQL. Distinct from RDS_HOST, which
+# stays pointed at the instance itself: creating and dropping databases is
+# administrative work that has no business going through a connection pooler
+# (CREATE/DROP DATABASE cannot run inside the transaction a pooled connection
+# may already be in).
+#
+# Each service holds its own pool, so connections grow with tenants x services
+# against a db.t3.micro that allows ~112 of them -- around ten awake tenants.
+# PgBouncer in transaction mode makes that a function of concurrent SQL instead.
+#
+# Only used when the pooler is actually up: a tenant deployed against a
+# nonexistent Service would fail every query, which is a far worse failure than
+# using more connections than we would like. Set DB_VIA_PGBOUNCER=false to force
+# services back onto the instance directly.
+resolve_db_endpoint() {
+  DB_ENDPOINT_HOST="${RDS_HOST}"
+  DB_ENDPOINT_PORT="${RDS_PORT}"
+  # Schema migrations take session-level advisory locks, which a transaction
+  # pooler breaks; they get the pooler's session-mode port instead. Same host,
+  # so this is still one bounded set of connections to RDS.
+  DB_SESSION_PORT="${RDS_PORT}"
+
+  [ "${DB_VIA_PGBOUNCER:-true}" = "true" ] || return 0
+  kubectl -n "${PGBOUNCER_NAMESPACE:-otterworks-platform}" get svc pgbouncer >/dev/null 2>&1 || {
+    warn "pgbouncer not found; wiring services straight to RDS (install with demo-platform/scripts/install-pgbouncer.sh)"
+    return 0
+  }
+
+  DB_ENDPOINT_HOST="pgbouncer.${PGBOUNCER_NAMESPACE:-otterworks-platform}.svc.cluster.local"
+  DB_ENDPOINT_PORT=6432
+  DB_SESSION_PORT=6433
 }
 
 irsa_arn() { echo "${IRSA_JSON:-{}}" | jq -r --arg s "$1" '.[$s] // empty' 2>/dev/null; }
@@ -216,8 +306,14 @@ build_helm_args() {
     api-gateway) : ;;
     auth-service)
       EXTRA_ARGS+=(--set-string "config.SPRING_PROFILES_ACTIVE=prod")
-      EXTRA_ARGS+=(--set-string "config.SPRING_DATASOURCE_URL=jdbc:postgresql://${RDS_HOST}:${RDS_PORT}/${T_DB_NAME}")
+      EXTRA_ARGS+=(--set-string "config.SPRING_DATASOURCE_URL=jdbc:postgresql://${DB_ENDPOINT_HOST}:${DB_ENDPOINT_PORT}/${T_DB_NAME}")
       EXTRA_ARGS+=(--set-string "config.SPRING_DATASOURCE_USERNAME=${DB_USER}")
+      # Flyway runs on boot and holds a session-level advisory lock for the
+      # length of the migration, so it gets its own datasource on the pooler's
+      # session port; the application's own queries stay on the transaction one.
+      EXTRA_ARGS+=(--set-string "config.SPRING_FLYWAY_URL=jdbc:postgresql://${DB_ENDPOINT_HOST}:${DB_SESSION_PORT}/${T_DB_NAME}")
+      EXTRA_ARGS+=(--set-string "config.SPRING_FLYWAY_USER=${DB_USER}")
+      add_secret SPRING_FLYWAY_PASSWORD "${DB_PASSWORD}"
       add_secret SPRING_DATASOURCE_PASSWORD "${DB_PASSWORD}" ;;
     file-service)
       EXTRA_ARGS+=(--set-string "config.AWS_REGION=${AWS_REGION}")
@@ -232,7 +328,7 @@ build_helm_args() {
       EXTRA_ARGS+=(--set-string "config.REDIS_HOST=${T_REDIS_HOST}" --set-string "config.REDIS_PORT=6379")
       EXTRA_ARGS+=(--set-string "config.DOC_SVC_AWS_REGION=${AWS_REGION}")
       EXTRA_ARGS+=(--set-string "config.DOC_SVC_SNS_TOPIC_ARN=${sns_topic}")
-      add_secret DOC_SVC_DATABASE_URL "postgresql+asyncpg://$(urlencode "${DB_USER}"):$(urlencode "${DB_PASSWORD}")@${RDS_HOST}:${RDS_PORT}/${T_DB_NAME}" ;;
+      add_secret DOC_SVC_DATABASE_URL "postgresql+asyncpg://$(urlencode "${DB_USER}"):$(urlencode "${DB_PASSWORD}")@${DB_ENDPOINT_HOST}:${DB_ENDPOINT_PORT}/${T_DB_NAME}" ;;
     collab-service)
       EXTRA_ARGS+=(--set-string "config.HTTP_PORT=8084" --set-string "config.NODE_ENV=production")
       EXTRA_ARGS+=(--set-string "config.REDIS_HOST=${T_REDIS_HOST}" --set-string "config.REDIS_PORT=6379") ;;
@@ -255,11 +351,21 @@ build_helm_args() {
       # isolation, and just burns ResourceQuota on short-lived tenants.
       EXTRA_ARGS+=(--set cronjob.enabled=false)
       EXTRA_ARGS+=(--set-string "config.ANALYTICS_HOST=0.0.0.0" --set-string "config.PORT=8088")
-      EXTRA_ARGS+=(--set-string "config.DATABASE_URL=jdbc:postgresql://${RDS_HOST}:${RDS_PORT}/${T_DB_NAME}")
+      # Third migration path, and the quietest: AnalyticsDb.migrate() runs Flyway
+      # from the same DATABASE_URL as the Slick pool, and a failed migration
+      # falls back to the in-memory store instead of crashing -- so getting this
+      # wrong loses the tenant's analytics data without any pod ever going
+      # unhealthy. Session port for the whole service, as with Rails. Slick here
+      # opens connections per query rather than holding a pool, so this costs
+      # the session pooler far less than the connection count suggests.
+      EXTRA_ARGS+=(--set-string "config.DATABASE_URL=jdbc:postgresql://${DB_ENDPOINT_HOST}:${DB_SESSION_PORT}/${T_DB_NAME}")
       EXTRA_ARGS+=(--set-string "config.DATABASE_USER=${DB_USER}")
       add_secret DATABASE_PASSWORD "${DB_PASSWORD}" ;;
     admin-service)
-      EXTRA_ARGS+=(--set-string "config.DATABASE_HOST=${RDS_HOST}" --set-string "config.DATABASE_PORT=${RDS_PORT}")
+      # Rails takes a session-level advisory lock in `db:migrate`, which runs
+      # from the image's CMD on every boot and shares one connection URL with
+      # the app -- so the whole service uses the session-mode port.
+      EXTRA_ARGS+=(--set-string "config.DATABASE_HOST=${DB_ENDPOINT_HOST}" --set-string "config.DATABASE_PORT=${DB_SESSION_PORT}")
       EXTRA_ARGS+=(--set-string "config.DATABASE_USER=${DB_USER}")
       EXTRA_ARGS+=(--set-string "config.RAILS_ENV=production" --set-string "config.RAILS_LOG_TO_STDOUT=true")
       add_secret DATABASE_PASSWORD "${DB_PASSWORD}"
@@ -269,7 +375,7 @@ build_helm_args() {
       EXTRA_ARGS+=(--set-string "config.Aws__DynamoDbTable=${DDB_AUDIT}")
       EXTRA_ARGS+=(--set-string "config.Aws__S3ArchiveBucket=${S3_AUDIT_BUCKET}") ;;
     report-service)
-      EXTRA_ARGS+=(--set-string "config.DB_HOST=${RDS_HOST}" --set-string "config.DB_PORT=${RDS_PORT}")
+      EXTRA_ARGS+=(--set-string "config.DB_HOST=${DB_ENDPOINT_HOST}" --set-string "config.DB_PORT=${DB_ENDPOINT_PORT}")
       EXTRA_ARGS+=(--set-string "config.DB_NAME=${T_DB_NAME}" --set-string "config.DB_USER=${DB_USER}")
       add_secret DB_PASSWORD "${DB_PASSWORD}" ;;
   esac

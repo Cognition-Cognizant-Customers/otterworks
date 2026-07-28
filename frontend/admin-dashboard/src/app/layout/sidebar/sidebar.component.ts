@@ -19,11 +19,11 @@ interface NavItem {
     <div class="sidebar" [class.collapsed]="collapsed">
       <div class="sidebar-header">
         <div class="logo" *ngIf="!collapsed">
-          <mat-icon class="logo-icon">pets</mat-icon>
+          <img class="logo-icon" src="assets/otter-logo.png" alt="OtterWorks logo" width="28" height="28" />
           <span class="logo-text">OtterWorks</span>
         </div>
         <div class="logo logo-collapsed" *ngIf="collapsed">
-          <mat-icon class="logo-icon">pets</mat-icon>
+          <img class="logo-icon" src="assets/otter-logo.png" alt="OtterWorks logo" width="28" height="28" />
         </div>
         <button class="toggle-btn" (click)="toggleCollapsed()" [matTooltip]="collapsed ? 'Expand' : 'Collapse'">
           <mat-icon>{{ collapsed ? 'chevron_right' : 'chevron_left' }}</mat-icon>
@@ -48,7 +48,7 @@ interface NavItem {
     .sidebar {
       width: 260px;
       min-height: 100vh;
-      background: #1a1a2e;
+      background: #1f3a5f;
       color: #ffffff;
       display: flex;
       flex-direction: column;
@@ -80,10 +80,10 @@ interface NavItem {
     }
 
     .logo-icon {
-      color: #4fc3f7;
-      font-size: 28px;
       width: 28px;
       height: 28px;
+      background: #ffffff;
+      border-radius: 2px;
     }
 
     .logo-text {
@@ -119,7 +119,7 @@ interface NavItem {
     :host ::ng-deep .mat-mdc-list-item {
       color: rgba(255, 255, 255, 0.75) !important;
       margin: 2px 8px;
-      border-radius: 8px;
+      border-radius: 2px;
     }
 
     :host ::ng-deep .mat-mdc-list-item .mdc-list-item__primary-text,
@@ -138,17 +138,17 @@ interface NavItem {
     }
 
     :host ::ng-deep .active-link {
-      background: rgba(79, 195, 247, 0.15) !important;
-      color: #4fc3f7 !important;
+      background: rgba(217, 154, 61, 0.18) !important;
+      color: #d99a3d !important;
     }
 
     :host ::ng-deep .active-link .mdc-list-item__primary-text,
     :host ::ng-deep .active-link .mat-mdc-list-item-title {
-      color: #4fc3f7 !important;
+      color: #d99a3d !important;
     }
 
     :host ::ng-deep .active-link .mat-icon {
-      color: #4fc3f7 !important;
+      color: #d99a3d !important;
     }
 
     :host ::ng-deep .mat-mdc-list-item .mat-icon {

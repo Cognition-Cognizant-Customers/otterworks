@@ -1,0 +1,217 @@
+name: Deploy tenant environment
+
+# Continuous delivery for demo environments.
+#
+#   main            -> the perpetual tenant (t-main), the golden app everyone shares
+#   workshop-<id>   -> that attendee's ephemeral tenant, created on first push
+#   demo-<id>       -> same, for demos
+#
+# Forks share the registry and the control plane with this repo, so they set a
+# TENANT_PREFIX repository variable: their `demo-x` is tenant `<prefix>-x`, with
+# its own namespace, database, hostname and image tag. A fork does not own
+# `main` either -- the golden app and the perpetual environment belong to this
+# repo -- so a fork's main pushes publish no golden image and deploy nothing.
+#
+# Only the services a push actually changed are rebuilt; the tenant picks up the
+# golden image for everything else (see resolve_tag in scripts/deploy-tenant.sh).
+# Deployment goes through the ops dashboard API, never straight at the cluster:
+# the dashboard runs the work as a runner Job under its own IRSA role, so this
+# workflow needs no EKS access.
+
+on:
+  push:
+    branches:
+      - main
+      - 'workshop-**'
+      - 'demo-**'
+  workflow_dispatch:
+    inputs:
+      rebuild_all:
+        description: Rebuild every service rather than only the changed ones
+        type: boolean
+        default: false
+
+# One deploy per branch at a time. Two overlapping runs would be two `helm
+# upgrade`s against the same releases; the dashboard rejects the second, which
+# would fail the run rather than simply waiting for the first.
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.select.outputs.services }}
+      image_tag: ${{ steps.select.outputs.image_tag }}
+      tenant_tag: ${{ steps.select.outputs.tenant_tag }}
+      golden: ${{ steps.select.outputs.golden }}
+      deploy: ${{ steps.select.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          # paths-filter compares against the previous commit on push; it needs
+          # that commit present, and a shallow clone does not have it.
+          fetch-depth: 0
+
+      - uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3
+        id: changes
+        with:
+          filters: |
+            api-gateway: ['services/api-gateway/**']
+            auth-service: ['services/auth-service/**']
+            file-service: ['services/file-service/**']
+            document-service: ['services/document-service/**']
+            collab-service: ['services/collab-service/**']
+            notification-service: ['services/notification-service/**']
+            search-service: ['services/search-service/**']
+            analytics-service: ['services/analytics-service/**']
+            admin-service: ['services/admin-service/**']
+            audit-service: ['services/audit-service/**']
+            report-service: ['services/report-service/**']
+            web-app: ['frontend/client-app/**']
+            admin-dashboard: ['frontend/admin-dashboard/**']
+            deployable: ['services/**', 'frontend/**', 'infrastructure/helm/**', 'scripts/**']
+
+      - name: Select services and tags
+        id: select
+        env:
+          CHANGED: ${{ steps.changes.outputs.changes }}
+          REBUILD_ALL: ${{ inputs.rebuild_all }}
+          DEPLOYABLE: ${{ steps.changes.outputs.deployable }}
+          TENANT_PREFIX: ${{ vars.TENANT_PREFIX }}
+        run: |
+          set -euo pipefail
+          source scripts/lib/tenant-common.sh
+
+          slug="$(branch_tag_slug "${GITHUB_REF_NAME}")"
+          echo "tenant_tag=$(tenant_image_tag "$(branch_tenant_id "${GITHUB_REF_NAME}")")" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${TENANT_PREFIX:+${TENANT_PREFIX}-}${slug}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+          # Only this repository's main is the golden app. A fork publishing to
+          # `:main` would replace the image every other tenant falls back to.
+          golden=false
+          if [ "${GITHUB_REF_NAME}" = "main" ] && [ -z "${TENANT_PREFIX}" ]; then golden=true; fi
+          echo "golden=${golden}" >> "$GITHUB_OUTPUT"
+
+          if [ "${REBUILD_ALL}" = "true" ]; then
+            services="$(printf '%s\n' "${ALL_SERVICES[@]}" | jq -R . | jq -sc .)"
+          else
+            # paths-filter emits every matching filter, including the
+            # 'deployable' catch-all, which is not a service.
+            services="$(printf '%s' "${CHANGED}" | jq -c '[.[] | select(. != "deployable")]')"
+          fi
+          echo "services=${services}" >> "$GITHUB_OUTPUT"
+
+          # A push that touches nothing deployable -- docs, CI config, the
+          # control plane itself -- does not redeploy. The tenant would come
+          # back byte-identical, minutes later, for no reason. Neither does a
+          # fork's main: the perpetual environment tracks this repository.
+          deploy=false
+          if [ "${DEPLOYABLE}" = "true" ] || [ "${REBUILD_ALL}" = "true" ]; then
+            deploy=true
+          fi
+          if [ "${GITHUB_REF_NAME}" = "main" ] && [ -n "${TENANT_PREFIX}" ]; then
+            echo "::notice::TENANT_PREFIX is set, so main is not deployed from this repository"
+            deploy=false
+          fi
+          echo "deploy=${deploy}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.services != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(needs.plan.outputs.services) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Resolve build context
+        id: ctx
+        env:
+          SERVICE: ${{ matrix.service }}
+        run: |
+          set -euo pipefail
+          case "${SERVICE}" in
+            web-app)         path=frontend/client-app ;;
+            admin-dashboard) path=frontend/admin-dashboard ;;
+            *)               path=services/${SERVICE} ;;
+          esac
+          echo "path=${path}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      # Each tag has a job:
+      #   <slug>-<sha>  immutable, exactly what this run built
+      #   tenant-<id>   the environment's current build, what it deploys
+      #   main          the golden image every other tenant falls back to
+      - name: Resolve image tags
+        id: tags
+        env:
+          REPO: ${{ steps.ecr.outputs.registry }}/otterworks/${{ matrix.service }}
+          IMAGE_TAG: ${{ needs.plan.outputs.image_tag }}
+          TENANT_TAG: ${{ needs.plan.outputs.tenant_tag }}
+          GOLDEN: ${{ needs.plan.outputs.golden }}
+        run: |
+          set -euo pipefail
+          {
+            echo "list<<EOF"
+            echo "${REPO}:${IMAGE_TAG}"
+            echo "${REPO}:${TENANT_TAG}"
+            if [ "${GOLDEN}" = "true" ]; then echo "${REPO}:main"; fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        with:
+          context: ${{ steps.ctx.outputs.path }}
+          push: true
+          platforms: linux/amd64
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          tags: ${{ steps.tags.outputs.list }}
+
+  deploy:
+    needs: [plan, build]
+    # `always()` so a push that changed no service still redeploys the branch;
+    # a failed build must not deploy, hence the explicit result check.
+    if: always() && needs.plan.outputs.deploy == 'true' && needs.build.result != 'failure' && needs.build.result != 'cancelled'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Creates the tenant with a 72h TTL if the branch has none, otherwise
+      # redeploys it in place. `main` is the perpetual tenant and must already
+      # exist -- CD deliberately cannot create a perpetual environment (see
+      # `tenant.sh persist`), so a missing t-main is an error, not a silent
+      # ephemeral tenant on the golden branch.
+      - name: Sync tenant environment
+        env:
+          TENANT_PREFIX: ${{ vars.TENANT_PREFIX }}
+        run: demo-platform/scripts/tenant.sh sync "${GITHUB_REF_NAME}"

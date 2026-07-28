@@ -1,19 +1,23 @@
-# DNS/TLS is gated behind enable_dns until otterworks.xyz is registered in
-# Route53. Once the domain exists, `terraform apply -var enable_dns=true` creates
-# the hosted zone (if managing it here) and an IRSA role that external-dns +
-# cert-manager (DNS-01) use to manage records for *.demo.otterworks.xyz.
+# DNS/TLS is gated behind enable_dns until the domain is registered in Route53.
+# Once it exists, `terraform apply -var enable_dns=true` grants an IRSA role that
+# external-dns + cert-manager (DNS-01) use to manage records for the tenant
+# wildcard.
 #
 # NOTE: domain *registration* (route53domains register-domain) is a manual,
-# contact-info + ICANN-verification step done out of band; this only manages the
-# hosted zone + DNS automation IAM.
-
-resource "aws_route53_zone" "demo" {
+# contact-info + ICANN-verification step done out of band.
+#
+# The zone is looked up, never managed. Registering a domain creates its hosted
+# zone, so it already exists by the time this runs -- and it has to outlive every
+# rebuild of this platform, because it holds the registrar's NS delegation.
+# Managing it here meant a plain `terraform apply` (without -var enable_dns=true)
+# planned to destroy it, and the blank-slate `terraform destroy` would have taken
+# the domain's DNS with it; recreating a zone issues new nameservers, so the
+# domain would stay dark until the registrar was updated by hand. Route53's
+# refusal to delete a non-empty zone is what stopped that, which is not a control
+# worth relying on.
+data "aws_route53_zone" "demo" {
   count = var.enable_dns ? 1 : 0
   name  = var.dns_zone_name
-
-  tags = {
-    Name = var.dns_zone_name
-  }
 }
 
 data "aws_iam_policy_document" "dns_trust" {
@@ -52,7 +56,7 @@ data "aws_iam_policy_document" "dns" {
   statement {
     effect    = "Allow"
     actions   = ["route53:ChangeResourceRecordSets"]
-    resources = ["arn:aws:route53:::hostedzone/${aws_route53_zone.demo[0].zone_id}"]
+    resources = ["arn:aws:route53:::hostedzone/${data.aws_route53_zone.demo[0].zone_id}"]
   }
   statement {
     effect    = "Allow"

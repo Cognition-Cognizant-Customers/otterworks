@@ -35,6 +35,7 @@
     "react-hook-form": "^7.72.1",
     "react-hot-toast": "^2.4.1",
     "react-router-dom": "^7.18.1",
+    "recharts": "^2.15.4",
     "socket.io-client": "^4.7.4",
     "tailwindcss": "^3.4.1",
     "y-prosemirror": "^1.2.5",

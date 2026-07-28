@@ -12,6 +12,17 @@ export const POST = withSession(async (_req, { actor, params }) => {
   const tenant = await getTenant(id);
   if (!tenant) return error(404, "not found");
 
+  // A perpetual tenant is shared infrastructure: check-in destroys its
+  // namespace and database. There is deliberately no force flag -- clearing
+  // `persistent` is a separate, audited call, so no single request (or
+  // mistyped id) can tear one down.
+  if (tenant.persistent) {
+    return error(
+      409,
+      `tenant '${id}' is persistent; POST /api/tenants/${id}/persist {"persistent":false} first`,
+    );
+  }
+
   await checkin(id);
   await appendAudit({ tenantId: id, action: "checkin", actor });
 

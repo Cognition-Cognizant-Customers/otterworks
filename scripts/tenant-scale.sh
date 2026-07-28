@@ -2,9 +2,13 @@
 # ------------------------------------------------------------------------------
 # OtterWorks - Per-Tenant Scale-to-Zero (cost control)
 #
-# Between demo sessions, scale a tenant's compute to zero while KEEPING the
-# namespace, config/secrets, per-tenant Redis/MeiliSearch data and RDS database
-# intact — compute cost drops to ~0, spin-up is a single command.
+# Between sessions, scale a tenant's compute to zero while KEEPING the
+# namespace, config/secrets and its RDS database intact — compute cost drops to
+# ~0, spin-up is a single command.
+#
+# The per-tenant Redis and MeiliSearch run without persistence, so scaling down
+# discards sessions, the search index (rebuilt on use) and any injected chaos
+# flag. Re-inject the scenario after scaling a lab tenant back up.
 #
 # Usage:
 #   ./scripts/tenant-scale.sh <ATTENDEE_ID> down   # scale all deployments to 0

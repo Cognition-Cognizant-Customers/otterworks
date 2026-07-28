@@ -51,11 +51,17 @@ services:
       SERVICES: s3,sqs,sns,dynamodb,ses,cognito-idp,secretsmanager
       DEFAULT_REGION: us-east-1
       DOCKER_HOST: unix:///var/run/docker.sock
+      # Persist emulated AWS state (e.g. DynamoDB) to the localstack_data volume so
+      # local data survives container recreation. S3 objects are not captured by
+      # LocalStack persistence in the community image; localstack-restore.sh
+      # re-hydrates them on boot from a seed dump when one is present.
+      PERSISTENCE: '1'
     ports:
     - 4566:4566
     volumes:
     - localstack_data:/var/lib/localstack
     - ./scripts/localstack-init.sh:/etc/localstack/init/ready.d/init.sh
+    - ./scripts/localstack-restore.sh:/etc/localstack/init/ready.d/zz-restore.sh
     healthcheck:
       test:
       - CMD

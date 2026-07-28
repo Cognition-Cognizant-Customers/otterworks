@@ -1,11 +1,9 @@
-# https://docs.devin.ai/onboard-devin/environment-yaml
-# Docker + Compose v2 preinstalled; app + mobile + desktop toolchains set up here.
+runs-on: default
+# One-time setup (e.g., install system tools, global CLIs).
 initialize: |
-  # Pre-pull infra images and pre-build all service/frontend images (layers persist; containers do not).
   docker compose -f docker-compose.infra.yml pull
-  # Build one service at a time with retries. Building everything in parallel overwhelms
-  # Docker's embedded DNS (127.0.0.11), so dependency fetches (e.g. cargo's static.crates.io)
-  # intermittently fail to resolve; serializing avoids the DNS storm and the retry covers blips.
+  # Serialized with retries: parallel builds overwhelm Docker's embedded DNS (127.0.0.11)
+  # and dependency fetches (e.g. cargo's static.crates.io) intermittently fail to resolve.
   COMPOSE="docker compose -f docker-compose.infra.yml -f docker-compose.yml"
   for svc in $($COMPOSE config --services); do
     n=0
@@ -15,16 +13,14 @@ initialize: |
     done
   done
 
-  # --- Mobile (Capacitor Android app at frontend/client-app/mobile/android) ---
-  # JDK 21 (Capacitor 8 / AGP require it)
+  # Capacitor 8 / AGP require JDK 21.
   sudo apt-get update && sudo apt-get install -y openjdk-21-jdk-headless
   echo "JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64" >> $ENVRC
-  sudo usermod -aG kvm "$(whoami)" || true   # emulator hardware acceleration (/dev/kvm)
+  sudo usermod -aG kvm "$(whoami)" || true
 
-  # Node 22 (Vite 8 requires Node >=20.19)
+  # Vite 8 requires Node >=20.19.
   export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"; nvm install 22 && nvm alias default 22
 
-  # Android SDK command-line tools + packages (compileSdk 36)
   export ANDROID_HOME=$HOME/Android/Sdk
   mkdir -p $ANDROID_HOME/cmdline-tools
   if [ ! -d "$ANDROID_HOME/cmdline-tools/latest" ]; then
@@ -36,40 +32,140 @@ initialize: |
   yes | $SDKM --licenses >/dev/null
   $SDKM "platform-tools" "emulator" "platforms;android-36" "build-tools;36.0.0" "system-images;android-36;google_apis;x86_64"
   echo "no" | $ANDROID_HOME/cmdline-tools/latest/bin/avdmanager create avd -n otter -k "system-images;android-36;google_apis;x86_64" -d pixel_6 --force
+  # Shrink the display to conserve GPU/RAM in the microVM.
+  AVD_CFG=$HOME/.android/avd/otter.avd/config.ini
+  sed -i -E 's|^hw.lcd.width *=.*|hw.lcd.width = 720|; s|^hw.lcd.height *=.*|hw.lcd.height = 1600|; s|^hw.lcd.density *=.*|hw.lcd.density = 320|; s|^showDeviceFrame *=.*|showDeviceFrame = no|' "$AVD_CFG"
+  grep -q '^skin.name' "$AVD_CFG" || echo 'skin.name = 720x1600' >> "$AVD_CFG"
+  grep -q '^skin.path' "$AVD_CFG" || echo 'skin.path = _no_skin' >> "$AVD_CFG"
   echo "ANDROID_HOME=$HOME/Android/Sdk" >> $ENVRC
   echo "ANDROID_SDK_ROOT=$HOME/Android/Sdk" >> $ENVRC
   echo 'PATH=$HOME/Android/Sdk/platform-tools:$HOME/Android/Sdk/emulator:$HOME/Android/Sdk/cmdline-tools/latest/bin:$PATH' >> $ENVRC
 
-  # Gradle wrapper jar is gitignored. Generate it in a scratch project and copy the jar in.
-  # (The jar is version-specific, not project-specific. Running `gradle wrapper` inside the
-  #  android project would configure Capacitor modules whose files - e.g. cordova.variables.gradle -
-  #  only exist after `npx cap sync`, which hasn't run yet, so we avoid touching that project here.)
+  # The wrapper jar is gitignored and version-specific, so generate it in a scratch project.
+  # Running `gradle wrapper` in the android project would configure Capacitor modules whose
+  # files only exist after `npx cap sync`, which hasn't run yet.
   curl -sL -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-8.14.3-bin.zip
   unzip -q -o /tmp/gradle.zip -d $HOME/gradle-dist
   mkdir -p /tmp/gradle-wrapper-gen && touch /tmp/gradle-wrapper-gen/settings.gradle
   (cd /tmp/gradle-wrapper-gen && $HOME/gradle-dist/gradle-8.14.3/bin/gradle wrapper --gradle-version 8.14.3)
   cp /tmp/gradle-wrapper-gen/gradle/wrapper/gradle-wrapper.jar \
      frontend/client-app/mobile/android/gradle/wrapper/gradle-wrapper.jar
+
+  # Warm the Gradle cache so runtime `make dev-android` builds are incremental.
+  export ANDROID_HOME=$HOME/Android/Sdk ANDROID_SDK_ROOT=$HOME/Android/Sdk
+  export PATH=$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+  # JAVA_HOME is only written to $ENVRC (for later sessions), so set it for assembleDebug.
+  export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+  nvm use default
+  (cd frontend/client-app && npm install && npm install --no-save @rolldown/binding-linux-x64-gnu@1.1.5 \
+     && npm run build && npx cap sync android)
+  (cd frontend/client-app/mobile/android && ./gradlew --no-daemon assembleDebug)
+
+  # Save a "clean" snapshot so runtime launches resume instead of cold-booting. Best-effort:
+  # if the emulator can't boot at build time (e.g. no /dev/kvm) runtime just cold-boots.
+  sudo chmod 666 /dev/kvm || true
+  emulator -avd otter -no-window -no-audio -no-snapshot -gpu swiftshader_indirect &
+  EMU_PID=$!
+  if timeout 120 adb wait-for-device \
+     && timeout 240 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 3; done'; then
+    adb shell settings put global window_animation_scale 0 || true
+    adb shell settings put global transition_animation_scale 0 || true
+    adb shell settings put global animator_duration_scale 0 || true
+    adb emu avd snapshot save clean || true
+    adb emu kill || true
+  else
+    echo "WARN: emulator did not boot at build time; skipping snapshot warm-up (runtime will cold-boot)."
+  fi
+  kill $EMU_PID 2>/dev/null || true
+  wait $EMU_PID 2>/dev/null || true
+
+  # Seed the "RetailCo enterprise drive" (~2,445 files / 15 departments / 60 docs) through the
+  # gateway so a session only runs `make up` to come up data-rich. Postgres, DynamoDB and
+  # MeiliSearch land in docker volumes that persist into the snapshot. Idempotent.
+  COMPOSE="docker compose -f docker-compose.infra.yml -f docker-compose.yml"
+  # Start from clean volumes so Flyway migrations apply consistently at this revision.
+  $COMPOSE down -v || true
+  docker compose -f docker-compose.infra.yml up -d
+  for i in $(seq 1 60); do docker exec otterworks-postgres pg_isready -q 2>/dev/null && break; sleep 2; done
+  # auth-service must win the shared Flyway history race (several JVM services migrate version 1
+  # into otterworks/public.flyway_schema_history; whichever runs first wins) since seeding logs in.
+  $COMPOSE up -d --build auth-service
+  for i in $(seq 1 90); do [ "$(docker inspect -f '{{.State.Health.Status}}' otterworks-auth-service 2>/dev/null)" = healthy ] && break; sleep 2; done
+  $COMPOSE up -d --build
+  for i in $(seq 1 120); do
+    code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 -X POST http://localhost:8080/api/v1/auth/login \
+      -H 'Content-Type: application/json' -d '{"email":"probe@otterworks.local","password":"x"}' || true)
+    [ "$code" != "000" ] && [ "$code" != "502" ] && [ "$code" != "503" ] && break
+    sleep 2
+  done
+  python3 -m venv /tmp/retail-seed-venv
+  /tmp/retail-seed-venv/bin/pip install -q -r testdata/generated/retail-drive/requirements.txt
+  /tmp/retail-seed-venv/bin/python testdata/generated/retail-drive/generate_drive.py \
+    --gateway http://localhost:8080 \
+    --email "$DRIVE_EMAIL" --password "$DRIVE_PASSWORD" \
+    --departments all --scale 1.0 --workers 6 --register
+
+  # admin-service's Dockerfile runs db:migrate but never db:seed, leaving every admin-dashboard
+  # screen empty. Best-effort: a seed failure must not sink the build.
+  for i in $(seq 1 90); do [ "$(docker inspect -f '{{.State.Health.Status}}' otterworks-admin-service 2>/dev/null)" = healthy ] && break; sleep 2; done
+  docker exec otterworks-admin-service bundle exec rails db:seed || echo "WARN: admin-service db:seed failed; admin dashboard will show empty tables."
+
+  # LocalStack community does not persist S3, so bake the objects in for localstack-restore.sh.
+  docker exec otterworks-localstack sh -lc \
+    'for b in otterworks-files otterworks-data-lake otterworks-audit-archive; do \
+       d=/var/lib/localstack/seed-s3/$b; mkdir -p "$d"; awslocal s3 sync "s3://$b" "$d"; \
+     done'
+  # Remove containers but KEEP the seeded volumes so they are captured in the snapshot.
+  $COMPOSE down
+# Install project dependencies (runs during builds, surfaced to agent at session start).
 maintenance: |
+  # file-service's Cargo.lock needs a newer Cargo than the baked-in 1.83 (edition2024).
+  rustup update stable >/dev/null 2>&1 || true
   export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"; nvm use default >/dev/null
-  # Include the linux rolldown native binding (npm optional-deps bug omits it -> Vite build fails)
+  # The rolldown native binding is explicit: an npm optional-deps bug omits it and Vite fails.
   (cd frontend/client-app && npm install && npm install --no-save @rolldown/binding-linux-x64-gnu@1.1.5)
-  # Electron desktop app deps (downloads the Electron binary via postinstall under Node 22)
   (cd frontend/client-app/desktop && npm install)
 knowledge:
   - name: run backend + web
     contents: |
       make infra-up && make up   # web :3000, admin :4200, gateway :8080
+  - name: seeded demo data (web app)
+    contents: |
+      The web app (:3000) is pre-seeded with the "RetailCo enterprise drive": ~2,445 files
+      across 15 department folders + 60 rich-text documents, owned by the synthetic account
+      in the DRIVE_EMAIL / DRIVE_PASSWORD secrets. To re-seed a fresh stack:
+        python3 -m venv /tmp/seed && /tmp/seed/bin/pip install -r testdata/generated/retail-drive/requirements.txt
+        /tmp/seed/bin/python testdata/generated/retail-drive/generate_drive.py \
+          --gateway http://localhost:8080 --email "$DRIVE_EMAIL" \
+          --password "$DRIVE_PASSWORD" --departments all --scale 1.0 --register
+  - name: run admin dashboard
+    contents: |
+      `make up` serves the Angular dashboard at http://localhost:4200 from the prebuilt nginx
+      container - no dev server needed. Login is a CLIENT-SIDE MOCK
+      (frontend/admin-dashboard/src/app/core/services/auth.service.ts): any email + any
+      non-empty password returns a hardcoded admin JWT, so the web-app credentials are not
+      used here. Data comes from admin-service's tables, seeded at init. To re-seed:
+        docker exec otterworks-admin-service bundle exec rails db:seed
+      `make dev-admin` (HMR) is NOT pre-warmed - the first run pays a full Angular `npm ci`.
   - name: run android app
     contents: |
-      sudo chmod 666 /dev/kvm    # /dev/kvm perms reset each boot
-      emulator -avd otter -no-snapshot -no-audio -no-window -gpu swiftshader_indirect &
+      # Free resources before launching the emulator (virtualized microVM).
+      pkill -f chrome 2>/dev/null || true
+      sudo systemctl stop snapd unattended-upgrades cron 2>/dev/null || true
+      sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null
+      sudo chmod 666 /dev/kvm    # perms reset each boot
+      # Resumes the "clean" snapshot; -no-snapshot-save keeps it pristine.
+      DISPLAY=:0 emulator -avd otter -no-audio -gpu swiftshader_indirect -snapshot clean -no-snapshot-save &
       adb wait-for-device
-      make dev-android   # builds (with the correct collab port) + cap sync + cap run on the emulator
-      # App calls the gateway at http://10.0.2.2:8080/api/v1 (debug build allows cleartext to 10.0.2.2).
+      export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"; nvm use default >/dev/null
+      make dev-android
+      # Override the deploy target for a real device (list with `adb devices`):
+      #   make dev-android ANDROID_TARGET=<device-id>
+      # Dismiss the "Nested virtualization" dialog on first boot or it blocks GUI interaction.
+      # The app calls the gateway at http://10.0.2.2:8080/api/v1.
   - name: run electron desktop app
     contents: |
-      DISPLAY=:0 make dev-electron   # builds (with the correct collab port) + launches the Electron desktop app
+      DISPLAY=:0 make dev-electron
       # Embedded server on :34117 proxies /api/v1 to the gateway; run with Node 22.
   - name: test
     contents: |
@@ -77,3 +173,45 @@ knowledge:
   - name: lint
     contents: |
       make lint
+---
+# Windows sessions for the Electron desktop shell. Windows runs blueprint commands in
+# bash (Git Bash), the same as Linux, so this document must be bash - not PowerShell.
+runs-on: windows
+initialize: |
+  export npm_config_audit=false npm_config_fund=false npm_config_loglevel=error
+
+  # Prefer Node >=22. Vite 8 is happy on the image's 20.19, but electron@43 and its toolchain
+  # (@electron/get, @electron/rebuild, node-abi) declare engines >=22.12 and spray EBADENGINE
+  # warnings -- today only warnings, but a latent breakage. Best-effort and fully guarded: if no
+  # package manager is present the existing Node is kept and the build continues unchanged.
+  major=$(node -v 2>/dev/null | sed 's/^v//' | cut -d. -f1)
+  if [ -n "$major" ] && [ "$major" -lt 22 ]; then
+    if command -v winget >/dev/null 2>&1; then
+      winget install --id OpenJS.NodeJS.LTS -e --silent --accept-source-agreements --accept-package-agreements || true
+    elif command -v choco >/dev/null 2>&1; then
+      choco install nodejs-lts -y --no-progress || true
+    else
+      echo "No winget/choco available; keeping Node $major (EBADENGINE warnings expected)."
+    fi
+  fi
+
+  # Web client: deps + production bundle. The Electron shell serves frontend/client-app/dist.
+  (cd frontend/client-app && npm ci && npm run build) || { echo "client-app setup failed"; exit 1; }
+
+  # Electron desktop shell: deps + TypeScript build (src -> build).
+  (cd frontend/client-app/desktop && npm ci && npm run build) || { echo "desktop setup failed"; exit 1; }
+
+  # npm ci does NOT fetch the Electron binary (its download is deferred to first launch), so
+  # pre-download it via Electron's own installer to keep the snapshot boot fast.
+  (cd frontend/client-app/desktop && node node_modules/electron/install.js) || { echo "electron binary download failed"; exit 1; }
+maintenance: |
+  (cd frontend/client-app && npm install)
+  (cd frontend/client-app/desktop && npm install)
+knowledge:
+  - name: run electron desktop app
+    contents: |
+      (cd frontend/client-app/desktop && npm start)   # builds then launches the Electron shell
+      # Embedded server on :34117 proxies /api/v1 to a gateway; run with Node 22.
+  - name: build web bundle
+    contents: |
+      (cd frontend/client-app && npm run build)   # Electron serves frontend/client-app/dist

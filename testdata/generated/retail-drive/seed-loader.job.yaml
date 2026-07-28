@@ -1,0 +1,113 @@
+# OtterWorks enterprise-drive seed loader.
+#
+# Runs testdata/generated/retail-drive/generate_drive.py against the in-cluster
+# API gateway so a freshly spun-up (or re-seeded) OtterWorks environment gets the
+# full, browsable multimodal drive. Idempotent: safe to re-run.
+#
+#   # 1. create the credentials secret (once)
+#   kubectl -n otterworks create secret generic retail-drive-seed \
+#       --from-literal=DRIVE_EMAIL='<drive-account-email>' \
+#       --from-literal=DRIVE_PASSWORD='<pick-a-password>'
+#
+#   # 2. run the loader
+#   kubectl -n otterworks apply -f testdata/generated/retail-drive/seed-loader.job.yaml
+#   kubectl -n otterworks logs -f job/retail-drive-seed-loader
+#
+# An init container clones the repo into a shared volume; the loader container
+# builds a venv in that volume and runs the generator. Both run as a non-root
+# user with privilege escalation disabled and all capabilities dropped.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: retail-drive-seed-loader
+  namespace: otterworks
+  labels:
+    app.kubernetes.io/name: retail-drive-seed-loader
+    app.kubernetes.io/part-of: otterworks-seed
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: retail-drive-seed-loader
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: work
+          emptyDir: {}
+      initContainers:
+        - name: clone
+          image: alpine/git:2.45.2
+          env:
+            - name: REPO_URL
+              value: "https://github.com/Cognition-Partner-Workshops/otterworks.git"
+            - name: REPO_REF
+              value: "main"
+          command: ["/bin/sh", "-c"]
+          args:
+            - git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" /work/src
+          volumeMounts:
+            - name: work
+              mountPath: /work
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: loader
+          image: python:3.11-slim
+          workingDir: /work/src/testdata/generated/retail-drive
+          env:
+            - name: HOME
+              value: "/work"
+            - name: GATEWAY_URL
+              value: "http://api-gateway.otterworks.svc.cluster.local:8080"
+            - name: SCALE
+              value: "1.0"
+            - name: DEPARTMENTS
+              value: "all"
+            - name: DRIVE_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: retail-drive-seed
+                  key: DRIVE_EMAIL
+            - name: DRIVE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: retail-drive-seed
+                  key: DRIVE_PASSWORD
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              python -m venv /work/venv
+              /work/venv/bin/pip install --no-cache-dir -q -r requirements.txt
+              /work/venv/bin/python generate_drive.py \
+                --gateway "$GATEWAY_URL" \
+                --email "$DRIVE_EMAIL" --password "$DRIVE_PASSWORD" \
+                --departments "$DEPARTMENTS" --scale "$SCALE" \
+                --workers 6 --register
+          volumeMounts:
+            - name: work
+              mountPath: /work
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"

@@ -32,7 +32,29 @@ export const env = {
     return process.env.RUNNER_SECRET_NAME || "demo-ops-dashboard";
   },
   get hostSuffix(): string {
-    return process.env.HOST_SUFFIX || "demo.otterworks.xyz";
+    return process.env.HOST_SUFFIX || "demo.otterworks.app";
+  },
+  // Tenant ids allowed to be perpetual. A perpetual tenant never expires and is
+  // never idle-suspended, so it bills continuously and no reaper pass will ever
+  // clean it up: that is a standing cost decision, not something any dashboard
+  // caller should be able to make for an arbitrary id. Everything else is TTL'd.
+  get perpetualTenantIds(): Set<string> {
+    // Unset defaults to `main`; explicitly empty means no id may be perpetual,
+    // which fails closed -- a checkout asking for one is refused rather than
+    // quietly given an environment that never expires.
+    const raw = process.env.PERPETUAL_TENANT_IDS ?? "main";
+    return new Set(
+      raw
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    );
+  },
+  // The perpetual tenant is the shared reference environment and gets a shorter
+  // URL than the per-attendee ones (t-main.otterworks.app, not
+  // t-main.demo.otterworks.app). Both are covered by the wildcard certificate.
+  get perpetualHostSuffix(): string {
+    return process.env.PERPETUAL_HOST_SUFFIX || "otterworks.app";
   },
   // HTTPS clone URL passed to runner Jobs so they can fetch participant branches
   // (workshop-<id>) with GITHUB_TOKEN. Empty -> runner uses the image's bundled

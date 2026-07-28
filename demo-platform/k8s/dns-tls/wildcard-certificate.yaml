@@ -1,0 +1,32 @@
+# One wildcard certificate covers every tenant host plus the ops dashboard, so
+# adding tenants needs NO new certs. It is issued into the ingress-nginx
+# namespace and wired as the controller's --default-ssl-certificate, so every
+# tenant Ingress serves HTTPS with no per-namespace secret.
+#
+#   *.demo.<root>   covers  t-<id>.demo.<root>  AND  api-t-<id>.demo.<root>
+#   *.<root>        covers the perpetual tenant (t-main.<root>, api-t-main.<root>)
+#                   and the ops dashboard. A wildcard matches ONE label, so this
+#                   is not implied by the line above and vice versa.
+#
+# Placeholders (filled by scripts/enable-dns-tls.sh via envsubst):
+#   __DOMAIN_ROOT__  registrable domain, e.g. otterworks.app
+#   __ISSUER__       letsencrypt-staging | letsencrypt-prod
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: otterworks-wildcard
+  namespace: ingress-nginx
+spec:
+  secretName: otterworks-wildcard-tls
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  duration: 2160h    # 90d
+  renewBefore: 360h  # 15d
+  issuerRef:
+    name: __ISSUER__
+    kind: ClusterIssuer
+  dnsNames:
+    - "*.demo.__DOMAIN_ROOT__"
+    - "*.__DOMAIN_ROOT__"

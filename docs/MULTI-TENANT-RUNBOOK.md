@@ -25,7 +25,7 @@ cluster, one per attendee/demo run (`ATTENDEE_ID` → namespace
 
 ```bash
 export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_DEFAULT_REGION=us-east-1
-# aws sts get-caller-identity  -> account 599083837640, ARN ...Devin-PartnerWorkshops-Internal...
+# aws sts get-caller-identity  -> expect the workshop account (<AWS_ACCOUNT_ID>) and a Devin-PartnerWorkshops-Internal IAM identity
 export DB_PASSWORD='<shared RDS master password>'
 # Stable across redeploys so issued JWTs / Rails sessions stay valid:
 export JWT_SECRET='<hex>' SECRET_KEY_BASE='<hex>'

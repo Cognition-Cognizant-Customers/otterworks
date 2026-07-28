@@ -237,5 +237,19 @@ resource "aws_eks_addon" "vpc_cni" {
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
+  # Prefix delegation. By default the CNI hands each pod one secondary IP from
+  # the node's ENIs, capping a t3.large at 35 pods and burning a subnet IP per
+  # pod. Multi-tenant density (15 pods per tenant) exhausts both the per-node
+  # limit and the subnet CIDR long before CPU or memory runs out. Allocating /28
+  # prefixes instead raises the per-node ceiling by roughly an order of
+  # magnitude and is the difference between this cluster holding 10 tenants and
+  # holding 100.
+  configuration_values = jsonencode({
+    env = {
+      ENABLE_PREFIX_DELEGATION = "true"
+      WARM_PREFIX_TARGET       = "1"
+    }
+  })
+
   depends_on = [aws_eks_node_group.default]
 }

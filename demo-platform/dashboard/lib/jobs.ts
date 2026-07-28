@@ -13,6 +13,9 @@ export interface RunnerJobInput {
   ttl?: string;
   scenario?: string;
   hostSuffix?: string;
+  // Deploy into a tenant that is already up (continuous delivery) rather than
+  // standing a new one up. Only changes how the runner records the operation.
+  redeploy?: boolean;
 }
 
 // Secret keys the runner needs at runtime. These are referenced via
@@ -55,6 +58,7 @@ function buildEnv(input: RunnerJobInput): k8s.V1EnvVar[] {
   if (input.imageTag) plain.push({ name: "IMAGE_TAG", value: input.imageTag });
   if (input.ttl) plain.push({ name: "TTL", value: input.ttl });
   if (input.scenario) plain.push({ name: "SCENARIO", value: input.scenario });
+  if (input.redeploy) plain.push({ name: "REDEPLOY", value: "true" });
 
   // Secrets injected by reference — values never appear in the Job manifest.
   const secretEnv: k8s.V1EnvVar[] = RUNNER_SECRET_ENV_KEYS.map((key) => ({
@@ -111,6 +115,31 @@ export function buildRunnerJob(input: RunnerJobInput, epoch: number): k8s.V1Job 
       },
     },
   };
+}
+
+/**
+ * Name of an unfinished Job of this action for this tenant, if any.
+ *
+ * Two overlapping deploys of one tenant are two `helm upgrade` runs against
+ * the same releases, which is how you get a half-applied environment. CD makes
+ * that easy to hit (two pushes in a minute), so callers check this first.
+ */
+export async function activeRunnerJob(
+  tenantId: string,
+  action: RunnerAction,
+): Promise<string | null> {
+  const res = await batch().listNamespacedJob(
+    env.platformNamespace,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    `demo/tenant-id=${tenantId},demo/action=${action}`,
+  );
+  const running = res.body.items.find(
+    (j) => (j.status?.active ?? 0) > 0 || (!j.status?.succeeded && !j.status?.failed),
+  );
+  return running?.metadata?.name ?? null;
 }
 
 /** Create the runner Job in the platform namespace. Returns the Job name. */

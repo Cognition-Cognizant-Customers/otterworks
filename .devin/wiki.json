@@ -1,0 +1,447 @@
+{
+  "repo_notes": [
+    {
+      "content": ""
+    }
+  ],
+  "pages": [
+    {
+      "title": "OtterWorks Overview",
+      "purpose": "High-level introduction to OtterWorks: what it is, its purpose as a polyglot microservices demo platform, the overall architecture diagram, key design principles (Golden App, planted bugs, multi-tenant demos), and links to all major sections.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Getting Started",
+      "purpose": "Step-by-step guide for onboarding engineers: prerequisites, cloning the repo, running the full stack locally with Docker Compose and Make, seeding data, and verifying the system is healthy. Covers the Makefile targets, docker-compose files, LocalStack initialization, and the seed script.",
+      "parent": "OtterWorks Overview",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "System Architecture",
+      "purpose": "Deep dive into the overall system design: the polyglot service mesh, the API Gateway as the single ingress, data flow diagrams (login, file upload, document edit, search, notifications), event bus topology (SNS/SQS), and the shared data stores (PostgreSQL, Redis, DynamoDB, S3, MeiliSearch).",
+      "parent": "OtterWorks Overview",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Backend Services",
+      "purpose": "Overview of all 11 backend microservices, their languages, ports, and responsibilities. Links to child pages for each service group. Summarizes the polyglot nature and inter-service communication patterns.",
+      "page_notes": [
+        {
+          "content": "show table of each microservice"
+        }
+      ]
+    },
+    {
+      "title": "API Gateway",
+      "purpose": "Detailed documentation of the Go/Chi API Gateway: routing configuration, JWT validation middleware, rate limiting, CORS, circuit breaker, request logging, and how it proxies to each downstream service. Covers the middleware chain and health handler.",
+      "parent": "Backend Services",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Auth Service",
+      "purpose": "Documentation of the Java/Spring Boot Auth Service: user registration and login flows, JWT issuance and validation (JwtTokenProvider), refresh token rotation, RBAC (roles: super_admin, admin, editor, viewer), BCrypt password hashing, Spring Security filter chain, Flyway migrations, and user settings management.",
+      "parent": "Backend Services",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "File Service",
+      "purpose": "Detailed documentation of the Rust/Actix-Web File Service: multipart upload pipeline, S3 blob storage, DynamoDB metadata persistence (MetadataClient), presigned download URLs, soft-delete (trash/restore), folder management, file versioning, file sharing (SharePermission), SNS event publishing, and the chaos flag mechanism.",
+      "parent": "Backend Services",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Document Service",
+      "purpose": "Documentation of the Python/FastAPI Document Service: CRUD endpoints, versioning system (DocumentVersion), soft delete, multi-format export (HTML, Markdown, PDF), template-based creation, full-text search via SQL ILIKE, SNS event publishing, JWT-based ownership validation, and the slow-query chaos injection mechanism.",
+      "parent": "Backend Services",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Collaboration Service",
+      "purpose": "Documentation of the Node.js/TypeScript Collaboration Service: real-time WebSocket architecture with Socket.io, CRDT-based concurrent editing via Yjs, cursor presence and awareness, Redis pub/sub for multi-instance sync, document store, and the Redis adapter.",
+      "parent": "Backend Services",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Search Service",
+      "purpose": "Documentation of the Python/Flask Search Service: MeiliSearch integration, indexing pipeline (SQS consumer from file-service and document-service events), search API endpoints, per-user result scoping via X-User-ID, the indexer and meilisearch_client modules, and auth middleware.",
+      "parent": "Backend Services",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Notification Service",
+      "purpose": "Documentation of the Kotlin/Ktor Notification Service: SQS event consumption, SNS fan-out, DynamoDB notification history, WebSocket push delivery, email via SES, notification templates, and the WebSocketManager.",
+      "parent": "Backend Services",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Analytics Service",
+      "purpose": "Documentation of the Scala/Akka Analytics Service: event ingestion from SQS, metrics aggregation (MetricsRepository, MetricsAggregator), S3 data lake storage, PostgreSQL metrics persistence, batch usage rollup jobs (UsageRollupJob, UsageRollupAggregator, EventLoader), and the analytics API routes.",
+      "parent": "Backend Services",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Admin Service",
+      "purpose": "Documentation of the Ruby on Rails Admin Service: incident lifecycle and state machine, Devin AI session integration (DevinSessionService), chaos injection controller, user management, feature flags, audit log viewer, bulk operations, health checker, JWT authentication middleware (JwtAuthenticator), and Rack::Attack rate limiting.",
+      "parent": "Backend Services",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Audit Service",
+      "purpose": "Documentation of the C#/.NET 8 Audit Service: immutable audit trail via DynamoDB (DynamoDbAuditRepository), S3 long-term archiving (S3AuditArchiver), SNS event consumption (SnsConsumer), CQRS with MediatR, compliance reporting, and the minimal API controller.",
+      "parent": "Backend Services",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Report Service & Legacy Portal",
+      "purpose": "Documentation of the legacy Java 8/Maven Report Service (CSV/PDF/Excel generation, ReportDataFetcher, ReportGenerationWorker) and the Legacy Portal modular monolith (Java 11/Spring Boot 2.7, three bounded contexts: Announcements, User Preferences, Feedback). Explains their role as upgrade/decomposition demo targets.",
+      "parent": "Backend Services",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Frontend Applications",
+      "purpose": "Overview of all frontend applications in OtterWorks: the React/Next.js web app, Angular admin dashboard, Electron desktop app, Capacitor mobile apps, and Windows WPF desktop client. Links to child pages for each.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Web App (React/Next.js)",
+      "purpose": "Documentation of the main user-facing React/Next.js SPA: page structure (files, documents, trash, shared, search, notifications, dashboard, starred, recent), the collaborative editor component (TipTap/ProseMirror), API client, Zustand state management, Vite configuration, nginx proxy setup, and the BDD/Playwright/Vitest test suites.",
+      "parent": "Frontend Applications",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Mobile & Desktop Clients",
+      "purpose": "Documentation of the cross-platform client strategy: Capacitor wrapping the React web app for Android and iOS (network security config, API base URL overrides), the Electron desktop wrapper (electron-builder, launch scripts), and the native Windows WPF desktop client (C#/.NET Framework 4.8, MVVM pattern, DPAPI token persistence, OtterWorksApiClient).",
+      "parent": "Frontend Applications",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Admin Dashboard (Angular)",
+      "purpose": "Documentation of the Angular 17 admin dashboard: component structure (dashboard, incidents, users, health, audit, quotas, features, login), AdminApiService as the gateway to the admin-service backend, AuthService with JWT localStorage persistence, mock data for development, proxy configuration, and Karma/Jasmine test setup.",
+      "parent": "Frontend Applications",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Infrastructure & Deployment",
+      "purpose": "Overview of the infrastructure layers: Terraform (platform and application), Helm charts, Kubernetes, Docker Compose for local development, and CI/CD pipelines. Links to child pages for each area.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Terraform Infrastructure",
+      "purpose": "Documentation of the two-layer Terraform approach: the platform layer (VPC, EKS, ECR in platform/terraform/) and the application layer (RDS, DynamoDB, S3, SQS/SNS, ElastiCache, MeiliSearch, Cognito, IRSA in infrastructure/terraform/). Covers module structure, key outputs (rds_endpoint, irsa_role_arns), and the IRSA security model.",
+      "parent": "Infrastructure & Deployment",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Helm Charts & Kubernetes",
+      "purpose": "Documentation of the Helm chart structure for all 13 services (Deployment, Service, Ingress, NetworkPolicy, ServiceMonitor, ServiceAccount templates), values.yaml configuration patterns, IRSA ServiceAccount annotations, resource quotas, and the infrastructure/k8s manifests.",
+      "parent": "Infrastructure & Deployment",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Local Development with Docker Compose",
+      "purpose": "Documentation of the local development environment: docker-compose.infra.yml (Postgres, Redis, MeiliSearch, observability stack), docker-compose.yml (all application services), LocalStack initialization for AWS service emulation, the Makefile targets (infra-up, up, dev-web, dev-admin), and the init-db.sql schema setup.",
+      "parent": "Infrastructure & Deployment",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "CI/CD Pipeline",
+      "purpose": "Documentation of the GitHub Actions CI/CD strategy: path-based change detection (dorny/paths-filter), per-language build jobs (Go, Rust, Java/Kotlin, Python, Ruby, C#, Scala), the docker-build workflow, and the deploy-dev.sh script that wires Terraform outputs into Helm releases.",
+      "parent": "Infrastructure & Deployment",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Multi-Tenant Demo Platform",
+      "purpose": "Overview of the multi-tenant workshop infrastructure: the concept of ephemeral tenant namespaces on a shared EKS cluster, the demo-platform ops dashboard, and the runner job system. Links to child pages for the deployment scripts and the ops dashboard.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Tenant Lifecycle Scripts",
+      "purpose": "Detailed documentation of the tenant management shell scripts: deploy-tenant.sh (namespace provisioning, IRSA trust extension, stateful backend setup, Helm service orchestration, ingress routing), teardown-tenant.sh (namespace deletion, database drop with FORCE), tenant-common.sh library functions (load_infra_outputs, build_helm_args, drop_tenant_db), inject-bug.sh, tenant-scale.sh, and the bug-catalog.yaml.",
+      "parent": "Multi-Tenant Demo Platform",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Demo Platform Ops Dashboard",
+      "purpose": "Documentation of the Next.js demo-ops-dashboard: tenant state management (DynamoDB control table), runner job construction (createRunnerJob, buildRunnerJob, RUNNER_SECRET_ENV_KEYS), health reconciliation (reconcileStatus, expectedDegradedServices), the runner entrypoint.sh lifecycle, IRSA wildcard migration for IAM policy size limits, the reaper CronJob, and the Helm chart for the platform itself.",
+      "parent": "Multi-Tenant Demo Platform",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Observability",
+      "purpose": "Overview of the full observability stack: metrics (Prometheus/Grafana), distributed tracing (OpenTelemetry/Jaeger), structured logging (Fluent Bit/CloudWatch), and alerting (Grafana alert rules → admin-service incident workflow). Links to child pages.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Metrics & Dashboards",
+      "purpose": "Documentation of the Prometheus and Grafana setup: scrape configuration, ServiceMonitor CRDs, the Grafana dashboards (otterworks-overview, service-detail, infrastructure, business-metrics, chaos-scenarios, incident-overview), alert rules (alert-rules.yml), contact points, and notification policies.",
+      "parent": "Observability",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Distributed Tracing & Logging",
+      "purpose": "Documentation of the OpenTelemetry instrumentation across services (OTEL_EXPORTER_OTLP_ENDPOINT), the OTel Collector configuration, Jaeger for trace visualization, Fluent Bit log shipping (log-format-spec.md, parsers.conf, fluentbit-config.yml), and the structured JSON logging conventions used across all service languages.",
+      "parent": "Observability",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Runbooks & Incident Response",
+      "purpose": "Documentation of the operational runbooks for common failure scenarios (document-service-slow, file-upload-failure, high-error-rate, high-latency, notification-processing-failure, search-suggest-500, service-down), the automated incident response workflow (Grafana alert → admin-service → Devin AI session), and the incident lifecycle state machine.",
+      "parent": "Observability",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Security",
+      "purpose": "Overview of the security posture: shift-left SAST pipeline, event-driven auto-remediation, network policies, and cross-service authentication. Links to child pages.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Security Scanning & SAST Pipeline",
+      "purpose": "Documentation of the security-scan.yml workflow (Trivy dependency scanning, Gitleaks secret detection, Semgrep SAST with OWASP Top Ten), the sast-auto-remediate.yml workflow (bot-loop prevention, SonarCloud Quality Gate polling, Devin webhook triggers, escalation to GitHub Issues), .trivyignore exclusions, and sonar-project.properties configuration.",
+      "parent": "Security",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Authentication & Network Security",
+      "purpose": "Documentation of the cross-service JWT authentication flow (JwtTokenProvider, JwtAuthFilter in Spring, JwtAuthenticator middleware in Rails), the X-User-ID header injection by the API gateway, Kubernetes NetworkPolicy enforcement (allow-namespace-egress, default-deny, allow-dns), ECR image scanning, and IRSA for pod-level AWS access control.",
+      "parent": "Security",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Chaos Engineering",
+      "purpose": "Overview of the chaos engineering subsystem: Redis-based chaos flags, the chaos injection mechanisms across services, the admin-service chaos controller, and the ChaosProbeService synthetic traffic generator. Links to child pages.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Chaos Scenarios & Injection Mechanisms",
+      "purpose": "Detailed documentation of all chaos scenarios: upload_s3_error (file-service), slow_queries (document-service), suggest_500 (search-service), consumer_strict_schema (notification-service). Covers the Redis flag pattern (_chaos_active checks), the chaos_controller.rb API, the inject-bug.sh script, the bug-catalog.yaml, and the Grafana chaos-scenarios dashboard.",
+      "parent": "Chaos Engineering",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Devin AI Integration",
+      "purpose": "Documentation of the Devin AI agent integration: DevinSessionService (building architecture prompts, calling api.devin.ai V3 API), the incident → Devin session workflow, devin_session_status states (running, pending, blocked, stopped, failed), the SAST auto-remediation webhook triggers, and the .devin/blueprint.yaml configuration.",
+      "parent": "Chaos Engineering",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Testing & Data",
+      "purpose": "Overview of the testing strategy across the monorepo: unit tests per service, API integration tests, contract tests, BDD tests, and the synthetic test data framework. Links to child pages.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "API & Contract Tests",
+      "purpose": "Documentation of the black-box API test suite (tests/api/: test_auth_flow.py, test_collaboration_flow.py, test_audit_analytics_report_flow.py, test_degradation_flow.py), the contract tests (tests/contract/test_search_contract.py), the shared OpenAPI specs (search-service.yaml, document-service.yaml, notification-service.yaml), and the api-route-matrix.md.",
+      "parent": "Testing & Data",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Synthetic Test Data Framework",
+      "purpose": "Documentation of the testdata generation framework: the Devin-driven workflow (GitHub Issue → generate.py → validate.py), namespaced PostgreSQL schemas (otterworks_<ns>), the validation harness (FK integrity, temporal consistency, enum values, business rules, criteria.json), the seed scripts (seed_01 through seed_10), and the Makefile testdata targets.",
+      "parent": "Testing & Data",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "ETL & Data Pipelines",
+      "purpose": "Documentation of the ETL pipeline layer: the five legacy cron-based Python scripts (analytics_daily.py, audit_archive_weekly.py, search_reindex_weekly.py, storage_cleanup_daily.py, user_activity_daily.py), their known problems (hardcoded credentials, no retry, silent failures), and the migration guide to Apache Airflow (DAG mapping, Airflow hooks, PySpark aggregation).",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Legacy ETL Scripts",
+      "purpose": "Detailed documentation of the five existing ETL scripts in etl/scripts/: their schedules, data sources (SQS, DynamoDB, S3, PostgreSQL, MeiliSearch APIs), the config.ini configuration pattern, known issues (silent except:pass, pandas memory limits, no idempotency), and the crontab schedule.",
+      "parent": "ETL & Data Pipelines",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Analytics Batch Jobs",
+      "purpose": "Documentation of the Scala analytics batch processing: the UsageRollupJob, UsageRollupAggregator, EventLoader, the seed usage-events.ndjson, the run-usage-rollup.sh script, the Kubernetes CronJob Helm template, and the PostgresMetricsRepository for persisting aggregated results.",
+      "parent": "ETL & Data Pipelines",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Shared Contracts & Event Schemas",
+      "purpose": "Documentation of the shared interface definitions used across services: the OpenAPI specs (search-service.yaml, document-service.yaml, notification-service.yaml), the JSON event schemas (file-events.json, document-events.json, collaboration-events.json, audit-events.json, notification-events.json), and the proto definitions.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Glossary",
+      "purpose": "Definitions of all codebase-specific terms, abbreviations, and domain concepts that an onboarding engineer needs to know. Each entry includes code pointers to relevant files, classes, or functions.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    }
+  ]
+}

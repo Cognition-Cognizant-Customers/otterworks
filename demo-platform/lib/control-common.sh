@@ -36,6 +36,28 @@ ctl_tenant_exists() {
   [ -n "$(ctl_get "TENANT#$1" META | jq -r '.Item.PK.S // empty' 2>/dev/null)" ]
 }
 
+# Every tenant id in the control table, one per line. Returns non-zero (and no
+# output) if the scan itself fails, so callers can tell "no tenants" apart from
+# "we do not know" — deleting on the latter would be a mass wipe. The orphan-DB
+# sweep deletes anything absent from this list, so a truncated result is a data
+# loss risk: page through LastEvaluatedKey rather than trust a single 1MB page.
+ctl_tenant_ids() {
+  local out token args
+  token=""
+  while :; do
+    args=(dynamodb scan
+      --table-name "${CONTROL_TABLE}" --region "${AWS_REGION}"
+      --filter-expression "SK = :meta AND begins_with(PK, :tp)"
+      --expression-attribute-values '{":meta":{"S":"META"},":tp":{"S":"TENANT#"}}'
+      --output json)
+    [ -n "${token}" ] && args+=(--starting-token "${token}")
+    out="$(aws "${args[@]}" 2>/dev/null)" || return 1
+    printf '%s' "${out}" | jq -r '.Items[]? | (.id.S // (.PK.S | sub("^TENANT#";"")))' 2>/dev/null
+    token="$(printf '%s' "${out}" | jq -r '.NextToken // empty' 2>/dev/null)"
+    [ -n "${token}" ] || break
+  done
+}
+
 # UpdateItem for TENANT#<id>/META. Sets status + last_seen_at. Upserts if absent
 # (safe: the dashboard normally creates the item at checkout, but a lone runner
 # retry must never crash on a missing item).
@@ -66,8 +88,8 @@ ctl_set_active() {
 }
 
 # Append an append-only AUDIT#<id> event. `action` must be one of the values in
-# control-table-schema.md (checkout, checkin, extend, deploy_ok, deploy_fail,
-# reap, inject, reset, login_ok, login_fail).
+# control-table-schema.md (checkout, checkin, extend, redeploy, persist,
+# deploy_ok, deploy_fail, reap, inject, reset, suspend, login_ok, login_fail).
 ctl_audit() {
   local id="$1" action="$2" detail="${3:-}" actor="${ACTOR:-runner}"
   # `ts` MUST be epoch-milliseconds to match the sort key and the dashboard

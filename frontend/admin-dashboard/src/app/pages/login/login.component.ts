@@ -22,7 +22,7 @@ import { AuthService } from '../../core/services/auth.service';
       <mat-card class="login-card">
         <mat-card-header>
           <div class="login-header">
-            <mat-icon class="login-logo">pets</mat-icon>
+            <img class="login-logo" src="assets/otter-logo.png" alt="OtterWorks logo" width="64" height="64" />
             <h1>OtterWorks Admin</h1>
             <p>Sign in to the admin dashboard</p>
           </div>
@@ -63,7 +63,7 @@ import { AuthService } from '../../core/services/auth.service';
       justify-content: center;
       align-items: center;
       min-height: 100vh;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      background: #1f3a5f;
     }
 
     .login-card {
@@ -78,10 +78,8 @@ import { AuthService } from '../../core/services/auth.service';
     }
 
     .login-logo {
-      font-size: 48px;
-      width: 48px;
-      height: 48px;
-      color: #1976d2;
+      width: 64px;
+      height: 64px;
       margin-bottom: 16px;
     }
 

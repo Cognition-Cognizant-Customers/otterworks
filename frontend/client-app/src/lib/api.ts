@@ -565,6 +565,88 @@ export const starredApi = {
   },
 };
 
+// ── Margins analytics (analytics-service) ────────────────────
+// Shapes are post-interceptor camelCase versions of the snake_case wire format.
+export interface MarginRow {
+  sku: string;
+  name: string;
+  category: string;
+  supplier: string;
+  listPriceUsd: number;
+  commodityCostUsd: number;
+  freightCostUsd: number;
+  overheadCostUsd: number;
+  cogsUsd: number;
+  marginPct: number;
+}
+
+export interface MarginKpis {
+  grossMarginPct: number;
+  avgCogsUsd: number;
+  salmonIndex: number;
+  freightIndex: number;
+}
+
+export interface MarginsResponse {
+  asOfDate: string;
+  source: string;
+  lastSyncAt: string | null;
+  kpis: MarginKpis;
+  rows: MarginRow[];
+}
+
+export interface MarginSeriesPoint {
+  marginDate: string;
+  marginPct: number;
+}
+
+export interface MarketPricePoint {
+  seriesCode: string;
+  priceDate: string;
+  value: number;
+  source: string;
+}
+
+export const marginsApi = {
+  getMargins: async (): Promise<MarginsResponse> => {
+    const { data } = await apiClient.get<MarginsResponse>("/analytics/margins");
+    return data;
+  },
+
+  getMarginSeries: async (params: {
+    sku?: string;
+    category?: string;
+    from?: string;
+    to?: string;
+  }): Promise<{ points: MarginSeriesPoint[] }> => {
+    const { data } = await apiClient.get<{ points: MarginSeriesPoint[] }>(
+      "/analytics/margins/series",
+      { params },
+    );
+    return data;
+  },
+
+  getMarketPrices: async (
+    seriesCode: string,
+    from?: string,
+    to?: string,
+  ): Promise<{ prices: MarketPricePoint[] }> => {
+    const { data } = await apiClient.get<{ prices: MarketPricePoint[] }>(
+      "/analytics/market/prices",
+      { params: { series_code: seriesCode, from, to } },
+    );
+    return data;
+  },
+
+  exportCsv: async (): Promise<string> => {
+    const { data } = await apiClient.get<string>(
+      "/analytics/margins/export?format=csv",
+      { responseType: "text", transformResponse: (d: string) => d },
+    );
+    return data;
+  },
+};
+
 // ── Settings ──────────────────────────────────────────────────
 export const settingsApi = {
   get: async (): Promise<UserSettings> => {

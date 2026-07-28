@@ -36,6 +36,42 @@ is provided explicitly (`scripts/deploy-dev.sh` wiring); `DATABASE_*` always
 takes precedence. If the durable store cannot be initialised at startup, the
 service logs a warning and falls back to the in-memory store so it still boots.
 
+## Market data & margins (OTD-15)
+
+The service also owns supply-chain market data and per-SKU margin analytics in a
+dedicated **`analytics` schema** (its own Flyway history table
+`flyway_schema_history_analytics`): `market_series`, `market_prices`, `products`,
+`product_margin_daily`, `sync_runs`.
+
+At startup an idempotent seeder loads the deterministic synthetic baseline
+bundled from `testdata/market-series` (see the README there for the CSV
+contract) and extends every series to "today" with a seeded random walk.
+
+Endpoints (all behind the API-gateway JWT — no extra auth):
+
+- `GET /api/v1/analytics/margins` — KPIs + per-SKU margin rows
+- `GET /api/v1/analytics/margins/series?sku=|category=&from=&to=`
+- `GET /api/v1/analytics/margins/export?format=csv`
+- `GET /api/v1/analytics/market/series` / `market/prices?series_code=&from=&to=` / `market/status`
+- `POST /api/v1/analytics/market/observations` — manual Trading Economics pulls:
+
+```json
+{
+  "observations": [
+    { "series_code": "SALMON_NOK_KG", "price_date": "2026-07-24", "value": 103.10 },
+    { "series_code": "USD_NOK", "price_date": "2026-07-24", "value": 10.62 }
+  ],
+  "source_note": "tradingeconomics.com manual pull"
+}
+```
+
+Each observation is validated (known series, ISO date not in the future,
+positive value); valid ones upsert as `manual_pull` (winning over synthetic),
+affected margins are recomputed synchronously and a `sync_runs` row is recorded.
+Response reports `accepted`, itemized `rejected`, `recomputed_skus` and
+`run_id`; an all-invalid request returns 400. There is **no** Trading Economics
+API integration and no TE credentials — pulls are manual by design.
+
 ## Lakehouse migration — "before" state
 
 This durable PostgreSQL store is the **"before"** state for a

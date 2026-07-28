@@ -3,17 +3,24 @@ set -euo pipefail
 
 echo "Initializing LocalStack resources..."
 
-# S3 Buckets
-awslocal s3 mb s3://otterworks-files
-awslocal s3 mb s3://otterworks-data-lake
-awslocal s3 mb s3://otterworks-audit-archive
+# Idempotent so re-runs on already-provisioned state (e.g. when DynamoDB tables
+# are restored from a persisted snapshot with PERSISTENCE=1) do not abort under
+# `set -e`. This ready.d hook runs on every container start.
+bucket_exists() { awslocal s3api head-bucket --bucket "$1" >/dev/null 2>&1; }
+table_exists()  { awslocal dynamodb describe-table --table-name "$1" >/dev/null 2>&1; }
+make_bucket()   { bucket_exists "$1" || awslocal s3 mb "s3://$1"; }
 
-# SQS Queue
+# S3 Buckets
+make_bucket otterworks-files
+make_bucket otterworks-data-lake
+make_bucket otterworks-audit-archive
+
+# SQS Queue (create-queue is idempotent for an existing queue with the same name)
 awslocal sqs create-queue --queue-name otterworks-notifications
 awslocal sqs create-queue --queue-name otterworks-audit-events-queue
 awslocal sqs create-queue --queue-name otterworks-search-events
 
-# SNS Topic
+# SNS Topic (create-topic returns the existing ARN if it already exists)
 awslocal sns create-topic --name otterworks-events
 NOTIFICATION_QUEUE_ARN=$(awslocal sqs get-queue-attributes \
   --queue-url http://localhost:4566/000000000000/otterworks-notifications \
@@ -44,19 +51,19 @@ awslocal sns subscribe \
   --notification-endpoint "$SEARCH_QUEUE_ARN"
 
 # DynamoDB Tables
-awslocal dynamodb create-table \
+table_exists otterworks-file-metadata || awslocal dynamodb create-table \
   --table-name otterworks-file-metadata \
   --attribute-definitions AttributeName=id,AttributeType=S \
   --key-schema AttributeName=id,KeyType=HASH \
   --billing-mode PAY_PER_REQUEST
 
-awslocal dynamodb create-table \
+table_exists otterworks-audit-events || awslocal dynamodb create-table \
   --table-name otterworks-audit-events \
   --attribute-definitions AttributeName=id,AttributeType=S \
   --key-schema AttributeName=id,KeyType=HASH \
   --billing-mode PAY_PER_REQUEST
 
-awslocal dynamodb create-table \
+table_exists otterworks-notifications || awslocal dynamodb create-table \
   --table-name otterworks-notifications \
   --attribute-definitions \
     AttributeName=id,AttributeType=S \
@@ -68,19 +75,19 @@ awslocal dynamodb create-table \
     '[{"IndexName":"userId-createdAt-index","KeySchema":[{"AttributeName":"userId","KeyType":"HASH"},{"AttributeName":"createdAt","KeyType":"RANGE"}],"Projection":{"ProjectionType":"ALL"}}]' \
   --billing-mode PAY_PER_REQUEST
 
-awslocal dynamodb create-table \
+table_exists otterworks-notification-preferences || awslocal dynamodb create-table \
   --table-name otterworks-notification-preferences \
   --attribute-definitions AttributeName=userId,AttributeType=S \
   --key-schema AttributeName=userId,KeyType=HASH \
   --billing-mode PAY_PER_REQUEST
 
-awslocal dynamodb create-table \
+table_exists otterworks-folders || awslocal dynamodb create-table \
   --table-name otterworks-folders \
   --attribute-definitions AttributeName=id,AttributeType=S \
   --key-schema AttributeName=id,KeyType=HASH \
   --billing-mode PAY_PER_REQUEST
 
-awslocal dynamodb create-table \
+table_exists otterworks-file-versions || awslocal dynamodb create-table \
   --table-name otterworks-file-versions \
   --attribute-definitions \
     AttributeName=file_id,AttributeType=S \
@@ -90,7 +97,7 @@ awslocal dynamodb create-table \
     AttributeName=version,KeyType=RANGE \
   --billing-mode PAY_PER_REQUEST
 
-awslocal dynamodb create-table \
+table_exists otterworks-file-shares || awslocal dynamodb create-table \
   --table-name otterworks-file-shares \
   --attribute-definitions AttributeName=id,AttributeType=S \
   --key-schema AttributeName=id,KeyType=HASH \

@@ -3,7 +3,7 @@ import { withSession, json, error } from "@/lib/api";
 import { appendAudit, checkout } from "@/lib/control";
 import { createRunnerJob } from "@/lib/jobs";
 import { env } from "@/lib/env";
-import { isValidId, randomIdSuffix, sanitizeId, ttlToSeconds } from "@/lib/util";
+import { isNeverTtl, isValidId, randomIdSuffix, sanitizeId, ttlToSeconds } from "@/lib/util";
 import type { CheckoutRequest, TenantTier } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -22,9 +22,25 @@ export const POST = withSession(async (req: NextRequest, { actor }) => {
   const tier: TenantTier = body.tier === "B" ? "B" : "A";
   const imageTag = typeof body.image_tag === "string" && body.image_tag ? body.image_tag : undefined;
 
-  const ttlStr = typeof body.ttl === "string" && body.ttl ? body.ttl : "8h";
+  // "never" and persistent:true are the same request; accept either spelling so
+  // a caller cannot end up with a tenant it believes is perpetual while the
+  // reaper still expires it.
+  const persistent = body.persistent === true || isNeverTtl(body.ttl ?? "");
+  if (persistent && !env.perpetualTenantIds.has(id)) {
+    return error(
+      403,
+      `tenant '${id}' may not be perpetual; a perpetual tenant never expires and is never suspended`,
+    );
+  }
+  const ttlStr = persistent ? "never" : typeof body.ttl === "string" && body.ttl ? body.ttl : "8h";
   const ttlSeconds = ttlToSeconds(ttlStr);
   if (ttlSeconds === null) return error(400, "invalid ttl");
+
+  // The perpetual tenant is the environment everyone shares, so it answers on
+  // the short host (t-main.otterworks.app) rather than under the per-attendee
+  // subdomain. The runner must be told the same suffix the record advertises,
+  // or the URL in the dashboard points at an Ingress that was never created.
+  const hostSuffix = persistent ? env.perpetualHostSuffix : env.hostSuffix;
 
   const tenant = await checkout({
     id,
@@ -33,7 +49,8 @@ export const POST = withSession(async (req: NextRequest, { actor }) => {
     tier,
     imageTag,
     ttlSeconds,
-    hostSuffix: env.hostSuffix,
+    hostSuffix,
+    persistent,
   });
 
   await appendAudit({
@@ -53,7 +70,7 @@ export const POST = withSession(async (req: NextRequest, { actor }) => {
       tier,
       imageTag,
       ttl: ttlStr,
-      hostSuffix: env.hostSuffix,
+      hostSuffix,
     });
   } catch (err) {
     await appendAudit({

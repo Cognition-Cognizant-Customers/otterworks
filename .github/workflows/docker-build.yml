@@ -1,22 +1,36 @@
 name: Docker Build & Push
 
-on:
-  push:
-    branches: [main]
-    tags: ['v*']
+# Release builds. Every service is published at one version, so a release is a
+# complete, self-consistent set of images.
+#
+# Branch and `main` builds are not here -- they belong to cd-tenant.yml, which
+# builds only what changed and then ships it to the tenant that owns the branch.
+#
+# Dispatch-only, and deliberately not triggered by pushing a `v*` tag: the CD
+# role trusts refs/heads/main, workshop-* and demo-* and nothing else, so a
+# tag-triggered run could not assume it. Run this from `main` and pass the
+# version you are cutting.
 
-env:
-  AWS_REGION: us-east-1
-  ECR_REGISTRY: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/workshop
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version to tag the images with, e.g. v1.4.0
+        required: true
+        type: string
 
 permissions:
   id-token: write
   contents: read
 
+env:
+  AWS_REGION: us-east-1
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         service:
           - { name: api-gateway, context: services/api-gateway }
@@ -29,27 +43,44 @@ jobs:
           - { name: analytics-service, context: services/analytics-service }
           - { name: admin-service, context: services/admin-service }
           - { name: audit-service, context: services/audit-service }
+          - { name: report-service, context: services/report-service }
           - { name: web-app, context: frontend/client-app }
           - { name: admin-dashboard, context: frontend/admin-dashboard }
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Validate version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          # The version becomes a Docker tag, so reject anything a registry
+          # would refuse (or that would silently overwrite `main`).
+          [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] ||
+            { echo "::error::version '${VERSION}' is not vMAJOR.MINOR.PATCH"; exit 1; }
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Build and push image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
           context: ${{ matrix.service.context }}
           push: true
+          platforms: linux/amd64
+          # otterworks/<service>: the repository layout every deploy script
+          # reads (ECR_PREFIX in scripts/lib/tenant-common.sh). Images published
+          # anywhere else are simply never deployed.
           tags: |
-            ${{ env.ECR_REGISTRY }}/otterworks-${{ matrix.service.name }}:${{ github.sha }}
-            ${{ env.ECR_REGISTRY }}/otterworks-${{ matrix.service.name }}:latest
+            ${{ steps.ecr.outputs.registry }}/otterworks/${{ matrix.service.name }}:${{ inputs.version }}
+            ${{ steps.ecr.outputs.registry }}/otterworks/${{ matrix.service.name }}:${{ github.sha }}

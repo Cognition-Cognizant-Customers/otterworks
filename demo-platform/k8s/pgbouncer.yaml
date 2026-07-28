@@ -1,13 +1,149 @@
-# PgBouncer (transaction pooling) in front of the shared RDS instance so total
-# DB connections stay bounded as tenants scale. Point tenant DB URLs at
-# pgbouncer.otterworks-platform:6432 instead of the RDS endpoint directly.
-# See docs/scaling.md §3.
+# PgBouncer (transaction pooling) in front of the shared RDS instance.
 #
-# Credentials are supplied at apply time via the `pgbouncer-auth` Secret (NOT
-# committed): keys RDS_HOST, RDS_PORT, DB_USER, DB_PASSWORD. Create it with:
-#   kubectl -n otterworks-platform create secret generic pgbouncer-auth \
-#     --from-literal=RDS_HOST=... --from-literal=RDS_PORT=5432 \
-#     --from-literal=DB_USER=otterworks_admin --from-literal=DB_PASSWORD="$DB_PASSWORD"
+# Every tenant's services keep their own connection pools against one
+# db.t3.micro, whose ceiling is ~112 connections total. A full tenant sitting
+# completely idle was measured holding 16, so the instance runs out of
+# connections at six tenants -- long before anything else on the way to a
+# hundred. PgBouncer makes the number of *server* connections a property of how
+# much SQL is in flight rather than of how many tenants exist: the same idle
+# tenant, through the pooler, holds one.
+#
+# __RDS_HOST__ / __RDS_PORT__ / __DB_USER__ are substituted at apply time by
+# scripts/install-pgbouncer.sh, which also writes the userlist Secret. See
+# docs/scaling.md §3.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbouncer-config
+  namespace: otterworks-platform
+  labels: { app: pgbouncer }
+data:
+  pgbouncer.ini: |
+    [databases]
+    # Wildcard, so a tenant database created after this pod started is reached
+    # without redeploying the pooler: the client's dbname (otterworks_<id>) is
+    # passed through to RDS as-is. Per-tenant database isolation is unchanged --
+    # a connection to otterworks_a still lands in otterworks_a. Credentials are
+    # deliberately absent here so the client's own user is forwarded rather than
+    # every tenant silently sharing one server-side identity.
+    * = host=__RDS_HOST__ port=__RDS_PORT__
+
+    [pgbouncer]
+    listen_addr = 0.0.0.0
+    listen_port = 6432
+    unix_socket_dir =
+    auth_type = scram-sha-256
+    auth_file = /etc/pgbouncer/userlist.txt
+
+    # Transaction pooling: a server connection is held for the length of a
+    # transaction, not a session, which is what lets a few dozen server
+    # connections serve thousands of idle client ones.
+    pool_mode = transaction
+
+    # Transaction pooling and prepared statements are the classic
+    # incompatibility -- a statement PREPAREd on one server connection is not
+    # there when the next transaction lands on another, and the JDBC driver and
+    # asyncpg both prepare by default. PgBouncer >= 1.21 tracks protocol-level
+    # prepared statements per server connection and re-prepares them as needed;
+    # this is what makes the services above work unmodified. Do not remove it
+    # without also disabling prepared statements in every SQL service.
+    max_prepared_statements = 200
+
+    # The two numbers that matter. max_client_conn is what the tenants see and
+    # is cheap (a few KB each); the server side is what RDS counts.
+    max_client_conn = 2000
+    default_pool_size = 5
+    min_pool_size = 0
+    reserve_pool_size = 2
+    reserve_pool_timeout = 3
+
+    # The actual ceiling. Every service connects as the same RDS master user, so
+    # a per-user cap is a global cap: 25 per replica x 2 replicas = 50 server
+    # connections here, plus 30 from the session pooler below = 80, under the
+    # ~112 a db.t3.micro allows and leaving room for psql, deploy jobs and RDS's
+    # own reserved superuser slots. This is the number to revisit when the
+    # instance is resized -- not default_pool_size.
+    max_user_connections = 25
+
+    # Idle tenants are the normal state here (the reaper scales them to zero),
+    # so hand server connections back quickly rather than holding them open for
+    # a tenant nobody is using.
+    server_idle_timeout = 60
+    server_lifetime = 900
+
+    # RDS advertises parameters the JDBC driver sends but PgBouncer does not
+    # track; without this the pooler rejects those startup packets outright.
+    ignore_startup_parameters = extra_float_digits,options
+
+    # search_path has to be *tracked*, not ignored. analytics-service asks for
+    # its own schema (`?currentSchema=analytics`), which the JDBC driver sends
+    # as a search_path startup packet; ignoring it would answer every query
+    # from `public` instead, and rejecting it fails the connection outright.
+    # Tracking makes PgBouncer re-apply it whenever the client lands on a
+    # different server connection.
+    track_extra_parameters = IntervalStyle,search_path
+
+    # require, not prefer: prefer silently falls back to plaintext, and every
+    # tenant's SQL crosses this hop authenticated as the RDS master user. RDS
+    # always offers TLS, so there is nothing to fall back for. Not verify-full,
+    # which additionally needs the RDS CA bundle mounted here -- worth doing,
+    # but it is a separate change with its own rotation story.
+    server_tls_sslmode = require
+    admin_users = __DB_USER__
+    stats_users = __DB_USER__
+
+    # Connection-level logging is per tenant service pod and would be constant
+    # noise at this fan-out; the SHOW POOLS/STATS views are the interface.
+    log_connections = 0
+    log_disconnections = 0
+
+  # A second pooler, in SESSION mode, for the things transaction pooling cannot
+  # serve: anything whose state outlives a transaction. Concretely, every schema
+  # migration in this app takes a *session*-level advisory lock -- Flyway when
+  # auth-service and analytics-service boot, `rails db:migrate` when
+  # admin-service does -- and such a lock taken through a transaction pooler is
+  # released onto whichever server connection the next transaction happens to
+  # get, not the one holding it. The lock leaks, the migration loses its mutual
+  # exclusion, and Flyway's per-connection search_path goes with it. Only
+  # auth-service can be pointed at a separate migration URL; the other two
+  # migrate from the same URL their queries use, so the endpoint is what has to
+  # differ and those services sit here in full.
+  #
+  # Routing this here rather than at the instance keeps it inside the connection
+  # budget; it holds a server connection for a client's whole session, which is
+  # affordable because the two services on it open connections per query rather
+  # than parking a pool.
+  #
+  # A migration that cannot get a connection is worse than a slow query -- it
+  # boots admin-service into a crash loop and analytics-service into its silent
+  # in-memory fallback -- so this pool is not the leftovers: 15 per replica x 2
+  # replicas = 30 of the 80-connection budget.
+  pgbouncer-session.ini: |
+    [databases]
+    * = host=__RDS_HOST__ port=__RDS_PORT__
+
+    [pgbouncer]
+    listen_addr = 0.0.0.0
+    listen_port = 6433
+    unix_socket_dir =
+    auth_type = scram-sha-256
+    auth_file = /etc/pgbouncer/userlist.txt
+    pool_mode = session
+    max_client_conn = 500
+    default_pool_size = 15
+    min_pool_size = 0
+    max_user_connections = 15
+    server_idle_timeout = 60
+    server_lifetime = 900
+    ignore_startup_parameters = extra_float_digits,options
+    track_extra_parameters = IntervalStyle,search_path
+    server_tls_sslmode = require
+    admin_users = __DB_USER__
+    stats_users = __DB_USER__
+    log_connections = 0
+    log_disconnections = 0
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,6 +156,10 @@ spec:
   template:
     metadata:
       labels: { app: pgbouncer }
+      annotations:
+        # Restart the pods when the pooler config or the credential changes;
+        # PgBouncer reads both only at startup.
+        checksum/config: __CONFIG_CHECKSUM__
     spec:
       securityContext:
         runAsNonRoot: true
@@ -27,26 +167,79 @@ spec:
         runAsGroup: 70
         fsGroup: 70
         seccompProfile: { type: RuntimeDefault }
+      # Every tenant's SQL goes through these two pods, so keep them apart: a
+      # single node going away (Spot reclaim, Karpenter consolidation) must not
+      # take both.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector: { matchLabels: { app: pgbouncer } }
       containers:
         - name: pgbouncer
-          image: edoburu/pgbouncer:1.22.1
+          image: edoburu/pgbouncer:v1.25.2-p0
+          # Run the mounted config directly. The image's entrypoint would
+          # otherwise generate a pgbouncer.ini from DB_* environment variables,
+          # which supports only a single database and would put the password in
+          # the container environment.
+          command: ["/usr/bin/pgbouncer", "/etc/pgbouncer/pgbouncer.ini"]
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
             capabilities: { drop: [ALL] }
-          ports: [{ containerPort: 6432 }]
-          env:
-            - { name: DB_HOST,   valueFrom: { secretKeyRef: { name: pgbouncer-auth, key: RDS_HOST } } }
-            - { name: DB_PORT,   valueFrom: { secretKeyRef: { name: pgbouncer-auth, key: RDS_PORT } } }
-            - { name: DB_USER,   valueFrom: { secretKeyRef: { name: pgbouncer-auth, key: DB_USER } } }
-            - { name: DB_PASSWORD, valueFrom: { secretKeyRef: { name: pgbouncer-auth, key: DB_PASSWORD } } }
-            - { name: POOL_MODE, value: transaction }
-            - { name: MAX_CLIENT_CONN, value: "1000" }
-            - { name: DEFAULT_POOL_SIZE, value: "20" }
-            - { name: AUTH_TYPE, value: scram-sha-256 }
+          ports: [{ containerPort: 6432, name: pgbouncer }]
+          volumeMounts:
+            - { name: config, mountPath: /etc/pgbouncer/pgbouncer.ini, subPath: pgbouncer.ini, readOnly: true }
+            - { name: userlist, mountPath: /etc/pgbouncer/userlist.txt, subPath: userlist.txt, readOnly: true }
+          readinessProbe:
+            tcpSocket: { port: 6432 }
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 6432 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
           resources:
             requests: { cpu: 50m, memory: 64Mi }
             limits: { cpu: 500m, memory: 256Mi }
+        # Session-mode pooler, in the same pod so it shares the Service, the
+        # userlist and the pod lifecycle. See pgbouncer-session.ini above.
+        - name: pgbouncer-session
+          image: edoburu/pgbouncer:v1.25.2-p0
+          command: ["/usr/bin/pgbouncer", "/etc/pgbouncer/pgbouncer-session.ini"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          ports: [{ containerPort: 6433, name: pgb-session }]
+          volumeMounts:
+            - { name: config, mountPath: /etc/pgbouncer/pgbouncer-session.ini, subPath: pgbouncer-session.ini, readOnly: true }
+            - { name: userlist, mountPath: /etc/pgbouncer/userlist.txt, subPath: userlist.txt, readOnly: true }
+          readinessProbe:
+            tcpSocket: { port: 6433 }
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 6433 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 25m, memory: 32Mi }
+            limits: { cpu: 250m, memory: 128Mi }
+      volumes:
+        - name: config
+          configMap: { name: pgbouncer-config }
+        - name: userlist
+          secret: { secretName: pgbouncer-auth, defaultMode: 0440 }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pgbouncer
+  namespace: otterworks-platform
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app: pgbouncer } }
 ---
 apiVersion: v1
 kind: Service
@@ -56,4 +249,6 @@ metadata:
   labels: { app: pgbouncer }
 spec:
   selector: { app: pgbouncer }
-  ports: [{ port: 6432, targetPort: 6432 }]
+  ports:
+    - { name: transaction, port: 6432, targetPort: 6432 }
+    - { name: session, port: 6433, targetPort: 6433 }

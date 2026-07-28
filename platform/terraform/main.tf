@@ -56,15 +56,15 @@ module "vpc" {
 module "eks" {
   source = "./modules/eks"
 
-  project        = "otterworks"
-  environment    = var.environment
-  cluster_name   = var.cluster_name
+  project         = "otterworks"
+  environment     = var.environment
+  cluster_name    = var.cluster_name
   cluster_version = var.cluster_version
 
   public_subnet_ids  = module.vpc.public_subnet_ids
   private_subnet_ids = module.vpc.private_subnet_ids
   # Use public subnets for nodes in dev (no NAT gateway needed, cost-optimized)
-  node_subnet_ids    = var.enable_nat_gateway ? module.vpc.private_subnet_ids : module.vpc.public_subnet_ids
+  node_subnet_ids = var.enable_nat_gateway ? module.vpc.private_subnet_ids : module.vpc.public_subnet_ids
 
   node_instance_types = var.node_instance_types
   node_capacity_type  = var.node_capacity_type

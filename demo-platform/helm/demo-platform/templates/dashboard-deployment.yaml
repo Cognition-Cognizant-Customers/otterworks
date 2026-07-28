@@ -49,6 +49,10 @@ spec:
               value: {{ .Values.runnerImage | quote }}
             - name: HOST_SUFFIX
               value: {{ .Values.hostSuffix | quote }}
+            - name: PERPETUAL_TENANT_IDS
+              value: {{ .Values.perpetualTenantIds | quote }}
+            - name: PERPETUAL_HOST_SUFFIX
+              value: {{ .Values.perpetualHostSuffix | quote }}
             {{- if .Values.repoHttpsUrl }}
             - name: REPO_HTTPS_URL
               value: {{ .Values.repoHttpsUrl | quote }}

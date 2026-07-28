@@ -41,6 +41,10 @@ export default function ReaperPanel() {
         grace_seconds: cfg.graceSeconds,
         enabled: cfg.enabled,
         sweep_orphans: cfg.sweepOrphans,
+        suspend_idle: cfg.suspendIdle,
+        idle_after_seconds: cfg.idleAfterSeconds,
+        sweep_infra: cfg.sweepInfra,
+        sweep_infra_delete: cfg.sweepInfraDelete,
       });
       setCfg(updated);
       setSaved(true);
@@ -94,6 +98,54 @@ export default function ReaperPanel() {
             />
             <span className="font-medium text-slate-700">Sweep orphans</span>
           </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={cfg.suspendIdle}
+              onChange={(e) => setCfg({ ...cfg, suspendIdle: e.target.checked })}
+            />
+            <span className="font-medium text-slate-700">Suspend idle tenants</span>
+          </label>
+          <label className="block text-sm">
+            <span className="font-medium text-slate-700">Idle after (seconds)</span>
+            <input
+              type="number"
+              min={60}
+              className="input mt-1"
+              value={cfg.idleAfterSeconds}
+              onChange={(e) => setCfg({ ...cfg, idleAfterSeconds: Number(e.target.value) })}
+            />
+            <span className="mt-1 block text-xs text-slate-500">
+              Zero ingress requests for this long scales the tenant to zero. Its namespace,
+              config and database are kept, so check-out wakes it in seconds.
+            </span>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={cfg.sweepInfra}
+              onChange={(e) => setCfg({ ...cfg, sweepInfra: e.target.checked })}
+            />
+            <span className="font-medium text-slate-700">Sweep AWS infrastructure orphans</span>
+          </label>
+          <p className="text-xs text-slate-500">
+            Finds load balancers, volumes, addresses and security groups that Kubernetes
+            created and no longer owns. Only resources carrying an OtterWorks or cluster
+            ownership tag are ever considered; anything untagged is reported, never touched.
+          </p>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              disabled={!cfg.sweepInfra}
+              checked={cfg.sweepInfraDelete}
+              onChange={(e) => setCfg({ ...cfg, sweepInfraDelete: e.target.checked })}
+            />
+            <span className="font-medium text-slate-700">…and delete what it finds</span>
+          </label>
+          <p className="text-xs text-slate-500">
+            Off, the sweep only reports. Review a report-only run before arming this: the
+            account holds resources this platform did not create.
+          </p>
         </div>
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
         {saved && <p className="mt-3 text-sm text-green-600">Saved.</p>}

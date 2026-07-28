@@ -18,6 +18,13 @@ export const POST = withSession(async (req: NextRequest, { actor, params }) => {
   const tenant = await getTenant(id);
   if (!tenant) return error(404, "not found");
 
+  // The perpetual tenant is everyone's reference environment: breaking it on
+  // purpose is exactly what it exists not to do. Bug-hunt labs get their own
+  // ephemeral tenant. (`reset` stays allowed -- it only restores.)
+  if (tenant.persistent) {
+    return error(409, `tenant '${id}' is persistent; inject a bug into an ephemeral tenant instead`);
+  }
+
   await appendAudit({ tenantId: id, action: "inject", actor, detail: `scenario=${scenario}` });
   const jobName = await createRunnerJob({ action: "inject", tenantId: id, scenario });
   return json({ ok: true, job: jobName });

@@ -22,8 +22,16 @@ controlTable: otterworks-demo-control
 
 # Ingress host suffix for tenant frontends/APIs (t-<id>.<suffix> /
 # api-t-<id>.<suffix>). Defaults to the wildcard domain; override to a nip.io
-# suffix (e.g. <nlb-ip>.nip.io) to run before otterworks.xyz DNS is live.
-hostSuffix: demo.otterworks.xyz
+# suffix (e.g. <nlb-ip>.nip.io) to run before otterworks.app DNS is live.
+hostSuffix: demo.otterworks.app
+
+# The perpetual tenant: never reaped, never idle-suspended, and the only id the
+# dashboard accepts `persistent: true` for. It answers at the apex
+# (t-main.otterworks.app) rather than under the per-attendee subdomain, so it
+# reads as the shared reference environment rather than one attendee's workshop.
+# Both hosts are covered by the wildcard certificate (k8s/dns-tls).
+perpetualTenantIds: main
+perpetualHostSuffix: otterworks.app
 
 # Runner image used by dashboard-launched Jobs AND the reaper CronJob (OP=reap).
 # Placeholder — override at deploy: --set runnerImage=<registry>/otterworks/demo-runner:<tag>
@@ -45,7 +53,7 @@ dashboard:
   image: REGISTRY/otterworks/demo-ops-dashboard:latest
   imagePullPolicy: IfNotPresent
   replicas: 1
-  host: ops.otterworks.xyz
+  host: ops.otterworks.app
   containerPort: 3000
   service:
     port: 80
@@ -59,14 +67,28 @@ dashboard:
 
 ingress:
   className: nginx
-  # Extra annotations (e.g. cert-manager cluster issuer) can be added here.
+  # HTTPS + HTTP->HTTPS redirect are handled globally once the shared wildcard
+  # cert is wired as the ingress-nginx --default-ssl-certificate (see
+  # demo-platform/k8s/dns-tls). Left empty on purpose so pre-TLS / nip.io
+  # deployments keep serving over HTTP; add a per-ingress ssl-redirect only if
+  # you need to override the global behavior.
   annotations: {}
 
 reaper:
   enabled: true
   schedule: "*/15 * * * *"
   # Host suffix used when GC-ing tenant Route53 records / building URLs.
-  hostSuffix: demo.otterworks.xyz
+  hostSuffix: demo.otterworks.app
+  # EXTRA clusters whose orphaned AWS resources the sweep may delete: names this
+  # platform previously ran under, whose leftovers should stay reclaimable. The
+  # cluster it runs on now is always included and does not belong here. Must
+  # match var.sweepable_clusters in Terraform, which grants the IAM conditions
+  # for the same set.
+  sweepableClusters: []
+  # Hosted zone the infrastructure sweep reconciles tenant records against.
+  # Unset, the sweep skips Route53 entirely and records for long-gone tenants
+  # accumulate in the zone. Read from `terraform output dns_zone_id`.
+  dnsZoneId: ""
   resources:
     requests:
       cpu: 50m

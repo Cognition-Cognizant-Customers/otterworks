@@ -52,3 +52,40 @@ resource "aws_dynamodb_table" "control" {
     Name = var.control_table_name
   }
 }
+
+# The reaper is off unless CONFIG#reaper says otherwise, which is the right
+# fail-safe but leaves a freshly installed platform with no cost control at all:
+# nothing seeds this item, so TTL reaping and idle suspension silently never run
+# until someone opens the dashboard. Seed it so the platform arrives in its
+# documented state.
+#
+# The infrastructure sweep is left off. It deletes AWS resources rather than
+# Kubernetes ones, so an operator should look at the orphan preview before arming
+# it on an account whose contents this module cannot see.
+resource "aws_dynamodb_table_item" "reaper_config" {
+  table_name = aws_dynamodb_table.control.name
+  hash_key   = aws_dynamodb_table.control.hash_key
+  range_key  = aws_dynamodb_table.control.range_key
+
+  item = jsonencode({
+    PK                 = { S = "CONFIG#reaper" }
+    SK                 = { S = "CONFIG" }
+    schedule_cron      = { S = var.reaper_schedule_cron }
+    grace_seconds      = { N = tostring(var.reaper_grace_seconds) }
+    enabled            = { BOOL = var.reaper_enabled }
+    sweep_orphans      = { BOOL = true }
+    suspend_idle       = { BOOL = true }
+    idle_after_seconds = { N = tostring(var.reaper_idle_after_seconds) }
+    sweep_infra        = { BOOL = false }
+    sweep_infra_delete = { BOOL = false }
+    updated_at         = { N = "0" }
+    updated_by         = { S = "terraform" }
+  })
+
+  # The dashboard owns this item once the platform is running. Terraform seeds
+  # it and then stops caring, so an operator's change is not reverted by the
+  # next apply.
+  lifecycle {
+    ignore_changes = [item]
+  }
+}

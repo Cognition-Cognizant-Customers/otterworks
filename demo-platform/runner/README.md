@@ -29,7 +29,7 @@ docker push <registry>/otterworks/demo-runner:<tag>
 ## Environment
 
 Non-secret (control-plane metadata): `OP`, `TENANT_ID`, `TIER`, `TTL`,
-`IMAGE_TAG`, `HOST_SUFFIX` (default `demo.otterworks.xyz`), `SCENARIO`,
+`IMAGE_TAG`, `HOST_SUFFIX` (default `demo.otterworks.app`), `SCENARIO`,
 `TENANT_BRANCH`, `CONTROL_TABLE` (default `otterworks-demo-control`),
 `AWS_REGION`, `EKS_CLUSTER` (default `otterworks-dev`), `ACTOR`.
 

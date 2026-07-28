@@ -104,11 +104,38 @@ the above changes `main`. Verify per the "Live verification" section of the runb
 
 ### Lifecycle / cleanup
 
-- Tenants are TTL-labeled (`deploy-tenant.sh <ID> --ttl 8h`); a reaper CronJob in
-  `otterworks-system` deletes expired namespaces. The reaper does **not** drop databases —
-  use `scripts/teardown-tenant.sh <ID>` to remove the namespace **and** drop
-  `otterworks_<ID>` and clean up IRSA trust.
-- Idle cost control: `scripts/tenant-scale.sh <ID> down|up` scales a tenant to/from zero.
+- Tenants are TTL-labeled (`deploy-tenant.sh <ID> --ttl 8h`). The platform reaper
+  (`demo-platform/reaper/reaper.sh`, scheduled from the ops dashboard) does the **full**
+  teardown of an expired tenant: namespace, the `otterworks_<ID>` database, its S3 prefix
+  and DynamoDB partitions, IRSA trust and DNS records. `scripts/teardown-tenant.sh <ID>`
+  does the same thing on demand for a single tenant.
+- Idle cost control: tenants that take no ingress traffic for an hour are scaled to zero
+  automatically (`demo-platform/reaper/idle-suspend.sh`); the dashboard wakes them on
+  check-out. Manually: `scripts/tenant-scale.sh <ID> down|up`.
+- Deploy only what a lab needs: `deploy-tenant.sh <ID> --profile core` brings up the 5
+  services a browser session exercises instead of all 13. See
+  `demo-platform/docs/cost-and-scale.md` for the capacity and cost model.
+- Pushing to `workshop-<id>` or `demo-<id>` ships that branch to its tenant automatically
+  (`.github/workflows/cd-tenant.yml`), creating the tenant with a 72h TTL if it does not
+  exist. The one exception is `t-main.otterworks.app`, the perpetual tenant tracking `main`:
+  it is exempt from the reaper and idle-suspend and cannot be checked in or bug-injected.
+  Never inject a scenario there — that is what a `workshop-<id>` tenant is for.
+
+### Never create AWS resources from Kubernetes
+
+A `Service` of `type: LoadBalancer` is provisioned by the in-cluster AWS cloud-controller,
+not by Terraform. Nothing outside the cluster knows it exists, so deleting the Service while
+the controller is down — or deleting the cluster at all — strands the load balancer, which
+then bills indefinitely. Four were stranded this way in June 2026.
+
+- The **only** permitted `LoadBalancer` Service is the shared ingress-nginx controller.
+  Everything else is `ClusterIP` behind that one ingress; `deploy-dev.sh` fails the deploy
+  if it finds otherwise.
+- Tear the cluster down with `scripts/teardown-cluster.sh`, which drains load balancers and
+  waits for AWS to release them **before** destroying the cluster.
+- `demo-platform/reaper/infra-sweep.sh` is the backstop: it deletes load balancers, target
+  groups, EBS volumes and DNS records whose owning cluster or Service no longer exists. It
+  only touches resources carrying an ownership tag, and defaults to `DRY_RUN=true`.
 
 ## Deploy
 

@@ -21,7 +21,7 @@ Given("I navigate to {string}", async function (this: OtterWorld, path: string) 
 });
 
 When("I click the link {string}", async function (this: OtterWorld, linkText: string) {
-  await this.page.getByRole("link", { name: linkText }).click();
+  await this.page.getByRole("link", { name: linkText }).first().click();
   await this.page.waitForLoadState("networkidle").catch(() => {});
 });
 
@@ -38,7 +38,9 @@ When("I fill in {string} with {string}", async function (this: OtterWorld, label
 });
 
 Then("I should see the heading {string}", async function (this: OtterWorld, heading: string) {
-  await expect(this.page.getByRole("heading", { name: heading })).toBeVisible({
+  await expect(
+    this.page.getByRole("heading", { name: heading }).first()
+  ).toBeVisible({
     timeout: 10_000,
   });
 });
@@ -47,8 +49,16 @@ Then("I should see the text {string}", async function (this: OtterWorld, text: s
   await expect(this.page.getByText(text).first()).toBeVisible({ timeout: 10_000 });
 });
 
+Then("I should see the otter logo", async function (this: OtterWorld) {
+  await expect(this.page.getByAltText("OtterWorks logo").first()).toBeVisible({
+    timeout: 10_000,
+  });
+});
+
 Then("I should see a link {string}", async function (this: OtterWorld, linkText: string) {
-  await expect(this.page.getByRole("link", { name: linkText })).toBeVisible({
+  await expect(
+    this.page.getByRole("link", { name: linkText }).first()
+  ).toBeVisible({
     timeout: 10_000,
   });
 });

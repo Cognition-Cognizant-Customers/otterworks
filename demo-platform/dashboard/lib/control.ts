@@ -46,6 +46,7 @@ interface TenantItem {
   expires_at: number;
   last_seen_at: number;
   note?: string;
+  persistent?: boolean;
 }
 
 let _doc: DynamoDBDocumentClient | null = null;
@@ -82,6 +83,7 @@ function itemToTenant(item: TenantItem): Tenant {
     expiresAt: item.expires_at,
     lastSeenAt: item.last_seen_at,
     note: item.note,
+    persistent: item.persistent === true,
   };
 }
 
@@ -126,6 +128,7 @@ export interface CheckoutInput {
   ttlSeconds: number;
   hostSuffix: string;
   lockTtlSeconds?: number;
+  persistent?: boolean;
 }
 
 /**
@@ -176,6 +179,7 @@ export async function checkout(input: CheckoutInput): Promise<Tenant> {
     checked_out_at: now,
     expires_at: expiresAt,
     last_seen_at: now,
+    persistent: input.persistent === true,
   };
 
   // Guard against re-checking-out a LIVE tenant. The lock above only serialises
@@ -230,6 +234,34 @@ export async function checkin(id: string): Promise<void> {
   await setStatus(id, "draining");
 }
 
+/**
+ * Mark a tenant perpetual, or return it to the TTL regime.
+ *
+ * The flag and the expiry move together in one update on purpose: the reaper
+ * reads the flag and the expiry is the backstop, so a partial write leaves the
+ * tenant either immortal with the flag off (never reaped, nobody can tell why)
+ * or flagged perpetual over an expiry already in the past.
+ */
+export async function setPersistent(
+  id: string,
+  persistent: boolean,
+  ttlSeconds: number,
+): Promise<number> {
+  const now = Math.floor(Date.now() / 1000);
+  const expiresAt = now + ttlSeconds;
+  await doc().send(
+    new UpdateCommand({
+      TableName: table(),
+      Key: { PK: pkTenant(id), SK: SK_META },
+      UpdateExpression: "SET #p = :p, expires_at = :e, last_seen_at = :now",
+      ConditionExpression: "attribute_exists(PK)",
+      ExpressionAttributeNames: { "#p": "persistent" },
+      ExpressionAttributeValues: { ":p": persistent, ":e": expiresAt, ":now": now },
+    }),
+  );
+  return expiresAt;
+}
+
 export async function extend(id: string, ttlSeconds: number): Promise<number> {
   const expiresAt = Math.floor(Date.now() / 1000) + ttlSeconds;
   await doc().send(
@@ -247,11 +279,18 @@ export async function extend(id: string, ttlSeconds: number): Promise<number> {
   return expiresAt;
 }
 
+// Mirrors the defaults in reaper.sh. The reaper treats an absent attribute as
+// false, so anything defaulted to true here would show the operator a control
+// that is switched on while the reaper is not acting on it.
 const DEFAULT_REAPER: ReaperConfig = {
   scheduleCron: "*/15 * * * *",
   graceSeconds: 300,
   enabled: true,
   sweepOrphans: false,
+  suspendIdle: false,
+  idleAfterSeconds: 3600,
+  sweepInfra: false,
+  sweepInfraDelete: false,
 };
 
 export async function getReaperConfig(): Promise<ReaperConfig> {
@@ -265,6 +304,10 @@ export async function getReaperConfig(): Promise<ReaperConfig> {
     graceSeconds: Number(it.grace_seconds ?? DEFAULT_REAPER.graceSeconds),
     enabled: Boolean(it.enabled ?? DEFAULT_REAPER.enabled),
     sweepOrphans: Boolean(it.sweep_orphans ?? DEFAULT_REAPER.sweepOrphans),
+    suspendIdle: Boolean(it.suspend_idle ?? DEFAULT_REAPER.suspendIdle),
+    idleAfterSeconds: Number(it.idle_after_seconds ?? DEFAULT_REAPER.idleAfterSeconds),
+    sweepInfra: Boolean(it.sweep_infra ?? DEFAULT_REAPER.sweepInfra),
+    sweepInfraDelete: Boolean(it.sweep_infra_delete ?? DEFAULT_REAPER.sweepInfraDelete),
     updatedAt: it.updated_at as number | undefined,
     updatedBy: it.updated_by as string | undefined,
   };
@@ -285,6 +328,10 @@ export async function putReaperConfig(
         grace_seconds: cfg.graceSeconds,
         enabled: cfg.enabled,
         sweep_orphans: cfg.sweepOrphans,
+        suspend_idle: cfg.suspendIdle,
+        idle_after_seconds: cfg.idleAfterSeconds,
+        sweep_infra: cfg.sweepInfra,
+        sweep_infra_delete: cfg.sweepInfraDelete,
         updated_at: now,
         updated_by: updatedBy,
       },

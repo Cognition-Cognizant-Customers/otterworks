@@ -42,3 +42,18 @@ output "node_group_role_arn" {
   description = "IAM role ARN for the node group"
   value       = aws_iam_role.node_group.arn
 }
+
+output "karpenter_controller_role_arn" {
+  description = "IAM role ARN the Karpenter controller assumes via IRSA"
+  value       = try(aws_iam_role.karpenter_controller[0].arn, null)
+}
+
+output "karpenter_node_instance_profile" {
+  description = "Instance profile Karpenter launches nodes with"
+  value       = try(aws_iam_instance_profile.karpenter_node[0].name, null)
+}
+
+output "karpenter_interruption_queue" {
+  description = "SQS queue carrying Spot interruption and rebalance notices"
+  value       = try(aws_sqs_queue.karpenter[0].name, null)
+}

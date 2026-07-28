@@ -5,8 +5,12 @@ image:
   tag: ""  # Set at deploy time (ECR uses IMMUTABLE tags)
   pullPolicy: IfNotPresent
 
+# ClusterIP only. A LoadBalancer Service makes the AWS cloud-controller create
+# an ELB that Terraform does not track, which is stranded (and billed) forever
+# if the Service or the cluster is deleted while the controller is not running.
+# External access goes through the single shared ingress-nginx controller.
 service:
-  type: LoadBalancer
+  type: ClusterIP
   port: 8080
   targetPort: 8080
 

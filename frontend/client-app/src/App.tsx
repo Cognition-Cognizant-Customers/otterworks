@@ -9,6 +9,7 @@ import DocumentEditorPage from "@/pages/document-editor";
 import FilesPage from "@/pages/files";
 import FileDetailPage from "@/pages/file-detail";
 import LoginPage from "@/pages/login";
+import MarginsPage from "@/pages/margins";
 import RegisterPage from "@/pages/register";
 import NotificationsPage from "@/pages/notifications";
 import RecentPage from "@/pages/recent";
@@ -17,6 +18,8 @@ import SettingsPage from "@/pages/settings";
 import SharedPage from "@/pages/shared";
 import StarredPage from "@/pages/starred";
 import TrashPage from "@/pages/trash";
+import TermsPage from "@/pages/terms";
+import PrivacyPage from "@/pages/privacy";
 
 function NotFound() {
   return (
@@ -41,6 +44,7 @@ export default function App() {
           <Route path="/files" element={<FilesPage />} />
           <Route path="/files/:id" element={<FileDetailPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/margins" element={<MarginsPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/recent" element={<RecentPage />} />
@@ -49,6 +53,8 @@ export default function App() {
           <Route path="/shared" element={<SharedPage />} />
           <Route path="/starred" element={<StarredPage />} />
           <Route path="/trash" element={<TrashPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </AuthProvider>

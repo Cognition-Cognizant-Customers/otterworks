@@ -26,6 +26,9 @@
 #        (g) delete TENANT#<id> + LOCK#<id> control items and append an AUDIT reap
 #   3. if sweep_orphans: independently list live namespaces / DBs / S3 prefixes /
 #      DynamoDB partitions and GC any with NO matching TENANT# control item.
+#   4. if sweep_infra: sweep the AWS resources Kubernetes creates implicitly and
+#      Terraform therefore does not track (load balancers, target groups,
+#      unattached EBS, idle EIPs, stale Route53 records). See infra-sweep.sh.
 #
 # Everything here is idempotent and retry-safe: re-running against an
 # already-clean tenant is a series of no-ops. Secrets are read from the env only
@@ -42,11 +45,17 @@ export REPO_ROOT
 source "${REPO_ROOT}/scripts/lib/tenant-common.sh"
 # shellcheck source=/dev/null
 source "${REPO_ROOT}/demo-platform/lib/control-common.sh"
+# Infrastructure-layer orphan GC (load balancers, target groups, EBS, EIP, DNS).
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/infra-sweep.sh"
+# Scale-to-zero for tenants taking no ingress traffic.
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/idle-suspend.sh"
 
 CONTROL_TABLE="${CONTROL_TABLE:-otterworks-demo-control}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 EKS_CLUSTER="${EKS_CLUSTER:-otterworks-dev}"
-HOST_SUFFIX="${HOST_SUFFIX:-demo.otterworks.xyz}"
+HOST_SUFFIX="${HOST_SUFFIX:-demo.otterworks.app}"
 SHARED_S3_PREFIX="${SHARED_S3_PREFIX:-otterworks-}"
 SHARED_DDB_PREFIX="${SHARED_DDB_PREFIX:-otterworks-}"
 # Convention for a tenant's object prefix inside the shared S3 buckets. Only this
@@ -204,8 +213,16 @@ reap_expired() {
   count=0
   while IFS= read -r item; do
     [ -n "${item}" ] || continue
-    local id exp
+    local id exp persistent
     id="$(echo "${item}"  | jq -r '.id.S // (.PK.S | sub("^TENANT#";""))')"
+    # Perpetual tenant (t-main and the like): shared reference infrastructure
+    # with no owner to check it back in, so it has no expiry to act on. It also
+    # carries a ten-year expires_at, but the flag is the contract.
+    persistent="$(echo "${item}" | jq -r '.persistent.BOOL // false')"
+    if [ "${persistent}" = "true" ]; then
+      log "tenant '${id}' is persistent; skipping (not reaping)"
+      continue
+    fi
     # Missing/blank expires_at => tenant is reserved or still deploying (its
     # expiry is written only by ctl_set_active on a successful deploy). Never
     # treat that as "expired at epoch 0"; skip it so an in-flight tenant is not
@@ -289,15 +306,40 @@ YAML
 }
 
 sweep_orphan_dbs() {
-  local db id
+  local db id ids known
+  # tenant_db_name is lossy: every character outside [a-z0-9] becomes '_', so
+  # otterworks_preston_test is what a tenant id of "preston-test" *or*
+  # "preston_test" produces. Stripping the prefix and looking the result up in
+  # the control table therefore misses live hyphenated tenants and deletes them
+  # minutes after checkout. Compare in the lossy direction instead: a database
+  # is an orphan only when no tenant in the control table maps onto its name.
+  if ! ids="$(ctl_tenant_ids)"; then
+    warn "control-table scan failed; skipping orphan-DB sweep (fail-closed)"
+    return 0
+  fi
+  # An empty control table would make every otterworks_* database look like an
+  # orphan and wipe them all. That is almost always a transient/misconfigured
+  # state (mid-bootstrap, wrong table) rather than a genuine "delete everything"
+  # signal, so treat it like a failed scan and skip: the namespace/S3/DDB sweeps
+  # still run, and a real empty table simply has no databases to reap anyway.
+  if [ -z "$(printf '%s' "${ids}" | tr -d '[:space:]')" ]; then
+    warn "control table has no tenants; skipping orphan-DB sweep (fail-closed)"
+    return 0
+  fi
+  known="$(while IFS= read -r id; do
+             [ -n "${id}" ] || continue
+             printf '%s\n' "$(tenant_db_name "${id}")"
+           done <<EOF
+${ids}
+EOF
+)"
   for db in $(list_tenant_dbs); do
     [ "${db}" = "otterworks" ] && continue
     id="${db#otterworks_}"
     [ -n "${id}" ] || continue
-    if ! ctl_tenant_exists "${id}"; then
-      warn "orphan database ${db} (no TENANT# item) -> GC"
-      gc_tenant "${id}" "orphan-database"
-    fi
+    printf '%s\n' "${known}" | grep -qxF "${db}" && continue
+    warn "orphan database ${db} (no TENANT# item) -> GC"
+    gc_tenant "${id}" "orphan-database"
   done
 }
 
@@ -353,27 +395,63 @@ sweep_orphans() {
 # ------------------------------------------------------------------------------
 main() {
   log "reaper v2 run at $(date -u +%Y-%m-%dT%H:%M:%SZ) (table=${CONTROL_TABLE})"
-  local cfg enabled grace sweep
+  local cfg enabled grace sweep infra infra_delete idle
   cfg="$(ctl_get "CONFIG#reaper" "CONFIG")"
   enabled="$(echo "${cfg}" | jq -r --arg d "${REAPER_ENABLED_DEFAULT}" '.Item.enabled.BOOL // ($d=="true")')"
   grace="$(echo "${cfg}"   | jq -r '.Item.grace_seconds.N // "0"')"
   sweep="$(echo "${cfg}"   | jq -r '.Item.sweep_orphans.BOOL // false')"
+  infra="$(echo "${cfg}"   | jq -r '.Item.sweep_infra.BOOL // false')"
+  infra_delete="$(echo "${cfg}" | jq -r '.Item.sweep_infra_delete.BOOL // false')"
+  idle="$(echo "${cfg}"    | jq -r '.Item.suspend_idle.BOOL // false')"
+  IDLE_AFTER_SECONDS="$(echo "${cfg}" | jq -r --arg d "${IDLE_AFTER_SECONDS}" '.Item.idle_after_seconds.N // $d')"
 
   if [ "${enabled}" != "true" ]; then
     log "CONFIG#reaper disabled (or absent); nothing to do. Exiting."
     exit 0
   fi
-  log "config: enabled=${enabled} grace_seconds=${grace} sweep_orphans=${sweep}"
+  log "config: enabled=${enabled} grace_seconds=${grace} sweep_orphans=${sweep} sweep_infra=${infra} sweep_infra_delete=${infra_delete} suspend_idle=${idle}"
 
   # Load shared infra outputs (RDS endpoint, bucket/table names) for GC.
   load_infra_outputs
 
   reap_expired "${grace}"
 
+  # Suspend before sweeping: a tenant that is merely idle should be scaled to
+  # zero, not deleted. Only TTL expiry deletes a tenant.
+  if [ "${idle}" = "true" ]; then
+    suspend_idle_tenants
+  else
+    log "suspend_idle disabled; skipping idle scan."
+  fi
+
   if [ "${sweep}" = "true" ]; then
     sweep_orphans
   else
     log "sweep_orphans disabled; skipping orphan sweep."
+  fi
+
+  # The infra sweep deletes AWS resources rather than Kubernetes ones, so it is
+  # gated separately from the tenant sweep and in two stages: sweep_infra runs
+  # it, sweep_infra_delete arms it. Running it report-only first is the intended
+  # workflow, because this account also holds resources this platform did not
+  # create.
+  #
+  # DRY_RUN is set from the control table on both paths rather than left to
+  # infra-sweep.sh's own default. Otherwise the scheduled run could never delete
+  # anything -- the CronJob sets no DRY_RUN, so it would report forever while
+  # the dashboard showed the sweep as on.
+  if [ "${infra}" = "true" ]; then
+    # shellcheck disable=SC2034  # read by act() in the sourced infra-sweep.sh
+    if [ "${infra_delete}" = "true" ]; then
+      DRY_RUN=false
+      log "infrastructure sweep armed: orphans matching an ownership tag will be deleted."
+    else
+      DRY_RUN=true
+      log "infrastructure sweep in report-only mode (set sweep_infra_delete to arm it)."
+    fi
+    infra_sweep
+  else
+    log "sweep_infra disabled; skipping infrastructure orphan sweep."
   fi
 
   log "reaper v2 run complete."

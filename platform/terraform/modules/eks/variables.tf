@@ -69,3 +69,9 @@ variable "ebs_csi_driver_version" {
   type        = string
   default     = "v1.37.0-eksbuild.1"
 }
+
+variable "enable_karpenter" {
+  description = "Provision the AWS side of Karpenter (controller role, node instance profile, interruption queue, discovery tags)."
+  type        = bool
+  default     = true
+}

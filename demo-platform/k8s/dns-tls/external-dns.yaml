@@ -1,0 +1,124 @@
+# external-dns — watches Ingress objects and writes Route53 records for the
+# demo domain automatically, so each tenant's `t-<id>.demo.<root>` /
+# `api-t-<id>.demo.<root>` host resolves to the shared NLB with ZERO per-tenant
+# DNS work, and records are removed when a tenant namespace is deleted.
+#
+# Placeholders (filled by scripts/enable-dns-tls.sh via envsubst):
+#   __DNS_ROLE_ARN__   IRSA role ARN (terraform output dns_role_arn)
+#   __DOMAIN_FILTER__  tenant subdomain, e.g. demo.otterworks.app
+#   __OPS_HOST__       ops dashboard host, e.g. ops.otterworks.app (a sibling of
+#                      the tenant subdomain, so it needs its own filter entry)
+#   __PERPETUAL_WEB_HOST__ / __PERPETUAL_API_HOST__
+#                      the perpetual tenant, e.g. t-main.otterworks.app. It sits
+#                      at the apex rather than under the tenant subdomain, so it
+#                      needs filter entries too.
+#   __TXT_OWNER__      registry owner id, e.g. otterworks-demo
+#
+# The SA name/namespace MUST match the IRSA trust in infra/terraform/dns.tf
+# (system:serviceaccount:external-dns:external-dns).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-dns
+  labels:
+    app.kubernetes.io/managed-by: otterworks-demo-platform
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: external-dns
+  namespace: external-dns
+  annotations:
+    eks.amazonaws.com/role-arn: "__DNS_ROLE_ARN__"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: external-dns
+rules:
+  - apiGroups: [""]
+    resources: ["services", "endpoints", "pods", "nodes"]
+    verbs: ["get", "watch", "list"]
+  - apiGroups: ["extensions", "networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "watch", "list"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "watch", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: external-dns-viewer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: external-dns
+subjects:
+  - kind: ServiceAccount
+    name: external-dns
+    namespace: external-dns
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: external-dns
+  namespace: external-dns
+  labels:
+    app.kubernetes.io/name: external-dns
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: external-dns
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: external-dns
+    spec:
+      serviceAccountName: external-dns
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: external-dns
+          image: registry.k8s.io/external-dns/external-dns:v0.15.0
+          args:
+            - --source=ingress
+            - --provider=aws
+            - --aws-zone-type=public
+            - --registry=txt
+            - --txt-owner-id=__TXT_OWNER__
+            - --domain-filter=__DOMAIN_FILTER__
+            - --domain-filter=__OPS_HOST__
+            - --domain-filter=__PERPETUAL_WEB_HOST__
+            - --domain-filter=__PERPETUAL_API_HOST__
+            # The tenant/ops filters are subdomains of the Route53 zone apex
+            # (otterworks.app). Without this, external-dns filters out the parent
+            # hosted zone and skips every record ("no hosted zone matching record
+            # DNS Name was detected"). This keeps the tight record filters while
+            # still discovering the parent zone.
+            - --aws-zone-match-parent
+            - --policy=sync
+            - --interval=1m
+            - --log-level=info
+          env:
+            - name: AWS_DEFAULT_REGION
+              value: us-east-1
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi

@@ -19,8 +19,16 @@ final case class DailyMetric(eventDate: String, eventType: String, eventCount: L
 class AnalyticsDb(config: PostgresConfig):
   private val logger = LoggerFactory.getLogger(getClass)
 
+  // All analytics tables live in a dedicated `analytics` schema with a
+  // service-owned Flyway history table, so this service never races other
+  // JVM services over the shared public.flyway_schema_history.
+  private val schema = "analytics"
+  private val urlWithSchema =
+    if config.url.contains("?") then s"${config.url}&currentSchema=$schema"
+    else s"${config.url}?currentSchema=$schema"
+
   val database: Database = Database.forURL(
-    url = config.url,
+    url = urlWithSchema,
     user = config.user,
     password = config.password,
     driver = "org.postgresql.Driver",
@@ -33,6 +41,9 @@ class AnalyticsDb(config: PostgresConfig):
       .configure()
       .dataSource(config.url, config.user, config.password)
       .locations("classpath:db/migration")
+      .defaultSchema(schema)
+      .createSchemas(true)
+      .table("flyway_schema_history_analytics")
       .load()
       .migrate()
     logger.info(

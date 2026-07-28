@@ -19,6 +19,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=lib/tenant-common.sh
 source "${SCRIPT_DIR}/lib/tenant-common.sh"
+# shellcheck source=lib/ingress-nginx.sh
+source "${SCRIPT_DIR}/lib/ingress-nginx.sh"
 
 INSTALL_INGRESS=true
 for arg in "$@"; do
@@ -33,21 +35,7 @@ aws eks update-kubeconfig --name "${EKS_CLUSTER}" --region "${AWS_REGION}" --ali
 
 # ---------- 1. Shared ingress-nginx (one controller, one NLB) ----------
 if [ "${INSTALL_INGRESS}" = true ]; then
-  log "Installing/upgrading shared ingress-nginx..."
-  helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx >/dev/null 2>&1 || true
-  helm repo update ingress-nginx >/dev/null 2>&1 || true
-  helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
-    --namespace "${INGRESS_NAMESPACE}" --create-namespace \
-    --set controller.service.type=LoadBalancer \
-    --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"=nlb \
-    --set controller.replicaCount=1 \
-    --set controller.resources.requests.cpu=100m \
-    --set controller.resources.requests.memory=128Mi \
-    --wait --timeout 5m || warn "ingress-nginx install reported an issue; continuing."
-  kubectl label namespace "${INGRESS_NAMESPACE}" kubernetes.io/metadata.name="${INGRESS_NAMESPACE}" --overwrite >/dev/null 2>&1 || true
-  log "ingress-nginx address:"
-  kubectl get svc -n "${INGRESS_NAMESPACE}" ingress-nginx-controller \
-    -o jsonpath='{.status.loadBalancer.ingress[0].hostname}{"\n"}' 2>/dev/null || true
+  ensure_ingress_nginx
 fi
 
 # ---------- 2. Namespace TTL reaper (otterworks-system) ----------

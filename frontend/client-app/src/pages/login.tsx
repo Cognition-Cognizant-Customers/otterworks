@@ -6,6 +6,7 @@ import { z } from "zod";
 import { Eye, EyeOff, LogIn } from "lucide-react";
 import { authApi } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
+import { Logo } from "@/components/ui/logo";
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email"),
@@ -52,9 +53,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <Link to="/" className="inline-flex items-center gap-2">
-            <div className="w-10 h-10 bg-otter-600 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-lg">OW</span>
-            </div>
+            <Logo size={40} />
             <span className="text-2xl font-bold text-gray-900">OtterWorks</span>
           </Link>
           <p className="text-gray-500 mt-2">Sign in to your account</p>

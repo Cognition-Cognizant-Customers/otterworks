@@ -1,6 +1,6 @@
 flowchart TB
     user([Facilitators / Attendees])
-    dns{{"Route53: *.demo.otterworks.xyz (wildcard)"}}
+    dns{{"Route53: *.demo.otterworks.app (wildcard)"}}
 
     user --> dns
 
@@ -39,9 +39,9 @@ flowchart TB
       end
     end
 
-    nlb -->|t-a01.demo.otterworks.xyz| T1
-    nlb -->|t-a02.demo.otterworks.xyz| T2
-    nlb -->|t-id.demo.otterworks.xyz| TN
+    nlb -->|t-a01.demo.otterworks.app| T1
+    nlb -->|t-a02.demo.otterworks.app| T2
+    nlb -->|t-id.demo.otterworks.app| TN
 
     T1 -->|db otterworks_a01 / prefix a01| rds
     T1 --> s3shared

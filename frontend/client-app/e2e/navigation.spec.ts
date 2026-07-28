@@ -3,7 +3,9 @@ import { test, expect } from "@playwright/test";
 test.describe("Navigation & Routing", () => {
   test("landing page loads at /", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "OtterWorks" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "OtterWorks", exact: true })
+    ).toBeVisible();
   });
 
   test("/login loads the login page", async ({ page }) => {

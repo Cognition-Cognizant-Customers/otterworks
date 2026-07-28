@@ -19,9 +19,10 @@
 #   OP            deploy | teardown | inject | reset | reap        (required)
 #   TENANT_ID     attendee id (required for deploy/teardown/inject/reset)
 #   TIER          A | B                                            (default A)
-#   TTL           e.g. 8h, 30m, 2d                                 (default 8h)
+#   TTL           e.g. 8h, 30m, 2d, or `never` for a perpetual tenant (default 8h)
+#   REDEPLOY      true when deploying over a live tenant (CD)   (default unset)
 #   IMAGE_TAG     optional pinned image tag
-#   HOST_SUFFIX   ingress host suffix              (default demo.otterworks.xyz)
+#   HOST_SUFFIX   ingress host suffix              (default demo.otterworks.app)
 #   SCENARIO      bug-catalog scenario (for OP=inject)
 #   TENANT_BRANCH git branch to check out (e.g. workshop-<id>)
 #   CONTROL_TABLE DynamoDB control table         (default otterworks-demo-control)
@@ -43,7 +44,7 @@ REPO_REMOTE="${REPO_REMOTE:-origin}"
 CONTROL_TABLE="${CONTROL_TABLE:-otterworks-demo-control}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 EKS_CLUSTER="${EKS_CLUSTER:-otterworks-dev}"
-HOST_SUFFIX="${HOST_SUFFIX:-demo.otterworks.xyz}"
+HOST_SUFFIX="${HOST_SUFFIX:-demo.otterworks.app}"
 TIER="${TIER:-A}"
 TTL="${TTL:-8h}"
 OP="${OP:-}"
@@ -91,8 +92,16 @@ checkout_branch() {
 
 # Convert a compact TTL (8h/30m/2d) to an absolute expiry epoch. Pure integer
 # arithmetic so it works with busybox `date` (no GNU `date -d` needed).
+#
+# `never` is a perpetual tenant. It still gets a real expiry ten years out: the
+# reaper skips it on the control table's `persistent` flag, and this is the
+# backstop if that check ever regresses.
 expiry_epoch() {
   local ttl="$1" num unit mult now
+  if [ "${ttl}" = "never" ]; then
+    echo $(( $(date -u +%s) + 10 * 365 * 86400 ))
+    return 0
+  fi
   num="${ttl%%[!0-9]*}"; unit="${ttl##*[0-9]}"
   [ -n "${num}" ] || die "invalid TTL '${ttl}'"
   case "${unit}" in
@@ -117,10 +126,15 @@ run_deploy() {
   exp="$(expiry_epoch "${TTL}")"
 
   ctl_update_status "${TENANT_ID}" deploying
-  ctl_audit "${TENANT_ID}" checkout "tier=${TIER} ttl=${TTL} branch=${TENANT_BRANCH:-} ns=${ns}"
+  local start_action="checkout"
+  [ "${REDEPLOY:-}" = "true" ] && start_action="redeploy"
+  ctl_audit "${TENANT_ID}" "${start_action}" "tier=${TIER} ttl=${TTL} branch=${TENANT_BRANCH:-} ns=${ns}"
 
   local args=(--tier "${TIER}" --ttl "${TTL}" --host-suffix "${HOST_SUFFIX}")
   [ -n "${IMAGE_TAG:-}" ] && args+=(--image-tag "${IMAGE_TAG}")
+  # Prefer images built from this tenant's own branch (see deploy-tenant.sh's
+  # tag resolution) over whatever was pushed to a service's repo most recently.
+  [ -n "${TENANT_BRANCH:-}" ] && args+=(--branch "${TENANT_BRANCH}")
   # Secrets (DB_PASSWORD/JWT_SECRET/SECRET_KEY_BASE) are read from the env by the
   # script; they are NOT placed on this argv.
   if "${REPO_DIR}/scripts/deploy-tenant.sh" "${TENANT_ID}" "${args[@]}"; then

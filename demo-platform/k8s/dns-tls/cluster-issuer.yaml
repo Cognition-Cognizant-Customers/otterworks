@@ -1,0 +1,53 @@
+# cert-manager ClusterIssuers — issue a real wildcard TLS cert for the demo
+# domain via ACME DNS-01 solved through Route53. DNS-01 is required for a
+# wildcard (`*.demo.<root>`); it never exposes anything publicly and works
+# behind the shared NLB.
+#
+# Route53 access uses the SAME IRSA role as external-dns, assumed via the
+# cert-manager controller ServiceAccount (annotated by enable-dns-tls.sh). No
+# static AWS keys are embedded.
+#
+# Placeholders (filled by scripts/enable-dns-tls.sh via envsubst):
+#   __ACME_EMAIL__   contact email for the ACME account (Let's Encrypt)
+#   __ZONE_ID__      Route53 hosted zone id (terraform output dns_zone_id)
+#   __DOMAIN_ROOT__  registrable domain, e.g. otterworks.app
+#
+# Two issuers are created: use `-staging` first to avoid Let's Encrypt rate
+# limits while validating, then switch to `-prod` for a browser-trusted cert.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: __ACME_EMAIL__
+    privateKeySecretRef:
+      name: letsencrypt-staging-account
+    solvers:
+      - selector:
+          dnsZones:
+            - "__DOMAIN_ROOT__"
+        dns01:
+          route53:
+            region: us-east-1
+            hostedZoneID: __ZONE_ID__
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: __ACME_EMAIL__
+    privateKeySecretRef:
+      name: letsencrypt-prod-account
+    solvers:
+      - selector:
+          dnsZones:
+            - "__DOMAIN_ROOT__"
+        dns01:
+          route53:
+            region: us-east-1
+            hostedZoneID: __ZONE_ID__

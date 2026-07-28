@@ -10,7 +10,7 @@ Deploys the OtterWorks **Demo Platform control plane** into the
 - a **ClusterRole + ClusterRoleBinding** letting that SA manage tenant
   (`otterworks-*`) namespaces and the workloads inside them, plus create runner
   Jobs in `otterworks-platform`;
-- the **Ops Dashboard** Deployment + Service + Ingress (`ops.otterworks.xyz`,
+- the **Ops Dashboard** Deployment + Service + Ingress (`ops.otterworks.app`,
   ingress class `nginx`);
 - a templated **Secret** `demo-ops-dashboard` holding `DASHBOARD_PASSCODE` +
   `SESSION_SECRET` (and optionally `DB_PASSWORD` / `JWT_SECRET` /
