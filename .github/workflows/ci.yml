@@ -334,8 +334,8 @@ jobs:
       - run: mvn test -B
       - run: mvn package -DskipTests -B -q
 
-  # Java 11 / Maven - Legacy Portal. Uses the checked-in wrapper rather than the
-  # runner's mvn: the portal builds on Spring Boot 2.x and pins its own Maven.
+  # Java 17 / Maven - Legacy Portal. Uses the checked-in wrapper rather than the
+  # runner's mvn: the portal pins its own Maven.
   legacy-portal:
     needs: detect-changes
     if: needs.detect-changes.outputs.legacy-portal == 'true'
@@ -348,7 +348,7 @@ jobs:
       - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           distribution: temurin
-          java-version: '11'
+          java-version: '17'
           cache: maven
       - run: ./mvnw test -B
 

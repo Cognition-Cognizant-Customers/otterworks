@@ -1,8 +1,8 @@
-# LEGACY: Java 11 (target: Java 17+). Maven build, matching the legacy Java enterprise pattern.
+# LEGACY: Java 17. Maven build, matching the legacy Java enterprise pattern.
 # NOTE: legacy-portal deploys to a VM / on-prem host today (see docker-compose.onprem.yml,
 # scripts/run-onprem.sh, deploy/legacy-portal.service). It is intentionally NOT on the Helm/EKS
 # deploy path — it is the rehost / decomposition "before" state.
-FROM maven:3.9-eclipse-temurin-11 AS builder
+FROM maven:3.9-eclipse-temurin-17 AS builder
 
 WORKDIR /app
 COPY pom.xml .
@@ -12,8 +12,8 @@ RUN mvn -B dependency:go-offline
 COPY src/ src/
 RUN mvn -B package -DskipTests
 
-# LEGACY: JRE 11 runtime (target: eclipse-temurin:17-jre or 21-jre).
-FROM eclipse-temurin:11-jre-jammy
+# LEGACY: JRE 17 runtime.
+FROM eclipse-temurin:17-jre-jammy
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
