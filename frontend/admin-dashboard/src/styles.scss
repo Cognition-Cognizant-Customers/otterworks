@@ -1,6 +1,7 @@
 @use '@angular/material' as mat;
 
-@include mat.core();
+@include mat.elevation-classes();
+@include mat.app-background();
 
 // OtterWorks classic-enterprise theme: navy/steel primary with a muted amber accent.
 $otter-navy-palette: (
