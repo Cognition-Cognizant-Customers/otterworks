@@ -25,6 +25,9 @@ GHSA-h25m-26qc-wcjf
 GHSA-mwv6-3258-q52c
 GHSA-q4gf-8mx6-v5v3
 
+# --- services/api-gateway: fix requires go.opentelemetry.io/otel/sdk v1.43.0+, which needs Go 1.25 (service is on Go 1.24) ---
+CVE-2026-39883
+
 # --- services/admin-service: requires Rails 7.2+ upgrade (activestorage CVEs) ---
 CVE-2026-33195
 CVE-2026-33658
