@@ -4,7 +4,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatButtonModule } from '@angular/material/button';
-import { NgChartsModule } from 'ng2-charts';
+import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration } from 'chart.js';
 import { AdminApiService } from '../../core/services/admin-api.service';
 import { AnalyticsReport } from '../../core/models/analytics.model';
@@ -14,7 +14,7 @@ import { AnalyticsReport } from '../../core/models/analytics.model';
   standalone: true,
   imports: [
     CommonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule,
-    MatButtonModule, NgChartsModule,
+    MatButtonModule, BaseChartDirective,
   ],
   template: `
     <div class="page-container">

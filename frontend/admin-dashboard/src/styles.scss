@@ -28,17 +28,17 @@ $otter-navy-palette: (
   ),
 );
 
-$admin-primary: mat.define-palette($otter-navy-palette, 500);
-$admin-accent: mat.define-palette(mat.$amber-palette, 700);
-$admin-warn: mat.define-palette(mat.$red-palette);
+$admin-primary: mat.m2-define-palette($otter-navy-palette, 500);
+$admin-accent: mat.m2-define-palette(mat.$m2-amber-palette, 700);
+$admin-warn: mat.m2-define-palette(mat.$m2-red-palette);
 
-$admin-theme: mat.define-light-theme((
+$admin-theme: mat.m2-define-light-theme((
   color: (
     primary: $admin-primary,
     accent: $admin-accent,
     warn: $admin-warn,
   ),
-  typography: mat.define-typography-config(),
+  typography: mat.m2-define-typography-config(),
   density: 0,
 ));
 
