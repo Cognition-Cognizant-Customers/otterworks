@@ -31,6 +31,7 @@ jobs:
       report-service: ${{ steps.changes.outputs.report-service }}
       legacy-portal: ${{ steps.changes.outputs.legacy-portal }}
       api-tests: ${{ steps.changes.outputs.api-tests }}
+      etl: ${{ steps.changes.outputs.etl }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -76,6 +77,8 @@ jobs:
               - 'services/api-gateway/internal/config/**'
               - 'docker-compose*.yml'
               - 'Makefile'
+            etl:
+              - 'etl/**'
 
   # Go - API Gateway
   api-gateway:
@@ -201,6 +204,19 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest --cov=app
+
+  # Python - ETL
+  etl:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.etl == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r etl/requirements.txt
+      - run: python -m py_compile etl/scripts/*.py
 
   # Scala - Analytics Service
   analytics-service:
