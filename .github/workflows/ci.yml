@@ -334,7 +334,8 @@ jobs:
       - run: mvn test -B
       - run: mvn package -DskipTests -B -q
 
-  # Java 11 / Maven - Legacy Portal
+  # Java 11 / Maven - Legacy Portal. Uses the checked-in wrapper rather than the
+  # runner's mvn: the portal builds on Spring Boot 2.x and pins its own Maven.
   legacy-portal:
     needs: detect-changes
     if: needs.detect-changes.outputs.legacy-portal == 'true'
@@ -343,11 +344,12 @@ jobs:
       run:
         working-directory: services/legacy-portal
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           distribution: temurin
           java-version: '11'
+          cache: maven
       - run: ./mvnw test -B
 
   # Terraform validation
@@ -395,6 +397,7 @@ jobs:
       - run: ./demo-platform/reaper/test-reaper.sh
       - run: ./demo-platform/reaper/test-idle-suspend.sh
       - run: ./demo-platform/reaper/test-infra-sweep.sh
+      - run: ./demo-platform/reaper/test-orphan-sweep.sh
 
   # Terraform validation for the demo control plane's own stack
   demo-platform-terraform:
