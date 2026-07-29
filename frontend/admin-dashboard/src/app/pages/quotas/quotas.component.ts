@@ -16,14 +16,13 @@ import { AdminApiService } from '../../core/services/admin-api.service';
 import { User } from '../../core/models/user.model';
 
 @Component({
-  selector: 'app-quotas',
-  standalone: true,
-  imports: [
-    CommonModule, FormsModule, MatTableModule, MatPaginatorModule, MatSortModule,
-    MatInputModule, MatFormFieldModule, MatButtonModule, MatIconModule,
-    MatProgressSpinnerModule, MatProgressBarModule, MatSelectModule, MatSnackBarModule,
-  ],
-  template: `
+    selector: 'app-quotas',
+    imports: [
+        CommonModule, FormsModule, MatTableModule, MatPaginatorModule, MatSortModule,
+        MatInputModule, MatFormFieldModule, MatButtonModule, MatIconModule,
+        MatProgressSpinnerModule, MatProgressBarModule, MatSelectModule, MatSnackBarModule,
+    ],
+    template: `
     <div class="page-container">
       <h1 class="page-title">Storage Quotas</h1>
 
@@ -104,7 +103,7 @@ import { User } from '../../core/models/user.model';
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     .page-container { padding: 0; }
     .page-title { font-size: 1.5rem; font-weight: 600; color: #333; margin-bottom: 24px; }
     .loading-container { display: flex; justify-content: center; padding: 60px; }
@@ -131,7 +130,7 @@ import { User } from '../../core/models/user.model';
     .quota-select { width: 120px; }
 
     :host ::ng-deep .quota-select .mat-mdc-form-field-subscript-wrapper { display: none; }
-  `],
+  `]
 })
 export class QuotasComponent implements OnInit {
   displayedColumns = ['displayName', 'storageUsed', 'storageQuota', 'usage', 'actions'];

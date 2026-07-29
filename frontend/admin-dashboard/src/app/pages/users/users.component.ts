@@ -20,15 +20,14 @@ import { User } from '../../core/models/user.model';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.component';
 
 @Component({
-  selector: 'app-users',
-  standalone: true,
-  imports: [
-    CommonModule, FormsModule, MatTableModule, MatPaginatorModule, MatSortModule,
-    MatInputModule, MatFormFieldModule, MatButtonModule, MatIconModule, MatChipsModule,
-    MatMenuModule, MatSelectModule, MatProgressSpinnerModule, MatSnackBarModule,
-    MatDialogModule,
-  ],
-  template: `
+    selector: 'app-users',
+    imports: [
+        CommonModule, FormsModule, MatTableModule, MatPaginatorModule, MatSortModule,
+        MatInputModule, MatFormFieldModule, MatButtonModule, MatIconModule, MatChipsModule,
+        MatMenuModule, MatSelectModule, MatProgressSpinnerModule, MatSnackBarModule,
+        MatDialogModule,
+    ],
+    template: `
     <div class="page-container">
       <h1 class="page-title">User Management</h1>
 
@@ -134,7 +133,7 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.c
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     .page-container { padding: 0; }
     .page-title { font-size: 1.5rem; font-weight: 600; color: #333; margin-bottom: 24px; }
     .loading-container { display: flex; justify-content: center; padding: 60px; }
@@ -173,7 +172,7 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.c
     .status-pending { background: #fff3e0; color: #e65100; }
 
     .delete-action { color: #d32f2f; }
-  `],
+  `]
 })
 export class UsersComponent implements OnInit {
   displayedColumns = ['displayName', 'role', 'status', 'department', 'lastLogin', 'actions'];

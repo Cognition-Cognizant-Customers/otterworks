@@ -13,14 +13,13 @@ import { AdminApiService } from '../../core/services/admin-api.service';
 import { FeatureFlag } from '../../core/models/feature-flag.model';
 
 @Component({
-  selector: 'app-features',
-  standalone: true,
-  imports: [
-    CommonModule, FormsModule, MatCardModule, MatIconModule, MatSlideToggleModule,
-    MatProgressSpinnerModule, MatChipsModule, MatInputModule, MatFormFieldModule,
-    MatSnackBarModule,
-  ],
-  template: `
+    selector: 'app-features',
+    imports: [
+        CommonModule, FormsModule, MatCardModule, MatIconModule, MatSlideToggleModule,
+        MatProgressSpinnerModule, MatChipsModule, MatInputModule, MatFormFieldModule,
+        MatSnackBarModule,
+    ],
+    template: `
     <div class="page-container">
       <h1 class="page-title">Feature Flags</h1>
 
@@ -68,7 +67,7 @@ import { FeatureFlag } from '../../core/models/feature-flag.model';
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     .page-container { padding: 0; }
     .page-title { font-size: 1.5rem; font-weight: 600; color: #333; margin-bottom: 24px; }
     .loading-container { display: flex; justify-content: center; padding: 60px; }
@@ -104,7 +103,7 @@ import { FeatureFlag } from '../../core/models/feature-flag.model';
     }
 
     .empty-state .mat-icon { font-size: 48px; width: 48px; height: 48px; margin-bottom: 12px; }
-  `],
+  `]
 })
 export class FeaturesComponent implements OnInit {
   flags: FeatureFlag[] = [];

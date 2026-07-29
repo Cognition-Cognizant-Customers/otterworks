@@ -10,13 +10,12 @@ import { AdminApiService } from '../../core/services/admin-api.service';
 import { ServiceHealth } from '../../core/models/system-health.model';
 
 @Component({
-  selector: 'app-health',
-  standalone: true,
-  imports: [
-    CommonModule, MatCardModule, MatIconModule, MatButtonModule,
-    MatProgressSpinnerModule, MatChipsModule,
-  ],
-  template: `
+    selector: 'app-health',
+    imports: [
+        CommonModule, MatCardModule, MatIconModule, MatButtonModule,
+        MatProgressSpinnerModule, MatChipsModule,
+    ],
+    template: `
     <div class="page-container">
       <div class="page-header">
         <h1 class="page-title">System Health</h1>
@@ -96,7 +95,7 @@ import { ServiceHealth } from '../../core/models/system-health.model';
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     .page-container { padding: 0; }
     .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
     .page-title { font-size: 1.5rem; font-weight: 600; color: #333; margin: 0; }
@@ -163,7 +162,7 @@ import { ServiceHealth } from '../../core/models/system-health.model';
     .badge-down { background: #ffebee; color: #c62828; }
 
     .last-checked { font-size: 0.75rem; color: #999; }
-  `],
+  `]
 })
 export class HealthComponent implements OnInit {
   services: ServiceHealth[] = [];
