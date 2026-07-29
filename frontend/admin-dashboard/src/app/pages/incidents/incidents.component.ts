@@ -176,20 +176,28 @@ const CHAOS_STATE_KEY = 'ow_admin_chaos_state';
       <!-- Status summary chips (only show when there are incidents) -->
       @if (!loading && incidents.length > 0) {
         <div class="status-summary">
-          <div class="summary-chip active" (click)="filterStatus = filterStatus === 'active' ? '' : 'active'">
+          <div class="summary-chip active" role="button" tabindex="0"
+            (click)="filterStatus = filterStatus === 'active' ? '' : 'active'"
+            (keyup.enter)="filterStatus = filterStatus === 'active' ? '' : 'active'">
             <mat-icon>warning</mat-icon>
             <span>{{ activeCount }} Active</span>
           </div>
-          <div class="summary-chip investigating" (click)="filterStatus = filterStatus === 'investigating' ? '' : 'investigating'">
+          <div class="summary-chip investigating" role="button" tabindex="0"
+            (click)="filterStatus = filterStatus === 'investigating' ? '' : 'investigating'"
+            (keyup.enter)="filterStatus = filterStatus === 'investigating' ? '' : 'investigating'">
             <mat-icon>smart_toy</mat-icon>
             <span>{{ investigatingCount }} Devin Investigating</span>
           </div>
-          <div class="summary-chip resolved" (click)="filterStatus = filterStatus === 'resolved' ? '' : 'resolved'">
+          <div class="summary-chip resolved" role="button" tabindex="0"
+            (click)="filterStatus = filterStatus === 'resolved' ? '' : 'resolved'"
+            (keyup.enter)="filterStatus = filterStatus === 'resolved' ? '' : 'resolved'">
             <mat-icon>check_circle</mat-icon>
             <span>{{ resolvedCount }} Resolved</span>
           </div>
           @if (closedCount > 0) {
-            <div class="summary-chip closed" (click)="showClosed = !showClosed">
+            <div class="summary-chip closed" role="button" tabindex="0"
+              (click)="showClosed = !showClosed"
+              (keyup.enter)="showClosed = !showClosed">
               <mat-icon>{{ showClosed ? 'visibility' : 'visibility_off' }}</mat-icon>
               <span>{{ closedCount }} Closed{{ showClosed ? '' : ' (hidden)' }}</span>
             </div>
@@ -727,7 +735,7 @@ export class IncidentsComponent implements OnInit, OnDestroy {
         this.saveChaosState();
         this.chaosLoading = false;
         const cleared = res.cleared?.length ?? 0;
-        const resolved = (res as any).resolved_incidents?.length ?? 0;
+        const resolved = res.resolved_incidents?.length ?? 0;
         const msg = resolved > 0
           ? `Reset complete — cleared ${cleared} chaos flag(s), resolved ${resolved} incident(s)`
           : `Reset complete — cleared ${cleared} chaos flag(s)`;

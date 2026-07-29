@@ -4,11 +4,9 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
 import { authGuard } from './auth.guard';
-import { AuthService } from '../services/auth.service';
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 
 describe('authGuard', () => {
-  let authService: AuthService;
   let router: Router;
   const mockRoute = {} as ActivatedRouteSnapshot;
   const mockState = { url: '/dashboard' } as RouterStateSnapshot;
@@ -19,7 +17,6 @@ describe('authGuard', () => {
     imports: [RouterTestingModule],
     providers: [provideHttpClient(withInterceptorsFromDi()), provideHttpClientTesting()]
 });
-    authService = TestBed.inject(AuthService);
     router = TestBed.inject(Router);
   });
 

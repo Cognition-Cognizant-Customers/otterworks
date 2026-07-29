@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
-import { tap, delay, map } from 'rxjs/operators';
+import { tap, delay } from 'rxjs/operators';
 import { Router } from '@angular/router';
 
 export interface AuthUser {
@@ -9,11 +9,6 @@ export interface AuthUser {
   email: string;
   displayName: string;
   role: string;
-  token: string;
-}
-
-interface LoginResponse {
-  user: AuthUser;
   token: string;
 }
 
@@ -41,7 +36,7 @@ export class AuthService {
 
   login(email: string, password: string): Observable<AuthUser> {
     // In production, this would call the real API:
-    // return this.http.post<LoginResponse>('/api/v1/admin/auth/login', { email, password })
+    // return this.http.post<{ user: AuthUser; token: string }>('/api/v1/admin/auth/login', { email, password })
     return this.mockLogin(email, password).pipe(
       tap(user => {
         localStorage.setItem(this.TOKEN_KEY, user.token);

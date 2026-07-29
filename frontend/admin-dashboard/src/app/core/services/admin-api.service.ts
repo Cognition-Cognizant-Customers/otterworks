@@ -9,6 +9,103 @@ import { ServiceHealth } from '../models/system-health.model';
 import { DashboardStats, AnalyticsReport, ChartDataPoint } from '../models/analytics.model';
 import { Incident } from '../models/incident.model';
 
+// Raw payload shapes returned by admin-service (snake_case)
+interface RawStorageQuota {
+  used_bytes?: number;
+  quota_bytes?: number;
+}
+
+interface RawUser {
+  id: string;
+  email: string;
+  display_name: string;
+  role: User['role'];
+  status: User['status'];
+  avatar_url?: string;
+  storage_quota?: RawStorageQuota;
+  last_login_at?: string;
+  created_at: string;
+  metadata?: { department?: string; documents_count?: number };
+}
+
+interface RawAuditLog {
+  id: string;
+  actor_id?: string;
+  actor_email?: string;
+  action: string;
+  resource_type?: string;
+  resource_id?: string;
+  changes_made?: Record<string, unknown>;
+  ip_address?: string;
+  created_at: string;
+}
+
+interface RawFeature {
+  id: string;
+  name?: string;
+  description?: string;
+  enabled: boolean;
+  updated_at?: string;
+  metadata?: { category?: string; updated_by?: string };
+}
+
+interface RawAnnouncement {
+  id: string;
+  title: string;
+  body: string;
+  severity?: string;
+  status: Announcement['status'];
+  created_at: string;
+  updated_at?: string;
+  starts_at?: string;
+  ends_at?: string;
+  created_by?: string;
+  target_audience?: { role?: string };
+}
+
+interface RawHealthCheck {
+  status?: string;
+  latency_ms?: number;
+  message?: string;
+}
+
+interface RawServiceHealth extends RawHealthCheck {
+  name: string;
+}
+
+interface RawHealthResponse {
+  services?: RawServiceHealth[];
+  database?: RawHealthCheck;
+  redis?: RawHealthCheck;
+  timestamp?: string;
+}
+
+interface RawMetricsSummary {
+  users?: { total?: number; active?: number; suspended?: number; by_role?: Record<string, number> };
+  storage?: { total_used_bytes?: number; by_tier?: Record<string, number> };
+  audit?: { total_events?: number; top_actions?: Record<string, number> };
+}
+
+interface RawIncident {
+  id: string;
+  title: string;
+  description: string;
+  severity: Incident['severity'];
+  status: Incident['status'];
+  affected_service?: string;
+  devin_session_id?: string | null;
+  devin_session_url?: string | null;
+  devin_session_status?: string | null;
+  reporter_id?: string | null;
+  resolved_at?: string | null;
+  closed_at?: string | null;
+  active?: boolean;
+  created_at: string;
+  updated_at?: string;
+}
+
+type RawIncidentEnvelope = RawIncident | { incident: RawIncident };
+
 // Service metadata not available from the health endpoint — kept here for display purposes
 const SERVICE_META: Record<string, { version: string; port: number; language: string; details: string }> = {
   'auth-service':         { version: '3.1.0', port: 8081, language: 'Java 17',     details: 'Authentication, authorization, user management' },
@@ -40,7 +137,7 @@ export class AdminApiService {
   // ── Dashboard ────────────────────────────────────────────────────────────
 
   getDashboardStats(): Observable<DashboardStats> {
-    return this.http.get<any>(`${this.baseUrl}/admin/metrics/summary`).pipe(
+    return this.http.get<RawMetricsSummary>(`${this.baseUrl}/admin/metrics/summary`).pipe(
       map(res => this.mapDashboardStats(res)),
     );
   }
@@ -48,31 +145,31 @@ export class AdminApiService {
   // ── Users ────────────────────────────────────────────────────────────────
 
   getUsers(): Observable<User[]> {
-    return this.http.get<any>(`${this.baseUrl}/admin/users`).pipe(
-      map(res => (res.users || []).map((u: any) => this.mapUser(u))),
+    return this.http.get<{ users?: RawUser[] }>(`${this.baseUrl}/admin/users`).pipe(
+      map(res => (res.users || []).map(u => this.mapUser(u))),
     );
   }
 
   getUser(id: string): Observable<User | undefined> {
-    return this.http.get<any>(`${this.baseUrl}/admin/users/${id}`).pipe(
+    return this.http.get<RawUser>(`${this.baseUrl}/admin/users/${id}`).pipe(
       map(raw => this.mapUser(raw)),
     );
   }
 
   getUserActivity(userId: string): Observable<UserActivity[]> {
-    return this.http.get<any>(`${this.baseUrl}/admin/audit-logs?actor_id=${userId}&per_page=20`).pipe(
-      map(res => (res.audit_logs || []).map((e: any) => this.mapUserActivity(e))),
+    return this.http.get<{ audit_logs?: RawAuditLog[] }>(`${this.baseUrl}/admin/audit-logs?actor_id=${userId}&per_page=20`).pipe(
+      map(res => (res.audit_logs || []).map(e => this.mapUserActivity(e))),
     );
   }
 
   suspendUser(userId: string): Observable<User> {
-    return this.http.put<any>(`${this.baseUrl}/admin/users/${userId}/suspend`, {}).pipe(
+    return this.http.put<RawUser>(`${this.baseUrl}/admin/users/${userId}/suspend`, {}).pipe(
       map(raw => this.mapUser(raw)),
     );
   }
 
   restoreUser(userId: string): Observable<User> {
-    return this.http.put<any>(`${this.baseUrl}/admin/users/${userId}/activate`, {}).pipe(
+    return this.http.put<RawUser>(`${this.baseUrl}/admin/users/${userId}/activate`, {}).pipe(
       map(raw => this.mapUser(raw)),
     );
   }
@@ -81,28 +178,28 @@ export class AdminApiService {
     return this.http.delete<void>(`${this.baseUrl}/admin/users/${userId}`);
   }
 
-  deleteDocument(docId: string, _fileSizeBytes = 275 * 1024 * 1024): Observable<void> {
+  deleteDocument(docId: string): Observable<void> {
     return this.http.delete<void>(`${this.baseUrl}/admin/documents/${docId}`);
   }
 
   // ── Audit Logs ───────────────────────────────────────────────────────────
 
   getAuditEvents(): Observable<AuditEvent[]> {
-    return this.http.get<any>(`${this.baseUrl}/admin/audit-logs`).pipe(
-      map(res => (res.audit_logs || []).map((e: any) => this.mapAuditEvent(e))),
+    return this.http.get<{ audit_logs?: RawAuditLog[] }>(`${this.baseUrl}/admin/audit-logs`).pipe(
+      map(res => (res.audit_logs || []).map(e => this.mapAuditEvent(e))),
     );
   }
 
   // ── Feature Flags ────────────────────────────────────────────────────────
 
   getFeatureFlags(): Observable<FeatureFlag[]> {
-    return this.http.get<any>(`${this.baseUrl}/admin/features`).pipe(
-      map(res => (res.features || []).map((f: any) => this.mapFeatureFlag(f))),
+    return this.http.get<{ features?: RawFeature[] }>(`${this.baseUrl}/admin/features`).pipe(
+      map(res => (res.features || []).map(f => this.mapFeatureFlag(f))),
     );
   }
 
   toggleFeatureFlag(flagId: string, enabled: boolean): Observable<FeatureFlag> {
-    return this.http.put<any>(`${this.baseUrl}/admin/features/${flagId}`, { feature: { enabled } }).pipe(
+    return this.http.put<RawFeature>(`${this.baseUrl}/admin/features/${flagId}`, { feature: { enabled } }).pipe(
       map(raw => this.mapFeatureFlag(raw)),
     );
   }
@@ -110,7 +207,7 @@ export class AdminApiService {
   // ── System Health ────────────────────────────────────────────────────────
 
   getSystemHealth(): Observable<ServiceHealth[]> {
-    return this.http.get<any>(`${this.baseUrl}/admin/health/services`).pipe(
+    return this.http.get<RawHealthResponse>(`${this.baseUrl}/admin/health/services`).pipe(
       map(res => this.mapHealthServices(res)),
     );
   }
@@ -118,8 +215,8 @@ export class AdminApiService {
   // ── Announcements ────────────────────────────────────────────────────────
 
   getAnnouncements(): Observable<Announcement[]> {
-    return this.http.get<any>(`${this.baseUrl}/admin/announcements`).pipe(
-      map(res => (res.announcements || []).map((a: any) => this.mapAnnouncement(a))),
+    return this.http.get<{ announcements?: RawAnnouncement[] }>(`${this.baseUrl}/admin/announcements`).pipe(
+      map(res => (res.announcements || []).map(a => this.mapAnnouncement(a))),
     );
   }
 
@@ -133,13 +230,13 @@ export class AdminApiService {
         target_audience: announcement.targetAudience ? { role: announcement.targetAudience } : {},
       },
     };
-    return this.http.post<any>(`${this.baseUrl}/admin/announcements`, payload).pipe(
+    return this.http.post<RawAnnouncement>(`${this.baseUrl}/admin/announcements`, payload).pipe(
       map(raw => this.mapAnnouncement(raw)),
     );
   }
 
   publishAnnouncement(id: string): Observable<Announcement> {
-    return this.http.put<any>(`${this.baseUrl}/admin/announcements/${id}`, { announcement: { status: 'published' } }).pipe(
+    return this.http.put<RawAnnouncement>(`${this.baseUrl}/admin/announcements/${id}`, { announcement: { status: 'published' } }).pipe(
       map(raw => this.mapAnnouncement(raw)),
     );
   }
@@ -151,7 +248,7 @@ export class AdminApiService {
   // ── Storage Quotas ───────────────────────────────────────────────────────
 
   updateStorageQuota(userId: string, quota: number): Observable<User> {
-    return this.http.put<any>(`${this.baseUrl}/admin/quotas/${userId}`, { quota: { quota_bytes: quota } }).pipe(
+    return this.http.put<RawStorageQuota>(`${this.baseUrl}/admin/quotas/${userId}`, { quota: { quota_bytes: quota } }).pipe(
       map(raw => ({
         id: userId,
         email: '',
@@ -170,7 +267,7 @@ export class AdminApiService {
   // ── Analytics ────────────────────────────────────────────────────────────
 
   getAnalyticsReport(): Observable<AnalyticsReport> {
-    return this.http.get<any>(`${this.baseUrl}/admin/metrics/summary`).pipe(
+    return this.http.get<RawMetricsSummary>(`${this.baseUrl}/admin/metrics/summary`).pipe(
       map(res => this.mapAnalyticsReport(res)),
     );
   }
@@ -178,14 +275,14 @@ export class AdminApiService {
   // ── Incidents ────────────────────────────────────────────────────────────
 
   getIncidents(): Observable<Incident[]> {
-    return this.http.get<any>(`${this.baseUrl}/admin/incidents`).pipe(
-      map(res => (res.incidents || []).map((i: any) => this.mapIncident(i))),
+    return this.http.get<{ incidents?: RawIncident[] }>(`${this.baseUrl}/admin/incidents`).pipe(
+      map(res => (res.incidents || []).map(i => this.mapIncident(i))),
     );
   }
 
   getIncident(id: string): Observable<Incident> {
-    return this.http.get<any>(`${this.baseUrl}/admin/incidents/${id}`).pipe(
-      map(res => this.mapIncident(res.incident || res)),
+    return this.http.get<RawIncidentEnvelope>(`${this.baseUrl}/admin/incidents/${id}`).pipe(
+      map(res => this.mapIncident(this.unwrapIncident(res))),
     );
   }
 
@@ -198,20 +295,20 @@ export class AdminApiService {
         affected_service: incident.affectedService,
       },
     };
-    return this.http.post<any>(`${this.baseUrl}/admin/incidents`, payload).pipe(
-      map(res => this.mapIncident(res.incident || res)),
+    return this.http.post<RawIncidentEnvelope>(`${this.baseUrl}/admin/incidents`, payload).pipe(
+      map(res => this.mapIncident(this.unwrapIncident(res))),
     );
   }
 
   triggerDevinSession(incidentId: string): Observable<Incident> {
-    return this.http.post<any>(`${this.baseUrl}/admin/incidents/${incidentId}/trigger_session`, {}).pipe(
-      map(res => this.mapIncident(res.incident || res)),
+    return this.http.post<RawIncidentEnvelope>(`${this.baseUrl}/admin/incidents/${incidentId}/trigger_session`, {}).pipe(
+      map(res => this.mapIncident(this.unwrapIncident(res))),
     );
   }
 
   updateIncidentStatus(id: string, status: string): Observable<Incident> {
-    return this.http.patch<any>(`${this.baseUrl}/admin/incidents/${id}`, { incident: { status } }).pipe(
-      map(res => this.mapIncident(res.incident || res)),
+    return this.http.patch<RawIncidentEnvelope>(`${this.baseUrl}/admin/incidents/${id}`, { incident: { status } }).pipe(
+      map(res => this.mapIncident(this.unwrapIncident(res))),
     );
   }
 
@@ -222,11 +319,11 @@ export class AdminApiService {
   // ── Chaos injection (demo/workshop controls) ─────────────────────────────
 
   triggerChaos(service: string, scenario: string): Observable<{ status: string; key: string; expires_in: number }> {
-    return this.http.post<any>(`${this.baseUrl}/admin/chaos`, { service, scenario });
+    return this.http.post<{ status: string; key: string; expires_in: number }>(`${this.baseUrl}/admin/chaos`, { service, scenario });
   }
 
-  resetChaos(): Observable<{ status: string; cleared: string[] }> {
-    return this.http.delete<any>(`${this.baseUrl}/admin/chaos`);
+  resetChaos(): Observable<{ status: string; cleared: string[]; resolved_incidents?: string[] }> {
+    return this.http.delete<{ status: string; cleared: string[]; resolved_incidents?: string[] }>(`${this.baseUrl}/admin/chaos`);
   }
 
   // ── Settings ──────────────────────────────────────────────────────────────
@@ -241,7 +338,11 @@ export class AdminApiService {
 
   // ── Private mappers ──────────────────────────────────────────────────────
 
-  private mapUser(raw: any): User {
+  private unwrapIncident(res: RawIncidentEnvelope): RawIncident {
+    return 'incident' in res ? res.incident : res;
+  }
+
+  private mapUser(raw: RawUser): User {
     const quota = raw.storage_quota;
     return {
       id: raw.id,
@@ -259,10 +360,10 @@ export class AdminApiService {
     };
   }
 
-  private mapUserActivity(raw: any): UserActivity {
+  private mapUserActivity(raw: RawAuditLog): UserActivity {
     return {
       id: raw.id,
-      userId: raw.actor_id,
+      userId: raw.actor_id ?? '',
       action: raw.action,
       resource: `${raw.resource_type}${raw.resource_id ? ' ' + raw.resource_id : ''}`,
       timestamp: raw.created_at,
@@ -271,7 +372,7 @@ export class AdminApiService {
     };
   }
 
-  private mapAuditEvent(raw: any): AuditEvent {
+  private mapAuditEvent(raw: RawAuditLog): AuditEvent {
     return {
       id: raw.id,
       timestamp: raw.created_at,
@@ -307,36 +408,36 @@ export class AdminApiService {
     return 'info';
   }
 
-  private mapFeatureFlag(raw: any): FeatureFlag {
+  private mapFeatureFlag(raw: RawFeature): FeatureFlag {
     return {
       id: raw.id,
-      name: raw.name,
+      name: raw.name ?? raw.id,
       key: raw.name?.toLowerCase().replace(/\s+/g, '-') ?? raw.id,
       description: raw.description ?? '',
       enabled: raw.enabled,
       category: raw.metadata?.category ?? 'General',
-      updatedAt: raw.updated_at,
+      updatedAt: raw.updated_at ?? '',
       updatedBy: raw.metadata?.updated_by ?? 'Admin',
     };
   }
 
-  private mapAnnouncement(raw: any): Announcement {
+  private mapAnnouncement(raw: RawAnnouncement): Announcement {
     return {
       id: raw.id,
       title: raw.title,
       content: raw.body,
-      priority: SEVERITY_TO_PRIORITY[raw.severity] ?? 'medium',
+      priority: SEVERITY_TO_PRIORITY[raw.severity ?? ''] ?? 'medium',
       status: raw.status,
       createdAt: raw.created_at,
       publishedAt: raw.status === 'published' ? (raw.starts_at ?? raw.updated_at) : undefined,
       expiresAt: raw.ends_at,
       createdBy: raw.created_by ?? 'Admin',
-      targetAudience: raw.target_audience?.role ?? 'all',
+      targetAudience: (raw.target_audience?.role as Announcement['targetAudience']) ?? 'all',
     };
   }
 
-  private mapHealthServices(res: any): ServiceHealth[] {
-    const services: ServiceHealth[] = (res.services || []).map((s: any) => {
+  private mapHealthServices(res: RawHealthResponse): ServiceHealth[] {
+    const services: ServiceHealth[] = (res.services || []).map((s): ServiceHealth => {
       const meta = SERVICE_META[s.name] ?? { version: 'unknown', port: 0, language: 'unknown', details: s.message ?? '' };
       return {
         name: s.name,
@@ -382,7 +483,7 @@ export class AdminApiService {
     return services;
   }
 
-  private mapDashboardStats(res: any): DashboardStats {
+  private mapDashboardStats(res: RawMetricsSummary): DashboardStats {
     const users = res.users ?? {};
     const storage = res.storage ?? {};
     const usedBytes: number = storage.total_used_bytes ?? 0;
@@ -398,7 +499,7 @@ export class AdminApiService {
     };
   }
 
-  private mapAnalyticsReport(res: any): AnalyticsReport {
+  private mapAnalyticsReport(res: RawMetricsSummary): AnalyticsReport {
     const users = res.users ?? {};
     const storage = res.storage ?? {};
     const audit = res.audit ?? {};
@@ -432,23 +533,23 @@ export class AdminApiService {
     return `${bytes} B`;
   }
 
-  private mapIncident(raw: any): Incident {
+  private mapIncident(raw: RawIncident): Incident {
     return {
       id: raw.id,
       title: raw.title,
       description: raw.description,
       severity: raw.severity,
       status: raw.status,
-      affectedService: raw.affected_service,
-      devinSessionId: raw.devin_session_id,
-      devinSessionUrl: raw.devin_session_url,
-      devinSessionStatus: raw.devin_session_status,
-      reporterId: raw.reporter_id,
-      resolvedAt: raw.resolved_at,
-      closedAt: raw.closed_at,
-      active: raw.active,
+      affectedService: raw.affected_service ?? null,
+      devinSessionId: raw.devin_session_id ?? null,
+      devinSessionUrl: raw.devin_session_url ?? null,
+      devinSessionStatus: raw.devin_session_status ?? null,
+      reporterId: raw.reporter_id ?? null,
+      resolvedAt: raw.resolved_at ?? null,
+      closedAt: raw.closed_at ?? null,
+      active: raw.active ?? false,
       createdAt: raw.created_at,
-      updatedAt: raw.updated_at,
+      updatedAt: raw.updated_at ?? raw.created_at,
     };
   }
 }
