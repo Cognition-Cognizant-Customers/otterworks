@@ -178,10 +178,7 @@ def main():
             except:
                 pass
             return "00"
-        df["hour"] = df["timestamp"].apply(parse_hour).where(
-            df["timestamp"].notna(), "00"
-        )
-    df["hour"] = df["hour"].where(df["hour"].notna(), "00")
+        df["hour"] = df["timestamp"].apply(parse_hour)
 
     # ---- Aggregate user actions ----
     active_users = set(df["resolved_user_id"].unique()) - {"unknown"}
