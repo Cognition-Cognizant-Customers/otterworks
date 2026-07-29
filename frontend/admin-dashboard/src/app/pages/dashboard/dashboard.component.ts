@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
@@ -16,94 +16,93 @@ import { DashboardStats } from '../../core/models/analytics.model';
     template: `
     <div class="page-container">
       <h1 class="page-title">Dashboard</h1>
-
-      <div *ngIf="loading" class="loading-container">
-        <mat-spinner diameter="40"></mat-spinner>
-      </div>
-
-      <div *ngIf="!loading && stats">
-        <div class="stats-grid">
-          <mat-card class="stat-card">
-            <mat-icon class="stat-icon users-icon">people</mat-icon>
-            <div class="stat-info">
-              <span class="stat-label">Total Users</span>
-              <span class="stat-value">{{ stats.totalUsers | number }}</span>
-              <span class="stat-growth" [class.positive]="stats.usersGrowth > 0" [class.negative]="stats.usersGrowth < 0">
-                <mat-icon>{{ stats.usersGrowth > 0 ? 'trending_up' : 'trending_down' }}</mat-icon>
-                {{ stats.usersGrowth }}%
-              </span>
-            </div>
-          </mat-card>
-
-          <mat-card class="stat-card">
-            <mat-icon class="stat-icon docs-icon">description</mat-icon>
-            <div class="stat-info">
-              <span class="stat-label">Active Documents</span>
-              <span class="stat-value">{{ stats.activeDocuments | number }}</span>
-              <span class="stat-growth" [class.positive]="stats.documentsGrowth > 0" [class.negative]="stats.documentsGrowth < 0">
-                <mat-icon>{{ stats.documentsGrowth > 0 ? 'trending_up' : 'trending_down' }}</mat-icon>
-                {{ stats.documentsGrowth }}%
-              </span>
-            </div>
-          </mat-card>
-
-          <mat-card class="stat-card">
-            <mat-icon class="stat-icon storage-icon">cloud</mat-icon>
-            <div class="stat-info">
-              <span class="stat-label">Storage Used</span>
-              <span class="stat-value">{{ stats.storageUsed }}</span>
-              <span class="stat-growth" [class.positive]="stats.storageGrowth > 0" [class.negative]="stats.storageGrowth < 0">
-                <mat-icon>{{ stats.storageGrowth > 0 ? 'trending_up' : 'trending_down' }}</mat-icon>
-                {{ stats.storageGrowth }}%
-              </span>
-            </div>
-          </mat-card>
-
-          <mat-card class="stat-card">
-            <mat-icon class="stat-icon sessions-icon">devices</mat-icon>
-            <div class="stat-info">
-              <span class="stat-label">Active Sessions</span>
-              <span class="stat-value">{{ stats.activeSessions | number }}</span>
-              <span class="stat-growth" [class.positive]="stats.sessionsGrowth > 0" [class.negative]="stats.sessionsGrowth < 0">
-                <mat-icon>{{ stats.sessionsGrowth > 0 ? 'trending_up' : 'trending_down' }}</mat-icon>
-                {{ stats.sessionsGrowth }}%
-              </span>
-            </div>
-          </mat-card>
+    
+      @if (loading) {
+        <div class="loading-container">
+          <mat-spinner diameter="40"></mat-spinner>
         </div>
-
-        <div class="charts-row">
-          <mat-card class="chart-card">
-            <mat-card-header>
-              <mat-card-title>User Signups</mat-card-title>
-            </mat-card-header>
-            <mat-card-content>
-              <canvas baseChart
-                [datasets]="signupChartData.datasets"
-                [labels]="signupChartData.labels"
-                [options]="lineChartOptions"
-                type="line">
-              </canvas>
-            </mat-card-content>
-          </mat-card>
-
-          <mat-card class="chart-card">
-            <mat-card-header>
-              <mat-card-title>Document Activity</mat-card-title>
-            </mat-card-header>
-            <mat-card-content>
-              <canvas baseChart
-                [datasets]="activityChartData.datasets"
-                [labels]="activityChartData.labels"
-                [options]="barChartOptions"
-                type="bar">
-              </canvas>
-            </mat-card-content>
-          </mat-card>
+      }
+    
+      @if (!loading && stats) {
+        <div>
+          <div class="stats-grid">
+            <mat-card class="stat-card">
+              <mat-icon class="stat-icon users-icon">people</mat-icon>
+              <div class="stat-info">
+                <span class="stat-label">Total Users</span>
+                <span class="stat-value">{{ stats.totalUsers | number }}</span>
+                <span class="stat-growth" [class.positive]="stats.usersGrowth > 0" [class.negative]="stats.usersGrowth < 0">
+                  <mat-icon>{{ stats.usersGrowth > 0 ? 'trending_up' : 'trending_down' }}</mat-icon>
+                  {{ stats.usersGrowth }}%
+                </span>
+              </div>
+            </mat-card>
+            <mat-card class="stat-card">
+              <mat-icon class="stat-icon docs-icon">description</mat-icon>
+              <div class="stat-info">
+                <span class="stat-label">Active Documents</span>
+                <span class="stat-value">{{ stats.activeDocuments | number }}</span>
+                <span class="stat-growth" [class.positive]="stats.documentsGrowth > 0" [class.negative]="stats.documentsGrowth < 0">
+                  <mat-icon>{{ stats.documentsGrowth > 0 ? 'trending_up' : 'trending_down' }}</mat-icon>
+                  {{ stats.documentsGrowth }}%
+                </span>
+              </div>
+            </mat-card>
+            <mat-card class="stat-card">
+              <mat-icon class="stat-icon storage-icon">cloud</mat-icon>
+              <div class="stat-info">
+                <span class="stat-label">Storage Used</span>
+                <span class="stat-value">{{ stats.storageUsed }}</span>
+                <span class="stat-growth" [class.positive]="stats.storageGrowth > 0" [class.negative]="stats.storageGrowth < 0">
+                  <mat-icon>{{ stats.storageGrowth > 0 ? 'trending_up' : 'trending_down' }}</mat-icon>
+                  {{ stats.storageGrowth }}%
+                </span>
+              </div>
+            </mat-card>
+            <mat-card class="stat-card">
+              <mat-icon class="stat-icon sessions-icon">devices</mat-icon>
+              <div class="stat-info">
+                <span class="stat-label">Active Sessions</span>
+                <span class="stat-value">{{ stats.activeSessions | number }}</span>
+                <span class="stat-growth" [class.positive]="stats.sessionsGrowth > 0" [class.negative]="stats.sessionsGrowth < 0">
+                  <mat-icon>{{ stats.sessionsGrowth > 0 ? 'trending_up' : 'trending_down' }}</mat-icon>
+                  {{ stats.sessionsGrowth }}%
+                </span>
+              </div>
+            </mat-card>
+          </div>
+          <div class="charts-row">
+            <mat-card class="chart-card">
+              <mat-card-header>
+                <mat-card-title>User Signups</mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <canvas baseChart
+                  [datasets]="signupChartData.datasets"
+                  [labels]="signupChartData.labels"
+                  [options]="lineChartOptions"
+                  type="line">
+                </canvas>
+              </mat-card-content>
+            </mat-card>
+            <mat-card class="chart-card">
+              <mat-card-header>
+                <mat-card-title>Document Activity</mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <canvas baseChart
+                  [datasets]="activityChartData.datasets"
+                  [labels]="activityChartData.labels"
+                  [options]="barChartOptions"
+                  type="bar">
+                </canvas>
+              </mat-card-content>
+            </mat-card>
+          </div>
         </div>
-      </div>
+      }
     </div>
-  `,
+    `,
     styles: [`
     .page-container { padding: 0; }
     .page-title { font-size: 1.5rem; font-weight: 600; color: #333; margin-bottom: 24px; }
@@ -163,6 +162,8 @@ import { DashboardStats } from '../../core/models/analytics.model';
   `]
 })
 export class DashboardComponent implements OnInit, OnDestroy {
+  private api = inject(AdminApiService);
+
   stats: DashboardStats | null = null;
   loading = true;
 
@@ -182,8 +183,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   };
 
   private destroy$ = new Subject<void>();
-
-  constructor(private api: AdminApiService) {}
 
   ngOnInit(): void {
     this.loadStats();

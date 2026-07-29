@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatTableModule, MatTableDataSource } from '@angular/material/table';
@@ -25,7 +25,7 @@ import { User } from '../../core/models/user.model';
     template: `
     <div class="page-container">
       <h1 class="page-title">Storage Quotas</h1>
-
+    
       <div class="toolbar">
         <mat-form-field appearance="outline" class="search-field">
           <mat-label>Search users</mat-label>
@@ -33,76 +33,74 @@ import { User } from '../../core/models/user.model';
           <mat-icon matSuffix>search</mat-icon>
         </mat-form-field>
       </div>
-
-      <div *ngIf="loading" class="loading-container">
-        <mat-spinner diameter="40"></mat-spinner>
-      </div>
-
-      <div class="table-container" *ngIf="!loading">
-        <table mat-table [dataSource]="dataSource" matSort class="quotas-table">
-          <ng-container matColumnDef="displayName">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header>User</th>
-            <td mat-cell *matCellDef="let user">
-              <div class="user-cell">
-                <mat-icon class="user-avatar">account_circle</mat-icon>
-                <div>
-                  <div class="user-name">{{ user.displayName }}</div>
-                  <div class="user-email">{{ user.email }}</div>
+    
+      @if (loading) {
+        <div class="loading-container">
+          <mat-spinner diameter="40"></mat-spinner>
+        </div>
+      }
+    
+      @if (!loading) {
+        <div class="table-container">
+          <table mat-table [dataSource]="dataSource" matSort class="quotas-table">
+            <ng-container matColumnDef="displayName">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>User</th>
+              <td mat-cell *matCellDef="let user">
+                <div class="user-cell">
+                  <mat-icon class="user-avatar">account_circle</mat-icon>
+                  <div>
+                    <div class="user-name">{{ user.displayName }}</div>
+                    <div class="user-email">{{ user.email }}</div>
+                  </div>
                 </div>
-              </div>
-            </td>
-          </ng-container>
-
-          <ng-container matColumnDef="storageUsed">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header>Used</th>
-            <td mat-cell *matCellDef="let user">{{ formatBytes(user.storageUsed) }}</td>
-          </ng-container>
-
-          <ng-container matColumnDef="storageQuota">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header>Quota</th>
-            <td mat-cell *matCellDef="let user">{{ formatBytes(user.storageQuota) }}</td>
-          </ng-container>
-
-          <ng-container matColumnDef="usage">
-            <th mat-header-cell *matHeaderCellDef>Usage</th>
-            <td mat-cell *matCellDef="let user">
-              <div class="usage-cell">
-                <mat-progress-bar
-                  mode="determinate"
-                  [value]="getUsagePercent(user)"
-                  [color]="getUsagePercent(user) > 90 ? 'warn' : 'primary'">
-                </mat-progress-bar>
-                <span class="usage-label">{{ getUsagePercent(user) | number:'1.0-0' }}%</span>
-              </div>
-            </td>
-          </ng-container>
-
-          <ng-container matColumnDef="actions">
-            <th mat-header-cell *matHeaderCellDef>Update Quota</th>
-            <td mat-cell *matCellDef="let user">
-              <div class="quota-actions">
-                <mat-form-field appearance="outline" class="quota-select">
-                  <mat-select [value]="user.storageQuota" (selectionChange)="updateQuota(user, $event.value)">
-                    <mat-option [value]="1 * gb">1 GB</mat-option>
-                    <mat-option [value]="2 * gb">2 GB</mat-option>
-                    <mat-option [value]="5 * gb">5 GB</mat-option>
-                    <mat-option [value]="10 * gb">10 GB</mat-option>
-                    <mat-option [value]="20 * gb">20 GB</mat-option>
-                    <mat-option [value]="50 * gb">50 GB</mat-option>
-                  </mat-select>
-                </mat-form-field>
-              </div>
-            </td>
-          </ng-container>
-
-          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-          <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
-        </table>
-
-        <mat-paginator [pageSizeOptions]="[5, 10, 25]" showFirstLastButtons></mat-paginator>
-      </div>
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="storageUsed">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Used</th>
+              <td mat-cell *matCellDef="let user">{{ formatBytes(user.storageUsed) }}</td>
+            </ng-container>
+            <ng-container matColumnDef="storageQuota">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Quota</th>
+              <td mat-cell *matCellDef="let user">{{ formatBytes(user.storageQuota) }}</td>
+            </ng-container>
+            <ng-container matColumnDef="usage">
+              <th mat-header-cell *matHeaderCellDef>Usage</th>
+              <td mat-cell *matCellDef="let user">
+                <div class="usage-cell">
+                  <mat-progress-bar
+                    mode="determinate"
+                    [value]="getUsagePercent(user)"
+                    [color]="getUsagePercent(user) > 90 ? 'warn' : 'primary'">
+                  </mat-progress-bar>
+                  <span class="usage-label">{{ getUsagePercent(user) | number:'1.0-0' }}%</span>
+                </div>
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef>Update Quota</th>
+              <td mat-cell *matCellDef="let user">
+                <div class="quota-actions">
+                  <mat-form-field appearance="outline" class="quota-select">
+                    <mat-select [value]="user.storageQuota" (selectionChange)="updateQuota(user, $event.value)">
+                      <mat-option [value]="1 * gb">1 GB</mat-option>
+                      <mat-option [value]="2 * gb">2 GB</mat-option>
+                      <mat-option [value]="5 * gb">5 GB</mat-option>
+                      <mat-option [value]="10 * gb">10 GB</mat-option>
+                      <mat-option [value]="20 * gb">20 GB</mat-option>
+                      <mat-option [value]="50 * gb">50 GB</mat-option>
+                    </mat-select>
+                  </mat-form-field>
+                </div>
+              </td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+          </table>
+          <mat-paginator [pageSizeOptions]="[5, 10, 25]" showFirstLastButtons></mat-paginator>
+        </div>
+      }
     </div>
-  `,
+    `,
     styles: [`
     .page-container { padding: 0; }
     .page-title { font-size: 1.5rem; font-weight: 600; color: #333; margin-bottom: 24px; }
@@ -133,6 +131,9 @@ import { User } from '../../core/models/user.model';
   `]
 })
 export class QuotasComponent implements OnInit {
+  private api = inject(AdminApiService);
+  private snackBar = inject(MatSnackBar);
+
   displayedColumns = ['displayName', 'storageUsed', 'storageQuota', 'usage', 'actions'];
   dataSource = new MatTableDataSource<User>([]);
   loading = true;
@@ -144,8 +145,6 @@ export class QuotasComponent implements OnInit {
   @ViewChild(MatSort) set matSort(sort: MatSort) {
     this.dataSource.sort = sort;
   }
-
-  constructor(private api: AdminApiService, private snackBar: MatSnackBar) {}
 
   ngOnInit(): void {
     this.api.getUsers().subscribe(users => {

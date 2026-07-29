@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, Subject, map } from 'rxjs';
 import { User, UserActivity } from '../models/user.model';
@@ -31,11 +31,11 @@ const PRIORITY_TO_SEVERITY: Record<string, string> = {
 
 @Injectable({ providedIn: 'root' })
 export class AdminApiService {
+  private http = inject(HttpClient);
+
   private readonly baseUrl = '/api/v1';
 
   readonly statsChanged$ = new Subject<void>();
-
-  constructor(private http: HttpClient) {}
 
   // ── Dashboard ────────────────────────────────────────────────────────────
 

@@ -9,13 +9,6 @@ CVE-2024-56373
 CVE-2025-54550
 CVE-2025-68675
 
-# --- frontend/admin-dashboard: requires Angular 19+ upgrade (major version) ---
-CVE-2025-66035
-CVE-2025-66412
-CVE-2026-22610
-CVE-2026-27970
-CVE-2026-32635
-
 # --- frontend/web-app: requires Next.js 14.2.25+ or 15.x upgrade ---
 CVE-2025-29927
 CVE-2024-46982
