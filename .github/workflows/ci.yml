@@ -123,8 +123,9 @@ jobs:
         working-directory: services/file-service
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: 1.97.1
           components: clippy, rustfmt
       - run: cargo fmt --check
       - run: cargo clippy -- -D warnings
