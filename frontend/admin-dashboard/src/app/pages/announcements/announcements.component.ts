@@ -16,14 +16,13 @@ import { Announcement } from '../../core/models/announcement.model';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.component';
 
 @Component({
-  selector: 'app-announcements',
-  standalone: true,
-  imports: [
-    CommonModule, FormsModule, MatCardModule, MatIconModule, MatButtonModule,
-    MatProgressSpinnerModule, MatChipsModule, MatInputModule, MatFormFieldModule,
-    MatSelectModule, MatSnackBarModule, MatDialogModule,
-  ],
-  template: `
+    selector: 'app-announcements',
+    imports: [
+        CommonModule, FormsModule, MatCardModule, MatIconModule, MatButtonModule,
+        MatProgressSpinnerModule, MatChipsModule, MatInputModule, MatFormFieldModule,
+        MatSelectModule, MatSnackBarModule, MatDialogModule,
+    ],
+    template: `
     <div class="page-container">
       <div class="page-header">
         <h1 class="page-title">Announcements</h1>
@@ -122,7 +121,7 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.c
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     .page-container { padding: 0; }
     .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
     .page-title { font-size: 1.5rem; font-weight: 600; color: #333; margin: 0; }
@@ -175,7 +174,7 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.c
     }
 
     .empty-state .mat-icon { font-size: 48px; width: 48px; height: 48px; margin-bottom: 12px; }
-  `],
+  `]
 })
 export class AnnouncementsComponent implements OnInit {
   announcements: Announcement[] = [];

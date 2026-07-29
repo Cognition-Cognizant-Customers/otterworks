@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { NgChartsModule } from 'ng2-charts';
+import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration } from 'chart.js';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -11,10 +11,9 @@ import { AdminApiService } from '../../core/services/admin-api.service';
 import { DashboardStats } from '../../core/models/analytics.model';
 
 @Component({
-  selector: 'app-dashboard',
-  standalone: true,
-  imports: [CommonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule, NgChartsModule],
-  template: `
+    selector: 'app-dashboard',
+    imports: [CommonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule, BaseChartDirective],
+    template: `
     <div class="page-container">
       <h1 class="page-title">Dashboard</h1>
 
@@ -105,7 +104,7 @@ import { DashboardStats } from '../../core/models/analytics.model';
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     .page-container { padding: 0; }
     .page-title { font-size: 1.5rem; font-weight: 600; color: #333; margin-bottom: 24px; }
     .loading-container { display: flex; justify-content: center; padding: 60px; }
@@ -161,7 +160,7 @@ import { DashboardStats } from '../../core/models/analytics.model';
     }
 
     .chart-card { padding: 16px; }
-  `],
+  `]
 })
 export class DashboardComponent implements OnInit, OnDestroy {
   stats: DashboardStats | null = null;

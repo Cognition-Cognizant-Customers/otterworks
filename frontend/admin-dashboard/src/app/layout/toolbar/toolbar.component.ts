@@ -7,10 +7,9 @@ import { MatMenuModule } from '@angular/material/menu';
 import { AuthService } from '../../core/services/auth.service';
 
 @Component({
-  selector: 'app-toolbar',
-  standalone: true,
-  imports: [CommonModule, MatToolbarModule, MatIconModule, MatButtonModule, MatMenuModule],
-  template: `
+    selector: 'app-toolbar',
+    imports: [CommonModule, MatToolbarModule, MatIconModule, MatButtonModule, MatMenuModule],
+    template: `
     <mat-toolbar class="app-toolbar">
       <span class="toolbar-title">Admin Dashboard</span>
       <span class="spacer"></span>
@@ -29,7 +28,7 @@ import { AuthService } from '../../core/services/auth.service';
       </mat-menu>
     </mat-toolbar>
   `,
-  styles: [`
+    styles: [`
     .app-toolbar {
       background: #ffffff;
       color: #333;
@@ -58,7 +57,7 @@ import { AuthService } from '../../core/services/auth.service';
     .user-name {
       font-size: 0.9rem;
     }
-  `],
+  `]
 })
 export class ToolbarComponent {
   constructor(public authService: AuthService) {}
