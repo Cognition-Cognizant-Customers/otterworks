@@ -15,14 +15,13 @@ import { AdminApiService } from '../../core/services/admin-api.service';
 import { AuditEvent } from '../../core/models/audit.model';
 
 @Component({
-  selector: 'app-audit',
-  standalone: true,
-  imports: [
-    CommonModule, FormsModule, MatTableModule, MatPaginatorModule, MatSortModule,
-    MatInputModule, MatFormFieldModule, MatSelectModule, MatIconModule, MatChipsModule,
-    MatProgressSpinnerModule, MatButtonModule,
-  ],
-  template: `
+    selector: 'app-audit',
+    imports: [
+        CommonModule, FormsModule, MatTableModule, MatPaginatorModule, MatSortModule,
+        MatInputModule, MatFormFieldModule, MatSelectModule, MatIconModule, MatChipsModule,
+        MatProgressSpinnerModule, MatButtonModule,
+    ],
+    template: `
     <div class="page-container">
       <h1 class="page-title">Audit Logs</h1>
 
@@ -115,7 +114,7 @@ import { AuditEvent } from '../../core/models/audit.model';
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     .page-container { padding: 0; }
     .page-title { font-size: 1.5rem; font-weight: 600; color: #333; margin-bottom: 24px; }
     .loading-container { display: flex; justify-content: center; padding: 60px; }
@@ -165,7 +164,7 @@ import { AuditEvent } from '../../core/models/audit.model';
     .severity-warning { color: #ff9800; }
     .severity-critical .severity-dot { background: #f44336; }
     .severity-critical { color: #f44336; }
-  `],
+  `]
 })
 export class AuditComponent implements OnInit {
   displayedColumns = ['timestamp', 'userName', 'action', 'resourceName', 'severity', 'details'];

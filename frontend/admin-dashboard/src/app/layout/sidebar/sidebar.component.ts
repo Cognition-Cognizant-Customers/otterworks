@@ -12,10 +12,9 @@ interface NavItem {
 }
 
 @Component({
-  selector: 'app-sidebar',
-  standalone: true,
-  imports: [CommonModule, RouterModule, MatListModule, MatIconModule, MatTooltipModule],
-  template: `
+    selector: 'app-sidebar',
+    imports: [CommonModule, RouterModule, MatListModule, MatIconModule, MatTooltipModule],
+    template: `
     <div class="sidebar" [class.collapsed]="collapsed">
       <div class="sidebar-header">
         <div class="logo" *ngIf="!collapsed">
@@ -44,7 +43,7 @@ interface NavItem {
       </mat-nav-list>
     </div>
   `,
-  styles: [`
+    styles: [`
     .sidebar {
       width: 260px;
       min-height: 100vh;
@@ -154,7 +153,7 @@ interface NavItem {
     :host ::ng-deep .mat-mdc-list-item .mat-icon {
       color: rgba(255, 255, 255, 0.75);
     }
-  `],
+  `]
 })
 export class SidebarComponent {
   @Input() collapsed = false;
