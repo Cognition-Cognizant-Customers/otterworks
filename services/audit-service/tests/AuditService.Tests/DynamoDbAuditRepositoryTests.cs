@@ -166,6 +166,19 @@ public class DynamoDbAuditRepositoryTests
     }
 
     [Fact]
+    public async Task QueryEventsAsync_WhenItemsAreNull_ShouldReturnEmptyPage()
+    {
+        _mockDynamoDb
+            .Setup(d => d.ScanAsync(It.IsAny<ScanRequest>(), default))
+            .ReturnsAsync(new ScanResponse());
+
+        var result = await _repository.QueryEventsAsync(null, null, null, null, null, null, 1, 20);
+
+        Assert.Empty(result.Events);
+        Assert.Equal(0, result.Total);
+    }
+
+    [Fact]
     public async Task GetAllUserEventsAsync_ShouldFilterByUserId()
     {
         var items = new List<Dictionary<string, AttributeValue>>
