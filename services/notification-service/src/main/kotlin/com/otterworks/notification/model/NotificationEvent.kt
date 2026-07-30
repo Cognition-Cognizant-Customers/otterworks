@@ -1,6 +1,45 @@
 package com.otterworks.notification.model
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.jsonPrimitive
+import java.time.Instant
+
+/**
+ * Deserializes timestamps that may arrive either as RFC 3339 strings
+ * (e.g. "2024-01-01T00:00:00Z") or as Unix epoch numbers (seconds or
+ * milliseconds) emitted by legacy service versions. Epoch values are
+ * normalized to RFC 3339 strings.
+ */
+object FlexibleTimestampSerializer : KSerializer<String> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("FlexibleTimestamp", PrimitiveKind.STRING)
+
+    override fun deserialize(decoder: Decoder): String {
+        val raw = if (decoder is JsonDecoder) {
+            decoder.decodeJsonElement().jsonPrimitive.content
+        } else {
+            decoder.decodeString()
+        }
+        val epoch = raw.toLongOrNull() ?: return raw
+        val instant = if (epoch >= 100_000_000_000L) {
+            Instant.ofEpochMilli(epoch)
+        } else {
+            Instant.ofEpochSecond(epoch)
+        }
+        return instant.toString()
+    }
+
+    override fun serialize(encoder: Encoder, value: String) {
+        encoder.encodeString(value)
+    }
+}
 
 @Serializable
 enum class EventType {
@@ -25,6 +64,7 @@ data class NotificationEvent(
     val title: String = "",
     val message: String = "",
     val metadata: Map<String, String> = emptyMap(),
+    @Serializable(with = FlexibleTimestampSerializer::class)
     val timestamp: String,
 )
 
@@ -39,6 +79,7 @@ data class SqsNotificationMessage(
     val userId: String = "",
     val actorId: String = "",
     val mentionedUserId: String = "",
+    @Serializable(with = FlexibleTimestampSerializer::class)
     val timestamp: String,
 )
 
