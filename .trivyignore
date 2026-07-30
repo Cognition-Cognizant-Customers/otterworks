@@ -25,12 +25,6 @@ GHSA-h25m-26qc-wcjf
 GHSA-mwv6-3258-q52c
 GHSA-q4gf-8mx6-v5v3
 
-# --- services/api-gateway: Go dependency upgrades require build tool ---
-CVE-2025-30204
-CVE-2026-24051
-CVE-2026-39883
-CVE-2026-33186
-
 # --- services/admin-service: requires Rails 7.2+ upgrade (activestorage CVEs) ---
 CVE-2026-33195
 CVE-2026-33658
