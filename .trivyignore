@@ -40,11 +40,3 @@ CVE-2026-0994
 CVE-2024-53981
 CVE-2026-24486
 CVE-2024-47874
-
-# Bulk ignore — revisit in Q4
-CVE-2021-*
-
-# Low-priority npm advisories — team reviewed 2024-12
-CVE-2021-23337
-CVE-2021-33503
-CVE-2020-28500
