@@ -8,8 +8,9 @@ use file_service::{
     metadata::MetadataClient,
     storage::S3Client,
 };
-use std::sync::Once;
+use std::sync::{Once, OnceLock};
 use std::time::Duration;
+use tokio::sync::Mutex;
 
 pub const FILES_TABLE: &str = "otterworks-file-metadata";
 pub const FOLDERS_TABLE: &str = "otterworks-folders";
@@ -17,6 +18,7 @@ pub const VERSIONS_TABLE: &str = "otterworks-file-versions";
 pub const SHARES_TABLE: &str = "otterworks-file-shares";
 
 static CREDENTIALS: Once = Once::new();
+static RESOURCE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[allow(dead_code)]
 pub struct TestContext {
@@ -85,6 +87,9 @@ pub fn unique_key(prefix: &str) -> String {
 }
 
 pub async fn ensure_resources(config: &AwsConfig) {
+    let resource_lock = RESOURCE_LOCK.get_or_init(|| Mutex::new(()));
+    let _guard = resource_lock.lock().await;
+
     ensure_credentials();
     let aws_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
         .region(aws_config::Region::new(config.region.clone()))
@@ -103,11 +108,17 @@ pub async fn ensure_resources(config: &AwsConfig) {
         .await
         .is_err()
     {
-        s3.create_bucket()
-            .bucket(&config.s3_bucket)
-            .send()
-            .await
-            .expect("create LocalStack S3 bucket");
+        if let Err(error) = s3.create_bucket().bucket(&config.s3_bucket).send().await {
+            if s3
+                .head_bucket()
+                .bucket(&config.s3_bucket)
+                .send()
+                .await
+                .is_err()
+            {
+                panic!("create LocalStack S3 bucket: {error:?}");
+            }
+        }
     }
 
     let dynamodb = aws_sdk_dynamodb::Client::new(&aws_config);
@@ -179,10 +190,17 @@ async fn create_table(
                     .expect("valid key schema"),
             );
         }
-        builder
-            .send()
-            .await
-            .expect("create LocalStack DynamoDB table");
+        if let Err(error) = builder.send().await {
+            if client
+                .describe_table()
+                .table_name(table_name)
+                .send()
+                .await
+                .is_err()
+            {
+                panic!("create LocalStack DynamoDB table {table_name}: {error:?}");
+            }
+        }
     }
 
     for _ in 0..100 {
