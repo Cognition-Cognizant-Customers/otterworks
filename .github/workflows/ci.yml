@@ -140,9 +140,10 @@ jobs:
       localstack:
         image: localstack/localstack:3.8
         env:
-          SERVICES: s3,sns,dynamodb
+          SERVICES: s3,sqs,sns,dynamodb,ses,cognito-idp,secretsmanager
           DEFAULT_REGION: us-east-1
           DOCKER_HOST: unix:///var/run/docker.sock
+          PERSISTENCE: "1"
         ports:
           - 4566:4566
         options: >-
