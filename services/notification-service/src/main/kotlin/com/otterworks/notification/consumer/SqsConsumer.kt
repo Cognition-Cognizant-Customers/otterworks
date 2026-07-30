@@ -55,8 +55,11 @@ class SqsConsumer(
     // SerializationException, is never deleted from the queue, and becomes
     // visible again after the SQS visibility timeout — causing queue depth to
     // climb indefinitely while the consumer appears healthy.
+    // Real producers (file-service, document-service) emit fields that are not
+    // modeled on SqsNotificationMessage, and SNS envelopes carry extra keys
+    // (Timestamp, Signature, ...), so unknown keys must always be ignored.
     private val strictJson = Json {
-        ignoreUnknownKeys = false
+        ignoreUnknownKeys = true
         isLenient = false
     }
 
@@ -113,8 +116,11 @@ class SqsConsumer(
         }
     }
 
-    internal fun parseMessage(body: String): SqsNotificationMessage? {
-        val parser = if (chaosActive("chaos:notification-service:consumer_strict_schema")) strictJson else json
+    internal fun parseMessage(
+        body: String,
+        strict: Boolean = chaosActive("chaos:notification-service:consumer_strict_schema"),
+    ): SqsNotificationMessage? {
+        val parser = if (strict) strictJson else json
         return try {
             // Try parsing as direct message first
             parser.decodeFromString<SqsNotificationMessage>(body)

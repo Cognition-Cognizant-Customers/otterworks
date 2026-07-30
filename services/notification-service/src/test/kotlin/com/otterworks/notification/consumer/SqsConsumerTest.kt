@@ -175,6 +175,55 @@ class SqsConsumerTest {
     }
 
     @Test
+    fun `parseMessage strict mode parses epoch timestamp with unknown producer fields`() {
+        val body = """
+            {
+                "eventType": "file_shared",
+                "fileId": "file-123",
+                "ownerId": "owner-1",
+                "sharedWithUserId": "user-2",
+                "folderId": "folder-9",
+                "name": "report.pdf",
+                "mimeType": "application/pdf",
+                "sizeBytes": 2048,
+                "timestamp": 1704067200
+            }
+        """.trimIndent()
+
+        val event = consumer.parseMessage(body, strict = true)
+
+        assertNotNull(event)
+        assertEquals("file_shared", event.eventType)
+        assertEquals("file-123", event.fileId)
+        assertEquals("2024-01-01T00:00:00Z", event.timestamp)
+    }
+
+    @Test
+    fun `parseMessage strict mode parses SNS envelope with extra keys`() {
+        val innerMessage = """{"eventType":"comment_added","userId":"user-1","documentId":"doc-1","timestamp":1704067200000}"""
+        val escapedInner = innerMessage.replace("\"", "\\\"")
+        val body = """
+            {
+                "Type": "Notification",
+                "MessageId": "msg-789",
+                "TopicArn": "arn:aws:sns:us-east-1:000000000000:test-topic",
+                "Timestamp": "2024-01-01T00:00:00.000Z",
+                "SignatureVersion": "1",
+                "Signature": "abc123",
+                "SigningCertURL": "https://sns.us-east-1.amazonaws.com/cert.pem",
+                "UnsubscribeURL": "https://sns.us-east-1.amazonaws.com/unsubscribe",
+                "Message": "$escapedInner"
+            }
+        """.trimIndent()
+
+        val event = consumer.parseMessage(body, strict = true)
+
+        assertNotNull(event)
+        assertEquals("comment_added", event.eventType)
+        assertEquals("2024-01-01T00:00:00Z", event.timestamp)
+    }
+
+    @Test
     fun `parseMessage handles missing optional fields`() {
         val body = """
             {
