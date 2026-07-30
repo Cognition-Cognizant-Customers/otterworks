@@ -88,10 +88,8 @@ After PR #31 (this PR):
 
 | CVE | Package | Reason |
 |-----|---------|--------|
-| CVE-2026-33195 | activestorage (Rails) | Requires Rails 7.2+ upgrade |
-| CVE-2026-33658 | activestorage (Rails) | Requires Rails 7.2+ upgrade |
 
-These are tracked in `.trivyignore` and should be resolved when the admin-service is upgraded to Rails 7.2+.
+CVE-2026-33195 and CVE-2026-33658 (activestorage) were resolved by upgrading admin-service to Rails 7.2.3.2. Remaining acknowledgements are tracked in `.trivyignore`.
 
 ## Running CI Locally
 
