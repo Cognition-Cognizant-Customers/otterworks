@@ -111,7 +111,7 @@ RSpec.describe JwtAuthenticator do
     it 'rejects all tokens when no secret is configured (never verifies against an empty key)' do
       allow(Rails.application.credentials).to receive(:jwt_secret).and_return(nil)
       ENV['JWT_SECRET'] = nil
-      token = JWT.encode(valid_payload, '', 'HS256')
+      token = encode_token(valid_payload, key: 'attacker-chosen-key')
       status, _, body = make_request('/api/v1/admin/features', 'Authorization' => "Bearer #{token}")
       expect(status).to eq(401)
       expect(JSON.parse(body.first)['error']).to eq('Invalid or expired token')
