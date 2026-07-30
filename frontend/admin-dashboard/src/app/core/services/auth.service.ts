@@ -78,8 +78,20 @@ export class AuthService {
       email,
       displayName: 'Admin User',
       role: 'admin',
-      token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJ1c2VyX2lkIjoiYTAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIiwiZW1haWwiOiJhZG1pbkBvdHRlcndvcmtzLmRldiIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTcwNDA2NzIwMCwiZXhwIjoxOTI0OTA1NjAwfQ.hD5dwgrPNRTzbXa6lbA83Aru7BvQVIQc0rGVySkF1fA',
+      token: this.generateMockToken(),
     };
     return of(user).pipe(delay(800));
+  }
+
+  /**
+   * Opaque, randomly generated placeholder credential for the mock login flow.
+   * It is deliberately not a JWT and carries no signature, so it cannot
+   * authenticate against any backend service.
+   */
+  private generateMockToken(): string {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    const random = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    return `mock-jwt-token-${random}`;
   }
 }
