@@ -48,15 +48,12 @@ class SqsConsumer(
         isLenient = true
     }
 
-    // CHAOS: strict parser that rejects messages whose timestamp field is not
-    // a valid RFC 3339 string.  Legacy events emitted by older service versions
-    // use Unix epoch integers for timestamps, which are rejected here.
-    // When the chaos flag is active, every such message throws
-    // SerializationException, is never deleted from the queue, and becomes
-    // visible again after the SQS visibility timeout — causing queue depth to
-    // climb indefinitely while the consumer appears healthy.
+    // Strict parser that enforces JSON types but must still tolerate unknown
+    // keys: publishers (e.g. file-service) and SNS envelopes carry fields not
+    // declared on the consumer's models, and rejecting them would leave
+    // messages stuck in the queue forever.
     private val strictJson = Json {
-        ignoreUnknownKeys = false
+        ignoreUnknownKeys = true
         isLenient = false
     }
 
@@ -113,8 +110,11 @@ class SqsConsumer(
         }
     }
 
-    internal fun parseMessage(body: String): SqsNotificationMessage? {
-        val parser = if (chaosActive("chaos:notification-service:consumer_strict_schema")) strictJson else json
+    internal fun parseMessage(
+        body: String,
+        strict: Boolean = chaosActive("chaos:notification-service:consumer_strict_schema"),
+    ): SqsNotificationMessage? {
+        val parser = if (strict) strictJson else json
         return try {
             // Try parsing as direct message first
             parser.decodeFromString<SqsNotificationMessage>(body)

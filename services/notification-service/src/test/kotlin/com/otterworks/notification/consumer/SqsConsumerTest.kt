@@ -153,6 +153,64 @@ class SqsConsumerTest {
     }
 
     @Test
+    fun `strict parser accepts epoch timestamp and unknown fields`() {
+        val body = """
+            {
+                "eventType": "file_shared",
+                "fileId": "file-123",
+                "folderId": "folder-1",
+                "name": "report.pdf",
+                "mimeType": "application/pdf",
+                "sizeBytes": 1024,
+                "timestamp": 1704067200
+            }
+        """.trimIndent()
+
+        val event = consumer.parseMessage(body, strict = true)
+
+        assertNotNull(event)
+        assertEquals("file_shared", event.eventType)
+        assertEquals("2024-01-01T00:00:00Z", event.timestamp)
+    }
+
+    @Test
+    fun `strict parser accepts SNS envelope with extra fields`() {
+        val innerMessage = """{"eventType":"comment_added","userId":"user-1","timestamp":1704067200000}"""
+        val escapedInner = innerMessage.replace("\"", "\\\"")
+        val body = """
+            {
+                "Type": "Notification",
+                "MessageId": "msg-123",
+                "TopicArn": "arn:aws:sns:us-east-1:000000000000:test-topic",
+                "Timestamp": "2024-01-01T00:00:00.000Z",
+                "SignatureVersion": "1",
+                "Signature": "abc",
+                "SigningCertURL": "https://example.com/cert.pem",
+                "UnsubscribeURL": "https://example.com/unsub",
+                "Message": "$escapedInner"
+            }
+        """.trimIndent()
+
+        val event = consumer.parseMessage(body, strict = true)
+
+        assertNotNull(event)
+        assertEquals("comment_added", event.eventType)
+        assertEquals("2024-01-01T00:00:00Z", event.timestamp)
+    }
+
+    @Test
+    fun `parseMessage rejects null timestamp`() {
+        val body = """
+            {
+                "eventType": "file_shared",
+                "timestamp": null
+            }
+        """.trimIndent()
+
+        assertNull(consumer.parseMessage(body, strict = true))
+    }
+
+    @Test
     fun `parseMessage handles missing optional fields`() {
         val body = """
             {

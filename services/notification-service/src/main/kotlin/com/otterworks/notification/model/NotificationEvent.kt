@@ -2,12 +2,14 @@ package com.otterworks.notification.model
 
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.jsonPrimitive
 import java.time.Instant
 
@@ -24,15 +26,20 @@ object FlexibleTimestampSerializer : KSerializer<String> {
     override fun deserialize(decoder: Decoder): String {
         if (decoder is JsonDecoder) {
             val primitive = decoder.decodeJsonElement().jsonPrimitive
-            primitive.content.toLongOrNull()?.let { epoch ->
-                val instant = if (epoch >= 100_000_000_000L) {
-                    Instant.ofEpochMilli(epoch)
-                } else {
-                    Instant.ofEpochSecond(epoch)
-                }
-                return instant.toString()
+            if (primitive is JsonNull) {
+                throw SerializationException("timestamp must not be null")
             }
-            return primitive.content
+            if (primitive.isString) {
+                return primitive.content
+            }
+            val epoch = primitive.content.toLongOrNull()
+                ?: throw SerializationException("timestamp must be an RFC 3339 string or epoch number: ${primitive.content}")
+            val instant = if (epoch >= 100_000_000_000L) {
+                Instant.ofEpochMilli(epoch)
+            } else {
+                Instant.ofEpochSecond(epoch)
+            }
+            return instant.toString()
         }
         return decoder.decodeString()
     }
