@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -289,6 +290,71 @@ func TestJWTAuth_MalformedAuthHeader(t *testing.T) {
 			assert.Equal(t, http.StatusUnauthorized, rec.Code)
 		})
 	}
+}
+
+func TestJWTAuth_RejectsNoneAlgorithm(t *testing.T) {
+	cfg := JWTConfig{
+		Secret:     testSecret,
+		PublicPath: DefaultPublicPaths(),
+		PrefixPath: DefaultPrefixPaths(),
+	}
+
+	claims := JWTClaims{
+		UserID: "user-123",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodNone, claims)
+	tokenStr, err := token.SignedString(jwt.UnsafeAllowNoneSignatureType)
+	require.NoError(t, err)
+
+	handler := JWTAuth(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/files/list", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenStr)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestJWTAuth_RejectsOversizedToken(t *testing.T) {
+	cfg := JWTConfig{
+		Secret:     testSecret,
+		PublicPath: DefaultPublicPaths(),
+		PrefixPath: DefaultPrefixPaths(),
+	}
+
+	handler := JWTAuth(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// jwt/v5 >= 5.2.2 caps token size to prevent excessive memory
+	// allocation during parsing (CVE-2025-30204).
+	oversized := strings.Repeat("A", 64*1024)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/files/list", nil)
+	req.Header.Set("Authorization", "Bearer "+oversized)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestValidateToken_TamperedSignature(t *testing.T) {
+	claims := JWTClaims{
+		UserID: "user-123",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
+		},
+	}
+	tokenStr := generateTestToken(t, testSecret, claims)
+	tampered := tokenStr[:len(tokenStr)-2] + "xx"
+
+	_, err := validateToken(tampered, testSecret)
+	assert.Error(t, err)
 }
 
 func TestExtractBearerToken(t *testing.T) {
