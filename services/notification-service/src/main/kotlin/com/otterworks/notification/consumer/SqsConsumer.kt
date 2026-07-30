@@ -95,7 +95,15 @@ class SqsConsumer(
                                 logger.debug { "Deleted SQS message: ${msg.messageId}" }
                             } else {
                                 processingErrorsCounter?.increment()
-                                logger.warn { "Failed to parse SQS message: ${msg.messageId}" }
+                                logger.warn { "Failed to parse SQS message, removing from queue: ${msg.messageId}" }
+                                // Unparseable messages will never succeed on retry;
+                                // delete them so they don't re-enter the queue after
+                                // the visibility timeout and grow queue depth.
+                                val deleteRequest = DeleteMessageRequest {
+                                    queueUrl = config.sqsQueueUrl
+                                    receiptHandle = msg.receiptHandle
+                                }
+                                sqsClient.deleteMessage(deleteRequest)
                             }
                         } catch (e: Exception) {
                             logger.error(e) { "Error processing SQS message: ${msg.messageId}" }
