@@ -11,13 +11,12 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { AuthService } from '../../core/services/auth.service';
 
 @Component({
-  selector: 'app-login',
-  standalone: true,
-  imports: [
-    CommonModule, FormsModule, MatCardModule, MatInputModule,
-    MatButtonModule, MatIconModule, MatProgressSpinnerModule, MatFormFieldModule,
-  ],
-  template: `
+    selector: 'app-login',
+    imports: [
+        CommonModule, FormsModule, MatCardModule, MatInputModule,
+        MatButtonModule, MatIconModule, MatProgressSpinnerModule, MatFormFieldModule,
+    ],
+    template: `
     <div class="login-container">
       <mat-card class="login-card">
         <mat-card-header>
@@ -57,7 +56,7 @@ import { AuthService } from '../../core/services/auth.service';
       </mat-card>
     </div>
   `,
-  styles: [`
+    styles: [`
     .login-container {
       display: flex;
       justify-content: center;
@@ -124,7 +123,7 @@ import { AuthService } from '../../core/services/auth.service';
       font-size: 0.85rem;
       margin-bottom: 8px;
     }
-  `],
+  `]
 })
 export class LoginComponent {
   email = '';

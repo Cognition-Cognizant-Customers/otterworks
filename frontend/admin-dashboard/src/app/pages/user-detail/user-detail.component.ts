@@ -15,14 +15,13 @@ import { User, UserActivity } from '../../core/models/user.model';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.component';
 
 @Component({
-  selector: 'app-user-detail',
-  standalone: true,
-  imports: [
-    CommonModule, RouterModule, MatCardModule, MatIconModule, MatButtonModule,
-    MatProgressSpinnerModule, MatProgressBarModule, MatTableModule, MatChipsModule,
-    MatSnackBarModule, MatDialogModule,
-  ],
-  template: `
+    selector: 'app-user-detail',
+    imports: [
+        CommonModule, RouterModule, MatCardModule, MatIconModule, MatButtonModule,
+        MatProgressSpinnerModule, MatProgressBarModule, MatTableModule, MatChipsModule,
+        MatSnackBarModule, MatDialogModule,
+    ],
+    template: `
     <div class="page-container">
       <div class="page-header">
         <button mat-icon-button (click)="goBack()">
@@ -147,7 +146,7 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.c
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     .page-container { padding: 0; }
     .page-header { display: flex; align-items: center; gap: 8px; margin-bottom: 24px; }
     .page-title { font-size: 1.5rem; font-weight: 600; color: #333; margin: 0; }
@@ -209,7 +208,7 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.c
 
     .not-found .mat-icon { font-size: 64px; width: 64px; height: 64px; margin-bottom: 16px; }
     .not-found h2 { margin-bottom: 20px; }
-  `],
+  `]
 })
 export class UserDetailComponent implements OnInit {
   user: User | null = null;

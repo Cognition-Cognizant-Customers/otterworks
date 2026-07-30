@@ -22,15 +22,14 @@ import { Subscription, interval } from 'rxjs';
 const CHAOS_STATE_KEY = 'ow_admin_chaos_state';
 
 @Component({
-  selector: 'app-incidents',
-  standalone: true,
-  imports: [
-    CommonModule, FormsModule, MatCardModule, MatIconModule, MatButtonModule,
-    MatProgressSpinnerModule, MatChipsModule, MatInputModule, MatFormFieldModule,
-    MatSelectModule, MatSnackBarModule, MatBadgeModule, MatTooltipModule, MatSlideToggleModule,
-    MatDialogModule,
-  ],
-  template: `
+    selector: 'app-incidents',
+    imports: [
+        CommonModule, FormsModule, MatCardModule, MatIconModule, MatButtonModule,
+        MatProgressSpinnerModule, MatChipsModule, MatInputModule, MatFormFieldModule,
+        MatSelectModule, MatSnackBarModule, MatBadgeModule, MatTooltipModule, MatSlideToggleModule,
+        MatDialogModule,
+    ],
+    template: `
     <div class="page-container">
       <div class="page-header">
         <div>
@@ -357,7 +356,7 @@ const CHAOS_STATE_KEY = 'ow_admin_chaos_state';
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     .page-container{padding:0}.page-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
     .page-title{font-size:1.5rem;font-weight:600;color:#333;margin:0}.page-subtitle{font-size:.85rem;color:#777;margin:4px 0 0}
     .loading-container{display:flex;justify-content:center;padding:60px}
@@ -414,7 +413,7 @@ const CHAOS_STATE_KEY = 'ow_admin_chaos_state';
     .auto-investigate-toggle{display:flex;align-items:center;justify-content:space-between;padding:16px;background:#e8f0fe;border:1px solid #c2d7f9;border-radius:8px;margin-bottom:16px}
     .toggle-info{flex:1}.toggle-label{display:flex;align-items:center;gap:8px;font-weight:600;font-size:.9rem;color:#1565c0;margin-bottom:4px}
     .toggle-description{font-size:.8rem;color:#555;line-height:1.4}
-  `],
+  `]
 })
 export class IncidentsComponent implements OnInit, OnDestroy {
   incidents: Incident[] = [];
