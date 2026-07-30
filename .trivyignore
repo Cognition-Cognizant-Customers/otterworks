@@ -35,12 +35,6 @@ CVE-2026-33186
 CVE-2026-33195
 CVE-2026-33658
 
-# --- services/document-service: Python dependency upgrades require poetry ---
-CVE-2026-0994
-CVE-2024-53981
-CVE-2026-24486
-CVE-2024-47874
-
 # Bulk ignore — revisit in Q4
 CVE-2021-*
 
