@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
-import { tap, delay, map } from 'rxjs/operators';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { BehaviorSubject, Observable, throwError } from 'rxjs';
+import { catchError, map, tap } from 'rxjs/operators';
 import { Router } from '@angular/router';
 
 export interface AuthUser {
@@ -12,9 +12,17 @@ export interface AuthUser {
   token: string;
 }
 
-interface LoginResponse {
-  user: AuthUser;
-  token: string;
+interface AuthResponse {
+  accessToken: string;
+  refreshToken: string;
+  tokenType: string;
+  expiresIn: number;
+  user: {
+    id: string;
+    email: string;
+    displayName: string;
+    avatarUrl: string | null;
+  };
 }
 
 @Injectable({ providedIn: 'root' })
@@ -39,9 +47,31 @@ export class AuthService {
   }
 
   login(email: string, password: string): Observable<AuthUser> {
-    // In production, this would call the real API:
-    // return this.http.post<LoginResponse>('/api/v1/admin/auth/login', { email, password })
-    return this.mockLogin(email, password).pipe(
+    if (password.length < 1) {
+      return throwError(() => new Error('Invalid credentials'));
+    }
+
+    return this.http.post<AuthResponse>('/api/v1/auth/login', { email, password }).pipe(
+      map(response => {
+        const roles = this.getRolesFromToken(response.accessToken);
+        const role = roles.includes('ADMIN') ? 'admin' : 'user';
+        if (role !== 'admin') {
+          throw new Error('Insufficient privileges: admin access required');
+        }
+        return {
+          id: response.user.id,
+          email: response.user.email,
+          displayName: response.user.displayName,
+          role,
+          token: response.accessToken,
+        };
+      }),
+      catchError(error => {
+        if (error instanceof HttpErrorResponse && [400, 401].includes(error.status)) {
+          return throwError(() => new Error('Invalid credentials'));
+        }
+        return throwError(() => error instanceof Error ? error : new Error('Login failed'));
+      }),
       tap(user => {
         localStorage.setItem(this.TOKEN_KEY, user.token);
         localStorage.setItem(this.USER_KEY, JSON.stringify(user));
@@ -69,29 +99,18 @@ export class AuthService {
     return null;
   }
 
-  private mockLogin(email: string, password: string): Observable<AuthUser> {
-    if (password.length < 1) {
-      return throwError(() => new Error('Invalid credentials'));
+  private getRolesFromToken(token: string): string[] {
+    const payload = token.split('.')[1];
+    if (!payload) {
+      return [];
     }
-    const user: AuthUser = {
-      id: 'a0000000-0000-0000-0000-000000000001',
-      email,
-      displayName: 'Admin User',
-      role: 'admin',
-      token: this.generateMockToken(),
-    };
-    return of(user).pipe(delay(800));
-  }
 
-  /**
-   * Opaque, randomly generated placeholder credential for the mock login flow.
-   * It is deliberately not a JWT and carries no signature, so it cannot
-   * authenticate against any backend service.
-   */
-  private generateMockToken(): string {
-    const bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
-    const random = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-    return `mock-jwt-token-${random}`;
+    try {
+      const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const decoded = JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')));
+      return Array.isArray(decoded.roles) ? decoded.roles : [];
+    } catch {
+      return [];
+    }
   }
 }
