@@ -15,19 +15,19 @@ function gte(a: string, b: string): boolean {
 }
 
 describe('dependency security guards', () => {
-  it('resolves lodash to a version patched for CVE-2020-28500 and CVE-2021-23337 (>=4.17.21)', () => {
+  it('resolves lodash to a version patched for CVE-2020-28500, CVE-2021-23337, and CVE-2026-4800 (>=4.18.0)', () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { version } = require('lodash/package.json') as { version: string };
-    expect(gte(version, '4.17.21')).toBe(true);
+    expect(gte(version, '4.18.0')).toBe(true);
   });
 
-  it('declares a lodash range in package.json whose floor is >=4.17.21', () => {
+  it('declares a lodash range in package.json whose floor is >=4.18.0', () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const pkg = require('../../package.json') as {
       dependencies: Record<string, string>;
     };
     const range = pkg.dependencies['lodash'];
     expect(range).toBeDefined();
-    expect(gte(range, '4.17.21')).toBe(true);
+    expect(gte(range, '4.18.0')).toBe(true);
   });
 });
