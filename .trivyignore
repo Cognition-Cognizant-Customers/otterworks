@@ -2,13 +2,6 @@
 # These CVEs are acknowledged and tracked for remediation in future upgrade cycles.
 # report-service is excluded via skip-dirs (intentional legacy Java 8 service for upgrade exercise).
 
-# --- etl/airflow: requires Airflow 2.9+ upgrade (major version) ---
-CVE-2024-39877
-CVE-2024-45034
-CVE-2024-56373
-CVE-2025-54550
-CVE-2025-68675
-
 # --- frontend/admin-dashboard: requires Angular 19+ upgrade (major version) ---
 CVE-2025-66035
 CVE-2025-66412
