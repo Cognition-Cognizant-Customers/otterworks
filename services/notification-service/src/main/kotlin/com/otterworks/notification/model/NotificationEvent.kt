@@ -2,12 +2,14 @@ package com.otterworks.notification.model
 
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.jsonPrimitive
 import java.time.Instant
 
@@ -23,7 +25,11 @@ object FlexibleTimestampSerializer : KSerializer<String> {
 
     override fun deserialize(decoder: Decoder): String {
         val raw = if (decoder is JsonDecoder) {
-            decoder.decodeJsonElement().jsonPrimitive.content
+            val element = decoder.decodeJsonElement()
+            if (element is JsonNull) {
+                throw SerializationException("timestamp must not be null")
+            }
+            element.jsonPrimitive.content
         } else {
             decoder.decodeString()
         }
