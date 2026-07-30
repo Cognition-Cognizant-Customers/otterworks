@@ -86,9 +86,6 @@ After PR #31 (this PR):
 
 ## Known CVE Acknowledgements (.trivyignore)
 
-| CVE | Package | Reason |
-|-----|---------|--------|
-
 CVE-2026-33195 and CVE-2026-33658 (activestorage) were resolved by upgrading admin-service to Rails 7.2.3.2. Remaining acknowledgements are tracked in `.trivyignore`.
 
 ## Running CI Locally
