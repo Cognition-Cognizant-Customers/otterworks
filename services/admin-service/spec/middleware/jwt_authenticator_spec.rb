@@ -108,6 +108,15 @@ RSpec.describe JwtAuthenticator do
       expect(status).to eq(200)
     end
 
+    it 'rejects all tokens when no secret is configured (never verifies against an empty key)' do
+      allow(Rails.application.credentials).to receive(:jwt_secret).and_return(nil)
+      ENV['JWT_SECRET'] = nil
+      token = JWT.encode(valid_payload, nil, 'HS256')
+      status, _, body = make_request('/api/v1/admin/features', 'Authorization' => "Bearer #{token}")
+      expect(status).to eq(401)
+      expect(JSON.parse(body.first)['error']).to eq('Invalid or expired token')
+    end
+
     it 'prefers the credentials jwt_secret over the environment variable' do
       allow(Rails.application.credentials).to receive(:jwt_secret).and_return('credentials-secret')
       token = encode_token(valid_payload, key: 'credentials-secret')
