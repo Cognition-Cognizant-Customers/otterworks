@@ -114,3 +114,50 @@ where
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{render_metrics, RequestId, HTTP_REQUESTS_TOTAL, HTTP_REQUEST_DURATION};
+    use actix_web::{test as actix_test, web, App, HttpResponse};
+
+    #[test]
+    fn render_metrics_contains_registered_metric_names() {
+        HTTP_REQUESTS_TOTAL
+            .with_label_values(&["GET", "/metrics-test", "200"])
+            .inc();
+        HTTP_REQUEST_DURATION
+            .with_label_values(&["GET", "/metrics-test"])
+            .observe(0.001);
+
+        let rendered = render_metrics();
+
+        assert!(rendered.contains("http_requests_total"));
+        assert!(rendered.contains("http_request_duration_seconds"));
+    }
+
+    #[actix_web::test]
+    async fn request_id_middleware_records_successful_requests() {
+        let app = actix_test::init_service(App::new().wrap(RequestId).route(
+            "/health",
+            web::get().to(|| async { HttpResponse::Ok().finish() }),
+        ))
+        .await;
+        let before = HTTP_REQUESTS_TOTAL
+            .with_label_values(&["GET", "/health", "200"])
+            .get();
+
+        let response = actix_test::call_service(
+            &app,
+            actix_test::TestRequest::get().uri("/health").to_request(),
+        )
+        .await;
+
+        assert!(response.status().is_success());
+        assert_eq!(
+            HTTP_REQUESTS_TOTAL
+                .with_label_values(&["GET", "/health", "200"])
+                .get(),
+            before + 1
+        );
+    }
+}

@@ -232,6 +232,24 @@ fn resolve_owner_id(req: &HttpRequest, query_owner_id: Option<Uuid>) -> Option<U
     header_owner_id.or(query_owner_id)
 }
 
+fn paginate<T>(
+    items: Vec<T>,
+    page: Option<u32>,
+    page_size: Option<u32>,
+) -> (Vec<T>, usize, u32, u32) {
+    let page = page.unwrap_or(1).max(1);
+    let page_size = page_size.unwrap_or(50).min(100);
+    let total = items.len();
+    let start = (page - 1).saturating_mul(page_size) as usize;
+    let paged = items
+        .into_iter()
+        .skip(start)
+        .take(page_size as usize)
+        .collect();
+
+    (paged, total, page, page_size)
+}
+
 pub async fn list_files(
     req: HttpRequest,
     meta: web::Data<MetadataClient>,
@@ -243,15 +261,7 @@ pub async fn list_files(
         .list_files(query.folder_id, owner_id, include_trashed)
         .await?;
 
-    let page = query.page.unwrap_or(1).max(1);
-    let page_size = query.page_size.unwrap_or(50).min(100);
-    let total = files.len();
-    let start = (page - 1).saturating_mul(page_size) as usize;
-    let paged: Vec<FileMetadata> = files
-        .into_iter()
-        .skip(start)
-        .take(page_size as usize)
-        .collect();
+    let (paged, total, page, page_size) = paginate(files, query.page, query.page_size);
 
     Ok(HttpResponse::Ok().json(ListFilesResponse {
         files: paged,
@@ -288,15 +298,7 @@ pub async fn list_shared_files(
         }
     }
 
-    let page = query.page.unwrap_or(1).max(1);
-    let page_size = query.page_size.unwrap_or(50).min(100);
-    let total = files.len();
-    let start = (page - 1).saturating_mul(page_size) as usize;
-    let paged: Vec<FileMetadata> = files
-        .into_iter()
-        .skip(start)
-        .take(page_size as usize)
-        .collect();
+    let (paged, total, page, page_size) = paginate(files, query.page, query.page_size);
 
     Ok(HttpResponse::Ok().json(ListFilesResponse {
         files: paged,
@@ -314,15 +316,7 @@ pub async fn list_trashed(
     let owner_id = resolve_owner_id(&req, query.owner_id);
     let files = meta.list_trashed(owner_id).await?;
 
-    let page = query.page.unwrap_or(1).max(1);
-    let page_size = query.page_size.unwrap_or(50).min(100);
-    let total = files.len();
-    let start = (page - 1).saturating_mul(page_size) as usize;
-    let paged: Vec<FileMetadata> = files
-        .into_iter()
-        .skip(start)
-        .take(page_size as usize)
-        .collect();
+    let (paged, total, page, page_size) = paginate(files, query.page, query.page_size);
 
     Ok(HttpResponse::Ok().json(ListFilesResponse {
         files: paged,
@@ -331,6 +325,7 @@ pub async fn list_trashed(
         page_size,
     }))
 }
+
 pub async fn delete_file(
     s3: web::Data<S3Client>,
     meta: web::Data<MetadataClient>,
@@ -417,7 +412,7 @@ pub async fn rename_file(
             file.folder_id.as_ref(),
             &file.name,
             &file.mime_type,
-            file.size_bytes as u64,
+            file.size_bytes,
         )
         .await;
 
@@ -475,7 +470,7 @@ pub async fn restore_file(
             file.folder_id.as_ref(),
             &file.name,
             &file.mime_type,
-            file.size_bytes as u64,
+            file.size_bytes,
         )
         .await;
 
@@ -709,7 +704,9 @@ pub async fn list_activity(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{paginate, resolve_owner_id, *};
+    use actix_web::test::TestRequest;
+    use uuid::Uuid;
 
     #[actix_rt::test]
     async fn test_health_endpoint() {
@@ -721,5 +718,93 @@ mod tests {
     async fn test_metrics_endpoint() {
         let resp = metrics().await;
         assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+    }
+
+    #[test]
+    fn resolve_owner_id_prefers_header() {
+        let header_id = Uuid::new_v4();
+        let query_id = Uuid::new_v4();
+        let req = TestRequest::default()
+            .insert_header(("X-User-ID", header_id.to_string()))
+            .to_http_request();
+
+        assert_eq!(resolve_owner_id(&req, Some(query_id)), Some(header_id));
+    }
+
+    #[test]
+    fn resolve_owner_id_falls_back_to_query() {
+        let query_id = Uuid::new_v4();
+        let req = TestRequest::default().to_http_request();
+
+        assert_eq!(resolve_owner_id(&req, Some(query_id)), Some(query_id));
+    }
+
+    #[test]
+    fn resolve_owner_id_returns_none_without_header_or_query() {
+        let req = TestRequest::default().to_http_request();
+
+        assert_eq!(resolve_owner_id(&req, None), None);
+    }
+
+    #[test]
+    fn resolve_owner_id_falls_back_when_header_is_invalid() {
+        let query_id = Uuid::new_v4();
+        let req = TestRequest::default()
+            .insert_header(("X-User-ID", "not-a-uuid"))
+            .to_http_request();
+
+        assert_eq!(resolve_owner_id(&req, Some(query_id)), Some(query_id));
+    }
+
+    #[test]
+    fn paginate_uses_defaults() {
+        let (items, total, page, page_size) = paginate(vec![1, 2, 3], None, None);
+
+        assert_eq!(items, vec![1, 2, 3]);
+        assert_eq!(total, 3);
+        assert_eq!(page, 1);
+        assert_eq!(page_size, 50);
+    }
+
+    #[test]
+    fn paginate_clamps_page_to_one() {
+        let (items, total, page, page_size) = paginate(vec![1, 2, 3], Some(0), Some(2));
+
+        assert_eq!(items, vec![1, 2]);
+        assert_eq!(total, 3);
+        assert_eq!(page, 1);
+        assert_eq!(page_size, 2);
+    }
+
+    #[test]
+    fn paginate_clamps_page_size_to_one_hundred() {
+        let input: Vec<_> = (0..101).collect();
+        let (items, total, page, page_size) = paginate(input, Some(1), Some(101));
+
+        assert_eq!(items.len(), 100);
+        assert_eq!(items[99], 99);
+        assert_eq!(total, 101);
+        assert_eq!(page, 1);
+        assert_eq!(page_size, 100);
+    }
+
+    #[test]
+    fn paginate_returns_empty_for_out_of_range_page() {
+        let (items, total, page, page_size) = paginate(vec![1, 2, 3], Some(3), Some(2));
+
+        assert!(items.is_empty());
+        assert_eq!(total, 3);
+        assert_eq!(page, 3);
+        assert_eq!(page_size, 2);
+    }
+
+    #[test]
+    fn paginate_saturates_huge_page_offset() {
+        let (items, total, page, page_size) = paginate(vec![1, 2, 3], Some(u32::MAX), Some(100));
+
+        assert!(items.is_empty());
+        assert_eq!(total, 3);
+        assert_eq!(page, u32::MAX);
+        assert_eq!(page_size, 100);
     }
 }

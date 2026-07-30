@@ -102,3 +102,157 @@ impl fmt::Display for ErrorResponse {
         write!(f, "{}: {}", self.error, self.message)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{ErrorResponse, ServiceError};
+    use actix_web::{body::to_bytes, http::StatusCode, ResponseError};
+
+    #[actix_web::test]
+    async fn error_responses_have_expected_status_and_code() {
+        let cases = vec![
+            (
+                ServiceError::FileNotFound("file".into()),
+                StatusCode::NOT_FOUND,
+                "file_not_found",
+            ),
+            (
+                ServiceError::FolderNotFound("folder".into()),
+                StatusCode::NOT_FOUND,
+                "folder_not_found",
+            ),
+            (
+                ServiceError::VersionNotFound("version".into()),
+                StatusCode::NOT_FOUND,
+                "version_not_found",
+            ),
+            (
+                ServiceError::ShareNotFound("share".into()),
+                StatusCode::NOT_FOUND,
+                "share_not_found",
+            ),
+            (
+                ServiceError::BadRequest("bad input".into()),
+                StatusCode::BAD_REQUEST,
+                "bad_request",
+            ),
+            (
+                ServiceError::FileTooLarge {
+                    max_bytes: 100,
+                    actual_bytes: 101,
+                },
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "file_too_large",
+            ),
+            (
+                ServiceError::Unauthorized("no token".into()),
+                StatusCode::UNAUTHORIZED,
+                "unauthorized",
+            ),
+            (
+                ServiceError::Forbidden("no access".into()),
+                StatusCode::FORBIDDEN,
+                "forbidden",
+            ),
+            (
+                ServiceError::S3Error("storage".into()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "storage_error",
+            ),
+            (
+                ServiceError::DynamoError("metadata".into()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "metadata_error",
+            ),
+            (
+                ServiceError::SnsError("event".into()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "event_error",
+            ),
+            (
+                ServiceError::Internal("internal".into()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+            ),
+        ];
+
+        for (error, expected_status, expected_code) in cases {
+            let response = error.error_response();
+            assert_eq!(response.status(), expected_status);
+            let body: serde_json::Value = serde_json::from_slice(
+                &to_bytes(response.into_body()).await.expect("response body"),
+            )
+            .expect("JSON error response");
+            assert_eq!(body["error"], expected_code);
+        }
+    }
+
+    #[test]
+    fn service_error_display_messages_match_thiserror_annotations() {
+        assert_eq!(
+            ServiceError::FileNotFound("file".into()).to_string(),
+            "File not found: file"
+        );
+        assert_eq!(
+            ServiceError::FolderNotFound("folder".into()).to_string(),
+            "Folder not found: folder"
+        );
+        assert_eq!(
+            ServiceError::VersionNotFound("version".into()).to_string(),
+            "Version not found: version"
+        );
+        assert_eq!(
+            ServiceError::ShareNotFound("share".into()).to_string(),
+            "Share not found: share"
+        );
+        assert_eq!(
+            ServiceError::BadRequest("bad input".into()).to_string(),
+            "Bad request: bad input"
+        );
+        assert_eq!(
+            ServiceError::FileTooLarge {
+                max_bytes: 100,
+                actual_bytes: 101
+            }
+            .to_string(),
+            "File too large: max 100 bytes, got 101 bytes"
+        );
+        assert_eq!(
+            ServiceError::Unauthorized("no token".into()).to_string(),
+            "Unauthorized: no token"
+        );
+        assert_eq!(
+            ServiceError::Forbidden("no access".into()).to_string(),
+            "Forbidden: no access"
+        );
+        assert_eq!(
+            ServiceError::S3Error("storage".into()).to_string(),
+            "S3 error: storage"
+        );
+        assert_eq!(
+            ServiceError::DynamoError("metadata".into()).to_string(),
+            "DynamoDB error: metadata"
+        );
+        assert_eq!(
+            ServiceError::SnsError("event".into()).to_string(),
+            "SNS error: event"
+        );
+        assert_eq!(
+            ServiceError::Internal("internal".into()).to_string(),
+            "Internal error: internal"
+        );
+    }
+
+    #[test]
+    fn error_response_display_formats_code_and_message() {
+        let response = ErrorResponse {
+            error: "bad_request".into(),
+            message: "Bad request: invalid name".into(),
+        };
+
+        assert_eq!(
+            response.to_string(),
+            "bad_request: Bad request: invalid name"
+        );
+    }
+}

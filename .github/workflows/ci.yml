@@ -131,6 +131,52 @@ jobs:
       - run: cargo test
       - run: cargo build --release
 
+  # Rust - File Service LocalStack integration tests
+  file-service-integration:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.file-service == 'true'
+    runs-on: ubuntu-latest
+    services:
+      localstack:
+        image: localstack/localstack:3.8
+        env:
+          SERVICES: s3,sns,dynamodb
+          DEFAULT_REGION: us-east-1
+          DOCKER_HOST: unix:///var/run/docker.sock
+        ports:
+          - 4566:4566
+        options: >-
+          --health-cmd "curl -f http://localhost:4566/_localstack/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    defaults:
+      run:
+        working-directory: services/file-service
+    env:
+      AWS_ENDPOINT_URL: http://localhost:4566
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_SESSION_TOKEN: test
+      AWS_EC2_METADATA_DISABLED: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - run: cargo test --features integration
+
   # Python - Document Service
   document-service:
     needs: detect-changes

@@ -200,3 +200,71 @@ pub struct ActivityQuery {
 pub struct ActivityResponse {
     pub items: Vec<ActivityItem>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{ActivityItem, FileDetailResponse, FileMetadata, FileShare, SharePermission};
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    #[test]
+    fn share_permission_round_trips_as_lowercase() {
+        for permission in [SharePermission::Viewer, SharePermission::Editor] {
+            let serialized = serde_json::to_string(&permission).expect("serialize permission");
+            let deserialized: SharePermission =
+                serde_json::from_str(&serialized).expect("deserialize permission");
+
+            assert_eq!(deserialized, permission);
+            assert!(serialized == "\"viewer\"" || serialized == "\"editor\"");
+        }
+    }
+
+    #[test]
+    fn file_detail_response_flattens_file_fields() {
+        let id = Uuid::new_v4();
+        let owner_id = Uuid::new_v4();
+        let now = Utc::now();
+        let file = FileMetadata {
+            id,
+            name: "notes.txt".into(),
+            mime_type: "text/plain".into(),
+            size_bytes: 12,
+            s3_key: "files/notes.txt".into(),
+            folder_id: None,
+            owner_id,
+            version: 1,
+            is_trashed: false,
+            created_at: now,
+            updated_at: now,
+        };
+        let response = FileDetailResponse {
+            file,
+            shared_with: Vec::<FileShare>::new(),
+        };
+
+        let value = serde_json::to_value(response).expect("serialize file detail");
+
+        assert_eq!(value["id"], id.to_string());
+        assert_eq!(value["name"], "notes.txt");
+        assert_eq!(value["shared_with"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn activity_item_uses_type_field_name() {
+        let item = ActivityItem {
+            id: "activity-1".into(),
+            activity_type: "uploaded".into(),
+            description: "Uploaded a file".into(),
+            actor_name: "Alice".into(),
+            resource_name: "notes.txt".into(),
+            resource_type: "file".into(),
+            resource_id: "file-1".into(),
+            created_at: "2024-01-01T00:00:00Z".into(),
+        };
+
+        let value = serde_json::to_value(item).expect("serialize activity item");
+
+        assert_eq!(value["type"], "uploaded");
+        assert!(value.get("activity_type").is_none());
+    }
+}

@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 authors = ["OtterWorks Engineering"]
 
+[features]
+integration = []
+
 [dependencies]
 actix-web = "4"
 actix-multipart = "0.7"
@@ -36,6 +39,7 @@ lazy_static = "1.4"
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
 
 [dev-dependencies]
+actix-http = "3"
 actix-rt = "2"
 actix-web = "4"
 tokio = { version = "1", features = ["full", "test-util"] }
