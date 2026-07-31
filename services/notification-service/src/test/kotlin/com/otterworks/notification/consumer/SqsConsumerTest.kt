@@ -2,12 +2,14 @@ package com.otterworks.notification.consumer
 
 import aws.sdk.kotlin.services.sqs.SqsClient
 import com.otterworks.notification.config.AppConfig
+import com.otterworks.notification.model.SqsNotificationMessage
 import com.otterworks.notification.service.NotificationService
 import io.mockk.mockk
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlinx.serialization.json.Json
 
 class SqsConsumerTest {
 
@@ -118,6 +120,45 @@ class SqsConsumerTest {
         assertEquals("mentioned-user", event.mentionedUserId)
         assertEquals("actor-2", event.actorId)
         assertEquals("doc-789", event.documentId)
+    }
+
+    @Test
+    fun `parseMessage parses legacy epoch-seconds timestamp`() {
+        val body = """
+            {
+                "eventType": "file_shared",
+                "fileId": "file-123",
+                "timestamp": 1704067200
+            }
+        """.trimIndent()
+
+        val event = consumer.parseMessage(body)
+
+        assertNotNull(event)
+        assertEquals("2024-01-01T00:00:00Z", event.timestamp)
+    }
+
+    @Test
+    fun `strict parser accepts legacy epoch timestamps`() {
+        val strictJson = Json {
+            ignoreUnknownKeys = false
+            isLenient = false
+        }
+
+        val seconds = strictJson.decodeFromString<SqsNotificationMessage>(
+            """{"eventType":"file_shared","timestamp":1704067200}""",
+        )
+        assertEquals("2024-01-01T00:00:00Z", seconds.timestamp)
+
+        val millis = strictJson.decodeFromString<SqsNotificationMessage>(
+            """{"eventType":"file_shared","timestamp":1704067200000}""",
+        )
+        assertEquals("2024-01-01T00:00:00Z", millis.timestamp)
+
+        val rfc3339 = strictJson.decodeFromString<SqsNotificationMessage>(
+            """{"eventType":"file_shared","timestamp":"2024-01-01T00:00:00Z"}""",
+        )
+        assertEquals("2024-01-01T00:00:00Z", rfc3339.timestamp)
     }
 
     @Test
