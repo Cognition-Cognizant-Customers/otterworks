@@ -74,6 +74,25 @@ class SqsConsumerTest {
     }
 
     @Test
+    fun `parseMessage parses legacy message with epoch integer timestamp`() {
+        val body = """
+            {
+                "eventType": "file_shared",
+                "fileId": "file-123",
+                "ownerId": "owner-1",
+                "sharedWithUserId": "user-2",
+                "timestamp": 1704067200
+            }
+        """.trimIndent()
+
+        val event = consumer.parseMessage(body)
+
+        assertNotNull(event)
+        assertEquals("file_shared", event.eventType)
+        assertEquals("1704067200", event.timestamp)
+    }
+
+    @Test
     fun `parseMessage returns null for invalid JSON`() {
         val event = consumer.parseMessage("not json at all")
         assertNull(event)
