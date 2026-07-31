@@ -1,6 +1,43 @@
 package com.otterworks.notification.model
 
+import java.time.Instant
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
+
+/**
+ * Deserializes event timestamps that may arrive either as RFC 3339 strings
+ * or as Unix epoch numbers (seconds or milliseconds) emitted by legacy
+ * service versions. Epoch values are normalized to RFC 3339 strings.
+ */
+object FlexibleTimestampSerializer : KSerializer<String> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("FlexibleTimestamp", PrimitiveKind.STRING)
+
+    override fun deserialize(decoder: Decoder): String {
+        val jsonDecoder = decoder as? JsonDecoder ?: return decoder.decodeString()
+        val primitive: JsonPrimitive = jsonDecoder.decodeJsonElement().jsonPrimitive
+        if (primitive.isString) return primitive.content
+        val epoch = primitive.content.toLongOrNull() ?: return primitive.content
+        val instant = if (epoch >= 100_000_000_000L) {
+            Instant.ofEpochMilli(epoch)
+        } else {
+            Instant.ofEpochSecond(epoch)
+        }
+        return instant.toString()
+    }
+
+    override fun serialize(encoder: Encoder, value: String) {
+        encoder.encodeString(value)
+    }
+}
 
 @Serializable
 enum class EventType {
@@ -25,6 +62,7 @@ data class NotificationEvent(
     val title: String = "",
     val message: String = "",
     val metadata: Map<String, String> = emptyMap(),
+    @Serializable(with = FlexibleTimestampSerializer::class)
     val timestamp: String,
 )
 
@@ -39,6 +77,7 @@ data class SqsNotificationMessage(
     val userId: String = "",
     val actorId: String = "",
     val mentionedUserId: String = "",
+    @Serializable(with = FlexibleTimestampSerializer::class)
     val timestamp: String,
 )
 
