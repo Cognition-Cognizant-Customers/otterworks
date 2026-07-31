@@ -7,7 +7,9 @@ import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
@@ -21,8 +23,11 @@ object FlexibleTimestampSerializer : KSerializer<String> {
     override fun deserialize(decoder: Decoder): String {
         val jsonDecoder = decoder as? JsonDecoder ?: return decoder.decodeString()
         val element = jsonDecoder.decodeJsonElement()
-        return (element as? JsonPrimitive)?.content
-            ?: throw kotlinx.serialization.SerializationException("Expected primitive timestamp, got $element")
+        val primitive = element as? JsonPrimitive
+        if (primitive == null || primitive is JsonNull) {
+            throw SerializationException("Expected primitive timestamp, got $element")
+        }
+        return primitive.content
     }
 
     override fun serialize(encoder: Encoder, value: String) {
