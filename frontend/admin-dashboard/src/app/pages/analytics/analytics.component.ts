@@ -10,13 +10,12 @@ import { AdminApiService } from '../../core/services/admin-api.service';
 import { AnalyticsReport } from '../../core/models/analytics.model';
 
 @Component({
-  selector: 'app-analytics',
-  standalone: true,
-  imports: [
-    CommonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule,
-    MatButtonModule, NgChartsModule,
-  ],
-  template: `
+    selector: 'app-analytics',
+    imports: [
+        CommonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule,
+        MatButtonModule, NgChartsModule,
+    ],
+    template: `
     <div class="page-container">
       <h1 class="page-title">Analytics</h1>
 
@@ -97,7 +96,7 @@ import { AnalyticsReport } from '../../core/models/analytics.model';
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     .page-container { padding: 0; }
     .page-title { font-size: 1.5rem; font-weight: 600; color: #333; margin-bottom: 24px; }
     .loading-container { display: flex; justify-content: center; padding: 60px; }
@@ -115,7 +114,7 @@ import { AnalyticsReport } from '../../core/models/analytics.model';
       .charts-grid { grid-template-columns: 1fr; }
       .span-2 { grid-column: span 1; }
     }
-  `],
+  `]
 })
 export class AnalyticsComponent implements OnInit {
   loading = true;
