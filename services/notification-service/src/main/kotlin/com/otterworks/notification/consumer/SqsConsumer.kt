@@ -95,15 +95,10 @@ class SqsConsumer(
                                 logger.debug { "Deleted SQS message: ${msg.messageId}" }
                             } else {
                                 processingErrorsCounter?.increment()
-                                logger.warn { "Failed to parse SQS message, removing from queue: ${msg.messageId}" }
-                                // Malformed messages will never parse successfully; delete
-                                // them so they don't reappear after the visibility timeout
-                                // and grow the queue unboundedly.
-                                val deleteRequest = DeleteMessageRequest {
-                                    queueUrl = config.sqsQueueUrl
-                                    receiptHandle = msg.receiptHandle
-                                }
-                                sqsClient.deleteMessage(deleteRequest)
+                                // Leave the message in the queue; the SQS redrive policy
+                                // moves it to the notifications DLQ after maxReceiveCount,
+                                // keeping the payload inspectable and redrivable.
+                                logger.warn { "Failed to parse SQS message, leaving for DLQ redrive: ${msg.messageId}" }
                             }
                         } catch (e: Exception) {
                             logger.error(e) { "Error processing SQS message: ${msg.messageId}" }
