@@ -102,3 +102,120 @@ impl fmt::Display for ErrorResponse {
         write!(f, "{}: {}", self.error, self.message)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use actix_web::http::StatusCode;
+
+    fn cases() -> Vec<(ServiceError, StatusCode, &'static str)> {
+        vec![
+            (
+                ServiceError::FileNotFound("f".into()),
+                StatusCode::NOT_FOUND,
+                "file_not_found",
+            ),
+            (
+                ServiceError::FolderNotFound("f".into()),
+                StatusCode::NOT_FOUND,
+                "folder_not_found",
+            ),
+            (
+                ServiceError::VersionNotFound("v".into()),
+                StatusCode::NOT_FOUND,
+                "version_not_found",
+            ),
+            (
+                ServiceError::ShareNotFound("s".into()),
+                StatusCode::NOT_FOUND,
+                "share_not_found",
+            ),
+            (
+                ServiceError::BadRequest("b".into()),
+                StatusCode::BAD_REQUEST,
+                "bad_request",
+            ),
+            (
+                ServiceError::FileTooLarge {
+                    max_bytes: 10,
+                    actual_bytes: 11,
+                },
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "file_too_large",
+            ),
+            (
+                ServiceError::Unauthorized("u".into()),
+                StatusCode::UNAUTHORIZED,
+                "unauthorized",
+            ),
+            (
+                ServiceError::Forbidden("f".into()),
+                StatusCode::FORBIDDEN,
+                "forbidden",
+            ),
+            (
+                ServiceError::S3Error("boom".into()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "storage_error",
+            ),
+            (
+                ServiceError::DynamoError("boom".into()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "metadata_error",
+            ),
+            (
+                ServiceError::SnsError("boom".into()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "event_error",
+            ),
+            (
+                ServiceError::Internal("boom".into()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+            ),
+        ]
+    }
+
+    #[test]
+    fn every_variant_maps_to_its_status_and_error_type() {
+        for (error, status, error_type) in cases() {
+            let response = error.error_response();
+            assert_eq!(response.status(), status, "status for {error_type}");
+            assert_eq!(
+                response.headers().get("content-type").unwrap(),
+                "application/json",
+                "content-type for {error_type}"
+            );
+        }
+    }
+
+    #[actix_rt::test]
+    async fn the_body_carries_the_error_type_and_message() {
+        let error = ServiceError::FileTooLarge {
+            max_bytes: 10,
+            actual_bytes: 11,
+        };
+        let expected_message = error.to_string();
+
+        let body = actix_web::body::to_bytes(error.error_response().into_body())
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(json["error"], "file_too_large");
+        assert_eq!(json["message"], expected_message);
+        assert_eq!(
+            expected_message,
+            "File too large: max 10 bytes, got 11 bytes"
+        );
+    }
+
+    #[test]
+    fn error_response_displays_as_type_and_message() {
+        let response = ErrorResponse {
+            error: "bad_request".into(),
+            message: "owner_id is required".into(),
+        };
+        assert_eq!(response.to_string(), "bad_request: owner_id is required");
+    }
+}

@@ -231,6 +231,10 @@ generation / image signing (cosign).
   `shared/events/schemas/`.
 - **Testdata harness** under `testdata/` (generated + harness) with namespaced Postgres schemas
   (see `.agents/skills/synthetic-testdata-generation`).
+- `file-service` (Rust) is covered end to end in-process: S3/DynamoDB/SNS are driven through the
+  AWS SDK's static replay HTTP client and Redis through an in-test RESP server
+  (`src/test_support.rs`), so upload/download/delete, the `upload_s3_error` chaos branch, error
+  mapping, config parsing and DTO contracts run under `cargo test` with no LocalStack.
 
 **Gap / what a demo needs.** `shared/proto/` is a **README stub** (no protobuf/gRPC contracts
 despite the architecture referencing them); `shared/openapi/` covers only 3 of 11 services. No

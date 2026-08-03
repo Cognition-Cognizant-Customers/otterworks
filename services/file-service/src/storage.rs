@@ -125,3 +125,152 @@ impl S3Client {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{expected_request, s3_body, s3_client, s3_error, s3_ok, TEST_BUCKET};
+    use aws_smithy_http_client::test_util::ReplayEvent;
+
+    const KEY: &str = "files/owner/file-1";
+
+    fn object_uri() -> String {
+        format!("http://s3.local/{TEST_BUCKET}/{KEY}")
+    }
+
+    #[tokio::test]
+    async fn upload_object_puts_body_to_the_configured_bucket() {
+        let (s3, http) = s3_client(vec![ReplayEvent::new(
+            expected_request(&object_uri()),
+            s3_ok(),
+        )]);
+
+        s3.upload_object(KEY, Bytes::from_static(b"hello"), "text/plain")
+            .await
+            .expect("upload should succeed");
+
+        let request = http.actual_requests().next().unwrap();
+        assert_eq!(request.method(), "PUT");
+        assert!(request.uri().starts_with(&object_uri()));
+        assert_eq!(request.headers().get("content-type"), Some("text/plain"));
+        assert_eq!(request.body().bytes(), Some(&b"hello"[..]));
+    }
+
+    #[tokio::test]
+    async fn upload_object_maps_s3_failure_to_service_error() {
+        let (s3, _http) = s3_client(vec![ReplayEvent::new(
+            expected_request(&object_uri()),
+            s3_error(404, "NoSuchBucket"),
+        )]);
+
+        let err = s3
+            .upload_object(KEY, Bytes::from_static(b"hello"), "text/plain")
+            .await
+            .expect_err("missing bucket should fail");
+
+        assert!(
+            matches!(&err, ServiceError::S3Error(msg) if msg.starts_with("upload failed")),
+            "unexpected error: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn download_object_returns_body_bytes() {
+        let (s3, http) = s3_client(vec![ReplayEvent::new(
+            expected_request(&object_uri()),
+            s3_body("file contents"),
+        )]);
+
+        let body = s3.download_object(KEY).await.expect("download should work");
+
+        assert_eq!(body, Bytes::from_static(b"file contents"));
+        assert_eq!(http.actual_requests().next().unwrap().method(), "GET");
+    }
+
+    #[tokio::test]
+    async fn download_object_maps_missing_key_to_service_error() {
+        let (s3, _http) = s3_client(vec![ReplayEvent::new(
+            expected_request(&object_uri()),
+            s3_error(404, "NoSuchKey"),
+        )]);
+
+        let err = s3
+            .download_object(KEY)
+            .await
+            .expect_err("missing key should fail");
+
+        assert!(
+            matches!(&err, ServiceError::S3Error(msg) if msg.starts_with("download failed")),
+            "unexpected error: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn delete_object_issues_a_delete() {
+        let (s3, http) = s3_client(vec![ReplayEvent::new(
+            expected_request(&object_uri()),
+            http::Response::builder()
+                .status(204)
+                .body(aws_smithy_types::body::SdkBody::empty())
+                .unwrap(),
+        )]);
+
+        s3.delete_object(KEY).await.expect("delete should succeed");
+
+        let request = http.actual_requests().next().unwrap();
+        assert_eq!(request.method(), "DELETE");
+        assert!(request.uri().starts_with(&object_uri()));
+    }
+
+    #[tokio::test]
+    async fn delete_object_maps_s3_failure_to_service_error() {
+        let (s3, _http) = s3_client(vec![ReplayEvent::new(
+            expected_request(&object_uri()),
+            s3_error(403, "AccessDenied"),
+        )]);
+
+        let err = s3
+            .delete_object(KEY)
+            .await
+            .expect_err("access denied should fail");
+
+        assert!(
+            matches!(&err, ServiceError::S3Error(msg) if msg.starts_with("delete failed")),
+            "unexpected error: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn copy_object_uses_bucket_qualified_source() {
+        let (s3, http) = s3_client(vec![ReplayEvent::new(
+            expected_request(&format!("http://s3.local/{TEST_BUCKET}/files/owner/file-2")),
+            s3_body("<CopyObjectResult></CopyObjectResult>"),
+        )]);
+
+        s3.copy_object(KEY, "files/owner/file-2")
+            .await
+            .expect("copy should succeed");
+
+        let request = http.actual_requests().next().unwrap();
+        assert_eq!(
+            request.headers().get("x-amz-copy-source"),
+            Some(format!("{TEST_BUCKET}/{KEY}").as_str())
+        );
+    }
+
+    #[tokio::test]
+    async fn presigned_download_url_is_signed_and_offline() {
+        // Presigning performs no HTTP call, hence the empty replay list.
+        let (s3, http) = s3_client(vec![]);
+
+        let url = s3
+            .presigned_download_url(KEY, 900)
+            .await
+            .expect("presign should succeed");
+
+        assert!(url.starts_with(&object_uri()), "unexpected url: {url}");
+        assert!(url.contains("X-Amz-Signature="), "unexpected url: {url}");
+        assert!(url.contains("X-Amz-Expires=900"), "unexpected url: {url}");
+        assert_eq!(http.actual_requests().count(), 0);
+    }
+}

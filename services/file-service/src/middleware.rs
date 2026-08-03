@@ -114,3 +114,64 @@ where
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use actix_web::{test, web, App, HttpResponse};
+
+    fn request_count(method: &str, path: &str, status: &str) -> u64 {
+        HTTP_REQUESTS_TOTAL
+            .with_label_values(&[method, path, status])
+            .get()
+    }
+
+    #[actix_rt::test]
+    async fn matched_requests_are_counted_under_their_route_pattern() {
+        let app = test::init_service(
+            App::new()
+                .wrap(RequestId)
+                .route("/probe/{id}", web::get().to(HttpResponse::Ok)),
+        )
+        .await;
+
+        let before = request_count("GET", "/probe/{id}", "200");
+        let resp =
+            test::call_service(&app, test::TestRequest::get().uri("/probe/42").to_request()).await;
+
+        assert!(resp.status().is_success());
+        assert_eq!(request_count("GET", "/probe/{id}", "200"), before + 1);
+    }
+
+    #[actix_rt::test]
+    async fn unmatched_requests_are_counted_without_leaking_the_raw_path() {
+        let app = test::init_service(
+            App::new()
+                .wrap(RequestId)
+                .route("/probe", web::get().to(HttpResponse::Ok)),
+        )
+        .await;
+
+        let before = request_count("GET", "unmatched", "404");
+        let resp =
+            test::call_service(&app, test::TestRequest::get().uri("/nope").to_request()).await;
+
+        assert_eq!(resp.status(), actix_web::http::StatusCode::NOT_FOUND);
+        assert_eq!(request_count("GET", "unmatched", "404"), before + 1);
+    }
+
+    #[actix_rt::test]
+    async fn rendered_metrics_expose_the_http_families() {
+        let app = test::init_service(
+            App::new()
+                .wrap(RequestId)
+                .route("/probe", web::get().to(HttpResponse::Ok)),
+        )
+        .await;
+        test::call_service(&app, test::TestRequest::get().uri("/probe").to_request()).await;
+
+        let rendered = render_metrics();
+        assert!(rendered.contains("http_requests_total"));
+        assert!(rendered.contains("http_request_duration_seconds_bucket"));
+    }
+}

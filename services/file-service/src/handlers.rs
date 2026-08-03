@@ -24,6 +24,38 @@ use crate::models::{
 };
 use crate::storage::S3Client;
 
+/// Register every route the service exposes.
+pub fn configure_routes(cfg: &mut web::ServiceConfig) {
+    cfg.route("/health", web::get().to(health))
+        .route("/metrics", web::get().to(metrics))
+        .service(
+            web::scope("/api/v1/files")
+                .route("/upload", web::post().to(upload_file))
+                .route("/shared", web::get().to(list_shared_files))
+                .route("/trash", web::get().to(list_trashed))
+                .route("/activity", web::get().to(list_activity))
+                .route("", web::get().to(list_files))
+                .route("/{file_id}", web::get().to(get_file_metadata))
+                .route("/{file_id}", web::delete().to(delete_file))
+                .route("/{file_id}/download", web::get().to(download_file))
+                .route("/{file_id}/move", web::put().to(move_file))
+                .route("/{file_id}/rename", web::patch().to(rename_file))
+                .route("/{file_id}/versions", web::get().to(list_versions))
+                .route("/{file_id}/trash", web::post().to(trash_file))
+                .route("/{file_id}/restore", web::post().to(restore_file))
+                .route("/{file_id}/share", web::post().to(share_file))
+                .route("/{file_id}/share/{user_id}", web::delete().to(remove_share)),
+        )
+        .service(
+            web::scope("/api/v1/folders")
+                .route("", web::get().to(list_folders))
+                .route("", web::post().to(create_folder))
+                .route("/{folder_id}", web::get().to(get_folder))
+                .route("/{folder_id}", web::put().to(update_folder))
+                .route("/{folder_id}", web::delete().to(delete_folder)),
+        );
+}
+
 // -- Health & Metrics --
 
 pub async fn health() -> HttpResponse {
@@ -710,6 +742,59 @@ pub async fn list_activity(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{
+        dynamo_missing_item, dynamo_ok, expected_request, multipart_body, multipart_content_type,
+        s3_error, s3_ok, test_config, test_state, TestState, TEST_BUCKET,
+    };
+    use actix_web::{test, App};
+    use aws_smithy_http_client::test_util::ReplayEvent;
+    use serde_json::Value;
+
+    const CHAOS_FLAG: &str = "chaos:file-service:upload_s3_error";
+    const CHAOS_BUCKET: &str = "otterworks-files-chaos-nonexistent";
+
+    fn s3_uri(bucket: &str, key: &str) -> String {
+        format!("http://s3.local/{bucket}/{key}")
+    }
+
+    fn dynamo_uri() -> String {
+        "http://dynamodb.local/".to_string()
+    }
+
+    /// A DynamoDB `GetItem` response holding one file row.
+    fn file_item(file_id: Uuid, owner_id: Uuid, s3_key: &str) -> String {
+        let now = Utc::now().to_rfc3339();
+        format!(
+            r#"{{"Item":{{
+                "id":{{"S":"{file_id}"}},
+                "name":{{"S":"report.pdf"}},
+                "mime_type":{{"S":"application/pdf"}},
+                "size_bytes":{{"N":"12"}},
+                "s3_key":{{"S":"{s3_key}"}},
+                "owner_id":{{"S":"{owner_id}"}},
+                "version":{{"N":"1"}},
+                "is_trashed":{{"BOOL":false}},
+                "created_at":{{"S":"{now}"}},
+                "updated_at":{{"S":"{now}"}}
+            }}}}"#
+        )
+    }
+
+    async fn call(state: &TestState, req: test::TestRequest) -> actix_web::dev::ServiceResponse {
+        let app = test::init_service(App::new().configure(|cfg| state.register(cfg))).await;
+        test::call_service(&app, req.to_request()).await
+    }
+
+    fn upload_request(body: Vec<u8>, user_id: Option<Uuid>) -> test::TestRequest {
+        let mut req = test::TestRequest::post()
+            .uri("/api/v1/files/upload")
+            .insert_header(("content-type", multipart_content_type()))
+            .set_payload(body);
+        if let Some(user_id) = user_id {
+            req = req.insert_header(("X-User-ID", user_id.to_string()));
+        }
+        req
+    }
 
     #[actix_rt::test]
     async fn test_health_endpoint() {
@@ -721,5 +806,432 @@ mod tests {
     async fn test_metrics_endpoint() {
         let resp = metrics().await;
         assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+    }
+
+    // -- Upload --
+
+    #[actix_rt::test]
+    async fn upload_stores_blob_then_metadata_and_version() {
+        let owner = Uuid::new_v4();
+        let (state, s3_http, dynamo_http) = test_state(
+            vec![ReplayEvent::new(
+                expected_request(&s3_uri(TEST_BUCKET, "files")),
+                s3_ok(),
+            )],
+            vec![
+                ReplayEvent::new(expected_request(&dynamo_uri()), dynamo_ok("{}")),
+                ReplayEvent::new(expected_request(&dynamo_uri()), dynamo_ok("{}")),
+            ],
+            &[],
+        )
+        .await;
+
+        let body = multipart_body(
+            Some(("report.pdf", "application/pdf", b"hello world!")),
+            &[("owner_id", &owner.to_string())],
+        );
+        let resp = call(&state, upload_request(body, None)).await;
+
+        assert_eq!(resp.status(), actix_web::http::StatusCode::CREATED);
+        let json: Value = test::read_body_json(resp).await;
+        assert_eq!(json["file"]["name"], "report.pdf");
+        assert_eq!(json["file"]["mime_type"], "application/pdf");
+        assert_eq!(json["file"]["size_bytes"], 12);
+        assert_eq!(json["file"]["owner_id"], owner.to_string());
+        assert_eq!(json["file"]["version"], 1);
+
+        let s3_request = s3_http.actual_requests().next().unwrap();
+        assert_eq!(s3_request.method(), "PUT");
+        assert!(
+            s3_request
+                .uri()
+                .starts_with(&s3_uri(TEST_BUCKET, &format!("files/{owner}/"))),
+            "unexpected S3 uri: {}",
+            s3_request.uri()
+        );
+        assert_eq!(s3_request.body().bytes(), Some(&b"hello world!"[..]));
+        assert_eq!(dynamo_http.actual_requests().count(), 2);
+    }
+
+    #[actix_rt::test]
+    async fn upload_prefers_the_gateway_user_header_over_the_form_field() {
+        let header_owner = Uuid::new_v4();
+        let form_owner = Uuid::new_v4();
+        let (state, s3_http, _dynamo_http) = test_state(
+            vec![ReplayEvent::new(
+                expected_request(&s3_uri(TEST_BUCKET, "files")),
+                s3_ok(),
+            )],
+            vec![
+                ReplayEvent::new(expected_request(&dynamo_uri()), dynamo_ok("{}")),
+                ReplayEvent::new(expected_request(&dynamo_uri()), dynamo_ok("{}")),
+            ],
+            &[],
+        )
+        .await;
+
+        let body = multipart_body(
+            Some(("report.pdf", "application/pdf", b"hello world!")),
+            &[("owner_id", &form_owner.to_string())],
+        );
+        let resp = call(&state, upload_request(body, Some(header_owner))).await;
+
+        assert_eq!(resp.status(), actix_web::http::StatusCode::CREATED);
+        let json: Value = test::read_body_json(resp).await;
+        assert_eq!(json["file"]["owner_id"], header_owner.to_string());
+        assert!(s3_http
+            .actual_requests()
+            .next()
+            .unwrap()
+            .uri()
+            .contains(&header_owner.to_string()));
+    }
+
+    #[actix_rt::test]
+    async fn upload_chaos_flag_targets_a_nonexistent_bucket_and_returns_a_storage_error() {
+        let owner = Uuid::new_v4();
+        let (state, s3_http, dynamo_http) = test_state(
+            vec![ReplayEvent::new(
+                expected_request(&s3_uri(CHAOS_BUCKET, "files")),
+                s3_error(404, "NoSuchBucket"),
+            )],
+            vec![],
+            &[CHAOS_FLAG],
+        )
+        .await;
+
+        let body = multipart_body(
+            Some(("report.pdf", "application/pdf", b"hello world!")),
+            &[("owner_id", &owner.to_string())],
+        );
+        let resp = call(&state, upload_request(body, None)).await;
+
+        assert_eq!(
+            resp.status(),
+            actix_web::http::StatusCode::INTERNAL_SERVER_ERROR
+        );
+        let json: Value = test::read_body_json(resp).await;
+        assert_eq!(json["error"], "storage_error");
+        assert!(
+            json["message"].as_str().unwrap().contains("upload failed"),
+            "unexpected message: {}",
+            json["message"]
+        );
+
+        // The blob write was redirected to the chaos bucket and nothing was persisted.
+        assert!(s3_http
+            .actual_requests()
+            .next()
+            .unwrap()
+            .uri()
+            .starts_with(&s3_uri(CHAOS_BUCKET, "files/")));
+        assert_eq!(dynamo_http.actual_requests().count(), 0);
+    }
+
+    #[actix_rt::test]
+    async fn upload_without_the_chaos_flag_uses_the_configured_bucket() {
+        let owner = Uuid::new_v4();
+        let (state, s3_http, _dynamo_http) = test_state(
+            vec![ReplayEvent::new(
+                expected_request(&s3_uri(TEST_BUCKET, "files")),
+                s3_ok(),
+            )],
+            vec![
+                ReplayEvent::new(expected_request(&dynamo_uri()), dynamo_ok("{}")),
+                ReplayEvent::new(expected_request(&dynamo_uri()), dynamo_ok("{}")),
+            ],
+            // An unrelated chaos flag must not divert the upload.
+            &["chaos:file-service:some_other_flag"],
+        )
+        .await;
+
+        let body = multipart_body(
+            Some(("report.pdf", "application/pdf", b"hello world!")),
+            &[("owner_id", &owner.to_string())],
+        );
+        let resp = call(&state, upload_request(body, None)).await;
+
+        assert_eq!(resp.status(), actix_web::http::StatusCode::CREATED);
+        assert!(s3_http
+            .actual_requests()
+            .next()
+            .unwrap()
+            .uri()
+            .starts_with(&s3_uri(TEST_BUCKET, "files/")));
+    }
+
+    #[actix_rt::test]
+    async fn upload_without_an_owner_is_a_bad_request() {
+        let (state, s3_http, _dynamo_http) = test_state(vec![], vec![], &[]).await;
+
+        let body = multipart_body(Some(("report.pdf", "application/pdf", b"data")), &[]);
+        let resp = call(&state, upload_request(body, None)).await;
+
+        assert_eq!(resp.status(), actix_web::http::StatusCode::BAD_REQUEST);
+        let json: Value = test::read_body_json(resp).await;
+        assert_eq!(json["error"], "bad_request");
+        assert_eq!(s3_http.actual_requests().count(), 0);
+    }
+
+    #[actix_rt::test]
+    async fn upload_without_a_file_part_is_a_bad_request() {
+        let (state, _s3_http, _dynamo_http) = test_state(vec![], vec![], &[]).await;
+
+        let owner = Uuid::new_v4();
+        let body = multipart_body(None, &[("owner_id", &owner.to_string())]);
+        let resp = call(&state, upload_request(body, None)).await;
+
+        assert_eq!(resp.status(), actix_web::http::StatusCode::BAD_REQUEST);
+    }
+
+    #[actix_rt::test]
+    async fn upload_over_the_size_limit_is_rejected() {
+        let (mut state, s3_http, _dynamo_http) = test_state(vec![], vec![], &[]).await;
+        state.config = web::Data::new(test_config(4));
+
+        let owner = Uuid::new_v4();
+        let body = multipart_body(
+            Some(("report.pdf", "application/pdf", b"far too many bytes")),
+            &[("owner_id", &owner.to_string())],
+        );
+        let resp = call(&state, upload_request(body, None)).await;
+
+        assert_eq!(
+            resp.status(),
+            actix_web::http::StatusCode::PAYLOAD_TOO_LARGE
+        );
+        let json: Value = test::read_body_json(resp).await;
+        assert_eq!(json["error"], "file_too_large");
+        assert_eq!(s3_http.actual_requests().count(), 0);
+    }
+
+    // -- Download --
+
+    #[actix_rt::test]
+    async fn download_returns_a_presigned_url_for_the_stored_key() {
+        let file_id = Uuid::new_v4();
+        let owner = Uuid::new_v4();
+        let key = format!("files/{owner}/{file_id}");
+        let (state, s3_http, _dynamo_http) = test_state(
+            vec![],
+            vec![ReplayEvent::new(
+                expected_request(&dynamo_uri()),
+                dynamo_ok(&file_item(file_id, owner, &key)),
+            )],
+            &[],
+        )
+        .await;
+
+        let resp = call(
+            &state,
+            test::TestRequest::get().uri(&format!("/api/v1/files/{file_id}/download")),
+        )
+        .await;
+
+        assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+        let json: Value = test::read_body_json(resp).await;
+        assert_eq!(json["expires_in_secs"], 3600);
+        let url = json["url"].as_str().unwrap();
+        assert!(url.starts_with(&s3_uri(TEST_BUCKET, &key)), "url: {url}");
+        assert!(url.contains("X-Amz-Signature="), "url: {url}");
+        // Presigning is offline: no request reaches S3.
+        assert_eq!(s3_http.actual_requests().count(), 0);
+    }
+
+    #[actix_rt::test]
+    async fn download_of_an_unknown_file_is_a_404() {
+        let (state, _s3_http, _dynamo_http) = test_state(
+            vec![],
+            vec![ReplayEvent::new(
+                expected_request(&dynamo_uri()),
+                dynamo_missing_item(),
+            )],
+            &[],
+        )
+        .await;
+
+        let file_id = Uuid::new_v4();
+        let resp = call(
+            &state,
+            test::TestRequest::get().uri(&format!("/api/v1/files/{file_id}/download")),
+        )
+        .await;
+
+        assert_eq!(resp.status(), actix_web::http::StatusCode::NOT_FOUND);
+        let json: Value = test::read_body_json(resp).await;
+        assert_eq!(json["error"], "file_not_found");
+    }
+
+    #[actix_rt::test]
+    async fn download_with_a_malformed_id_is_a_bad_request() {
+        let (state, _s3_http, _dynamo_http) = test_state(vec![], vec![], &[]).await;
+
+        let resp = call(
+            &state,
+            test::TestRequest::get().uri("/api/v1/files/not-a-uuid/download"),
+        )
+        .await;
+
+        assert_eq!(resp.status(), actix_web::http::StatusCode::BAD_REQUEST);
+    }
+
+    // -- Delete --
+
+    #[actix_rt::test]
+    async fn delete_removes_metadata_then_the_blob() {
+        let file_id = Uuid::new_v4();
+        let owner = Uuid::new_v4();
+        let key = format!("files/{owner}/{file_id}");
+        let (state, s3_http, dynamo_http) = test_state(
+            vec![ReplayEvent::new(
+                expected_request(&s3_uri(TEST_BUCKET, &key)),
+                s3_ok(),
+            )],
+            vec![
+                ReplayEvent::new(
+                    expected_request(&dynamo_uri()),
+                    dynamo_ok(&file_item(file_id, owner, &key)),
+                ),
+                ReplayEvent::new(expected_request(&dynamo_uri()), dynamo_ok("{}")),
+            ],
+            &[],
+        )
+        .await;
+
+        let resp = call(
+            &state,
+            test::TestRequest::delete().uri(&format!("/api/v1/files/{file_id}")),
+        )
+        .await;
+
+        assert_eq!(resp.status(), actix_web::http::StatusCode::NO_CONTENT);
+        assert_eq!(dynamo_http.actual_requests().count(), 2);
+        let s3_request = s3_http.actual_requests().next().unwrap();
+        assert_eq!(s3_request.method(), "DELETE");
+        assert!(s3_request.uri().starts_with(&s3_uri(TEST_BUCKET, &key)));
+    }
+
+    #[actix_rt::test]
+    async fn delete_of_an_unknown_file_is_a_404() {
+        let (state, s3_http, _dynamo_http) = test_state(
+            vec![],
+            vec![ReplayEvent::new(
+                expected_request(&dynamo_uri()),
+                dynamo_missing_item(),
+            )],
+            &[],
+        )
+        .await;
+
+        let file_id = Uuid::new_v4();
+        let resp = call(
+            &state,
+            test::TestRequest::delete().uri(&format!("/api/v1/files/{file_id}")),
+        )
+        .await;
+
+        assert_eq!(resp.status(), actix_web::http::StatusCode::NOT_FOUND);
+        let json: Value = test::read_body_json(resp).await;
+        assert_eq!(json["error"], "file_not_found");
+        assert_eq!(s3_http.actual_requests().count(), 0);
+    }
+
+    #[actix_rt::test]
+    async fn delete_surfaces_an_s3_failure_as_a_storage_error() {
+        let file_id = Uuid::new_v4();
+        let owner = Uuid::new_v4();
+        let key = format!("files/{owner}/{file_id}");
+        let (state, _s3_http, _dynamo_http) = test_state(
+            vec![ReplayEvent::new(
+                expected_request(&s3_uri(TEST_BUCKET, &key)),
+                s3_error(403, "AccessDenied"),
+            )],
+            vec![
+                ReplayEvent::new(
+                    expected_request(&dynamo_uri()),
+                    dynamo_ok(&file_item(file_id, owner, &key)),
+                ),
+                ReplayEvent::new(expected_request(&dynamo_uri()), dynamo_ok("{}")),
+            ],
+            &[],
+        )
+        .await;
+
+        let resp = call(
+            &state,
+            test::TestRequest::delete().uri(&format!("/api/v1/files/{file_id}")),
+        )
+        .await;
+
+        assert_eq!(
+            resp.status(),
+            actix_web::http::StatusCode::INTERNAL_SERVER_ERROR
+        );
+        let json: Value = test::read_body_json(resp).await;
+        assert_eq!(json["error"], "storage_error");
+    }
+
+    // -- Metadata --
+
+    #[actix_rt::test]
+    async fn get_file_metadata_returns_the_file_with_its_shares() {
+        let file_id = Uuid::new_v4();
+        let owner = Uuid::new_v4();
+        let key = format!("files/{owner}/{file_id}");
+        let (state, _s3_http, _dynamo_http) = test_state(
+            vec![],
+            vec![
+                ReplayEvent::new(
+                    expected_request(&dynamo_uri()),
+                    dynamo_ok(&file_item(file_id, owner, &key)),
+                ),
+                // scan of the shares table
+                ReplayEvent::new(
+                    expected_request(&dynamo_uri()),
+                    dynamo_ok(r#"{"Items":[]}"#),
+                ),
+            ],
+            &[],
+        )
+        .await;
+
+        let resp = call(
+            &state,
+            test::TestRequest::get().uri(&format!("/api/v1/files/{file_id}")),
+        )
+        .await;
+
+        assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+        let json: Value = test::read_body_json(resp).await;
+        assert_eq!(json["id"], file_id.to_string());
+        assert_eq!(json["s3_key"], key);
+        assert_eq!(json["shared_with"].as_array().unwrap().len(), 0);
+    }
+
+    #[actix_rt::test]
+    async fn metadata_failures_surface_as_metadata_errors() {
+        let (state, _s3_http, _dynamo_http) = test_state(
+            vec![],
+            vec![ReplayEvent::new(
+                expected_request(&dynamo_uri()),
+                crate::test_support::dynamo_error("ResourceNotFoundException"),
+            )],
+            &[],
+        )
+        .await;
+
+        let file_id = Uuid::new_v4();
+        let resp = call(
+            &state,
+            test::TestRequest::get().uri(&format!("/api/v1/files/{file_id}/download")),
+        )
+        .await;
+
+        assert_eq!(
+            resp.status(),
+            actix_web::http::StatusCode::INTERNAL_SERVER_ERROR
+        );
+        let json: Value = test::read_body_json(resp).await;
+        assert_eq!(json["error"], "metadata_error");
     }
 }

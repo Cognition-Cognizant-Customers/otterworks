@@ -48,6 +48,11 @@ impl EventPublisher {
         }
     }
 
+    #[cfg(test)]
+    pub fn from_parts(client: aws_sdk_sns::Client, topic_arn: Option<String>) -> Self {
+        Self { client, topic_arn }
+    }
+
     async fn publish(&self, event: &FileEvent) -> Result<(), ServiceError> {
         let topic_arn = match &self.topic_arn {
             Some(arn) => arn,
@@ -225,6 +230,8 @@ impl EventPublisher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{expected_request, http_response, sns_client};
+    use aws_smithy_http_client::test_util::ReplayEvent;
 
     #[test]
     fn test_file_event_serialization() {
@@ -244,6 +251,112 @@ mod tests {
         assert!(json.contains("eventType"));
         assert!(json.contains("fileId"));
         assert!(json.contains("ownerId"));
+    }
+
+    #[tokio::test]
+    async fn publishing_without_a_topic_is_a_no_op() {
+        let (client, http) = sns_client(vec![]);
+        let publisher = EventPublisher::from_parts(client, None);
+
+        publisher
+            .file_deleted(&Uuid::new_v4(), &Uuid::new_v4())
+            .await
+            .expect("publish should be skipped");
+
+        assert_eq!(http.actual_requests().count(), 0);
+    }
+
+    #[tokio::test]
+    async fn a_configured_topic_receives_the_serialised_event() {
+        let (client, http) = sns_client(vec![sns_publish_ok()]);
+        let publisher = EventPublisher::from_parts(
+            client,
+            Some("arn:aws:sns:us-east-1:1:file-events".to_string()),
+        );
+
+        let file_id = Uuid::new_v4();
+        let owner_id = Uuid::new_v4();
+        publisher
+            .file_uploaded(
+                &file_id,
+                &owner_id,
+                None,
+                "report.pdf",
+                "application/pdf",
+                12,
+            )
+            .await
+            .expect("publish should succeed");
+
+        let request = http.actual_requests().next().unwrap();
+        let body = form_body(request.body().bytes().unwrap());
+        assert!(body.contains("arn:aws:sns:us-east-1:1:file-events"));
+        assert!(body.contains("file_uploaded"));
+        assert!(body.contains(&file_id.to_string()));
+        // Standard topics must not carry FIFO-only parameters.
+        assert!(!body.contains("MessageGroupId"));
+    }
+
+    #[tokio::test]
+    async fn a_fifo_topic_gets_a_group_and_deduplication_id() {
+        let (client, http) = sns_client(vec![sns_publish_ok()]);
+        let publisher = EventPublisher::from_parts(
+            client,
+            Some("arn:aws:sns:us-east-1:1:file-events.fifo".to_string()),
+        );
+
+        publisher
+            .file_trashed(&Uuid::new_v4(), &Uuid::new_v4())
+            .await
+            .expect("publish should succeed");
+
+        let request = http.actual_requests().next().unwrap();
+        let body = form_body(request.body().bytes().unwrap());
+        assert!(body.contains("MessageGroupId"));
+        assert!(body.contains("MessageDeduplicationId"));
+    }
+
+    #[tokio::test]
+    async fn an_sns_failure_maps_to_a_service_error() {
+        let (client, _http) = sns_client(vec![ReplayEvent::new(
+            expected_request("http://sns.local/"),
+            http_response(
+                403,
+                r#"<ErrorResponse><Error><Code>AuthorizationError</Code><Message>denied</Message></Error></ErrorResponse>"#,
+            ),
+        )]);
+        let publisher = EventPublisher::from_parts(
+            client,
+            Some("arn:aws:sns:us-east-1:1:file-events".to_string()),
+        );
+
+        let err = publisher
+            .file_deleted(&Uuid::new_v4(), &Uuid::new_v4())
+            .await
+            .expect_err("publish should fail");
+
+        assert!(
+            matches!(err, ServiceError::SnsError(_)),
+            "unexpected error: {err:?}"
+        );
+    }
+
+    fn sns_publish_ok() -> ReplayEvent {
+        ReplayEvent::new(
+            expected_request("http://sns.local/"),
+            http_response(
+                200,
+                r#"<PublishResponse><PublishResult><MessageId>m-1</MessageId></PublishResult></PublishResponse>"#,
+            ),
+        )
+    }
+
+    /// The SNS query protocol form-encodes its parameters; decode just enough
+    /// of it to assert on ARNs and message contents.
+    fn form_body(body: &[u8]) -> String {
+        String::from_utf8(body.to_vec())
+            .unwrap()
+            .replace("%3A", ":")
     }
 
     #[test]
