@@ -60,7 +60,10 @@ async def test_list_documents(client: AsyncClient, owner_id: uuid.UUID):
             "/api/v1/documents/",
             json={"title": f"Doc {i}", "content": "", "owner_id": str(owner_id)},
         )
-    resp = await client.get("/api/v1/documents/", params={"owner_id": str(owner_id)})
+    token = _make_jwt(str(owner_id))
+    resp = await client.get(
+        "/api/v1/documents/", headers={"Authorization": f"Bearer {token}"}
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["total"] == 3
@@ -74,13 +77,60 @@ async def test_list_documents_pagination(client: AsyncClient, owner_id: uuid.UUI
             "/api/v1/documents/",
             json={"title": f"Doc {i}", "content": "", "owner_id": str(owner_id)},
         )
+    token = _make_jwt(str(owner_id))
     resp = await client.get(
-        "/api/v1/documents/", params={"owner_id": str(owner_id), "page": 1, "size": 2}
+        "/api/v1/documents/",
+        params={"page": 1, "size": 2},
+        headers={"Authorization": f"Bearer {token}"},
     )
     data = resp.json()
     assert data["total"] == 5
     assert len(data["items"]) == 2
     assert data["pages"] == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route", ["/api/v1/documents/", "/api/v1/documents"])
+async def test_list_documents_does_not_allow_owner_id_override(
+    client: AsyncClient, route: str
+):
+    owner_id = uuid.uuid4()
+    victim_id = uuid.uuid4()
+    owner_token = _make_jwt(str(owner_id))
+
+    for title in ("Owner Doc 1", "Owner Doc 2"):
+        await client.post(
+            "/api/v1/documents/",
+            json={"title": title, "content": "Owner content"},
+            headers={"Authorization": f"Bearer {owner_token}"},
+        )
+    await client.post(
+        "/api/v1/documents/",
+        json={
+            "title": "Victim Doc",
+            "content": "Victim content",
+            "owner_id": str(victim_id),
+        },
+    )
+
+    resp = await client.get(
+        route,
+        params={"owner_id": str(victim_id)},
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 2
+    assert {item["title"] for item in data["items"]} == {"Owner Doc 1", "Owner Doc 2"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route", ["/api/v1/documents/", "/api/v1/documents"])
+async def test_list_documents_without_auth_returns_401(client: AsyncClient, route: str):
+    resp = await client.get(route)
+
+    assert resp.status_code == 401
 
 
 @pytest.mark.asyncio
