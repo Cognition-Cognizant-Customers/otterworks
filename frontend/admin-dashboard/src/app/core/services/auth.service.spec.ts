@@ -1,5 +1,5 @@
-import { TestBed, fakeAsync, tick } from '@angular/core/testing';
-import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { TestBed } from '@angular/core/testing';
+import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { Router } from '@angular/router';
 import { AuthService, AuthUser } from './auth.service';
@@ -7,6 +7,7 @@ import { AuthService, AuthUser } from './auth.service';
 describe('AuthService', () => {
   let service: AuthService;
   let router: Router;
+  let httpTestingController: HttpTestingController;
 
   beforeEach(() => {
     localStorage.clear();
@@ -15,9 +16,11 @@ describe('AuthService', () => {
     });
     service = TestBed.inject(AuthService);
     router = TestBed.inject(Router);
+    httpTestingController = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {
+    httpTestingController.verify();
     localStorage.clear();
   });
 
@@ -30,61 +33,105 @@ describe('AuthService', () => {
     expect(service.currentUser).toBeNull();
   });
 
-  it('should login successfully with valid credentials', fakeAsync(() => {
+  it('should login successfully with an admin token', () => {
     let loggedInUser: AuthUser | undefined;
-    service.login('admin@otterworks.io', 'admin123').subscribe(user => {
+    service.login('admin@otterworks.io', 'test-password').subscribe(user => {
       loggedInUser = user;
     });
-    tick(900);
+    const request = httpTestingController.expectOne('/api/v1/auth/login');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({ email: 'admin@otterworks.io', password: 'test-password' });
+    request.flush(loginResponse(unsignedToken(['USER', 'ADMIN'])));
     expect(loggedInUser).toBeTruthy();
     expect(loggedInUser!.email).toBe('admin@otterworks.io');
     expect(loggedInUser!.role).toBe('admin');
     expect(service.isAuthenticated).toBeTrue();
     expect(service.currentUser).toBeTruthy();
-  }));
+  });
 
-  it('should store token in localStorage after login', fakeAsync(() => {
-    service.login('admin@otterworks.io', 'admin123').subscribe();
-    tick(900);
-    expect(localStorage.getItem('ow_admin_token')).toBeTruthy();
+  it('should store token in localStorage after login', () => {
+    const token = unsignedToken(['ADMIN']);
+    service.login('admin@otterworks.io', 'test-password').subscribe();
+    httpTestingController.expectOne('/api/v1/auth/login').flush(loginResponse(token));
+    expect(localStorage.getItem('ow_admin_token')).toBe(token);
     expect(localStorage.getItem('ow_admin_user')).toBeTruthy();
-  }));
+  });
 
-  it('should clear auth state on logout', fakeAsync(() => {
-    service.login('admin@otterworks.io', 'admin123').subscribe();
-    tick(900);
+  it('should clear auth state on logout', () => {
+    service.login('admin@otterworks.io', 'test-password').subscribe();
+    httpTestingController.expectOne('/api/v1/auth/login').flush(loginResponse(unsignedToken(['ADMIN'])));
     spyOn(router, 'navigate');
     service.logout();
     expect(service.isAuthenticated).toBeFalse();
     expect(service.currentUser).toBeNull();
     expect(localStorage.getItem('ow_admin_token')).toBeNull();
     expect(router.navigate).toHaveBeenCalledWith(['/login']);
-  }));
+  });
 
-  it('should emit user on currentUser$ observable', fakeAsync(() => {
+  it('should emit user on currentUser$ observable', () => {
     const emitted: (AuthUser | null)[] = [];
     service.currentUser$.subscribe(user => emitted.push(user));
-    service.login('admin@otterworks.io', 'admin123').subscribe();
-    tick(900);
+    service.login('admin@otterworks.io', 'test-password').subscribe();
+    httpTestingController.expectOne('/api/v1/auth/login').flush(loginResponse(unsignedToken(['ADMIN'])));
     expect(emitted.length).toBeGreaterThanOrEqual(2);
     expect(emitted[emitted.length - 1]).toBeTruthy();
-  }));
+  });
 
-  it('should return token from getToken()', fakeAsync(() => {
+  it('should return token from getToken()', () => {
     expect(service.getToken()).toBeNull();
-    service.login('admin@otterworks.io', 'admin123').subscribe();
-    tick(900);
-    expect(service.getToken()).toBeTruthy();
-    expect(service.getToken()!.startsWith('mock-jwt-token-')).toBeTrue();
-  }));
+    const token = unsignedToken(['ADMIN']);
+    service.login('admin@otterworks.io', 'test-password').subscribe();
+    httpTestingController.expectOne('/api/v1/auth/login').flush(loginResponse(token));
+    expect(service.getToken()).toBe(token);
+  });
 
-  it('should reject login with empty password', fakeAsync(() => {
+  it('should fail without returning or storing a token when the HTTP call errors', () => {
     let error: Error | undefined;
-    service.login('admin@otterworks.io', '').subscribe({
+    service.login('admin@otterworks.io', 'wrong-password').subscribe({
       error: (e: Error) => { error = e; },
     });
-    tick(900);
+    httpTestingController.expectOne('/api/v1/auth/login').flush('Invalid credentials', {
+      status: 401,
+      statusText: 'Unauthorized',
+    });
     expect(error).toBeTruthy();
-    expect(error!.message).toBe('Invalid credentials');
-  }));
+    expect(localStorage.getItem('ow_admin_token')).toBeNull();
+    expect(localStorage.getItem('ow_admin_user')).toBeNull();
+    expect(service.currentUser).toBeNull();
+  });
+
+  it('should reject non-admin tokens without storing auth state', () => {
+    let error: Error | undefined;
+    service.login('user@otterworks.io', 'user-password').subscribe({
+      error: (e: Error) => { error = e; },
+    });
+    httpTestingController.expectOne('/api/v1/auth/login').flush(loginResponse(unsignedToken(['USER'])));
+    expect(error!.message).toBe('Insufficient privileges');
+    expect(localStorage.getItem('ow_admin_token')).toBeNull();
+    expect(localStorage.getItem('ow_admin_user')).toBeNull();
+    expect(service.currentUser).toBeNull();
+  });
 });
+
+function loginResponse(accessToken: string) {
+  return {
+    accessToken,
+    refreshToken: 'refresh-token',
+    tokenType: 'Bearer',
+    expiresIn: 3600,
+    user: {
+      id: 'user-1',
+      email: 'admin@otterworks.io',
+      displayName: 'Admin User',
+      avatarUrl: null,
+    },
+  };
+}
+
+function unsignedToken(roles: string[]): string {
+  const encode = (value: object): string => btoa(JSON.stringify(value))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+  return `${encode({ alg: 'none', typ: 'JWT' })}.${encode({ roles })}.dummy-signature`;
+}

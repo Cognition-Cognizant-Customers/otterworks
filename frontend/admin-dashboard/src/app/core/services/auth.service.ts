@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
-import { tap, delay, map } from 'rxjs/operators';
+import { BehaviorSubject, Observable } from 'rxjs';
+import { map, tap } from 'rxjs/operators';
 import { Router } from '@angular/router';
 
 export interface AuthUser {
@@ -13,8 +13,16 @@ export interface AuthUser {
 }
 
 interface LoginResponse {
-  user: AuthUser;
-  token: string;
+  accessToken: string;
+  refreshToken: string;
+  tokenType: string;
+  expiresIn: number;
+  user: {
+    id: string;
+    email: string;
+    displayName: string;
+    avatarUrl: string | null;
+  };
 }
 
 @Injectable({ providedIn: 'root' })
@@ -39,9 +47,8 @@ export class AuthService {
   }
 
   login(email: string, password: string): Observable<AuthUser> {
-    // In production, this would call the real API:
-    // return this.http.post<LoginResponse>('/api/v1/admin/auth/login', { email, password })
-    return this.mockLogin(email, password).pipe(
+    return this.http.post<LoginResponse>('/api/v1/auth/login', { email, password }).pipe(
+      map(response => this.toAuthUser(response)),
       tap(user => {
         localStorage.setItem(this.TOKEN_KEY, user.token);
         localStorage.setItem(this.USER_KEY, JSON.stringify(user));
@@ -69,17 +76,38 @@ export class AuthService {
     return null;
   }
 
-  private mockLogin(email: string, password: string): Observable<AuthUser> {
-    if (password.length < 1) {
-      return throwError(() => new Error('Invalid credentials'));
+  private toAuthUser(response: LoginResponse): AuthUser {
+    const roles = this.decodeRoles(response.accessToken);
+    // Roles are for client-side display and routing only; the server is the authority.
+    if (!roles || !roles.includes('ADMIN')) {
+      throw new Error('Insufficient privileges');
     }
-    const user: AuthUser = {
-      id: 'a0000000-0000-0000-0000-000000000001',
-      email,
-      displayName: 'Admin User',
+
+    return {
+      id: response.user.id,
+      email: response.user.email,
+      displayName: response.user.displayName,
       role: 'admin',
-      token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJ1c2VyX2lkIjoiYTAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIiwiZW1haWwiOiJhZG1pbkBvdHRlcndvcmtzLmRldiIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTcwNDA2NzIwMCwiZXhwIjoxOTI0OTA1NjAwfQ.hD5dwgrPNRTzbXa6lbA83Aru7BvQVIQc0rGVySkF1fA',
+      token: response.accessToken,
     };
-    return of(user).pipe(delay(800));
+  }
+
+  private decodeRoles(token: string): string[] | null {
+    try {
+      const payload = token.split('.')[1];
+      if (!payload) {
+        return null;
+      }
+
+      const normalizedPayload = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const paddedPayload = normalizedPayload.padEnd(Math.ceil(normalizedPayload.length / 4) * 4, '=');
+      const decodedPayload = JSON.parse(atob(paddedPayload)) as { roles?: unknown };
+      return Array.isArray(decodedPayload.roles) &&
+        decodedPayload.roles.every((role): role is string => typeof role === 'string')
+        ? decodedPayload.roles
+        : null;
+    } catch {
+      return null;
+    }
   }
 }
