@@ -58,7 +58,7 @@ export class AuthService {
         if (!(error instanceof HttpErrorResponse)) {
           return throwError(() => error);
         }
-        const message = error.status === 401
+        const message = error.status === 400 || error.status === 401
           ? 'Invalid credentials'
           : 'Login failed. Please try again.';
         return throwError(() => new Error(message));

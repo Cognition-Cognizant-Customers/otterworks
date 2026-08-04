@@ -115,6 +115,20 @@ describe('AuthService', () => {
     expect(localStorage.getItem('ow_admin_user')).toBeNull();
   });
 
+  it('should map a 400 HTTP failure to invalid credentials', () => {
+    let error: Error | undefined;
+    service.login('admin@otterworks.io', 'test-password').subscribe({
+      error: (e: Error) => { error = e; },
+    });
+    httpTestingController.expectOne('/api/v1/auth/login').flush('Invalid credentials', {
+      status: 400,
+      statusText: 'Bad Request',
+    });
+    expect(error!.message).toBe('Invalid credentials');
+    expect(localStorage.getItem('ow_admin_token')).toBeNull();
+    expect(localStorage.getItem('ow_admin_user')).toBeNull();
+  });
+
   it('should reject non-admin tokens without storing auth state', () => {
     let error: Error | undefined;
     service.login('user@otterworks.io', 'user-password').subscribe({
