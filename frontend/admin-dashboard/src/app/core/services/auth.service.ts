@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { BehaviorSubject, Observable } from 'rxjs';
-import { map, tap } from 'rxjs/operators';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { BehaviorSubject, Observable, throwError } from 'rxjs';
+import { catchError, map, tap } from 'rxjs/operators';
 import { Router } from '@angular/router';
 
 export interface AuthUser {
@@ -53,7 +53,16 @@ export class AuthService {
         localStorage.setItem(this.TOKEN_KEY, user.token);
         localStorage.setItem(this.USER_KEY, JSON.stringify(user));
         this.currentUserSubject.next(user);
-      })
+      }),
+      catchError(error => {
+        if (!(error instanceof HttpErrorResponse)) {
+          return throwError(() => error);
+        }
+        const message = error.status === 401
+          ? 'Invalid credentials'
+          : 'Login failed. Please try again.';
+        return throwError(() => new Error(message));
+      }),
     );
   }
 

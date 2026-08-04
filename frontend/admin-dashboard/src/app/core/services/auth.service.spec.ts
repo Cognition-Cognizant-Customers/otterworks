@@ -95,9 +95,24 @@ describe('AuthService', () => {
       statusText: 'Unauthorized',
     });
     expect(error).toBeTruthy();
+    expect(error!.message).toBe('Invalid credentials');
     expect(localStorage.getItem('ow_admin_token')).toBeNull();
     expect(localStorage.getItem('ow_admin_user')).toBeNull();
     expect(service.currentUser).toBeNull();
+  });
+
+  it('should map non-401 HTTP failures to a generic login error', () => {
+    let error: Error | undefined;
+    service.login('admin@otterworks.io', 'test-password').subscribe({
+      error: (e: Error) => { error = e; },
+    });
+    httpTestingController.expectOne('/api/v1/auth/login').flush('Server error', {
+      status: 500,
+      statusText: 'Internal Server Error',
+    });
+    expect(error!.message).toBe('Login failed. Please try again.');
+    expect(localStorage.getItem('ow_admin_token')).toBeNull();
+    expect(localStorage.getItem('ow_admin_user')).toBeNull();
   });
 
   it('should reject non-admin tokens without storing auth state', () => {
