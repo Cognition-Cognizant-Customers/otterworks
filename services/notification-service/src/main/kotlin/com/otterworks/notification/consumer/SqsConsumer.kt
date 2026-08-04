@@ -95,16 +95,9 @@ class SqsConsumer(
                                 logger.debug { "Deleted SQS message: ${msg.messageId}" }
                             } else {
                                 processingErrorsCounter?.increment()
-                                if (isMalformed(body)) {
-                                    logger.warn { "Removing malformed SQS message from queue: ${msg.messageId}" }
-                                    val deleteRequest = DeleteMessageRequest {
-                                        queueUrl = config.sqsQueueUrl
-                                        receiptHandle = msg.receiptHandle
-                                    }
-                                    sqsClient.deleteMessage(deleteRequest)
-                                } else {
-                                    logger.warn { "Failed to parse SQS message, leaving for retry: ${msg.messageId}" }
-                                }
+                                // Left undeleted: the queue's redrive policy moves
+                                // repeatedly-failing messages to the DLQ for inspection.
+                                logger.warn { "Failed to parse SQS message: ${msg.messageId}" }
                             }
                         } catch (e: Exception) {
                             logger.error(e) { "Error processing SQS message: ${msg.messageId}" }
@@ -124,19 +117,6 @@ class SqsConsumer(
 
     internal fun parseMessage(body: String): SqsNotificationMessage? {
         val parser = if (chaosActive("chaos:notification-service:consumer_strict_schema")) strictJson else json
-        val result = parseWith(parser, body)
-        if (result == null) {
-            logger.error { "Failed to parse message body" }
-        }
-        return result
-    }
-
-    // A message is a poison pill only if even the lenient parser rejects it;
-    // messages rejected solely by a stricter parser configuration are left in
-    // the queue for later retry.
-    internal fun isMalformed(body: String): Boolean = parseWith(json, body) == null
-
-    private fun parseWith(parser: Json, body: String): SqsNotificationMessage? {
         return try {
             // Try parsing as direct message first
             parser.decodeFromString<SqsNotificationMessage>(body)
@@ -145,7 +125,8 @@ class SqsConsumer(
                 // Try unwrapping SNS envelope
                 val snsWrapper = parser.decodeFromString<SnsEnvelope>(body)
                 parser.decodeFromString<SqsNotificationMessage>(snsWrapper.Message)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                logger.error(e) { "Failed to parse message body" }
                 null
             }
         }
