@@ -1,4 +1,6 @@
 class ApplicationController < ActionController::API
+  ADMIN_ROLES = %w[admin super_admin].freeze
+
   before_action :set_request_metadata
 
   rescue_from StandardError do |e|
@@ -30,6 +32,12 @@ class ApplicationController < ActionController::API
 
   def current_user_role
     request.env['jwt.user_role']
+  end
+
+  def require_admin!
+    return if ADMIN_ROLES.include?(current_user_role.to_s.downcase)
+
+    render json: { error: 'Admin access required' }, status: :forbidden
   end
 
   def set_request_metadata

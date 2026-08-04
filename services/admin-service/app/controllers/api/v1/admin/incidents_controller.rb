@@ -2,6 +2,7 @@ module Api
   module V1
     module Admin
       class IncidentsController < ApplicationController
+        before_action :require_admin!
         before_action :set_incident, only: %i[show update destroy trigger_session]
 
         # GET /api/v1/admin/incidents
