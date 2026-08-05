@@ -105,12 +105,20 @@ byte-for-byte identical and run through the **JUnit Vintage engine**:
 
 ## 7. Hibernate 5.4 → 6.4 (transitive via starter-data-jpa)
 
-No code change was needed: the entity (`Report`) uses only portable mappings
-(`@Enumerated(STRING)`, `@Temporal`, `@Lob`) and the repository uses derived
-queries plus simple JPQL, all valid under Hibernate 6. `PostgreSQLDialect` /
-`H2Dialect` names in the properties files are unchanged and still correct in
-Hibernate 6. Verified by the H2-backed integration tests (create, list, fetch,
-download-state and delete flows).
+One mapping change was required: Hibernate 6 binds `@Lob String` on PostgreSQL
+through the large-object (`oid`) JDBC API instead of Hibernate 5's `text`
+column mapping. `Report.errorMessage` (`model/Report.java`) therefore replaces
+`@Lob` with `@JdbcTypeCode(SqlTypes.LONGVARCHAR)`, which maps to `text` on
+PostgreSQL and a character large object on H2 — matching the column the
+pre-upgrade version created and avoiding both runtime read/write failures on
+existing databases and leaked server-side large objects on fresh ones.
+
+Everything else needed no change: the entity's other mappings
+(`@Enumerated(STRING)`, `@Temporal`) are portable and the repository uses
+derived queries plus simple JPQL, all valid under Hibernate 6.
+`PostgreSQLDialect` / `H2Dialect` names in the properties files are unchanged
+and still correct in Hibernate 6. Verified by the H2-backed integration tests
+(create, list, fetch, download-state and delete flows).
 
 ## 8. Dockerfile — `services/report-service/Dockerfile`
 
@@ -134,8 +142,5 @@ family, same non-root user, port, healthcheck, and entrypoint.
 - **JUnit 4 test style**: intentionally kept (via Vintage engine) instead of a
   Jupiter rewrite, so the test suite itself is provably identical pre/post
   upgrade.
-- **`@Lob String errorMessage` on `Report`**: Hibernate 6 maps this the same
-  way as Hibernate 5 for the existing schema (`spring.jpa.hibernate.ddl-auto=update`
-  leaves the existing Postgres column untouched), so it was not remapped.
 - **`/v2/api-docs` → `/v3/api-docs`**: unavoidable consequence of SpringFox's
   incompatibility; no application client consumes the docs endpoint.
