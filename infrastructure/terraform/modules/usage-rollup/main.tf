@@ -1,0 +1,175 @@
+# ------------------------------------------------------------------------------
+# OtterWorks Usage-Rollup Module (event-driven "after" state)
+#
+# Replaces the legacy nightly usage-rollup CronJob with an incremental,
+# event-driven pipeline:
+#
+#   analytics event -> EventBridge rule -> SQS queue (with DLQ) -> Lambda
+#                                                                  incremental
+#                                                                  rollup upsert
+#                                                                  into DynamoDB
+#
+# The Lambda reuses the analytics-service aggregation semantics
+# (com.otterworks.analytics.event.UsageRollupLambdaHandler), so rollups match
+# the deterministic batch output byte-for-byte while staying fresh within
+# seconds instead of up to 24 h. See docs/BATCH-USAGE-ROLLUP.md.
+# ------------------------------------------------------------------------------
+
+locals {
+  name = "${var.project}-usage-rollup-${var.environment}"
+
+  common_tags = {
+    Module  = "usage-rollup"
+    Project = var.project
+    Service = "analytics-service"
+  }
+}
+
+# --- EventBridge rule: route analytics usage events to SQS ---
+
+resource "aws_cloudwatch_event_rule" "usage_events" {
+  name        = local.name
+  description = "Routes OtterWorks analytics usage events to the usage-rollup queue"
+
+  event_pattern = jsonencode({
+    source        = ["otterworks.analytics"]
+    "detail-type" = ["AnalyticsEvent"]
+  })
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_event_target" "usage_events_to_sqs" {
+  rule = aws_cloudwatch_event_rule.usage_events.name
+  arn  = aws_sqs_queue.usage_rollup.arn
+
+  dead_letter_config {
+    arn = aws_sqs_queue.usage_rollup_dlq.arn
+  }
+}
+
+# --- SQS queue (buffer/retry) + dead-letter queue ---
+
+resource "aws_sqs_queue" "usage_rollup" {
+  name = "${local.name}-events"
+  # >= 6x the Lambda timeout so in-flight batches never reappear mid-run.
+  visibility_timeout_seconds = 180
+  message_retention_seconds  = 259200
+  receive_wait_time_seconds  = 20
+
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.usage_rollup_dlq.arn
+    maxReceiveCount     = 3
+  })
+
+  tags = local.common_tags
+}
+
+resource "aws_sqs_queue" "usage_rollup_dlq" {
+  name                      = "${local.name}-dlq"
+  message_retention_seconds = 1209600
+
+  tags = local.common_tags
+}
+
+resource "aws_sqs_queue_policy" "usage_rollup" {
+  queue_url = aws_sqs_queue.usage_rollup.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "events.amazonaws.com" }
+      Action    = "sqs:SendMessage"
+      Resource  = aws_sqs_queue.usage_rollup.arn
+      Condition = { ArnEquals = { "aws:SourceArn" = aws_cloudwatch_event_rule.usage_events.arn } }
+    }]
+  })
+}
+
+# --- DynamoDB: one rollup item per calendar date (the upsert target) ---
+
+resource "aws_dynamodb_table" "usage_rollups" {
+  name         = "${var.project}-usage-rollups-${var.environment}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "date"
+
+  attribute {
+    name = "date"
+    type = "S"
+  }
+
+  tags = local.common_tags
+}
+
+# --- Lambda: incremental rollup upsert ---
+
+resource "aws_iam_role" "lambda" {
+  name = "${local.name}-lambda"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+
+  tags = local.common_tags
+}
+
+resource "aws_iam_role_policy" "lambda" {
+  name = "${local.name}-lambda"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"]
+        Resource = aws_sqs_queue.usage_rollup.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"]
+        Resource = aws_dynamodb_table.usage_rollups.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "arn:aws:logs:*:*:*"
+      }
+    ]
+  })
+}
+
+resource "aws_lambda_function" "usage_rollup" {
+  function_name = local.name
+  role          = aws_iam_role.lambda.arn
+
+  # Fat jar built from analytics-service (sbt assembly); the handler class is
+  # compiled alongside the legacy batch job so both share aggregation semantics.
+  filename         = var.lambda_jar_path
+  source_code_hash = filebase64sha256(var.lambda_jar_path)
+  handler          = "com.otterworks.analytics.event.UsageRollupLambdaHandler::handleRequest"
+  runtime          = "java17"
+  memory_size      = 512
+  timeout          = 30
+
+  environment {
+    variables = {
+      ROLLUP_TABLE = aws_dynamodb_table.usage_rollups.name
+    }
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_lambda_event_source_mapping" "usage_rollup" {
+  event_source_arn                   = aws_sqs_queue.usage_rollup.arn
+  function_name                      = aws_lambda_function.usage_rollup.arn
+  batch_size                         = 10
+  maximum_batching_window_in_seconds = 5
+  function_response_types            = ["ReportBatchItemFailures"]
+}

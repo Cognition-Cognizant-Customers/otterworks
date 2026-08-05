@@ -109,6 +109,14 @@ module "messaging" {
   project     = "otterworks"
 }
 
+module "usage_rollup" {
+  source      = "./modules/usage-rollup"
+  environment = var.environment
+  project     = "otterworks"
+
+  lambda_jar_path = var.usage_rollup_lambda_jar_path
+}
+
 module "search" {
   source      = "./modules/search"
   environment = var.environment

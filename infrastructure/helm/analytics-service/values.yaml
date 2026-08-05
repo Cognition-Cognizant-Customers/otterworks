@@ -58,26 +58,8 @@ config: {}
 # stringData) and injected via envFrom. Populate at deploy time; never commit values.
 secrets: {}
 
-# Nightly usage-rollup batch job (LEGACY "before" state for the batch ->
-# event-driven re-architect demo). Deploys as a Kubernetes CronJob that
-# bulk-loads analytics events and aggregates them into per-day usage rollups.
-# See docs/BATCH-USAGE-ROLLUP.md.
-cronjob:
-  enabled: true
-  schedule: "0 2 * * *" # nightly at 02:00 UTC
-  concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 3
-  failedJobsHistoryLimit: 3
-  startingDeadlineSeconds: 300
-  backoffLimit: 2
-  # NDJSON input source. Defaults to the deterministic seed bundled in the image.
-  input: "/seed/usage-events.ndjson"
-  outputDir: "/var/lib/otterworks"
-  output: "/var/lib/otterworks/usage-rollup.json"
-  resources:
-    limits:
-      cpu: 500m
-      memory: 256Mi
-    requests:
-      cpu: 100m
-      memory: 128Mi
+# The nightly usage-rollup CronJob has been decommissioned in favour of the
+# event-driven pipeline (EventBridge -> SQS -> Lambda incremental upsert); see
+# infrastructure/terraform/modules/usage-rollup and docs/BATCH-USAGE-ROLLUP.md.
+# The batch code remains runnable locally (make batch-usage-rollup) as the
+# deterministic comparison baseline.

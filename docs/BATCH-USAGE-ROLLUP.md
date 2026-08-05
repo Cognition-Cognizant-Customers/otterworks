@@ -1,9 +1,9 @@
-# Nightly Usage-Rollup Batch Job
+# Usage Rollup: Batch Baseline & Event-Driven Pipeline
 
-> **Status: LEGACY "before" state.** This is a deliberately batch, timer-driven,
-> poll-and-process job. It exists so a **batch → event-driven re-architecture**
-> demo has a realistic starting point to convert. The event-driven "after"
-> (EventBridge → SQS → Lambda) is intentionally **not** implemented here.
+> **Status: re-architected.** The nightly CronJob has been **decommissioned**;
+> production rollups now flow through the event-driven pipeline
+> (**EventBridge → SQS (with DLQ) → Lambda incremental upsert**). The batch
+> code remains runnable **locally** as the deterministic comparison baseline.
 
 ## What it is
 
@@ -36,7 +36,16 @@ demo removes.
 | Deterministic seed data | `services/analytics-service/src/main/resources/seed/usage-events.ndjson` |
 | Seed generator | `services/analytics-service/scripts/generate_seed_events.py` |
 | Unit tests | `services/analytics-service/src/test/.../batch/*.scala` |
-| Kubernetes CronJob | `infrastructure/helm/analytics-service/templates/cronjob.yaml` |
+
+### Event-driven path (the "after")
+
+| Concern | File |
+|---------|------|
+| Incremental upsert logic (pure) | `services/analytics-service/.../event/IncrementalUsageRollup.scala` |
+| Lambda handler (SQS → upsert) | `services/analytics-service/.../event/UsageRollupLambdaHandler.scala` |
+| Rollup store (DynamoDB / in-memory) | `services/analytics-service/.../event/RollupStore.scala` |
+| EventBridge rule, SQS + DLQ, Lambda, DynamoDB | `infrastructure/terraform/modules/usage-rollup/` |
+| Tests (incremental + handler) | `services/analytics-service/src/test/.../event/*.scala` |
 
 ## Run it locally
 
@@ -64,20 +73,25 @@ three identical daily rollups (55 events/day, 8 active users, 6 MiB allocated /
 
 ## Deployment
 
-The job ships as a `CronJob` in the `analytics-service` Helm chart
-(`cronjob.enabled: true`), reusing the service image, ServiceAccount (IRSA), and
-`envFrom` config/secret wiring. It overrides the container entrypoint to run
-`com.otterworks.analytics.batch.UsageRollupJob`.
+The Kubernetes `CronJob` (`templates/cronjob.yaml`, schedule `0 2 * * *`) has
+been removed from the `analytics-service` Helm chart. The event path deploys
+via Terraform:
 
 ```bash
-helm template analytics-service infrastructure/helm/analytics-service \
-  --set image.tag=<tag> --show-only templates/cronjob.yaml
+cd services/analytics-service && sbt assembly   # builds the Lambda fat jar
+cd infrastructure/terraform && terraform apply  # module "usage_rollup"
 ```
 
-## The re-architecture demo this enables (the "after" — NOT built here)
+The Lambda handler is
+`com.otterworks.analytics.event.UsageRollupLambdaHandler::handleRequest`
+(runtime `java17`), consuming the SQS queue in batches of 10 and upserting one
+DynamoDB item per calendar date (`otterworks-usage-rollups-<env>`). Messages
+that fail 3 deliveries land on the dead-letter queue.
 
-The batch job couples reporting to a nightly window and reprocesses everything
-in bulk. The target is a low-latency, event-driven pipeline:
+## The re-architecture
+
+The batch job coupled reporting to a nightly window and reprocessed everything
+in bulk. The event-driven pipeline removes that latency:
 
 ```
                  (today: batch)                         (target: event-driven)
@@ -97,17 +111,19 @@ in bulk. The target is a low-latency, event-driven pipeline:
                                                rollups updated continuously
 ```
 
-Conversion sketch (out of scope for this PR):
+How it maps:
 
-- **Producer** — services publish domain events to **EventBridge** (or reuse the
-  existing SNS topic) instead of the rollup reading them nightly.
-- **EventBridge rule** — pattern-matches usage events and forwards them to an
-  **SQS** queue (buffering, retries, dead-letter queue).
-- **Lambda** — consumes SQS in small batches and performs an **incremental**
-  rollup upsert (e.g. `date` partition in DynamoDB/Postgres), so rollups are
-  fresh within seconds instead of up to 24 h stale.
-- **Decommission** the CronJob once the event path is validated.
-
-`UsageRollupAggregator` is deliberately pure and I/O-free, so the same
-aggregation semantics can be reused by the Lambda handler when the "after" is
-built.
+- **EventBridge rule** — `source = otterworks.analytics`,
+  `detail-type = AnalyticsEvent` events are routed to the **SQS** queue
+  (buffering, retries, dead-letter queue after 3 failed deliveries).
+- **Lambda** — consumes SQS in batches of 10 and performs an **incremental**
+  rollup upsert keyed on the UTC calendar date in DynamoDB, so rollups are
+  fresh within seconds instead of up to 24 h stale. Distinct `activeUsers` are
+  kept exact by persisting the per-day user-id set; storage
+  allocated/released/net bytes follow the same metadata parsing as the batch
+  aggregator.
+- **CronJob decommissioned** — removed from the Helm chart; the batch path
+  stays runnable locally (`make batch-usage-rollup`) as the comparison
+  baseline. Folding the seed events through the incremental path reproduces
+  the batch output exactly (see `IncrementalUsageRollupSpec` /
+  `UsageRollupLambdaHandlerSpec`).

@@ -64,6 +64,28 @@ output "sns_events_topic_arn" {
   value       = module.messaging.events_topic_arn
 }
 
+# --- Usage rollup (event-driven) ---
+
+output "usage_rollup_queue_url" {
+  description = "SQS queue URL buffering usage events for the rollup Lambda"
+  value       = module.usage_rollup.queue_url
+}
+
+output "usage_rollup_dlq_arn" {
+  description = "Dead-letter queue ARN for failed usage-rollup deliveries"
+  value       = module.usage_rollup.dlq_arn
+}
+
+output "usage_rollup_lambda_function_name" {
+  description = "Lambda performing the incremental usage-rollup upsert"
+  value       = module.usage_rollup.lambda_function_name
+}
+
+output "usage_rollup_table_name" {
+  description = "DynamoDB table holding one usage rollup per calendar date"
+  value       = module.usage_rollup.rollup_table_name
+}
+
 # --- Search ---
 
 output "meilisearch_ecs_cluster_arn" {
