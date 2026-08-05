@@ -1,5 +1,6 @@
 package com.otterworks.analytics.service
 
+import com.otterworks.analytics.event.{NoopUsageEventPublisher, UsageEventPublisher}
 import com.otterworks.analytics.model.*
 import com.otterworks.analytics.repository.MetricsRepository
 import org.slf4j.LoggerFactory
@@ -11,7 +12,10 @@ import scala.concurrent.{ExecutionContext, Future}
  * Core analytics business logic. Coordinates event tracking with the
  * repository layer and provides query methods for all analytics endpoints.
  */
-class AnalyticsService(repository: MetricsRepository)(using ec: ExecutionContext):
+class AnalyticsService(
+    repository: MetricsRepository,
+    publisher: UsageEventPublisher = NoopUsageEventPublisher
+)(using ec: ExecutionContext):
 
   private val logger = LoggerFactory.getLogger(getClass)
 
@@ -25,7 +29,10 @@ class AnalyticsService(repository: MetricsRepository)(using ec: ExecutionContext
   ): Future[AnalyticsEvent] =
     val event = AnalyticsEvent.create(eventType, userId, resourceId, resourceType, metadata)
     logger.info("Tracking event: type={}, user={}, resource={}", event.eventType, event.userId, event.resourceId)
-    repository.storeEvent(event).map(_ => event)
+    repository.storeEvent(event).map { _ =>
+      publisher.publish(event)
+      event
+    }
 
   /** Get aggregated dashboard metrics for the given period. */
   def getDashboardSummary(period: String): Future[DashboardSummary] =

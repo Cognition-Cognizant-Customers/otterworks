@@ -78,6 +78,31 @@ class IncrementalUsageRollupSpec extends AnyFlatSpec with Matchers:
     day.storageAllocatedBytes shouldBe 0L
   }
 
+  it should "combine same-date states with counter sums and distinct user union" in {
+    val left = IncrementalUsageRollup.applyAll(
+      Map.empty,
+      Seq(
+        event(EventType.DocumentCreated, "u1", "2024-03-01T01:00:00Z"),
+        event(EventType.StorageAllocated, "u2", "2024-03-01T02:00:00Z", "file", Map("bytes" -> "100"))
+      )
+    )("2024-03-01")
+    val right = IncrementalUsageRollup.applyAll(
+      Map.empty,
+      Seq(
+        event(EventType.DocumentViewed, "u1", "2024-03-01T03:00:00Z"),
+        event(EventType.StorageReleased, "u3", "2024-03-01T04:00:00Z", "file", Map("bytes" -> "40"))
+      )
+    )("2024-03-01")
+
+    val day = left.combine(right).toRollup
+
+    day.totalEvents shouldBe 4L
+    day.activeUsers shouldBe 3L
+    day.documentsCreated shouldBe 1L
+    day.documentsViewed shouldBe 1L
+    day.netStorageBytes shouldBe 60L
+  }
+
   it should "reproduce the three deterministic daily rollups from the bundled seed" in {
     val events = EventLoader.fromResource(UsageRollupJob.DefaultInput)
 

@@ -72,6 +72,22 @@ resource "aws_sqs_queue" "usage_rollup_dlq" {
   tags = local.common_tags
 }
 
+# EventBridge delivers target failures to the DLQ under its own service
+# principal, so the DLQ needs its own SendMessage policy.
+resource "aws_sqs_queue_policy" "usage_rollup_dlq" {
+  queue_url = aws_sqs_queue.usage_rollup_dlq.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "events.amazonaws.com" }
+      Action    = "sqs:SendMessage"
+      Resource  = aws_sqs_queue.usage_rollup_dlq.arn
+      Condition = { ArnEquals = { "aws:SourceArn" = aws_cloudwatch_event_rule.usage_events.arn } }
+    }]
+  })
+}
+
 resource "aws_sqs_queue_policy" "usage_rollup" {
   queue_url = aws_sqs_queue.usage_rollup.id
   policy = jsonencode({
@@ -153,9 +169,7 @@ resource "aws_iam_role_policy" "lambda" {
   })
 }
 
-# Environment variables hold only the (non-sensitive) DynamoDB table name and
-# are encrypted at rest with the AWS-managed Lambda key.
-resource "aws_lambda_function" "usage_rollup" { # nosemgrep: terraform.aws.security.aws-lambda-environment-unencrypted.aws-lambda-environment-unencrypted
+resource "aws_lambda_function" "usage_rollup" {
   function_name = local.name
   role          = aws_iam_role.lambda.arn
 
@@ -168,6 +182,9 @@ resource "aws_lambda_function" "usage_rollup" { # nosemgrep: terraform.aws.secur
   memory_size      = 512
   timeout          = 30
 
+  # Environment variables hold only the (non-sensitive) DynamoDB table name and
+  # are encrypted at rest with the AWS-managed Lambda key.
+  # nosemgrep: terraform.aws.security.aws-lambda-environment-unencrypted.aws-lambda-environment-unencrypted
   environment {
     variables = {
       ROLLUP_TABLE = aws_dynamodb_table.usage_rollups.name

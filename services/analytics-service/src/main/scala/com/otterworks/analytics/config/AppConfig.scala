@@ -7,6 +7,7 @@ final case class AppConfig(
     s3: S3Config,
     sqs: SqsConfig,
     aws: AwsConfig,
+    eventBridge: EventBridgeConfig,
     postgres: PostgresConfig,
     repository: RepositoryConfig,
     server: ServerConfig
@@ -15,6 +16,9 @@ final case class AppConfig(
 final case class S3Config(dataLakeBucket: String)
 final case class SqsConfig(eventsQueueUrl: String)
 final case class AwsConfig(region: String, endpointUrl: Option[String])
+
+/** EventBridge publishing for the event-driven usage-rollup pipeline. */
+final case class EventBridgeConfig(enabled: Boolean, busName: String)
 final case class PostgresConfig(
     url: String,
     user: String,
@@ -51,6 +55,11 @@ object AppConfig:
         else None
     )
 
+    val eventBridge = EventBridgeConfig(
+      enabled = analytics.getBoolean("eventbridge.enabled"),
+      busName = analytics.getString("eventbridge.bus-name")
+    )
+
     val pg = analytics.getConfig("postgres")
     val postgres = PostgresConfig(
       url = pg.getString("url"),
@@ -70,4 +79,4 @@ object AppConfig:
       port = if analytics.hasPath("server.port") then analytics.getInt("server.port") else 8088
     )
 
-    AppConfig(s3, sqs, aws, postgres, repository, server)
+    AppConfig(s3, sqs, aws, eventBridge, postgres, repository, server)

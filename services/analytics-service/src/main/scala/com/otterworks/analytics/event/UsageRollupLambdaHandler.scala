@@ -41,13 +41,15 @@ class UsageRollupLambdaHandler(store: RollupStore) extends RequestStreamHandler:
     logger.info("usage-rollup upsert: events={} datesUpdated={}", events.size, updated.size)
     output.write(s"""{"batchItemFailures":[]}""".getBytes(StandardCharsets.UTF_8))
 
-  /** Incrementally upsert a batch of events; returns the affected dates. */
+  /**
+   * Incrementally upsert a batch of events; returns the affected dates. Events
+   * are folded into one delta per date and merged atomically, so concurrent
+   * invocations for the same date never lose each other's updates.
+   */
   def process(events: Seq[AnalyticsEvent]): Set[String] =
-    val dates = events.map(e => IncrementalUsageRollup.dateOf(e.timestamp)).toSet
-    val current = dates.flatMap(date => store.get(date).map(date -> _)).toMap
-    val updated = IncrementalUsageRollup.applyAll(current, events)
-    dates.foreach(date => updated.get(date).foreach(store.put))
-    dates
+    val deltas = IncrementalUsageRollup.applyAll(Map.empty, events)
+    deltas.values.foreach(store.merge)
+    deltas.keySet
 
 object UsageRollupLambdaHandler:
 

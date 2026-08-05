@@ -35,6 +35,7 @@ lazy val root = project
       "software.amazon.awssdk" % "s3" % "2.25.6",
       "software.amazon.awssdk" % "sqs" % "2.25.6",
       "software.amazon.awssdk" % "dynamodb" % "2.25.6",
+      "software.amazon.awssdk" % "eventbridge" % "2.25.6",
 
       // AWS Lambda runtime interface (event-driven usage-rollup handler)
       "com.amazonaws" % "aws-lambda-java-core" % "1.2.3",

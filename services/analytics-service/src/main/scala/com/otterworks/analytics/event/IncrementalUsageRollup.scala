@@ -44,6 +44,23 @@ final case class DailyRollupState(
       storageReleasedBytes = storageReleasedBytes + bytesIf(event, EventType.StorageReleased)
     )
 
+  /** Merge two states for the same date (counter sums, user-id set union). */
+  def combine(other: DailyRollupState): DailyRollupState =
+    require(date == other.date, s"cannot combine states for $date and ${other.date}")
+    DailyRollupState(
+      date = date,
+      totalEvents = totalEvents + other.totalEvents,
+      userIds = userIds ++ other.userIds,
+      documentsCreated = documentsCreated + other.documentsCreated,
+      documentsViewed = documentsViewed + other.documentsViewed,
+      documentsEdited = documentsEdited + other.documentsEdited,
+      filesUploaded = filesUploaded + other.filesUploaded,
+      filesDownloaded = filesDownloaded + other.filesDownloaded,
+      collabSessions = collabSessions + other.collabSessions,
+      storageAllocatedBytes = storageAllocatedBytes + other.storageAllocatedBytes,
+      storageReleasedBytes = storageReleasedBytes + other.storageReleasedBytes
+    )
+
   /** Project the state into the same output shape the batch job produces. */
   def toRollup: DailyUsageRollup =
     DailyUsageRollup(

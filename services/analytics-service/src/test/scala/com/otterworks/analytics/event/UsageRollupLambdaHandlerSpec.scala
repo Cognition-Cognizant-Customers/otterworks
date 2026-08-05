@@ -58,6 +58,21 @@ class UsageRollupLambdaHandlerSpec extends AnyFlatSpec with Matchers:
     }
   }
 
+  it should "not lose updates when interleaved handlers share the store" in {
+    val store = InMemoryRollupStore()
+    val a = UsageRollupLambdaHandler(store)
+    val b = UsageRollupLambdaHandler(store)
+    val events = EventLoader.fromResource(UsageRollupJob.DefaultInput)
+
+    // Alternate batches between two handler instances, as concurrent Lambda
+    // invocations merging deltas into the same date would.
+    events.grouped(10).zipWithIndex.foreach { case (batch, i) =>
+      (if i % 2 == 0 then a else b).process(batch)
+    }
+
+    IncrementalUsageRollup.rollups(store.snapshot) shouldBe UsageRollupAggregator.rollup(events)
+  }
+
   it should "match the deterministic batch aggregation exactly" in {
     val store = InMemoryRollupStore()
     val handler = UsageRollupLambdaHandler(store)

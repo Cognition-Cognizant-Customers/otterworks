@@ -1,18 +1,21 @@
 package com.otterworks.analytics.event
 
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient
-import software.amazon.awssdk.services.dynamodb.model.{AttributeValue, GetItemRequest, PutItemRequest}
+import software.amazon.awssdk.services.dynamodb.model.{AttributeValue, GetItemRequest, UpdateItemRequest}
 
 import scala.jdk.CollectionConverters.*
 
 /**
- * Persistence for per-day incremental rollup state. The Lambda handler reads
- * the current state for each affected date, folds the batch's events in, and
- * writes the updated state back (an upsert keyed on the calendar date).
+ * Persistence for per-day incremental rollup state. The Lambda handler folds a
+ * batch's events into one delta [[DailyRollupState]] per affected date and
+ * merges each delta into the store. Implementations must make `merge` atomic so
+ * concurrent invocations touching the same date never lose updates.
  */
 trait RollupStore:
   def get(date: String): Option[DailyRollupState]
-  def put(state: DailyRollupState): Unit
+
+  /** Atomically fold a delta into the stored state for `delta.date`. */
+  def merge(delta: DailyRollupState): Unit
 
 /** In-memory store used by tests and the local comparison harness. */
 final class InMemoryRollupStore extends RollupStore:
@@ -20,15 +23,22 @@ final class InMemoryRollupStore extends RollupStore:
 
   def get(date: String): Option[DailyRollupState] = states.get(date)
 
-  def put(state: DailyRollupState): Unit =
-    states = states.updated(state.date, state)
+  def merge(delta: DailyRollupState): Unit = synchronized {
+    val merged = states.get(delta.date) match
+      case Some(current) => current.combine(delta)
+      case None          => delta
+    states = states.updated(delta.date, merged)
+  }
 
   def snapshot: Map[String, DailyRollupState] = states
 
 /**
- * DynamoDB-backed store: one item per calendar date, keyed on `date`. The
- * distinct active-user set is persisted as a DynamoDB string set so
- * `activeUsers` stays exact across incremental upserts.
+ * DynamoDB-backed store: one item per calendar date, keyed on `date`. Deltas
+ * are applied with a single atomic `UpdateItem` (`ADD` on numeric counters and
+ * on the distinct user-id string set), so concurrent Lambda invocations for the
+ * same date never overwrite each other's increments. Derived values
+ * (`activeUsers`, `netStorageBytes`) are computed on read via
+ * [[DailyRollupState.toRollup]] rather than stored.
  */
 final class DynamoDbRollupStore(client: DynamoDbClient, tableName: String) extends RollupStore:
 
@@ -58,25 +68,40 @@ final class DynamoDbRollupStore(client: DynamoDbClient, tableName: String) exten
         )
       )
 
-  def put(state: DailyRollupState): Unit =
-    val rollup = state.toRollup
-    val item = scala.collection.mutable.Map[String, AttributeValue](
-      "date" -> AttributeValue.fromS(state.date),
-      "totalEvents" -> AttributeValue.fromN(state.totalEvents.toString),
-      "activeUsers" -> AttributeValue.fromN(rollup.activeUsers.toString),
-      "documentsCreated" -> AttributeValue.fromN(state.documentsCreated.toString),
-      "documentsViewed" -> AttributeValue.fromN(state.documentsViewed.toString),
-      "documentsEdited" -> AttributeValue.fromN(state.documentsEdited.toString),
-      "filesUploaded" -> AttributeValue.fromN(state.filesUploaded.toString),
-      "filesDownloaded" -> AttributeValue.fromN(state.filesDownloaded.toString),
-      "collabSessions" -> AttributeValue.fromN(state.collabSessions.toString),
-      "storageAllocatedBytes" -> AttributeValue.fromN(state.storageAllocatedBytes.toString),
-      "storageReleasedBytes" -> AttributeValue.fromN(state.storageReleasedBytes.toString),
-      "netStorageBytes" -> AttributeValue.fromN(rollup.netStorageBytes.toString)
+  def merge(delta: DailyRollupState): Unit =
+    val counters = List(
+      "totalEvents" -> delta.totalEvents,
+      "documentsCreated" -> delta.documentsCreated,
+      "documentsViewed" -> delta.documentsViewed,
+      "documentsEdited" -> delta.documentsEdited,
+      "filesUploaded" -> delta.filesUploaded,
+      "filesDownloaded" -> delta.filesDownloaded,
+      "collabSessions" -> delta.collabSessions,
+      "storageAllocatedBytes" -> delta.storageAllocatedBytes,
+      "storageReleasedBytes" -> delta.storageReleasedBytes
     )
+    val values = scala.collection.mutable.Map[String, AttributeValue]()
+    val adds = scala.collection.mutable.ListBuffer[String]()
+    counters.foreach { case (name, value) =>
+      adds += s"#$name :$name"
+      values(s":$name") = AttributeValue.fromN(value.toString)
+    }
     // DynamoDB string sets cannot be empty.
-    if state.userIds.nonEmpty then item("userIds") = AttributeValue.fromSs(state.userIds.toList.sorted.asJava)
-    client.putItem(PutItemRequest.builder().tableName(tableName).item(item.toMap.asJava).build())
+    if delta.userIds.nonEmpty then
+      adds += "#userIds :userIds"
+      values(":userIds") = AttributeValue.fromSs(delta.userIds.toList.sorted.asJava)
+    val names = (counters.map(_._1) ++ (if delta.userIds.nonEmpty then List("userIds") else Nil))
+      .map(name => s"#$name" -> name)
+      .toMap
+    val request = UpdateItemRequest
+      .builder()
+      .tableName(tableName)
+      .key(Map("date" -> AttributeValue.fromS(delta.date)).asJava)
+      .updateExpression("ADD " + adds.mkString(", "))
+      .expressionAttributeNames(names.asJava)
+      .expressionAttributeValues(values.toMap.asJava)
+      .build()
+    client.updateItem(request): Unit
 
   private def n(item: java.util.Map[String, AttributeValue], key: String): Long =
     Option(item.get(key)).map(_.n().toLong).getOrElse(0L)

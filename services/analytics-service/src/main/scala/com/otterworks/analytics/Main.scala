@@ -9,8 +9,12 @@ import com.otterworks.analytics.api.{AnalyticsRoutes, EventRoutes, HealthRoutes,
 import com.otterworks.analytics.batch.MarketSeeder
 import com.otterworks.analytics.config.AppConfig
 import com.otterworks.analytics.db.AnalyticsDb
+import com.otterworks.analytics.event.{EventBridgeUsageEventPublisher, NoopUsageEventPublisher, UsageEventPublisher}
 import com.otterworks.analytics.repository.{InMemoryMetricsRepository, MarketRepository, MetricsRepository, PostgresMetricsRepository}
 import com.otterworks.analytics.service.{AnalyticsService, EventProcessor, MarginService}
+import software.amazon.awssdk.services.eventbridge.EventBridgeClient
+
+import java.net.URI
 
 import scala.concurrent.{Await, ExecutionContextExecutor}
 import scala.concurrent.duration.Duration
@@ -47,7 +51,16 @@ object Main:
         system.log.info("Analytics using in-memory metrics store (per configuration)")
         (new InMemoryMetricsRepository(config.postgres), None)
 
-    val analyticsService = AnalyticsService(repository)
+    // Publish ingested events onto EventBridge to feed the event-driven
+    // usage-rollup pipeline (EventBridge rule -> SQS -> Lambda upsert).
+    val publisher: UsageEventPublisher =
+      if config.eventBridge.enabled then
+        val builder = EventBridgeClient.builder()
+        config.aws.endpointUrl.foreach(url => builder.endpointOverride(URI.create(url)))
+        EventBridgeUsageEventPublisher(builder.build(), config.eventBridge.busName)
+      else NoopUsageEventPublisher
+
+    val analyticsService = AnalyticsService(repository, publisher)
     val eventProcessor = EventProcessor(config, analyticsService)
 
     // Market/margin feature (requires the durable Postgres store): seed the
