@@ -1,4 +1,4 @@
-# Migration Notes: Java 8 / Spring Boot 2.5.14 → Java 17 / Spring Boot 3.2.5
+# Migration Notes — Java 8 / Spring Boot 2.5.14 → Java 17 / Spring Boot 3.2.5
 
 Each breaking change hit during the upgrade, the file it was in, and why the fix
 is behavior-preserving. Scope was deliberately minimal: only dependencies that are
