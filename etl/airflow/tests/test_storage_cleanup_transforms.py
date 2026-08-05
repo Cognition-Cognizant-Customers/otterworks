@@ -2,6 +2,7 @@
 
 import importlib.util
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -38,6 +39,16 @@ class TestKeyFormats:
             mod.build_report_key("2026-08-05")
             == "reports/storage-cleanup/2026-08-05/report.json"
         )
+
+
+class TestRunDate:
+    def test_scheduled_run_uses_interval_end_date(self):
+        interval_end = datetime(2026, 8, 5, 2, 30, tzinfo=timezone.utc)
+        assert mod.resolve_run_date(interval_end) == "2026-08-05"
+
+    def test_manual_run_falls_back_to_utc_now(self):
+        expected = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+        assert mod.resolve_run_date(None) == expected
 
 
 class TestTableName:

@@ -1,22 +1,31 @@
-version: "3.8"
+# Local development Airflow stack for the OtterWorks ETL DAGs.
+# Credentials are never committed: provide connections via a local .env file
+# (see the AIRFLOW_CONN_* variables below) or a secrets backend.
 
 x-airflow-common: &airflow-common
-  image: apache/airflow:2.8.4-python3.11
+  image: apache/airflow:3.2.2
+  security_opt:
+    - no-new-privileges:true
+  read_only: true
+  tmpfs:
+    - /tmp
+    - /opt/airflow
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
-    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
-    _PIP_ADDITIONAL_REQUIREMENTS: apache-airflow-providers-amazon==8.19.0 apache-airflow-providers-postgres==5.10.2
-    # Connections (override in a .env file or a secrets backend; do not commit secrets)
-    AIRFLOW_CONN_AWS_DEFAULT: ${AIRFLOW_CONN_AWS_DEFAULT:-aws://}
-    AIRFLOW_CONN_OTTERWORKS_POSTGRES: ${AIRFLOW_CONN_OTTERWORKS_POSTGRES:-postgresql://etl_user:changeme@analytics-db.internal.otterworks.dev:5432/otterworks_analytics}
+    # Local-dev auth only: every request is an admin. Never use outside localhost.
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "true"
+    # Connections (set in a local .env file or a secrets backend; no defaults
+    # with credentials are committed)
+    AIRFLOW_CONN_AWS_DEFAULT: ${AIRFLOW_CONN_AWS_DEFAULT:-}
+    AIRFLOW_CONN_OTTERWORKS_POSTGRES: ${AIRFLOW_CONN_OTTERWORKS_POSTGRES:-}
     # Variables
     AIRFLOW_VAR_OTTERWORKS_FILE_STORAGE_BUCKET: ${OTTERWORKS_FILE_STORAGE_BUCKET:-otterworks-file-storage}
     AIRFLOW_VAR_OTTERWORKS_QUARANTINE_BUCKET: ${OTTERWORKS_QUARANTINE_BUCKET:-otterworks-file-quarantine}
     AIRFLOW_VAR_OTTERWORKS_DATA_LAKE_BUCKET: ${OTTERWORKS_DATA_LAKE_BUCKET:-otterworks-data-lake}
   volumes:
-    - ./dags:/opt/airflow/dags
+    - ./dags:/opt/airflow/dags:ro
     - airflow-logs:/opt/airflow/logs
   depends_on:
     airflow-db:
@@ -25,6 +34,12 @@ x-airflow-common: &airflow-common
 services:
   airflow-db:
     image: postgres:15
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
@@ -38,24 +53,16 @@ services:
 
   airflow-init:
     <<: *airflow-common
-    entrypoint: /bin/bash
-    command:
-      - -c
-      - |
-        airflow db migrate
-        airflow users create \
-          --username admin --password admin \
-          --firstname Admin --lastname User \
-          --role Admin --email admin@otterworks.dev
+    command: ["airflow", "db", "migrate"]
     restart: "no"
 
-  airflow-webserver:
+  airflow-apiserver:
     <<: *airflow-common
-    command: webserver
+    command: api-server
     ports:
-      - "8090:8080"
+      - "127.0.0.1:8090:8080"
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/version"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -67,6 +74,14 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: dag-processor
     restart: unless-stopped
     depends_on:
       airflow-init:

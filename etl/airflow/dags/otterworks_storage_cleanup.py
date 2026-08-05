@@ -20,10 +20,10 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from airflow import DAG
-from airflow.models import Variable
-from airflow.operators.python import PythonOperator
+from airflow.providers.standard.operators.python import PythonOperator
 from airflow.providers.amazon.aws.hooks.dynamodb import DynamoDBHook
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from airflow.sdk import Variable
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,18 @@ def build_quarantine_key(quarantine_prefix, ds, source_key):
 def build_report_key(ds):
     """Data-lake report key: 'reports/storage-cleanup/<YYYY-MM-DD>/report.json'."""
     return "reports/storage-cleanup/%s/report.json" % ds
+
+
+def resolve_run_date(data_interval_end):
+    """Wall-clock UTC run date (YYYY-MM-DD), matching the legacy script.
+
+    For a scheduled daily run at 02:30 UTC the data interval ends at the
+    actual execution time, so its date equals the calendar day the cleanup
+    runs. Falls back to the current UTC date when no interval is set
+    (e.g. manual trigger).
+    """
+    moment = data_interval_end or datetime.now(tz=timezone.utc)
+    return moment.strftime("%Y-%m-%d")
 
 
 def find_orphans(all_objects, referenced_keys):
@@ -97,7 +109,7 @@ def build_report(ds, generated_at, total_objects, total_size_bytes,
 def list_s3_objects(**context):
     """Extract: list all objects under the files/ prefix in the storage bucket."""
     bucket = Variable.get(
-        "otterworks_file_storage_bucket", default_var="otterworks-file-storage"
+        "otterworks_file_storage_bucket", default="otterworks-file-storage"
     )
     logger.info("Listing objects in s3://%s/%s", bucket, FILES_PREFIX)
 
@@ -164,14 +176,14 @@ def find_orphaned_objects(**context):
 def move_to_quarantine(**context):
     """Quarantine: copy orphans to the quarantine bucket, then delete originals."""
     ti = context["ti"]
-    ds = context["ds"]
+    ds = resolve_run_date(context.get("data_interval_end"))
     orphaned = ti.xcom_pull(task_ids="find_orphaned_objects")
 
     file_storage_bucket = Variable.get(
-        "otterworks_file_storage_bucket", default_var="otterworks-file-storage"
+        "otterworks_file_storage_bucket", default="otterworks-file-storage"
     )
     quarantine_bucket = Variable.get(
-        "otterworks_quarantine_bucket", default_var="otterworks-file-quarantine"
+        "otterworks_quarantine_bucket", default="otterworks-file-quarantine"
     )
 
     if not orphaned:
@@ -209,16 +221,16 @@ def move_to_quarantine(**context):
 def generate_storage_report(**context):
     """Report: write the storage savings report JSON to the data lake bucket."""
     ti = context["ti"]
-    ds = context["ds"]
+    ds = resolve_run_date(context.get("data_interval_end"))
     all_objects = ti.xcom_pull(task_ids="list_s3_objects")
     orphaned = ti.xcom_pull(task_ids="find_orphaned_objects")
     quarantine_result = ti.xcom_pull(task_ids="move_to_quarantine")
 
     quarantine_bucket = Variable.get(
-        "otterworks_quarantine_bucket", default_var="otterworks-file-quarantine"
+        "otterworks_quarantine_bucket", default="otterworks-file-quarantine"
     )
     data_lake_bucket = Variable.get(
-        "otterworks_data_lake_bucket", default_var="otterworks-data-lake"
+        "otterworks_data_lake_bucket", default="otterworks-data-lake"
     )
 
     orphaned_bytes = sum(o["size"] for o in orphaned)
@@ -262,6 +274,7 @@ default_args = {
     "retry_delay": timedelta(minutes=1),
     "retry_exponential_backoff": True,
     "max_retry_delay": timedelta(minutes=30),
+    "email": ["data-team@otterworks.dev"],
     "email_on_failure": True,
 }
 
