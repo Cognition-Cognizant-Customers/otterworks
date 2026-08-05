@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi.testclient import TestClient
 
 from app.config import AppConfig, AuthConfig, MeiliSearchConfig, SQSConfig
 from app.main import create_app
@@ -59,18 +61,59 @@ def mock_meilisearch_client() -> MagicMock:
 
 @pytest.fixture()
 def app(app_config: AppConfig, mock_meilisearch_client: MagicMock):
-    """Create a Flask test app with mocked MeiliSearch."""
+    """Create a FastAPI test app with mocked MeiliSearch."""
     with patch("app.services.meilisearch_client.meilisearch.Client") as mock_cls:
         mock_cls.return_value = mock_meilisearch_client
-        flask_app = create_app(app_config)
-        flask_app.config["TESTING"] = True
-        yield flask_app
+        yield create_app(app_config)
+
+
+class _Response:
+    """Adapter exposing a Flask-test-client-like response interface."""
+
+    def __init__(self, response: Any) -> None:
+        self._response = response
+
+    @property
+    def status_code(self) -> int:
+        return self._response.status_code
+
+    @property
+    def data(self) -> bytes:
+        return self._response.content
+
+    def get_json(self) -> Any:
+        return self._response.json()
+
+
+class _Client:
+    """Adapter exposing a Flask-test-client-like request interface."""
+
+    def __init__(self, client: TestClient) -> None:
+        self._client = client
+
+    def _request(self, method: str, path: str, **kwargs: Any) -> _Response:
+        content_type = kwargs.pop("content_type", None)
+        if content_type is not None:
+            headers = dict(kwargs.pop("headers", None) or {})
+            headers["Content-Type"] = content_type
+            kwargs["headers"] = headers
+        return _Response(self._client.request(method, path, **kwargs))
+
+    def get(self, path: str, **kwargs: Any) -> _Response:
+        return self._request("GET", path, **kwargs)
+
+    def post(self, path: str, **kwargs: Any) -> _Response:
+        return self._request("POST", path, **kwargs)
+
+    def delete(self, path: str, **kwargs: Any) -> _Response:
+        return self._request("DELETE", path, **kwargs)
 
 
 @pytest.fixture()
 def client(app):
-    """Create a Flask test client."""
-    return app.test_client()
+    """Create a test client for the FastAPI app."""
+    with TestClient(app, raise_server_exceptions=False) as test_client:
+        yield _Client(test_client)
 
 
 @pytest.fixture()

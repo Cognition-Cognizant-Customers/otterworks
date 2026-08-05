@@ -2,92 +2,105 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import structlog
-from flask import Blueprint, jsonify, request
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
 
 from app.api.health import INDEX_COUNT
+from app.api.search import get_search_service
+from app.models.schemas import IndexResponseModel
 from app.services.indexer import Indexer
 from app.services.meilisearch_client import MeiliSearchService
 
 logger = structlog.get_logger()
 
-index_bp = Blueprint("index", __name__)
+router = APIRouter(prefix="/api/v1/search", tags=["index"])
 
 
-def _get_indexer() -> Indexer:
-    """Get an Indexer instance from the current app config."""
-    from flask import current_app
-
-    search_service: MeiliSearchService = current_app.config["SEARCH_SERVICE"]
+def get_indexer(
+    search_service: MeiliSearchService = Depends(get_search_service),
+) -> Indexer:
+    """Get an Indexer instance backed by the shared MeiliSearchService."""
     return Indexer(search_service)
 
 
-@index_bp.route("/index/document", methods=["POST"])
-def index_document() -> tuple:
+async def _read_json_body(request: Request) -> dict | None:
+    """Read the request body as JSON, returning None when absent or invalid."""
+    try:
+        data = await request.json()
+    except Exception:
+        return None
+    if not isinstance(data, dict) or not data:
+        return None
+    return data
+
+
+@router.post("/index/document", status_code=201, response_model=IndexResponseModel)
+async def index_document(request: Request, indexer: Indexer = Depends(get_indexer)):
     """Index a document (called by document-service or SQS)."""
-    data = request.get_json()
+    data = await _read_json_body(request)
     if not data:
-        return jsonify({"error": "Request body is required"}), 400
+        return JSONResponse(status_code=400, content={"error": "Request body is required"})
 
     try:
-        indexer = _get_indexer()
-        result = indexer.index_document(data)
+        result = await asyncio.to_thread(indexer.index_document, data)
         INDEX_COUNT.labels(operation="index", type="document").inc()
         logger.info("api_document_indexed", document_id=data.get("id"))
-        return jsonify(result), 201
+        return IndexResponseModel(**result)
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        return JSONResponse(status_code=400, content={"error": str(e)})
     except Exception:
         logger.exception("api_index_document_failed")
-        return jsonify({"error": "Failed to index document"}), 500
+        return JSONResponse(status_code=500, content={"error": "Failed to index document"})
 
 
-@index_bp.route("/index/file", methods=["POST"])
-def index_file() -> tuple:
+@router.post("/index/file", status_code=201, response_model=IndexResponseModel)
+async def index_file(request: Request, indexer: Indexer = Depends(get_indexer)):
     """Index a file (called by file-service or SQS)."""
-    data = request.get_json()
+    data = await _read_json_body(request)
     if not data:
-        return jsonify({"error": "Request body is required"}), 400
+        return JSONResponse(status_code=400, content={"error": "Request body is required"})
 
     try:
-        indexer = _get_indexer()
-        result = indexer.index_file(data)
+        result = await asyncio.to_thread(indexer.index_file, data)
         INDEX_COUNT.labels(operation="index", type="file").inc()
         logger.info("api_file_indexed", file_id=data.get("id"))
-        return jsonify(result), 201
+        return IndexResponseModel(**result)
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        return JSONResponse(status_code=400, content={"error": str(e)})
     except Exception:
         logger.exception("api_index_file_failed")
-        return jsonify({"error": "Failed to index file"}), 500
+        return JSONResponse(status_code=500, content={"error": "Failed to index file"})
 
 
-@index_bp.route("/index/<doc_type>/<doc_id>", methods=["DELETE"])
-def remove_from_index(doc_type: str, doc_id: str) -> tuple:
+@router.delete("/index/{doc_type}/{doc_id}", response_model=IndexResponseModel)
+async def remove_from_index(
+    doc_type: str, doc_id: str, indexer: Indexer = Depends(get_indexer)
+):
     """Remove a document or file from the search index."""
     try:
-        indexer = _get_indexer()
-        result = indexer.remove(doc_type, doc_id)
+        result = await asyncio.to_thread(indexer.remove, doc_type, doc_id)
         if result["status"] == "not_found":
-            return jsonify(result), 404
+            return JSONResponse(status_code=404, content=result)
         INDEX_COUNT.labels(operation="delete", type=doc_type).inc()
         logger.info("api_document_removed", doc_type=doc_type, doc_id=doc_id)
-        return jsonify(result), 200
+        return IndexResponseModel(**result)
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        return JSONResponse(status_code=400, content={"error": str(e)})
     except Exception:
         logger.exception("api_remove_from_index_failed")
-        return jsonify({"error": "Failed to remove from index"}), 500
+        return JSONResponse(status_code=500, content={"error": "Failed to remove from index"})
 
 
-@index_bp.route("/reindex", methods=["POST"])
-def reindex() -> tuple:
+@router.post("/reindex")
+async def reindex(indexer: Indexer = Depends(get_indexer)):
     """Reindex all data (admin operation)."""
     try:
-        indexer = _get_indexer()
-        result = indexer.reindex()
+        result = await asyncio.to_thread(indexer.reindex)
         logger.info("api_reindex_triggered")
-        return jsonify(result), 200
+        return result
     except Exception:
         logger.exception("api_reindex_failed")
-        return jsonify({"error": "Failed to reindex"}), 500
+        return JSONResponse(status_code=500, content={"error": "Failed to reindex"})

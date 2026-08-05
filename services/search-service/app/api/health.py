@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import structlog
-from flask import Blueprint, current_app, jsonify
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse, Response
 from prometheus_client import (
     Counter,
     Histogram,
     generate_latest,
 )
 
+from app.models.schemas import HealthResponseModel, ReadinessResponseModel
+
 logger = structlog.get_logger()
 
-health_bp = Blueprint("health", __name__)
+health_router = APIRouter()
 
 # Prometheus metrics
 REQUEST_COUNT = Counter(
@@ -36,34 +41,33 @@ INDEX_COUNT = Counter(
 )
 
 
-@health_bp.route("/health")
-def health() -> tuple:
+@health_router.get("/health", response_model=HealthResponseModel)
+async def health() -> HealthResponseModel:
     """Liveness check — returns 200 if the process is running."""
-    return jsonify({
-        "status": "alive",
-        "service": "search-service",
-    }), 200
+    return HealthResponseModel(status="alive", service="search-service")
 
 
-@health_bp.route("/health/ready")
-def readiness() -> tuple:
+@health_router.get("/health/ready")
+async def readiness(request: Request):
     """Readiness check — returns 503 if MeiliSearch is unreachable."""
-    search_service = current_app.config.get("SEARCH_SERVICE")
+    search_service = getattr(request.app.state, "search_service", None)
 
     healthy = False
     if search_service:
-        healthy = search_service.ping()
+        healthy = await asyncio.to_thread(search_service.ping)
 
     if healthy:
-        return jsonify({"ready": True}), 200
-    return jsonify({"ready": False, "reason": "meilisearch_unavailable"}), 503
+        return ReadinessResponseModel(ready=True)
+    return JSONResponse(
+        status_code=503,
+        content={"ready": False, "reason": "meilisearch_unavailable"},
+    )
 
 
-@health_bp.route("/metrics")
-def metrics() -> tuple:
+@health_router.get("/metrics")
+async def metrics() -> Response:
     """Prometheus metrics endpoint."""
-    return (
-        generate_latest(),
-        200,
-        {"Content-Type": "text/plain; charset=utf-8"},
+    return Response(
+        content=generate_latest(),
+        media_type="text/plain; charset=utf-8",
     )

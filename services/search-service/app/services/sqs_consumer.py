@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
-import threading
-import time
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -16,7 +15,7 @@ logger = structlog.get_logger()
 
 
 class SQSConsumer:
-    """Background thread SQS consumer for search-indexing queue events."""
+    """Asyncio-task SQS consumer for search-indexing queue events."""
 
     def __init__(
         self,
@@ -36,26 +35,27 @@ class SQSConsumer:
         self.wait_time_seconds = wait_time_seconds
         self.visibility_timeout = visibility_timeout
         self._running = False
-        self._thread: threading.Thread | None = None
+        self._task: asyncio.Task | None = None
 
     def start(self) -> None:
-        """Start the SQS consumer in a background daemon thread."""
+        """Start the SQS consumer as a background asyncio task."""
         if not self.queue_url:
             logger.warning("sqs_consumer_skipped", reason="No SQS_QUEUE_URL configured")
             return
 
         self._running = True
-        self._thread = threading.Thread(
-            target=self._poll_loop, daemon=True, name="sqs-consumer"
-        )
-        self._thread.start()
+        self._task = asyncio.create_task(self._poll_loop(), name="sqs-consumer")
         logger.info("sqs_consumer_started", queue_url=self.queue_url)
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """Stop the SQS consumer."""
         self._running = False
-        if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=5)
+        if self._task and not self._task.done():
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
         logger.info("sqs_consumer_stopped")
 
     def _create_sqs_client(self) -> Any:
@@ -67,13 +67,18 @@ class SQSConsumer:
             kwargs["endpoint_url"] = self.endpoint_url
         return boto3.client("sqs", **kwargs)
 
-    def _poll_loop(self) -> None:
-        """Main polling loop for SQS messages."""
-        sqs = self._create_sqs_client()
+    async def _poll_loop(self) -> None:
+        """Main polling loop for SQS messages.
+
+        The boto3 SQS client is synchronous, so every call is dispatched to a
+        worker thread via ``asyncio.to_thread`` to keep the event loop free.
+        """
+        sqs = await asyncio.to_thread(self._create_sqs_client)
 
         while self._running:
             try:
-                response = sqs.receive_message(
+                response = await asyncio.to_thread(
+                    sqs.receive_message,
                     QueueUrl=self.queue_url,
                     MaxNumberOfMessages=self.max_messages,
                     WaitTimeSeconds=self.wait_time_seconds,
@@ -82,11 +87,13 @@ class SQSConsumer:
 
                 messages = response.get("Messages", [])
                 for message in messages:
-                    self._process_message(sqs, message)
+                    await asyncio.to_thread(self._process_message, sqs, message)
 
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 logger.exception("sqs_consumer_error")
-                time.sleep(5)
+                await asyncio.sleep(5)
 
     @staticmethod
     def _normalize_event(body: dict[str, Any]) -> dict[str, Any]:

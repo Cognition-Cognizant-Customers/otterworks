@@ -2,18 +2,25 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 
 import redis as redis_lib
 import structlog
-from flask import Blueprint, current_app, jsonify, request
+from fastapi import APIRouter, Depends, Header, Query, Request
+from fastapi.responses import JSONResponse
 
 from app.api.health import SEARCH_COUNT
+from app.models.schemas import (
+    AnalyticsResponseModel,
+    SearchResponseModel,
+    SuggestResponseModel,
+)
 from app.services.meilisearch_client import MeiliSearchService, get_search_analytics
 
 logger = structlog.get_logger()
 
-search_bp = Blueprint("search", __name__)
+router = APIRouter(prefix="/api/v1/search", tags=["search"])
 
 _redis_client: redis_lib.Redis | None = None
 
@@ -36,59 +43,70 @@ def _chaos_active(key: str) -> bool:
         return False
 
 
-def _get_service() -> MeiliSearchService:
-    """Get the shared MeiliSearchService from app config."""
-    return current_app.config["SEARCH_SERVICE"]
+def get_search_service(request: Request) -> MeiliSearchService:
+    """Get the shared MeiliSearchService from app state."""
+    return request.app.state.search_service
 
 
-@search_bp.route("/", methods=["GET"], strict_slashes=False)
-def search_documents() -> tuple:
+@router.get("", include_in_schema=False, response_model=SearchResponseModel, response_model_exclude_none=True)
+@router.get("/", response_model=SearchResponseModel, response_model_exclude_none=True)
+async def search_documents(
+    q: str = Query(""),
+    type: str | None = Query(None),
+    page: str = Query("1"),
+    size: str = Query("20"),
+    x_user_id: str | None = Header(None, alias="X-User-ID"),
+    service: MeiliSearchService = Depends(get_search_service),
+):
     """Full-text search across documents and files.
 
     Query params: q (required), type, page, size
     Results are automatically scoped to the authenticated user via the
     ``X-User-ID`` header set by the API gateway.
     """
-    query = request.args.get("q", "")
+    query = q
     try:
-        page = max(1, int(request.args.get("page", 1)))
-        page_size = max(1, min(100, int(request.args.get("size", 20))))
+        page_num = max(1, int(page))
+        page_size = max(1, min(100, int(size)))
     except (ValueError, TypeError):
-        return jsonify({"error": "Invalid page or size parameter"}), 400
-    doc_type = request.args.get("type")
-    owner_id = request.headers.get("X-User-ID", "").strip() or None
+        return JSONResponse(status_code=400, content={"error": "Invalid page or size parameter"})
+    doc_type = type
+    owner_id = x_user_id.strip() if x_user_id and x_user_id.strip() else None
 
     if not query:
-        return jsonify({"error": "Query parameter 'q' is required"}), 400
+        return JSONResponse(status_code=400, content={"error": "Query parameter 'q' is required"})
 
     try:
-        service = _get_service()
-        results = service.search(
+        results = await asyncio.to_thread(
+            service.search,
             query=query,
             doc_type=doc_type,
             owner_id=owner_id,
-            page=page,
+            page=page_num,
             page_size=page_size,
         )
         SEARCH_COUNT.inc()
         logger.info("search_executed", query=query, result_count=results.total)
-        return jsonify(results.to_dict()), 200
+        return SearchResponseModel(**results.to_dict())
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        return JSONResponse(status_code=400, content={"error": str(e)})
     except Exception:
         logger.exception("search_failed", query=query)
-        return jsonify({"error": "Search failed"}), 500
+        return JSONResponse(status_code=500, content={"error": "Search failed"})
 
 
-@search_bp.route("/suggest", methods=["GET"])
-def suggest() -> tuple:
+@router.get("/suggest", response_model=SuggestResponseModel)
+async def suggest(
+    q: str = Query(""),
+    service: MeiliSearchService = Depends(get_search_service),
+):
     """Autocomplete suggestions based on prefix.
 
     Query params: q (required, min 2 chars)
     """
-    prefix = request.args.get("q", "")
+    prefix = q
     if not prefix or len(prefix) < 2:
-        return jsonify({"suggestions": [], "query": prefix}), 200
+        return SuggestResponseModel(suggestions=[], query=prefix)
 
     # CHAOS: when this flag is active the ranking-score enrichment path runs.
     # This path was introduced to sort suggestions by relevance using
@@ -96,8 +114,7 @@ def suggest() -> tuple:
     # requested via attributesToRetrieve — without it the key lookup raises
     # KeyError and crashes the handler with a 500.
     if _chaos_active("chaos:search-service:suggest_500"):
-        service = _get_service()
-        raw_suggestions = service.suggest(prefix)
+        raw_suggestions = await asyncio.to_thread(service.suggest, prefix)
         if not raw_suggestions:
             # Simulate the same KeyError that fires when results exist but
             # _rankingScore is missing — ensures chaos fires even with an
@@ -105,29 +122,37 @@ def suggest() -> tuple:
             raw_suggestions = [{}]
         # Sort by MeiliSearch ranking score for better relevance ordering.
         ranked = sorted(raw_suggestions, key=lambda s: s["_rankingScore"], reverse=True)  # type: ignore[index]
-        return jsonify({"suggestions": ranked, "query": prefix}), 200
+        return SuggestResponseModel(suggestions=ranked, query=prefix)
 
     try:
-        service = _get_service()
-        suggestions = service.suggest(prefix)
-        return jsonify({"suggestions": suggestions, "query": prefix}), 200
+        suggestions = await asyncio.to_thread(service.suggest, prefix)
+        return SuggestResponseModel(suggestions=suggestions, query=prefix)
     except Exception:
         logger.exception("suggest_failed", prefix=prefix)
-        return jsonify({"suggestions": [], "query": prefix}), 200
+        return SuggestResponseModel(suggestions=[], query=prefix)
 
 
-@search_bp.route("/advanced", methods=["POST"])
-def advanced_search() -> tuple:
+@router.post("/advanced", response_model=SearchResponseModel, response_model_exclude_none=True)
+async def advanced_search(
+    request: Request,
+    x_user_id: str | None = Header(None, alias="X-User-ID"),
+    service: MeiliSearchService = Depends(get_search_service),
+):
     """Advanced search with filters: date range, owner, type, tags.
 
     JSON body: {q, type, tags, date_from, date_to, page, size}
     owner_id is always derived from X-User-ID for tenant isolation.
     """
-    data = request.get_json() or {}
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
 
     query = data.get("q")
     doc_type = data.get("type")
-    owner_id = request.headers.get("X-User-ID", "").strip() or None
+    owner_id = x_user_id.strip() if x_user_id and x_user_id.strip() else None
     tags = data.get("tags")
     date_from = data.get("date_from")
     date_to = data.get("date_to")
@@ -135,11 +160,11 @@ def advanced_search() -> tuple:
         page = max(int(data.get("page", 1)), 1)
         page_size = min(max(int(data.get("size", 20)), 1), 100)
     except (ValueError, TypeError):
-        return jsonify({"error": "Invalid page or size parameter"}), 400
+        return JSONResponse(status_code=400, content={"error": "Invalid page or size parameter"})
 
     try:
-        service = _get_service()
-        results = service.advanced_search(
+        results = await asyncio.to_thread(
+            service.advanced_search,
             query=query,
             doc_type=doc_type,
             owner_id=owner_id,
@@ -151,18 +176,18 @@ def advanced_search() -> tuple:
         )
         SEARCH_COUNT.inc()
         logger.info("advanced_search_executed", query=query, result_count=results.total)
-        return jsonify(results.to_dict()), 200
+        return SearchResponseModel(**results.to_dict())
     except Exception:
         logger.exception("advanced_search_failed")
-        return jsonify({"error": "Advanced search failed"}), 500
+        return JSONResponse(status_code=500, content={"error": "Advanced search failed"})
 
 
-@search_bp.route("/analytics", methods=["GET"])
-def search_analytics() -> tuple:
+@router.get("/analytics", response_model=AnalyticsResponseModel)
+async def search_analytics():
     """Search analytics: popular queries, zero-result queries."""
     try:
         analytics = get_search_analytics()
-        return jsonify(analytics.to_dict()), 200
+        return AnalyticsResponseModel(**analytics.to_dict())
     except Exception:
         logger.exception("analytics_failed")
-        return jsonify({"error": "Failed to retrieve analytics"}), 500
+        return JSONResponse(status_code=500, content={"error": "Failed to retrieve analytics"})
