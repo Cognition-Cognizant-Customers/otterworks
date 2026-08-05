@@ -24,6 +24,8 @@ locals {
   # The rule listens on the account's default event bus.
   event_bus_arn = "arn:aws:events:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:event-bus/default"
 
+  jar_present = fileexists(var.lambda_jar_path)
+
   common_tags = {
     Module  = "usage-rollup"
     Project = var.project
@@ -208,12 +210,14 @@ resource "aws_lambda_function" "usage_rollup" {
 
   # Fat jar built from analytics-service (sbt assembly); the handler class is
   # compiled alongside the legacy batch job so both share aggregation semantics.
-  # `filebase64sha256` is evaluated at plan time, so it is guarded with
-  # `fileexists` to keep `terraform plan`/`apply` of unrelated resources working
-  # from a clean checkout where the jar has not been assembled yet. Creating or
-  # updating this function still requires `sbt assembly` first.
+  # The function (and its event source mapping) is skipped entirely when the
+  # jar has not been assembled yet, so plans/applies of unrelated resources
+  # from a clean checkout keep working; run `sbt assembly` and re-apply to
+  # create it. deploy-dev.sh builds the jar before `terraform apply`.
+  count = local.jar_present ? 1 : 0
+
   filename         = var.lambda_jar_path
-  source_code_hash = fileexists(var.lambda_jar_path) ? filebase64sha256(var.lambda_jar_path) : null
+  source_code_hash = filebase64sha256(var.lambda_jar_path)
   handler          = "com.otterworks.analytics.event.UsageRollupLambdaHandler::handleRequest"
   runtime          = "java17"
   memory_size      = 512
@@ -237,8 +241,10 @@ resource "aws_lambda_function" "usage_rollup" {
 }
 
 resource "aws_lambda_event_source_mapping" "usage_rollup" {
+  count = local.jar_present ? 1 : 0
+
   event_source_arn                   = aws_sqs_queue.usage_rollup.arn
-  function_name                      = aws_lambda_function.usage_rollup.arn
+  function_name                      = aws_lambda_function.usage_rollup[0].arn
   batch_size                         = 10
   maximum_batching_window_in_seconds = 5
   function_response_types            = ["ReportBatchItemFailures"]
