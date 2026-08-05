@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { FileText, MoreVertical, Trash2, Share2, ExternalLink, Star } from "lucide-react";
+import { FileText, MoreVertical, Trash2, Share2, ExternalLink, Star, Archive, ArchiveRestore } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import type { Document } from "@/types";
 import { formatRelativeTime, getInitials, generateColor } from "@/lib/utils";
@@ -10,11 +10,21 @@ interface DocumentCardProps {
   document: Document;
   onDelete?: (id: string) => void;
   onShare?: (id: string) => void;
+  onArchive?: (id: string) => void;
   view?: "grid" | "list";
   onStarToggle?: () => void;
 }
 
-export function DocumentCard({ document, onDelete, onShare, view = "grid", onStarToggle }: DocumentCardProps) {
+function ArchivedBadge({ archivedAt }: Readonly<{ archivedAt?: string | null }>) {
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[11px] font-medium flex-shrink-0">
+      <Archive size={11} />
+      Archived{archivedAt ? ` ${new Date(archivedAt).toLocaleDateString()}` : ""}
+    </span>
+  );
+}
+
+export function DocumentCard({ document, onDelete, onShare, onArchive, view = "grid", onStarToggle }: DocumentCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { user } = useAuthStore();
   const userId = user?.id ?? "";
@@ -51,6 +61,7 @@ export function DocumentCard({ document, onDelete, onShare, view = "grid", onSta
             {document.wordCount > 0 && ` \u00B7 ${document.wordCount} words`}
           </p>
         </div>
+        {document.isArchived && <ArchivedBadge archivedAt={document.archivedAt} />}
         {(document.collaborators ?? []).length > 0 && (
           <div className="flex -space-x-1 mr-2">
             {document.collaborators.slice(0, 3).map((c) => (
@@ -89,9 +100,11 @@ export function DocumentCard({ document, onDelete, onShare, view = "grid", onSta
           {menuOpen && (
             <DocMenu
               docId={document.id}
+              isArchived={document.isArchived}
               onClose={() => setMenuOpen(false)}
               onDelete={onDelete}
               onShare={onShare}
+              onArchive={onArchive}
             />
           )}
         </div>
@@ -120,6 +133,11 @@ export function DocumentCard({ document, onDelete, onShare, view = "grid", onSta
             <p className="text-xs text-gray-500 mt-0.5">
               {formatRelativeTime(document.updatedAt)}
             </p>
+            {document.isArchived && (
+              <div className="mt-1">
+                <ArchivedBadge archivedAt={document.archivedAt} />
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-1">
             <button
@@ -146,9 +164,11 @@ export function DocumentCard({ document, onDelete, onShare, view = "grid", onSta
               {menuOpen && (
                 <DocMenu
                   docId={document.id}
+                  isArchived={document.isArchived}
                   onClose={() => setMenuOpen(false)}
                   onDelete={onDelete}
                   onShare={onShare}
+                  onArchive={onArchive}
                 />
               )}
             </div>
@@ -176,14 +196,18 @@ export function DocumentCard({ document, onDelete, onShare, view = "grid", onSta
 
 function DocMenu({
   docId,
+  isArchived,
   onClose,
   onDelete,
   onShare,
+  onArchive,
 }: {
   docId: string;
+  isArchived?: boolean;
   onClose: () => void;
   onDelete?: (id: string) => void;
   onShare?: (id: string) => void;
+  onArchive?: (id: string) => void;
 }) {
   return (
     <>
@@ -208,6 +232,18 @@ function DocMenu({
         >
           <Share2 size={14} />
           Share
+        </button>
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onArchive?.(docId);
+            onClose();
+          }}
+          className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+        >
+          {isArchived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
+          {isArchived ? "Unarchive" : "Archive"}
         </button>
         <button
           onClick={(e) => {

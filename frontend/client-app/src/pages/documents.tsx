@@ -33,10 +33,11 @@ function DocumentsContent() {
   const queryClient = useQueryClient();
   const { viewMode, setViewMode } = useUIStore();
   const [searchQuery, setSearchQuery] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["documents", "list"],
-    queryFn: () => documentsApi.list(),
+    queryKey: ["documents", "list", { archived: showArchived }],
+    queryFn: () => documentsApi.list(1, 50, showArchived),
   });
 
   const createMutation = useMutation({
@@ -53,6 +54,14 @@ function DocumentsContent() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["documents"] });
       queryClient.invalidateQueries({ queryKey: ["storage", "usage"] });
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: (id: string) =>
+      showArchived ? documentsApi.unarchive(id) : documentsApi.archive(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
     },
   });
 
@@ -95,6 +104,32 @@ function DocumentsContent() {
         </div>
       </div>
 
+      {/* Active / Archived toggle */}
+      <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden w-fit">
+        <button
+          onClick={() => setShowArchived(false)}
+          className={cn(
+            "px-3 py-1.5 text-sm transition",
+            !showArchived
+              ? "bg-gray-100 text-gray-900 font-medium"
+              : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+          )}
+        >
+          Active
+        </button>
+        <button
+          onClick={() => setShowArchived(true)}
+          className={cn(
+            "px-3 py-1.5 text-sm transition",
+            showArchived
+              ? "bg-gray-100 text-gray-900 font-medium"
+              : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+          )}
+        >
+          Archived
+        </button>
+      </div>
+
       {/* Search/filter */}
       <div className="relative max-w-md">
         <Search
@@ -118,6 +153,7 @@ function DocumentsContent() {
         viewMode={viewMode}
         onCreate={() => createMutation.mutate("Untitled document")}
         onDelete={(id) => deleteMutation.mutate(id)}
+        onArchive={(id) => archiveMutation.mutate(id)}
       />
     </div>
   );
@@ -130,6 +166,7 @@ function DocumentListing({
   viewMode,
   onCreate,
   onDelete,
+  onArchive,
 }: Readonly<{
   isLoading: boolean;
   documents: Document[];
@@ -137,6 +174,7 @@ function DocumentListing({
   viewMode: ViewMode;
   onCreate: () => void;
   onDelete: (id: string) => void;
+  onArchive: (id: string) => void;
 }>) {
   if (isLoading) {
     return <PageLoader />;
@@ -178,6 +216,7 @@ function DocumentListing({
           document={doc}
           view={viewMode}
           onDelete={onDelete}
+          onArchive={onArchive}
         />
       ))}
     </div>

@@ -82,6 +82,8 @@ export interface Document {
   createdAt: string;
   updatedAt: string;
   trashedAt?: string;
+  isArchived?: boolean;
+  archivedAt?: string | null;
 }
 
 export interface Collaborator {

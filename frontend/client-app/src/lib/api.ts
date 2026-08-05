@@ -328,9 +328,9 @@ export const filesApi = {
 
 // ── Documents ─────────────────────────────────────────────────
 export const documentsApi = {
-  list: async (page = 1, pageSize = 50): Promise<PaginatedResponse<Document>> => {
+  list: async (page = 1, pageSize = 50, archived = false): Promise<PaginatedResponse<Document>> => {
     const { data } = await apiClient.get<PaginatedResponse<Document>>("/documents", {
-      params: { page, pageSize },
+      params: { page, pageSize, archived },
     });
     return data;
   },
@@ -354,6 +354,12 @@ export const documentsApi = {
   },
   restore: async (id: string): Promise<void> => {
     await apiClient.post(`/documents/${id}/restore`);
+  },
+  archive: async (id: string): Promise<void> => {
+    await apiClient.post(`/documents/${id}/archive`);
+  },
+  unarchive: async (id: string): Promise<void> => {
+    await apiClient.post(`/documents/${id}/unarchive`);
   },
   getRecent: async (limit = 10): Promise<Document[]> => {
     const { data } = await apiClient.get<{ items?: Document[] }>("/documents", {
