@@ -106,6 +106,44 @@ describe('AuthService', () => {
     expect(service.currentUser?.token).toBe('new-access');
   });
 
+  it('should not restore a session when logout happens during refresh', () => {
+    localStorage.setItem('ow_admin_token', 'old-access');
+    localStorage.setItem('ow_admin_refresh_token', 'old-refresh');
+    localStorage.setItem('ow_admin_user', JSON.stringify({
+      id: 'user-id', email: 'admin@otterworks.io', displayName: 'Admin User',
+      role: 'admin', token: 'old-access',
+    }));
+    service.refreshSession().subscribe();
+    const refresh = httpTestingController.expectOne('/api/v1/auth/refresh');
+    service.logout();
+    refresh.flush(loginResponse('new-access', 'new-refresh'));
+    const profile = httpTestingController.expectOne('/api/v1/auth/profile');
+    profile.flush({
+      id: 'user-id', email: 'admin@otterworks.io', displayName: 'Admin User',
+      avatarUrl: null, roles: ['ADMIN'],
+    });
+    expect(localStorage.getItem('ow_admin_token')).toBeNull();
+    expect(localStorage.getItem('ow_admin_refresh_token')).toBeNull();
+    expect(localStorage.getItem('ow_admin_user')).toBeNull();
+    expect(service.currentUser).toBeNull();
+  });
+
+  it('should not restore a session when logout happens during login', () => {
+    service.login('admin@otterworks.io', 'admin123').subscribe();
+    const login = httpTestingController.expectOne('/api/v1/auth/login');
+    service.logout();
+    login.flush(loginResponse());
+    const profile = httpTestingController.expectOne('/api/v1/auth/profile');
+    profile.flush({
+      id: 'user-id', email: 'admin@otterworks.io', displayName: 'Admin User',
+      avatarUrl: null, roles: ['ADMIN'],
+    });
+    expect(localStorage.getItem('ow_admin_token')).toBeNull();
+    expect(localStorage.getItem('ow_admin_refresh_token')).toBeNull();
+    expect(localStorage.getItem('ow_admin_user')).toBeNull();
+    expect(service.currentUser).toBeNull();
+  });
+
   it('should share one in-flight refresh request', () => {
     localStorage.setItem('ow_admin_refresh_token', 'old-refresh');
     const tokens: string[] = [];

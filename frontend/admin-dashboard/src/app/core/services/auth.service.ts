@@ -39,6 +39,7 @@ export class AuthService {
   private readonly REFRESH_TOKEN_KEY = 'ow_admin_refresh_token';
   private readonly USER_KEY = 'ow_admin_user';
   private refreshInFlight$: Observable<string> | null = null;
+  private sessionEpoch = 0;
   private currentUserSubject = new BehaviorSubject<AuthUser | null>(this.getStoredUser());
   currentUser$ = this.currentUserSubject.asObservable();
 
@@ -61,6 +62,7 @@ export class AuthService {
       return throwError(() => new Error('Invalid credentials'));
     }
 
+    const sessionEpoch = this.sessionEpoch;
     return this.http.post<AuthResponse>('/api/v1/auth/login', { email, password }).pipe(
       catchError(error => {
         if (error instanceof HttpErrorResponse && [400, 401].includes(error.status)) {
@@ -85,7 +87,7 @@ export class AuthService {
         user: this.toAuthUser(profile, response.accessToken),
         refreshToken: response.refreshToken,
       })),
-      tap(({ user, refreshToken }) => this.persistSession(user, refreshToken)),
+      tap(({ user, refreshToken }) => this.persistSession(user, refreshToken, sessionEpoch)),
       map(({ user }) => user),
     );
   }
@@ -99,6 +101,7 @@ export class AuthService {
       return this.refreshInFlight$;
     }
 
+    const sessionEpoch = this.sessionEpoch;
     const refreshToken = this.getRefreshToken();
     if (!refreshToken) {
       this.logout();
@@ -126,14 +129,16 @@ export class AuthService {
           ? error
           : new Error('Unable to verify admin privileges'))),
       )),
-      tap(({ user, refreshToken }) => this.persistSession(user, refreshToken)),
+      tap(({ user, refreshToken }) => this.persistSession(user, refreshToken, sessionEpoch)),
       map(({ user }) => user.token),
       catchError(error => {
         this.logout();
         return throwError(() => error instanceof Error ? error : new Error('Session refresh failed'));
       }),
       finalize(() => {
-        this.refreshInFlight$ = null;
+        if (this.sessionEpoch === sessionEpoch) {
+          this.refreshInFlight$ = null;
+        }
       }),
       shareReplay({ bufferSize: 1, refCount: false }),
     );
@@ -142,6 +147,8 @@ export class AuthService {
   }
 
   logout(): void {
+    this.sessionEpoch++;
+    this.refreshInFlight$ = null;
     localStorage.removeItem(this.TOKEN_KEY);
     localStorage.removeItem(this.REFRESH_TOKEN_KEY);
     localStorage.removeItem(this.USER_KEY);
@@ -171,7 +178,10 @@ export class AuthService {
     };
   }
 
-  private persistSession(user: AuthUser, refreshToken: string): void {
+  private persistSession(user: AuthUser, refreshToken: string, sessionEpoch: number): void {
+    if (sessionEpoch !== this.sessionEpoch) {
+      return;
+    }
     localStorage.setItem(this.TOKEN_KEY, user.token);
     localStorage.setItem(this.REFRESH_TOKEN_KEY, refreshToken);
     localStorage.setItem(this.USER_KEY, JSON.stringify(user));
