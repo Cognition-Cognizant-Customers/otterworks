@@ -54,6 +54,13 @@ resource "aws_cloudwatch_event_target" "usage_events_to_sqs" {
   dead_letter_config {
     arn = aws_sqs_queue.usage_rollup_dlq.arn
   }
+
+  # EventBridge can only deliver once the queues allow events.amazonaws.com to
+  # SendMessage; without this the rule can go live before the policies exist.
+  depends_on = [
+    aws_sqs_queue_policy.usage_rollup,
+    aws_sqs_queue_policy.usage_rollup_dlq,
+  ]
 }
 
 # --- SQS queue (buffer/retry) + dead-letter queue ---
