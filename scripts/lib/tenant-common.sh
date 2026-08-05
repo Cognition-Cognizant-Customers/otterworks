@@ -356,6 +356,14 @@ build_helm_args() {
       # the session pooler far less than the connection count suggests.
       EXTRA_ARGS+=(--set-string "config.DATABASE_URL=jdbc:postgresql://${DB_ENDPOINT_HOST}:${DB_SESSION_PORT}/${T_DB_NAME}")
       EXTRA_ARGS+=(--set-string "config.DATABASE_USER=${DB_USER}")
+      # Tenants never publish onto the shared default EventBridge bus (same
+      # isolation rule as SNS/SQS eventing): the usage-rollup pipeline and its
+      # rollup table are shared, so tenant events would mix across tenants.
+      if [ "${T_WIRE_EVENTING}" = "true" ]; then
+        EXTRA_ARGS+=(--set-string "config.EVENTBRIDGE_ENABLED=true")
+      else
+        EXTRA_ARGS+=(--set-string "config.EVENTBRIDGE_ENABLED=false")
+      fi
       add_secret DATABASE_PASSWORD "${DB_PASSWORD}" ;;
     admin-service)
       # Rails takes a session-level advisory lock in `db:migrate`, which runs

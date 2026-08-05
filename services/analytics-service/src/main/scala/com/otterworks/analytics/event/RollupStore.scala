@@ -1,46 +1,72 @@
 package com.otterworks.analytics.event
 
+import com.otterworks.analytics.model.AnalyticsEvent
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient
-import software.amazon.awssdk.services.dynamodb.model.{AttributeValue, GetItemRequest, UpdateItemRequest}
+import software.amazon.awssdk.services.dynamodb.model.{
+  AttributeValue,
+  GetItemRequest,
+  Put,
+  TransactWriteItem,
+  TransactWriteItemsRequest,
+  TransactionCanceledException,
+  Update
+}
 
+import java.time.Instant
 import scala.jdk.CollectionConverters.*
 
 /**
- * Persistence for per-day incremental rollup state. The Lambda handler folds a
- * batch's events into one delta [[DailyRollupState]] per affected date and
- * merges each delta into the store. Implementations must make `merge` atomic so
- * concurrent invocations touching the same date never lose updates.
+ * Persistence for per-day incremental rollup state. Each event is applied
+ * individually and idempotently: implementations must record the `eventId` and
+ * fold the event's delta into the stored state atomically, so redelivered
+ * events (SQS is at-least-once) are never counted twice and concurrent
+ * invocations touching the same date never lose updates.
  */
 trait RollupStore:
   def get(date: String): Option[DailyRollupState]
 
-  /** Atomically fold a delta into the stored state for `delta.date`. */
-  def merge(delta: DailyRollupState): Unit
+  /**
+   * Atomically apply one event's delta to the state for its date, recording
+   * the eventId. Returns false (a no-op) if the event was already applied.
+   */
+  def applyEvent(event: AnalyticsEvent): Boolean
 
 /** In-memory store used by tests and the local comparison harness. */
 final class InMemoryRollupStore extends RollupStore:
   private var states: Map[String, DailyRollupState] = Map.empty
+  private var processed: Set[String] = Set.empty
 
   def get(date: String): Option[DailyRollupState] = states.get(date)
 
-  def merge(delta: DailyRollupState): Unit = synchronized {
-    val merged = states.get(delta.date) match
-      case Some(current) => current.combine(delta)
-      case None          => delta
-    states = states.updated(delta.date, merged)
+  def applyEvent(event: AnalyticsEvent): Boolean = synchronized {
+    if processed.contains(event.eventId) then false
+    else
+      processed = processed + event.eventId
+      val date = IncrementalUsageRollup.dateOf(event.timestamp)
+      val state = states.getOrElse(date, DailyRollupState.empty(date))
+      states = states.updated(date, state(event))
+      true
   }
 
   def snapshot: Map[String, DailyRollupState] = states
 
+object DynamoDbRollupStore:
+  /** How long processed eventIds are retained for deduplication. */
+  val DedupeTtl: java.time.Duration = java.time.Duration.ofDays(14)
+
 /**
- * DynamoDB-backed store: one item per calendar date, keyed on `date`. Deltas
- * are applied with a single atomic `UpdateItem` (`ADD` on numeric counters and
- * on the distinct user-id string set), so concurrent Lambda invocations for the
- * same date never overwrite each other's increments. Derived values
+ * DynamoDB-backed store: one rollup item per calendar date (keyed on `date`)
+ * plus a processed-event ledger (keyed on `eventId`, TTL-expired). Each event
+ * is applied with a single `TransactWriteItems`: a conditional put of the
+ * eventId marker and an `UpdateItem` `ADD` on the numeric counters and the
+ * distinct user-id string set. The condition makes redelivered events no-ops
+ * and the `ADD` semantics make concurrent same-date updates commutative, so
+ * neither duplicates nor races corrupt the rollup. Derived values
  * (`activeUsers`, `netStorageBytes`) are computed on read via
  * [[DailyRollupState.toRollup]] rather than stored.
  */
-final class DynamoDbRollupStore(client: DynamoDbClient, tableName: String) extends RollupStore:
+final class DynamoDbRollupStore(client: DynamoDbClient, tableName: String, dedupeTableName: String)
+    extends RollupStore:
 
   def get(date: String): Option[DailyRollupState] =
     val request = GetItemRequest
@@ -68,7 +94,37 @@ final class DynamoDbRollupStore(client: DynamoDbClient, tableName: String) exten
         )
       )
 
-  def merge(delta: DailyRollupState): Unit =
+  def applyEvent(event: AnalyticsEvent): Boolean =
+    val date = IncrementalUsageRollup.dateOf(event.timestamp)
+    val delta = DailyRollupState.empty(date)(event)
+    val expiresAt = Instant.now().plus(DynamoDbRollupStore.DedupeTtl).getEpochSecond
+    val marker = Put
+      .builder()
+      .tableName(dedupeTableName)
+      .item(
+        Map(
+          "eventId" -> AttributeValue.fromS(event.eventId),
+          "expiresAt" -> AttributeValue.fromN(expiresAt.toString)
+        ).asJava
+      )
+      .conditionExpression("attribute_not_exists(eventId)")
+      .build()
+    val request = TransactWriteItemsRequest
+      .builder()
+      .transactItems(
+        TransactWriteItem.builder().put(marker).build(),
+        TransactWriteItem.builder().update(updateFor(delta)).build()
+      )
+      .build()
+    try
+      client.transactWriteItems(request)
+      true
+    catch
+      case ex: TransactionCanceledException
+          if ex.cancellationReasons().asScala.exists(_.code() == "ConditionalCheckFailed") =>
+        false
+
+  private def updateFor(delta: DailyRollupState): Update =
     val counters = List(
       "totalEvents" -> delta.totalEvents,
       "documentsCreated" -> delta.documentsCreated,
@@ -93,7 +149,7 @@ final class DynamoDbRollupStore(client: DynamoDbClient, tableName: String) exten
     val names = (counters.map(_._1) ++ (if delta.userIds.nonEmpty then List("userIds") else Nil))
       .map(name => s"#$name" -> name)
       .toMap
-    val request = UpdateItemRequest
+    Update
       .builder()
       .tableName(tableName)
       .key(Map("date" -> AttributeValue.fromS(delta.date)).asJava)
@@ -101,7 +157,6 @@ final class DynamoDbRollupStore(client: DynamoDbClient, tableName: String) exten
       .expressionAttributeNames(names.asJava)
       .expressionAttributeValues(values.toMap.asJava)
       .build()
-    client.updateItem(request): Unit
 
   private def n(item: java.util.Map[String, AttributeValue], key: String): Long =
     Option(item.get(key)).map(_.n().toLong).getOrElse(0L)

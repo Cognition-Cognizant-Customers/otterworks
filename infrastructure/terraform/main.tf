@@ -306,6 +306,11 @@ module "irsa" {
             "${module.storage.data_lake_bucket_arn}/*",
           ]
         },
+        {
+          Effect   = "Allow"
+          Action   = ["events:PutEvents"]
+          Resource = [module.usage_rollup.event_bus_arn]
+        },
       ]
     })
 

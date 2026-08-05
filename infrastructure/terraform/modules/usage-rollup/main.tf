@@ -15,8 +15,14 @@
 # seconds instead of up to 24 h. See docs/BATCH-USAGE-ROLLUP.md.
 # ------------------------------------------------------------------------------
 
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
 locals {
   name = "${var.project}-usage-rollup-${var.environment}"
+
+  # The rule listens on the account's default event bus.
+  event_bus_arn = "arn:aws:events:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:event-bus/default"
 
   common_tags = {
     Module  = "usage-rollup"
@@ -121,6 +127,31 @@ resource "aws_dynamodb_table" "usage_rollups" { # nosemgrep: terraform.aws.secur
   tags = local.common_tags
 }
 
+# Processed-event ledger: one item per eventId, written conditionally in the
+# same transaction as the rollup delta so redelivered events are never counted
+# twice. TTL-expired after the dedupe window.
+resource "aws_dynamodb_table" "processed_events" { # nosemgrep: terraform.aws.security.aws-dynamodb-table-unencrypted.aws-dynamodb-table-unencrypted
+  name         = "${var.project}-usage-rollup-processed-${var.environment}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "eventId"
+
+  server_side_encryption {
+    enabled = true
+  }
+
+  attribute {
+    name = "eventId"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "expiresAt"
+    enabled        = true
+  }
+
+  tags = local.common_tags
+}
+
 # --- Lambda: incremental rollup upsert ---
 
 resource "aws_iam_role" "lambda" {
@@ -153,7 +184,7 @@ resource "aws_iam_role_policy" "lambda" {
       {
         Effect   = "Allow"
         Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"]
-        Resource = aws_dynamodb_table.usage_rollups.arn
+        Resource = [aws_dynamodb_table.usage_rollups.arn, aws_dynamodb_table.processed_events.arn]
       },
       {
         Effect   = "Allow"
@@ -188,6 +219,7 @@ resource "aws_lambda_function" "usage_rollup" {
   environment {
     variables = {
       ROLLUP_TABLE = aws_dynamodb_table.usage_rollups.name
+      DEDUPE_TABLE = aws_dynamodb_table.processed_events.name
     }
   }
 

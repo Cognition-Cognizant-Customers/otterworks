@@ -27,3 +27,13 @@ output "rollup_table_name" {
   description = "DynamoDB table holding one usage rollup per calendar date"
   value       = aws_dynamodb_table.usage_rollups.name
 }
+
+output "dedupe_table_name" {
+  description = "DynamoDB processed-event ledger backing idempotent upserts"
+  value       = aws_dynamodb_table.processed_events.name
+}
+
+output "event_bus_arn" {
+  description = "EventBridge bus the usage-events rule listens on (default bus)"
+  value       = local.event_bus_arn
+}

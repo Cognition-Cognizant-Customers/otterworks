@@ -58,6 +58,20 @@ class UsageRollupLambdaHandlerSpec extends AnyFlatSpec with Matchers:
     }
   }
 
+  it should "not double-count redelivered events" in {
+    val store = InMemoryRollupStore()
+    val handler = UsageRollupLambdaHandler(store)
+    val events = EventLoader.fromResource(UsageRollupJob.DefaultInput)
+
+    handler.process(events)
+    // Redeliver the whole stream plus a partial batch, as SQS at-least-once
+    // delivery and redrive after a mid-batch failure would.
+    handler.process(events)
+    handler.process(events.take(10))
+
+    IncrementalUsageRollup.rollups(store.snapshot) shouldBe UsageRollupAggregator.rollup(events)
+  }
+
   it should "not lose updates when interleaved handlers share the store" in {
     val store = InMemoryRollupStore()
     val a = UsageRollupLambdaHandler(store)

@@ -42,28 +42,33 @@ class UsageRollupLambdaHandler(store: RollupStore) extends RequestStreamHandler:
     output.write(s"""{"batchItemFailures":[]}""".getBytes(StandardCharsets.UTF_8))
 
   /**
-   * Incrementally upsert a batch of events; returns the affected dates. Events
-   * are folded into one delta per date and merged atomically, so concurrent
-   * invocations for the same date never lose each other's updates.
+   * Incrementally upsert a batch of events; returns the affected dates. Each
+   * event is applied individually and idempotently keyed on its eventId, so
+   * redelivered events are no-ops and concurrent invocations for the same date
+   * never lose each other's updates.
    */
   def process(events: Seq[AnalyticsEvent]): Set[String] =
-    val deltas = IncrementalUsageRollup.applyAll(Map.empty, events)
-    deltas.values.foreach(store.merge)
-    deltas.keySet
+    events.flatMap { event =>
+      if store.applyEvent(event) then Some(IncrementalUsageRollup.dateOf(event.timestamp)) else None
+    }.toSet
 
 object UsageRollupLambdaHandler:
 
   /** Env var naming the DynamoDB rollup table. */
   val TableEnvVar = "ROLLUP_TABLE"
 
+  /** Env var naming the DynamoDB processed-event dedupe table. */
+  val DedupeTableEnvVar = "DEDUPE_TABLE"
+
   /** Optional env var pointing DynamoDB at a local endpoint (LocalStack). */
   val EndpointEnvVar = "ROLLUP_DYNAMODB_ENDPOINT"
 
   def storeFromEnv(): RollupStore =
     val table = sys.env.getOrElse(TableEnvVar, "otterworks-usage-rollups-dev")
+    val dedupeTable = sys.env.getOrElse(DedupeTableEnvVar, "otterworks-usage-rollup-processed-dev")
     val builder = DynamoDbClient.builder()
     sys.env.get(EndpointEnvVar).foreach(url => builder.endpointOverride(URI.create(url)))
-    DynamoDbRollupStore(builder.build(), table)
+    DynamoDbRollupStore(builder.build(), table, dedupeTable)
 
   /**
    * Parse the SQS event payload the Lambda receives. Each record body is the
