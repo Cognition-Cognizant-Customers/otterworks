@@ -54,6 +54,9 @@ object DynamoDbRollupStore:
   /** How long processed eventIds are retained for deduplication. */
   val DedupeTtl: java.time.Duration = java.time.Duration.ofDays(14)
 
+  /** Bounded retries for same-date transaction conflicts under concurrency. */
+  val MaxConflictRetries: Int = 5
+
 /**
  * DynamoDB-backed store: one rollup item per calendar date (keyed on `date`)
  * plus a processed-event ledger (keyed on `eventId`, TTL-expired). Each event
@@ -116,13 +119,27 @@ final class DynamoDbRollupStore(client: DynamoDbClient, tableName: String, dedup
         TransactWriteItem.builder().update(updateFor(delta)).build()
       )
       .build()
-    try
-      client.transactWriteItems(request)
-      true
-    catch
-      case ex: TransactionCanceledException
-          if ex.cancellationReasons().asScala.exists(_.code() == "ConditionalCheckFailed") =>
-        false
+    // All events for one calendar date update the same rollup item, so
+    // concurrent invocations can collide with TransactionConflict, which the
+    // SDK does not retry. Retry with jittered backoff before failing the
+    // record; a ConditionalCheckFailed means the eventId was already applied.
+    var attempt = 0
+    while true do
+      try
+        client.transactWriteItems(request)
+        return true
+      catch
+        case ex: TransactionCanceledException
+            if ex.cancellationReasons().asScala.exists(_.code() == "ConditionalCheckFailed") =>
+          return false
+        case ex: TransactionCanceledException
+            if attempt < DynamoDbRollupStore.MaxConflictRetries &&
+              ex.cancellationReasons()
+                .asScala
+                .exists(r => r.code() == "TransactionConflict" || r.code() == "TransactionInProgress") =>
+          attempt += 1
+          Thread.sleep(scala.util.Random.between(10L, 50L) * attempt)
+    false
 
   private def updateFor(delta: DailyRollupState): Update =
     val counters = List(

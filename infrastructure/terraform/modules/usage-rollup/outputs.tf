@@ -19,8 +19,8 @@ output "dlq_arn" {
 }
 
 output "lambda_function_name" {
-  description = "Lambda performing the incremental rollup upsert (null until the assembly jar is built and applied)"
-  value       = one(aws_lambda_function.usage_rollup[*].function_name)
+  description = "Lambda performing the incremental rollup upsert"
+  value       = aws_lambda_function.usage_rollup.function_name
 }
 
 output "rollup_table_name" {

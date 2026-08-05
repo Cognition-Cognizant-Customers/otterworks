@@ -210,14 +210,13 @@ resource "aws_lambda_function" "usage_rollup" {
 
   # Fat jar built from analytics-service (sbt assembly); the handler class is
   # compiled alongside the legacy batch job so both share aggregation semantics.
-  # The function (and its event source mapping) is skipped entirely when the
-  # jar has not been assembled yet, so plans/applies of unrelated resources
-  # from a clean checkout keep working; run `sbt assembly` and re-apply to
-  # create it. deploy-dev.sh builds the jar before `terraform apply`.
-  count = local.jar_present ? 1 : 0
-
-  filename         = var.lambda_jar_path
-  source_code_hash = filebase64sha256(var.lambda_jar_path)
+  # The function always exists: when the jar has not been assembled yet
+  # (clean checkout), the first apply ships a committed placeholder zip and a
+  # null source_code_hash, so later applies without the jar leave the deployed
+  # code untouched instead of destroying the function, and an apply with the
+  # jar present uploads it. deploy-dev.sh builds the jar before `terraform apply`.
+  filename         = local.jar_present ? var.lambda_jar_path : "${path.module}/lambda-placeholder.zip"
+  source_code_hash = local.jar_present ? filebase64sha256(var.lambda_jar_path) : null
   handler          = "com.otterworks.analytics.event.UsageRollupLambdaHandler::handleRequest"
   runtime          = "java17"
   memory_size      = 512
@@ -241,10 +240,8 @@ resource "aws_lambda_function" "usage_rollup" {
 }
 
 resource "aws_lambda_event_source_mapping" "usage_rollup" {
-  count = local.jar_present ? 1 : 0
-
   event_source_arn                   = aws_sqs_queue.usage_rollup.arn
-  function_name                      = aws_lambda_function.usage_rollup[0].arn
+  function_name                      = aws_lambda_function.usage_rollup.arn
   batch_size                         = 10
   maximum_batching_window_in_seconds = 5
   function_response_types            = ["ReportBatchItemFailures"]
