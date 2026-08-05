@@ -57,7 +57,8 @@ initialize: |
   # JAVA_HOME is only written to $ENVRC (for later sessions), so set it for assembleDebug.
   export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
   nvm use default
-  (cd frontend/client-app && npm install && npm install --no-save @rolldown/binding-linux-x64-gnu@1.1.5 \
+  (cd frontend/client-app && npm install \
+     && npm install --no-save "@rolldown/binding-linux-x64-gnu@$(node -p "require('rolldown/package.json').version")" \
      && npm run build && npx cap sync android)
   (cd frontend/client-app/mobile/android && ./gradlew --no-daemon assembleDebug)
 
@@ -123,7 +124,8 @@ maintenance: |
   rustup update stable >/dev/null 2>&1 || true
   export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"; nvm use default >/dev/null
   # The rolldown native binding is explicit: an npm optional-deps bug omits it and Vite fails.
-  (cd frontend/client-app && npm install && npm install --no-save @rolldown/binding-linux-x64-gnu@1.1.5)
+  (cd frontend/client-app && npm install \
+     && npm install --no-save "@rolldown/binding-linux-x64-gnu@$(node -p "require('rolldown/package.json').version")")
   (cd frontend/client-app/desktop && npm install)
 knowledge:
   - name: run backend + web
