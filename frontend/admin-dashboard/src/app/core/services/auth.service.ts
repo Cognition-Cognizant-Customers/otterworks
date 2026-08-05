@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
-import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
+import { BehaviorSubject, Observable, throwError } from 'rxjs';
 import { catchError, finalize, map, shareReplay, switchMap, tap } from 'rxjs/operators';
 import { Router } from '@angular/router';
 
@@ -71,14 +71,11 @@ export class AuthService {
       switchMap(response => this.http.get<UserProfile>('/api/v1/auth/profile', {
         headers: new HttpHeaders({ Authorization: `Bearer ${response.accessToken}` }),
       }).pipe(
-        switchMap(profile => {
+        map(profile => {
           if (!profile.roles.includes('ADMIN')) {
-            const privilegeError = new Error('Insufficient privileges: admin access required');
-            return this.revokeSession(response.accessToken).pipe(
-              switchMap(() => throwError(() => privilegeError)),
-            );
+            throw new Error('Insufficient privileges: admin access required');
           }
-          return of({ response, profile });
+          return { response, profile };
         }),
         catchError(error => throwError(() => error instanceof Error
           ? error
@@ -116,17 +113,14 @@ export class AuthService {
       switchMap(response => this.http.get<UserProfile>('/api/v1/auth/profile', {
         headers: new HttpHeaders({ Authorization: `Bearer ${response.accessToken}` }),
       }).pipe(
-        switchMap(profile => {
+        map(profile => {
           if (!profile.roles.includes('ADMIN')) {
-            const privilegeError = new Error('Insufficient privileges: admin access required');
-            return this.revokeSession(response.accessToken).pipe(
-              switchMap(() => throwError(() => privilegeError)),
-            );
+            throw new Error('Insufficient privileges: admin access required');
           }
-          return of({
+          return {
             user: this.toAuthUser(profile, response.accessToken),
             refreshToken: response.refreshToken,
-          });
+          };
         }),
         catchError(error => throwError(() => error instanceof Error
           ? error
@@ -175,16 +169,6 @@ export class AuthService {
       role: user.roles.includes('ADMIN') ? 'admin' : 'user',
       token,
     };
-  }
-
-  private revokeSession(accessToken: string): Observable<void> {
-    return this.http.post<void>(
-      '/api/v1/auth/logout',
-      {},
-      { headers: new HttpHeaders({ Authorization: `Bearer ${accessToken}` }) },
-    ).pipe(
-      catchError(() => of(void 0)),
-    );
   }
 
   private persistSession(user: AuthUser, refreshToken: string): void {

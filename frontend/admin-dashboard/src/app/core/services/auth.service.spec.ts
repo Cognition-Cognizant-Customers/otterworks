@@ -65,25 +65,10 @@ describe('AuthService', () => {
       error: (err: Error) => error = err,
     });
     completeLogin(['USER']);
-    const revoke = httpTestingController.expectOne('/api/v1/auth/logout');
-    expect(revoke.request.headers.get('Authorization')).toBe('Bearer access-token');
-    revoke.flush({});
     expect(error?.message).toBe('Insufficient privileges: admin access required');
     expect(localStorage.getItem('ow_admin_token')).toBeNull();
     expect(localStorage.getItem('ow_admin_refresh_token')).toBeNull();
     expect(service.currentUser).toBeNull();
-  });
-
-  it('should preserve the privilege error when session revocation fails', () => {
-    let error: Error | undefined;
-    service.login('user@otterworks.io', 'user123').subscribe({
-      error: (err: Error) => error = err,
-    });
-    completeLogin(['USER']);
-    const revoke = httpTestingController.expectOne('/api/v1/auth/logout');
-    expect(revoke.request.headers.get('Authorization')).toBe('Bearer access-token');
-    revoke.flush({}, { status: 500, statusText: 'Server Error' });
-    expect(error?.message).toBe('Insufficient privileges: admin access required');
   });
 
   it('should map login HTTP 401 to invalid credentials', () => {
