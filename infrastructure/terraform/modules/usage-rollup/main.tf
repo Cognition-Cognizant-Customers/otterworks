@@ -208,8 +208,12 @@ resource "aws_lambda_function" "usage_rollup" {
 
   # Fat jar built from analytics-service (sbt assembly); the handler class is
   # compiled alongside the legacy batch job so both share aggregation semantics.
+  # `filebase64sha256` is evaluated at plan time, so it is guarded with
+  # `fileexists` to keep `terraform plan`/`apply` of unrelated resources working
+  # from a clean checkout where the jar has not been assembled yet. Creating or
+  # updating this function still requires `sbt assembly` first.
   filename         = var.lambda_jar_path
-  source_code_hash = filebase64sha256(var.lambda_jar_path)
+  source_code_hash = fileexists(var.lambda_jar_path) ? filebase64sha256(var.lambda_jar_path) : null
   handler          = "com.otterworks.analytics.event.UsageRollupLambdaHandler::handleRequest"
   runtime          = "java17"
   memory_size      = 512
@@ -238,4 +242,8 @@ resource "aws_lambda_event_source_mapping" "usage_rollup" {
   batch_size                         = 10
   maximum_batching_window_in_seconds = 5
   function_response_types            = ["ReportBatchItemFailures"]
+
+  # AWS validates the execution role's SQS permissions when the mapping is
+  # created, so the inline policy must exist first.
+  depends_on = [aws_iam_role_policy.lambda]
 }
