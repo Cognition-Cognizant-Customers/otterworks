@@ -8,7 +8,7 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.12"
 fastapi = "^0.141.1"
-starlette = ">=0.40.0"
+starlette = ">=0.40.0,<2.0.0"
 uvicorn = {extras = ["standard"], version = "^0.52.1"}
 sqlalchemy = {extras = ["asyncio"], version = "^2.0.51"}
 asyncpg = "^0.31.0"
