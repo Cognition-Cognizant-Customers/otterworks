@@ -31,15 +31,59 @@ resource "aws_ecr_lifecycle_policy" "services" {
 
   repository = each.value.name
 
+  # Rules are evaluated lowest rulePriority first, and an image is only ever
+  # acted on by the first rule that matches it. The `main` and `tenant-*`
+  # rules therefore shield the golden and per-tenant images from the
+  # catch-all build rule below them; their retention counts are high enough
+  # that they never fire in practice while still bounding storage.
   policy = jsonencode({
     rules = [
       {
         rulePriority = 1
-        description  = "Keep last 10 images"
+        description  = "Retain the golden main image (never expired in practice)"
         selection = {
-          tagStatus   = "any"
+          tagStatus     = "tagged"
+          tagPrefixList = ["main"]
+          countType     = "imageCountMoreThan"
+          countNumber   = var.golden_image_retention_count
+        }
+        action = {
+          type = "expire"
+        }
+      },
+      {
+        rulePriority = 2
+        description  = "Retain per-tenant tenant-* images"
+        selection = {
+          tagStatus     = "tagged"
+          tagPrefixList = ["tenant-"]
+          countType     = "imageCountMoreThan"
+          countNumber   = var.tenant_image_retention_count
+        }
+        action = {
+          type = "expire"
+        }
+      },
+      {
+        rulePriority = 3
+        description  = "Expire short-lived per-build <slug>-<sha> images beyond the retention count"
+        selection = {
+          tagStatus      = "tagged"
+          tagPatternList = ["*"]
+          countType      = "imageCountMoreThan"
+          countNumber    = var.build_image_retention_count
+        }
+        action = {
+          type = "expire"
+        }
+      },
+      {
+        rulePriority = 4
+        description  = "Expire untagged images"
+        selection = {
+          tagStatus   = "untagged"
           countType   = "imageCountMoreThan"
-          countNumber = 10
+          countNumber = var.untagged_image_retention_count
         }
         action = {
           type = "expire"

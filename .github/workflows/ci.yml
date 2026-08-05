@@ -28,6 +28,7 @@ jobs:
       admin-dashboard: ${{ steps.changes.outputs.admin-dashboard }}
       demo-platform: ${{ steps.changes.outputs.demo-platform }}
       infrastructure: ${{ steps.changes.outputs.infrastructure }}
+      platform: ${{ steps.changes.outputs.platform }}
       report-service: ${{ steps.changes.outputs.report-service }}
       legacy-portal: ${{ steps.changes.outputs.legacy-portal }}
       api-tests: ${{ steps.changes.outputs.api-tests }}
@@ -66,6 +67,8 @@ jobs:
               - 'scripts/**'
             infrastructure:
               - 'infrastructure/**'
+            platform:
+              - 'platform/**'
             report-service:
               - 'services/report-service/**'
             legacy-portal:
@@ -368,6 +371,28 @@ jobs:
       - run: terraform fmt -check -recursive
       - run: terraform init -backend=false
       - run: terraform validate
+
+  # Terraform validation for the shared platform stack (EKS/ECR/VPC), plus the
+  # ECR lifecycle-policy test that guards the golden main and tenant-* images.
+  platform-terraform:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.platform == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: platform/terraform
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.7.5
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false
+      - run: terraform validate
+      - run: terraform init -backend=false
+        working-directory: platform/terraform/modules/ecr
+      - run: terraform test
+        working-directory: platform/terraform/modules/ecr
 
   # The tenant control plane: dashboard typecheck/lint, plus the shell tests for
   # the reaper and idle-suspend. Those two decide what gets deleted and what gets
