@@ -50,6 +50,8 @@ class DocumentResponse(BaseModel):
     folder_id: UUID | None
     is_deleted: bool
     is_template: bool
+    is_archived: bool
+    archived_at: datetime | None
     word_count: int
     version: int
     created_at: datetime

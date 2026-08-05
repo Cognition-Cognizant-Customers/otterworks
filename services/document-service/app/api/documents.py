@@ -172,11 +172,12 @@ async def _do_list_documents(
     page: int,
     size: int,
     db: AsyncSession,
+    archived: bool = False,
 ) -> DocumentListResponse:
     await _maybe_inject_latency()
     service = DocumentService(db)
     items, total = await service.list_documents(
-        owner_id=owner_id, folder_id=folder_id, page=page, size=size
+        owner_id=owner_id, folder_id=folder_id, page=page, size=size, archived=archived
     )
     return DocumentListResponse(
         items=items,
@@ -192,13 +193,16 @@ async def list_documents(
     request: Request,
     owner_id: UUID | None = None,
     folder_id: UUID | None = None,
+    archived: bool = Query(False),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
     """List documents with optional filtering and pagination."""
     effective_owner = owner_id or _extract_user_id(request)
-    return await _do_list_documents(effective_owner, folder_id, page, size, db)
+    return await _do_list_documents(
+        effective_owner, folder_id, page, size, db, archived=archived
+    )
 
 
 @router.get(
@@ -210,13 +214,16 @@ async def list_documents_no_slash(
     request: Request,
     owner_id: UUID | None = None,
     folder_id: UUID | None = None,
+    archived: bool = Query(False),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
     """List documents (no trailing slash)."""
     effective_owner = owner_id or _extract_user_id(request)
-    return await _do_list_documents(effective_owner, folder_id, page, size, db)
+    return await _do_list_documents(
+        effective_owner, folder_id, page, size, db, archived=archived
+    )
 
 
 @router.get("/{document_id}", response_model=DocumentResponse)
@@ -292,6 +299,44 @@ async def delete_document(
     _ensure_owner(existing, user_id)
     await service.delete(document_id)
     logger.info("document_deleted", document_id=str(document_id))
+
+
+@router.post("/{document_id}/archive", response_model=DocumentResponse)
+async def archive_document(
+    document_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Archive a document."""
+    await _maybe_inject_latency()
+    user_id = _require_user_id(request)
+    service = DocumentService(db)
+    existing = await service.get(document_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Document not found")
+    _ensure_owner(existing, user_id)
+    document = await service.archive(document_id)
+    logger.info("document_archived", document_id=str(document_id))
+    return document
+
+
+@router.post("/{document_id}/unarchive", response_model=DocumentResponse)
+async def unarchive_document(
+    document_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Unarchive a document."""
+    await _maybe_inject_latency()
+    user_id = _require_user_id(request)
+    service = DocumentService(db)
+    existing = await service.get(document_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Document not found")
+    _ensure_owner(existing, user_id)
+    document = await service.unarchive(document_id)
+    logger.info("document_unarchived", document_id=str(document_id))
+    return document
 
 
 @router.get("/{document_id}/versions", response_model=list[DocumentVersionResponse])

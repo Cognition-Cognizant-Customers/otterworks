@@ -2,6 +2,7 @@
 
 import html as html_mod
 import math
+from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
@@ -88,9 +89,12 @@ class DocumentService:
         folder_id: UUID | None = None,
         page: int = 1,
         size: int = 20,
+        archived: bool = False,
     ) -> tuple[list[Document], int]:
         base = select(Document).where(
-            Document.is_deleted.is_(False), Document.is_template.is_(False)
+            Document.is_deleted.is_(False),
+            Document.is_template.is_(False),
+            Document.is_archived.is_(archived),
         )
         if owner_id:
             base = base.where(Document.owner_id == owner_id)
@@ -201,13 +205,37 @@ class DocumentService:
         )
         return True
 
+    # ---- Archiving ----
+
+    async def archive(self, document_id: UUID) -> Document | None:
+        document = await self.get(document_id)
+        if not document:
+            return None
+        if not document.is_archived:
+            document.is_archived = True
+            document.archived_at = datetime.now(UTC)
+            await self.db.commit()
+            await self.db.refresh(document)
+        return document
+
+    async def unarchive(self, document_id: UUID) -> Document | None:
+        document = await self.get(document_id)
+        if not document:
+            return None
+        if document.is_archived:
+            document.is_archived = False
+            document.archived_at = None
+            await self.db.commit()
+            await self.db.refresh(document)
+        return document
+
     # ---- Versions ----
 
     async def list_versions(self, document_id: UUID) -> list[DocumentVersion]:
         result = await self.db.execute(
             select(DocumentVersion)
             .where(DocumentVersion.document_id == document_id)
-            .order_by(DocumentVersion.version_number.asc())
+            .order_by(DocumentVersion.version_number.desc())
         )
         return list(result.scalars().all())
 
