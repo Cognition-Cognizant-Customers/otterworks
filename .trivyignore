@@ -1,50 +1,47 @@
 # OtterWorks Trivy Ignore List
-# These CVEs are acknowledged and tracked for remediation in future upgrade cycles.
-# report-service is excluded via skip-dirs (intentional legacy Java 8 service for upgrade exercise).
+# Every entry must state: affected service/package, why it cannot be fixed now, and a
+# review date. Audited 2026-08-05 — see TRIVYIGNORE_AUDIT.md and SECURITY_BACKLOG.md.
+# Note: Trivy's plain ignore format matches vulnerability IDs exactly; wildcards
+# (e.g. "CVE-2021-*") are NOT expanded and must not be used.
+# report-service is excluded via --skip-dirs in CI (intentional legacy Java 8 service
+# for the upgrade exercise), not via this file.
 
-# --- etl/airflow: requires Airflow 2.9+ upgrade (major version) ---
-CVE-2024-39877
-CVE-2024-45034
-CVE-2024-56373
-CVE-2025-54550
-CVE-2025-68675
-
-# --- frontend/admin-dashboard: requires Angular 19+ upgrade (major version) ---
+# --- frontend/admin-dashboard: @angular/{common,compiler,core} 17.3.12 ---
+# Cannot fix now: fixes ship only in Angular >=19.2.x; 17.x is EOL with no patch, and the
+# Angular 19+ major upgrade is a separate planned effort. Review: 2026-11-01.
 CVE-2025-66035
 CVE-2025-66412
 CVE-2026-22610
 CVE-2026-27970
 CVE-2026-32635
 
-# --- frontend/web-app: requires Next.js 14.2.25+ or 15.x upgrade ---
-CVE-2025-29927
-CVE-2024-46982
-CVE-2024-51479
-GHSA-5j59-xgg2-r9c4
-GHSA-h25m-26qc-wcjf
-GHSA-mwv6-3258-q52c
-GHSA-q4gf-8mx6-v5v3
-
-# --- services/api-gateway: Go dependency upgrades require build tool ---
+# --- services/api-gateway: golang-jwt/jwt/v5 v5.2.1 ---
+# Cannot fix now: pending a standalone `go get` bump to 5.2.2 (low effort — do first).
+# Review: 2026-09-01.
 CVE-2025-30204
+
+# --- services/api-gateway: otel/sdk v1.24.0 and google.golang.org/grpc v1.61.1 ---
+# Cannot fix now: fixed versions (otel 1.40+/1.43+, grpc 1.79.3) require a newer Go
+# toolchain than the pinned go 1.22 and a coordinated otel/grpc module upgrade.
+# Review: 2026-11-01.
 CVE-2026-24051
 CVE-2026-39883
 CVE-2026-33186
 
-# --- services/admin-service: requires Rails 7.2+ upgrade (activestorage CVEs) ---
+# --- services/admin-service: activestorage 7.1.6 (CVE-2026-33195 CRITICAL,
+# CVE-2026-33658 MEDIUM) ---
+# Cannot fix now: fixes require activestorage >=7.2.3, i.e. a Rails 7.2+ upgrade; the
+# Gemfile pins rails ~> 7.1.3 and the golden-app lab depends on Rails 7.1 behavior
+# (planted bug in config/environments/production.rb — see AGENTS.md). Review: 2026-11-01.
 CVE-2026-33195
 CVE-2026-33658
 
-# --- services/document-service: Python dependency upgrades require poetry ---
+# --- services/document-service: protobuf 4.25.9 ---
+# Cannot fix now: fix is protobuf 5.29.6, but opentelemetry-proto 1.23.0 pins
+# protobuf <5.0; requires an OpenTelemetry Python upgrade. Review: 2026-11-01.
 CVE-2026-0994
-CVE-2024-53981
-CVE-2026-24486
+
+# --- services/document-service: starlette 0.37.2 ---
+# Cannot fix now: fix is starlette 0.40.0, blocked by the FastAPI pin that constrains
+# starlette; requires a FastAPI upgrade. Review: 2026-11-01.
 CVE-2024-47874
-
-# Bulk ignore — revisit in Q4
-CVE-2021-*
-
-# Low-priority npm advisories — team reviewed 2024-12
-CVE-2021-23337
-CVE-2021-33503
-CVE-2020-28500
