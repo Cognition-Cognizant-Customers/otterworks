@@ -121,6 +121,44 @@ class SqsConsumerTest {
     }
 
     @Test
+    fun `parseMessage parses legacy epoch-seconds timestamp`() {
+        val body = """
+            {
+                "eventType": "file_shared",
+                "fileId": "file-123",
+                "timestamp": 1704067200
+            }
+        """.trimIndent()
+
+        val event = consumer.parseMessage(body)
+
+        assertNotNull(event)
+        assertEquals("2024-01-01T00:00:00Z", event.timestamp)
+    }
+
+    @Test
+    fun `strict parser accepts legacy epoch timestamps`() {
+        val strictJson = kotlinx.serialization.json.Json {
+            ignoreUnknownKeys = false
+            isLenient = false
+        }
+        val seconds = strictJson.decodeFromString<com.otterworks.notification.model.SqsNotificationMessage>(
+            """{"eventType":"file_shared","timestamp":1704067200}""",
+        )
+        assertEquals("2024-01-01T00:00:00Z", seconds.timestamp)
+
+        val millis = strictJson.decodeFromString<com.otterworks.notification.model.SqsNotificationMessage>(
+            """{"eventType":"file_shared","timestamp":1704067200000}""",
+        )
+        assertEquals("2024-01-01T00:00:00Z", millis.timestamp)
+
+        val rfc3339 = strictJson.decodeFromString<com.otterworks.notification.model.SqsNotificationMessage>(
+            """{"eventType":"file_shared","timestamp":"2024-01-01T00:00:00Z"}""",
+        )
+        assertEquals("2024-01-01T00:00:00Z", rfc3339.timestamp)
+    }
+
+    @Test
     fun `parseMessage handles missing optional fields`() {
         val body = """
             {
