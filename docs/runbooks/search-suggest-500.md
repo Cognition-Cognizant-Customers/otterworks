@@ -59,9 +59,11 @@
 6. Distinguish chaos from a genuine regression:
    - **Chaos path** (flag `chaos:search-service:suggest_500` set): the handler in
      `services/search-service/app/api/search.py` runs the ranking-score enrichment branch,
-     where `sorted(raw_suggestions, key=lambda s: s["_rankingScore"], reverse=True)` raises
-     `KeyError: '_rankingScore'` because `MeiliSearchService.suggest()` only retrieves
-     `title` and `name` via `attributesToRetrieve` — the uncaught exception surfaces as a 500.
+     where `sorted(raw_suggestions, key=lambda s: s["_rankingScore"], reverse=True)` raises —
+     `TypeError: string indices must be integers` when `MeiliSearchService.suggest()`
+     returned titles (a `list[str]`), or `KeyError: '_rankingScore'` on the empty-index
+     fallback (`raw_suggestions = [{}]`) — and the uncaught exception surfaces as a 500.
+     Grep logs for either exception (step 1's pattern matches both via `rankingScore\|500`).
    - **Non-chaos path**: any failure is caught, logged as the structlog event
      `suggest_failed`, and the endpoint still returns **200 with an empty suggestions
      list** — so genuine suggest failures will NOT trip this 5xx alert (see Post-Incident).
@@ -86,7 +88,7 @@
    > endpoint (`demo-platform/dashboard/app/api/tenants/[id]/inject/route.ts`) returns
    > `409 tenant is persistent; inject a bug into an ephemeral tenant instead`.
 
-2. Code-level fix (if the KeyError appears without the chaos flag): the ranking-score
+2. Code-level fix (if the TypeError/KeyError appears without the chaos flag): the ranking-score
    enrichment branch in `suggest()` in `services/search-service/app/api/search.py` sorts
    suggestions by `s["_rankingScore"]`, but `MeiliSearchService.suggest()`
    (`services/search-service/app/services/meilisearch_client.py`) returns a `list[str]` of
@@ -101,7 +103,7 @@
 
    > **Do not "fix" this on `main`.** This branch is the planted chaos bug behind the
    > `search-suggest-500` scenario (see `AGENTS.md` — planted bugs are a feature of the
-   > golden app). The code-level guidance above applies only if the same KeyError ever
+   > golden app). The code-level guidance above applies only if the same exception ever
    > appears on a bespoke variant branch without the chaos flag set.
 3. Regression-check the suggest endpoint with the search-service test suite. Note that
    `TestSuggestEndpoint` in `tests/test_search_api.py` only exercises the normal (non-chaos)
@@ -132,4 +134,5 @@
   (`CHAOS_TTL`, default 3600s) matches the workshop schedule.
 - **Runbook drill:** confirm attendees can trace the failure end-to-end: alert →
   Chaos Scenarios dashboard → Jaeger `/api/v1/search/suggest` spans →
-  `KeyError: '_rankingScore'` in logs → `inject-bug.sh <ATTENDEE_ID> reset`.
+  the `TypeError`/`KeyError` from the ranking-score sort in logs →
+  `inject-bug.sh <ATTENDEE_ID> reset`.
