@@ -94,16 +94,7 @@ def suggest() -> tuple:
 
     try:
         service = _get_service()
-        suggestions = service.suggest(prefix)
-        if rank_by_score:
-            # Sort by MeiliSearch ranking score for better relevance ordering.
-            # _rankingScore is only present when explicitly requested from
-            # MeiliSearch, so fall back to a neutral score when it is absent.
-            suggestions = sorted(
-                suggestions,
-                key=lambda s: s.get("_rankingScore", 0.0) if isinstance(s, dict) else 0.0,
-                reverse=True,
-            )
+        suggestions = service.suggest(prefix, rank_by_score=rank_by_score)
         return jsonify({"suggestions": suggestions, "query": prefix}), 200
     except Exception:
         logger.exception("suggest_failed", prefix=prefix)
