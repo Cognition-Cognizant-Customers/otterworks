@@ -1,112 +1,108 @@
 package com.otterworks.report.model;
 
-import io.swagger.annotations.ApiModel;
-import io.swagger.annotations.ApiModelProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.EnumType;
-import javax.persistence.Enumerated;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.Lob;
-import javax.persistence.Table;
-import javax.persistence.Temporal;
-import javax.persistence.TemporalType;
-import javax.validation.constraints.NotNull;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Lob;
+import jakarta.persistence.Table;
+import jakarta.persistence.Temporal;
+import jakarta.persistence.TemporalType;
+import jakarta.validation.constraints.NotNull;
 import java.util.Date;
 
 /**
  * JPA entity representing a generated report.
  *
  * LEGACY PATTERNS:
- * - javax.persistence.* (target: jakarta.persistence.*)
- * - javax.validation.* (target: jakarta.validation.*)
  * - java.util.Date fields (target: java.time.Instant / LocalDateTime)
- * - SpringFox @ApiModel / @ApiModelProperty (target: @Schema from springdoc)
  * - No Lombok — uses manual getters/setters (verbose but explicit)
  */
 @Entity
 @Table(name = "reports")
-@ApiModel(description = "Generated report metadata")
+@Schema(description = "Generated report metadata")
 public class Report {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @ApiModelProperty(value = "Unique report identifier", readOnly = true)
+    @Schema(description = "Unique report identifier", accessMode = Schema.AccessMode.READ_ONLY)
     private Long id;
 
     @NotNull
     @Column(name = "report_name", nullable = false)
-    @ApiModelProperty(value = "Human-readable report name", required = true)
+    @Schema(description = "Human-readable report name", requiredMode = Schema.RequiredMode.REQUIRED)
     private String reportName;
 
     @NotNull
     @Enumerated(EnumType.STRING)
     @Column(name = "category", nullable = false)
-    @ApiModelProperty(value = "Report category", required = true)
+    @Schema(description = "Report category", requiredMode = Schema.RequiredMode.REQUIRED)
     private ReportCategory category;
 
     @NotNull
     @Enumerated(EnumType.STRING)
     @Column(name = "report_type", nullable = false)
-    @ApiModelProperty(value = "Output format: PDF, CSV, or EXCEL", required = true)
+    @Schema(description = "Output format: PDF, CSV, or EXCEL", requiredMode = Schema.RequiredMode.REQUIRED)
     private ReportType reportType;
 
     @NotNull
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
-    @ApiModelProperty(value = "Current generation status", readOnly = true)
+    @Schema(description = "Current generation status", accessMode = Schema.AccessMode.READ_ONLY)
     private ReportStatus status;
 
     @Column(name = "requested_by", nullable = false)
-    @ApiModelProperty(value = "User ID who requested the report")
+    @Schema(description = "User ID who requested the report")
     private String requestedBy;
 
     // LEGACY: java.util.Date instead of java.time.Instant
     @Temporal(TemporalType.TIMESTAMP)
     @Column(name = "date_from")
-    @ApiModelProperty(value = "Report data start date")
+    @Schema(description = "Report data start date")
     private Date dateFrom;
 
     // LEGACY: java.util.Date instead of java.time.Instant
     @Temporal(TemporalType.TIMESTAMP)
     @Column(name = "date_to")
-    @ApiModelProperty(value = "Report data end date")
+    @Schema(description = "Report data end date")
     private Date dateTo;
 
     // LEGACY: java.util.Date instead of java.time.Instant
     @Temporal(TemporalType.TIMESTAMP)
     @Column(name = "created_at", nullable = false)
-    @ApiModelProperty(value = "When the report was requested", readOnly = true)
+    @Schema(description = "When the report was requested", accessMode = Schema.AccessMode.READ_ONLY)
     private Date createdAt;
 
     // LEGACY: java.util.Date instead of java.time.Instant
     @Temporal(TemporalType.TIMESTAMP)
     @Column(name = "completed_at")
-    @ApiModelProperty(value = "When the report finished generating", readOnly = true)
+    @Schema(description = "When the report finished generating", accessMode = Schema.AccessMode.READ_ONLY)
     private Date completedAt;
 
     @Column(name = "file_path")
-    @ApiModelProperty(value = "Path to the generated report file")
+    @Schema(description = "Path to the generated report file")
     private String filePath;
 
     @Column(name = "file_size_bytes")
-    @ApiModelProperty(value = "Size of the generated file in bytes")
+    @Schema(description = "Size of the generated file in bytes")
     private Long fileSizeBytes;
 
     @Column(name = "row_count")
-    @ApiModelProperty(value = "Number of data rows in the report")
+    @Schema(description = "Number of data rows in the report")
     private Integer rowCount;
 
     @Lob
     @Column(name = "error_message")
-    @ApiModelProperty(value = "Error message if generation failed")
+    @Schema(description = "Error message if generation failed")
     private String errorMessage;
 
     @Column(name = "parameters")
-    @ApiModelProperty(value = "JSON-encoded report parameters")
+    @Schema(description = "JSON-encoded report parameters")
     private String parameters;
 
     // Default constructor required by JPA

@@ -10,11 +10,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * from analytics and audit data.
  *
  * LEGACY NOTES (tech debt for upgrade exercise):
- * - Java 8 runtime (target: Java 17+)
- * - Spring Boot 2.5.14 (target: Spring Boot 3.2+)
- * - javax.* namespace throughout (target: jakarta.*)
- * - WebSecurityConfigurerAdapter (removed in Spring Security 6)
- * - SpringFox Swagger 2 (dead project; target: springdoc-openapi)
  * - JUnit 4 tests (target: JUnit 5 Jupiter)
  * - java.util.Date usage (target: java.time.*)
  * - RestTemplate (target: WebClient or RestClient)

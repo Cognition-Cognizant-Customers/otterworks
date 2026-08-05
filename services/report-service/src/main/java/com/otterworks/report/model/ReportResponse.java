@@ -1,7 +1,6 @@
 package com.otterworks.report.model;
 
-import io.swagger.annotations.ApiModel;
-import io.swagger.annotations.ApiModelProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.Date;
 
@@ -10,49 +9,49 @@ import java.util.Date;
  *
  * LEGACY: Uses mutable POJO pattern. Modern Java would use a record.
  */
-@ApiModel(description = "Report metadata response")
+@Schema(description = "Report metadata response")
 public class ReportResponse {
 
-    @ApiModelProperty(value = "Report ID")
+    @Schema(description = "Report ID")
     private Long id;
 
-    @ApiModelProperty(value = "Report name")
+    @Schema(description = "Report name")
     private String reportName;
 
-    @ApiModelProperty(value = "Report category")
+    @Schema(description = "Report category")
     private String category;
 
-    @ApiModelProperty(value = "Output format")
+    @Schema(description = "Output format")
     private String reportType;
 
-    @ApiModelProperty(value = "Generation status")
+    @Schema(description = "Generation status")
     private String status;
 
-    @ApiModelProperty(value = "Who requested it")
+    @Schema(description = "Who requested it")
     private String requestedBy;
 
-    @ApiModelProperty(value = "Data start date")
+    @Schema(description = "Data start date")
     private Date dateFrom;
 
-    @ApiModelProperty(value = "Data end date")
+    @Schema(description = "Data end date")
     private Date dateTo;
 
-    @ApiModelProperty(value = "Request timestamp")
+    @Schema(description = "Request timestamp")
     private Date createdAt;
 
-    @ApiModelProperty(value = "Completion timestamp")
+    @Schema(description = "Completion timestamp")
     private Date completedAt;
 
-    @ApiModelProperty(value = "File size in bytes")
+    @Schema(description = "File size in bytes")
     private Long fileSizeBytes;
 
-    @ApiModelProperty(value = "Number of rows")
+    @Schema(description = "Number of rows")
     private Integer rowCount;
 
-    @ApiModelProperty(value = "Download URL")
+    @Schema(description = "Download URL")
     private String downloadUrl;
 
-    @ApiModelProperty(value = "Error message if failed")
+    @Schema(description = "Error message if failed")
     private String errorMessage;
 
     public ReportResponse() {

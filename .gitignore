@@ -93,3 +93,4 @@ infrastructure/terraform/plan.out
 .terraform.lock.hcl
 *.tfstate
 *.tfstate.backup
+services/report-service/target/

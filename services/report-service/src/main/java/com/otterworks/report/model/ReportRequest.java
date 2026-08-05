@@ -1,10 +1,9 @@
 package com.otterworks.report.model;
 
-import io.swagger.annotations.ApiModel;
-import io.swagger.annotations.ApiModelProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
-import javax.validation.constraints.NotBlank;
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.util.Date;
 import java.util.Map;
 
@@ -12,39 +11,37 @@ import java.util.Map;
  * Request DTO for creating a new report.
  *
  * LEGACY PATTERNS:
- * - javax.validation.* annotations (target: jakarta.validation.*)
- * - SpringFox annotations (target: springdoc @Schema)
  * - java.util.Date (target: java.time.Instant)
  * - Mutable POJO with setters (target: Java 16+ record)
  */
-@ApiModel(description = "Request to generate a new report")
+@Schema(description = "Request to generate a new report")
 public class ReportRequest {
 
     @NotBlank(message = "Report name is required")
-    @ApiModelProperty(value = "Human-readable name for the report", required = true, example = "Monthly Usage Report")
+    @Schema(description = "Human-readable name for the report", requiredMode = Schema.RequiredMode.REQUIRED, example = "Monthly Usage Report")
     private String reportName;
 
     @NotNull(message = "Report category is required")
-    @ApiModelProperty(value = "Category of data to include", required = true)
+    @Schema(description = "Category of data to include", requiredMode = Schema.RequiredMode.REQUIRED)
     private ReportCategory category;
 
     @NotNull(message = "Report type is required")
-    @ApiModelProperty(value = "Output format", required = true, example = "PDF")
+    @Schema(description = "Output format", requiredMode = Schema.RequiredMode.REQUIRED, example = "PDF")
     private ReportType reportType;
 
     @NotBlank(message = "Requester ID is required")
-    @ApiModelProperty(value = "User ID requesting the report", required = true)
+    @Schema(description = "User ID requesting the report", requiredMode = Schema.RequiredMode.REQUIRED)
     private String requestedBy;
 
     // LEGACY: java.util.Date
-    @ApiModelProperty(value = "Start of reporting period")
+    @Schema(description = "Start of reporting period")
     private Date dateFrom;
 
     // LEGACY: java.util.Date
-    @ApiModelProperty(value = "End of reporting period")
+    @Schema(description = "End of reporting period")
     private Date dateTo;
 
-    @ApiModelProperty(value = "Additional parameters for report generation")
+    @Schema(description = "Additional parameters for report generation")
     private Map<String, String> parameters;
 
     public ReportRequest() {
