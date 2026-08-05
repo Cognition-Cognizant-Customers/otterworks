@@ -34,6 +34,11 @@ output "dedupe_table_name" {
 }
 
 output "event_bus_arn" {
-  description = "EventBridge bus the usage-events rule listens on (default bus)"
-  value       = local.event_bus_arn
+  description = "Dedicated per-environment EventBridge bus the usage-events rule listens on"
+  value       = aws_cloudwatch_event_bus.usage_rollup.arn
+}
+
+output "event_bus_name" {
+  description = "Name of the dedicated usage-rollup EventBridge bus (wire into EVENTBRIDGE_BUS_NAME)"
+  value       = aws_cloudwatch_event_bus.usage_rollup.name
 }

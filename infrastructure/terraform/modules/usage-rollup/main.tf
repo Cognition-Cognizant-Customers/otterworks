@@ -15,14 +15,8 @@
 # seconds instead of up to 24 h. See docs/BATCH-USAGE-ROLLUP.md.
 # ------------------------------------------------------------------------------
 
-data "aws_caller_identity" "current" {}
-data "aws_region" "current" {}
-
 locals {
   name = "${var.project}-usage-rollup-${var.environment}"
-
-  # The rule listens on the account's default event bus.
-  event_bus_arn = "arn:aws:events:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:event-bus/default"
 
   jar_present = fileexists(var.lambda_jar_path)
 
@@ -33,11 +27,22 @@ locals {
   }
 }
 
-# --- EventBridge rule: route analytics usage events to SQS ---
+# --- EventBridge bus + rule: route analytics usage events to SQS ---
+
+# Dedicated per-environment bus. Publishing to the shared default bus would
+# cross-feed environments deployed in the same account: every environment's
+# rule matches the same source/detail-type, so each rollup table would absorb
+# the other environments' traffic. analytics-service is pointed at this bus
+# via EVENTBRIDGE_BUS_NAME (wired by scripts/deploy-dev.sh).
+resource "aws_cloudwatch_event_bus" "usage_rollup" {
+  name = local.name
+  tags = local.common_tags
+}
 
 resource "aws_cloudwatch_event_rule" "usage_events" {
-  name        = local.name
-  description = "Routes OtterWorks analytics usage events to the usage-rollup queue"
+  name           = local.name
+  description    = "Routes OtterWorks analytics usage events to the usage-rollup queue"
+  event_bus_name = aws_cloudwatch_event_bus.usage_rollup.name
 
   event_pattern = jsonencode({
     source        = ["otterworks.analytics"]
@@ -48,8 +53,9 @@ resource "aws_cloudwatch_event_rule" "usage_events" {
 }
 
 resource "aws_cloudwatch_event_target" "usage_events_to_sqs" {
-  rule = aws_cloudwatch_event_rule.usage_events.name
-  arn  = aws_sqs_queue.usage_rollup.arn
+  rule           = aws_cloudwatch_event_rule.usage_events.name
+  event_bus_name = aws_cloudwatch_event_bus.usage_rollup.name
+  arn            = aws_sqs_queue.usage_rollup.arn
 
   dead_letter_config {
     arn = aws_sqs_queue.usage_rollup_dlq.arn

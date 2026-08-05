@@ -86,6 +86,11 @@ output "usage_rollup_table_name" {
   value       = module.usage_rollup.rollup_table_name
 }
 
+output "usage_rollup_event_bus_name" {
+  description = "Dedicated EventBridge bus analytics-service publishes usage events to (EVENTBRIDGE_BUS_NAME)"
+  value       = module.usage_rollup.event_bus_name
+}
+
 # --- Search ---
 
 output "meilisearch_ecs_cluster_arn" {
