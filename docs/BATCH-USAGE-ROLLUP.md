@@ -1,5 +1,9 @@
 # Usage Rollup: Batch Baseline & Event-Driven Pipeline
 
+The usage rollup condenses the raw analytics event stream into one
+`DailyUsageRollup` per UTC day (total events, distinct active users, per-type
+counts, storage allocated/released/net bytes) for usage reporting and billing.
+
 > **Status: re-architected.** The nightly CronJob has been **decommissioned**;
 > production rollups now flow through the event-driven pipeline
 > (**EventBridge → SQS (with DLQ) → Lambda incremental upsert**). The batch
