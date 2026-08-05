@@ -18,7 +18,17 @@ import { setupCollaborationHandlers } from './handlers/collaboration';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { setupWSConnection } = require('y-websocket/bin/utils');
 
-const config = loadConfig();
+const config = (() => {
+  try {
+    return loadConfig();
+  } catch (err) {
+    console.error(
+      'Collaboration service configuration failed:',
+      err instanceof Error ? err.message : err,
+    );
+    process.exit(1);
+  }
+})();
 
 const logger = pino({
   level: config.logLevel,
