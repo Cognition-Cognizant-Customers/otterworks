@@ -24,8 +24,10 @@ import java.nio.charset.StandardCharsets
  * identical to the legacy batch
  * [[com.otterworks.analytics.batch.UsageRollupAggregator]].
  *
- * A record that cannot be parsed is left to SQS redrive: the whole batch fails
- * and, after `maxReceiveCount` attempts, lands on the dead-letter queue.
+ * Records are parsed and applied independently. Ones that cannot be parsed or
+ * applied are reported via `batchItemFailures` (partial batch response), so
+ * only they are redelivered by SQS and, after `maxReceiveCount` attempts, land
+ * on the dead-letter queue — one bad record never dead-letters its batchmates.
  */
 class UsageRollupLambdaHandler(store: RollupStore) extends RequestStreamHandler:
 
@@ -36,10 +38,30 @@ class UsageRollupLambdaHandler(store: RollupStore) extends RequestStreamHandler:
 
   override def handleRequest(input: InputStream, output: OutputStream, context: Context): Unit =
     val body = new String(input.readAllBytes(), StandardCharsets.UTF_8)
-    val events = UsageRollupLambdaHandler.parseSqsEvents(body)
-    val updated = process(events)
-    logger.info("usage-rollup upsert: events={} datesUpdated={}", events.size, updated.size)
-    output.write(s"""{"batchItemFailures":[]}""".getBytes(StandardCharsets.UTF_8))
+    val records = UsageRollupLambdaHandler.parseSqsRecords(body)
+    val failures = scala.collection.mutable.ListBuffer[String]()
+    var applied = 0
+    records.foreach { case (messageId, recordBody) =>
+      try
+        val event = UsageRollupLambdaHandler.parseEnvelope(recordBody)
+        if store.applyEvent(event) then applied += 1
+      catch
+        case ex: Exception =>
+          logger.warn("usage-rollup record failed: messageId={} error={}", messageId, ex.getMessage)
+          failures += messageId
+    }
+    logger.info(
+      "usage-rollup upsert: records={} applied={} failed={}",
+      records.size,
+      applied,
+      failures.size
+    )
+    val response = JsObject(
+      "batchItemFailures" -> JsArray(
+        failures.toVector.map(id => JsObject("itemIdentifier" -> JsString(id)))
+      )
+    )
+    output.write(response.compactPrint.getBytes(StandardCharsets.UTF_8))
 
   /**
    * Incrementally upsert a batch of events; returns the affected dates. Each
@@ -69,6 +91,22 @@ object UsageRollupLambdaHandler:
     val builder = DynamoDbClient.builder()
     sys.env.get(EndpointEnvVar).foreach(url => builder.endpointOverride(URI.create(url)))
     DynamoDbRollupStore(builder.build(), table, dedupeTable)
+
+  /** Extract `(messageId, body)` pairs from the SQS event payload. */
+  def parseSqsRecords(sqsEventJson: String): List[(String, String)] =
+    val records = sqsEventJson.parseJson.asJsObject.fields.get("Records") match
+      case Some(JsArray(elements)) => elements.toList
+      case _                       => Nil
+    records.map { record =>
+      val fields = record.asJsObject.fields
+      val messageId = fields.get("messageId") match
+        case Some(JsString(s)) => s
+        case _                 => ""
+      val body = fields.get("body") match
+        case Some(JsString(s)) => s
+        case other             => deserializationError(s"SQS record has no string body: $other")
+      messageId -> body
+    }
 
   /**
    * Parse the SQS event payload the Lambda receives. Each record body is the

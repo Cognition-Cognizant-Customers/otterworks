@@ -39,6 +39,25 @@ class UsageRollupLambdaHandlerSpec extends AnyFlatSpec with Matchers:
     a[Exception] should be thrownBy UsageRollupLambdaHandler.parseSqsEvents(payload)
   }
 
+  it should "report only the malformed records in batchItemFailures and apply the rest" in {
+    val store = InMemoryRollupStore()
+    val handler = UsageRollupLambdaHandler(store)
+    val events = EventLoader.fromResource(UsageRollupJob.DefaultInput).take(3)
+
+    val records = events.map(e =>
+      JsObject("messageId" -> JsString(e.eventId), "body" -> JsString(envelope(e)))
+    ) :+ JsObject("messageId" -> JsString("bad-1"), "body" -> JsString("not json"))
+    val payload = JsObject("Records" -> JsArray(records.toVector)).compactPrint
+
+    val output = new java.io.ByteArrayOutputStream()
+    handler.handleRequest(new java.io.ByteArrayInputStream(payload.getBytes("UTF-8")), output, null)
+
+    output.toString("UTF-8").parseJson shouldBe JsObject(
+      "batchItemFailures" -> JsArray(JsObject("itemIdentifier" -> JsString("bad-1")))
+    )
+    IncrementalUsageRollup.rollups(store.snapshot).map(_.totalEvents).sum shouldBe 3L
+  }
+
   it should "upsert the seed events into three deterministic daily rollups" in {
     val store = InMemoryRollupStore()
     val handler = UsageRollupLambdaHandler(store)
