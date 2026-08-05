@@ -570,7 +570,7 @@ function FileBrowserContent() {
         </div>
       )}
       {shareFileId && (() => {
-        const shareFile = files.find((f) => f.id === shareFileId);
+        const shareFile = rawFiles.find((f) => f.id === shareFileId);
         if (!shareFile) return null;
         return (
           <ShareDialog
