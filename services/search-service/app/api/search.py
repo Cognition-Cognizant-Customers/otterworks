@@ -90,22 +90,22 @@ def suggest() -> tuple:
     if not prefix or len(prefix) < 2:
         return jsonify({"suggestions": [], "query": prefix}), 200
 
-    # CHAOS: when this flag is active the ranking-score enrichment path runs.
-    # This path was introduced to sort suggestions by relevance using
-    # _rankingScore, but MeiliSearch only returns that field when explicitly
-    # requested via attributesToRetrieve — without it the key lookup raises
-    # KeyError and crashes the handler with a 500.
+    # Ranking-score enrichment: sort suggestions by MeiliSearch _rankingScore
+    # when available. The score is only present when explicitly requested, so
+    # missing scores fall back to 0.0 instead of raising.
     if _chaos_active("chaos:search-service:suggest_500"):
-        service = _get_service()
-        raw_suggestions = service.suggest(prefix)
-        if not raw_suggestions:
-            # Simulate the same KeyError that fires when results exist but
-            # _rankingScore is missing — ensures chaos fires even with an
-            # empty index.
-            raw_suggestions = [{}]
-        # Sort by MeiliSearch ranking score for better relevance ordering.
-        ranked = sorted(raw_suggestions, key=lambda s: s["_rankingScore"], reverse=True)  # type: ignore[index]
-        return jsonify({"suggestions": ranked, "query": prefix}), 200
+        try:
+            service = _get_service()
+            raw_suggestions = service.suggest(prefix)
+            ranked = sorted(
+                raw_suggestions,
+                key=lambda s: s.get("_rankingScore", 0.0) if isinstance(s, dict) else 0.0,
+                reverse=True,
+            )
+            return jsonify({"suggestions": ranked, "query": prefix}), 200
+        except Exception:
+            logger.exception("suggest_ranking_failed", prefix=prefix)
+            return jsonify({"suggestions": [], "query": prefix}), 200
 
     try:
         service = _get_service()
