@@ -188,7 +188,7 @@ def move_to_quarantine(**context):
 
     if not orphaned:
         logger.info("No orphaned objects to quarantine")
-        return {"moved_count": 0, "failed_count": 0}
+        return {"moved_count": 0, "failed_count": 0, "ds": ds}
 
     logger.info("Moving %d orphaned objects to quarantine...", len(orphaned))
     s3_client = S3Hook(aws_conn_id=AWS_CONN_ID).get_conn()
@@ -215,16 +215,18 @@ def move_to_quarantine(**context):
         "Quarantined %d objects (%d failed) to s3://%s/%s/%s/",
         moved_count, failed_count, quarantine_bucket, QUARANTINE_PREFIX, ds,
     )
-    return {"moved_count": moved_count, "failed_count": failed_count}
+    return {"moved_count": moved_count, "failed_count": failed_count, "ds": ds}
 
 
 def generate_storage_report(**context):
     """Report: write the storage savings report JSON to the data lake bucket."""
     ti = context["ti"]
-    ds = resolve_run_date(context.get("data_interval_end"))
     all_objects = ti.xcom_pull(task_ids="list_s3_objects")
     orphaned = ti.xcom_pull(task_ids="find_orphaned_objects")
     quarantine_result = ti.xcom_pull(task_ids="move_to_quarantine")
+    # Reuse the quarantine task's run date so report and quarantine keys always
+    # share the same date, even for manual runs crossing midnight.
+    ds = quarantine_result["ds"]
 
     quarantine_bucket = Variable.get(
         "otterworks_quarantine_bucket", default="otterworks-file-quarantine"
