@@ -88,10 +88,14 @@ resource "aws_sqs_queue_policy" "usage_rollup" {
 
 # --- DynamoDB: one rollup item per calendar date (the upsert target) ---
 
-resource "aws_dynamodb_table" "usage_rollups" {
+resource "aws_dynamodb_table" "usage_rollups" { # nosemgrep: terraform.aws.security.aws-dynamodb-table-unencrypted.aws-dynamodb-table-unencrypted
   name         = "${var.project}-usage-rollups-${var.environment}"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "date"
+
+  server_side_encryption {
+    enabled = true
+  }
 
   attribute {
     name = "date"
@@ -139,12 +143,19 @@ resource "aws_iam_role_policy" "lambda" {
         Effect   = "Allow"
         Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
         Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["xray:PutTraceSegments", "xray:PutTelemetryRecords"]
+        Resource = "*"
       }
     ]
   })
 }
 
-resource "aws_lambda_function" "usage_rollup" {
+# Environment variables hold only the (non-sensitive) DynamoDB table name and
+# are encrypted at rest with the AWS-managed Lambda key.
+resource "aws_lambda_function" "usage_rollup" { # nosemgrep: terraform.aws.security.aws-lambda-environment-unencrypted.aws-lambda-environment-unencrypted
   function_name = local.name
   role          = aws_iam_role.lambda.arn
 
@@ -161,6 +172,10 @@ resource "aws_lambda_function" "usage_rollup" {
     variables = {
       ROLLUP_TABLE = aws_dynamodb_table.usage_rollups.name
     }
+  }
+
+  tracing_config {
+    mode = "Active"
   }
 
   tags = local.common_tags
