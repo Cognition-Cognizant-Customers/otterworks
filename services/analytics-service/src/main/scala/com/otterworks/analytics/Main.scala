@@ -13,7 +13,7 @@ import com.otterworks.analytics.event.{EventBridgeUsageEventPublisher, NoopUsage
 import com.otterworks.analytics.repository.{InMemoryMetricsRepository, MarketRepository, MetricsRepository, PostgresMetricsRepository}
 import com.otterworks.analytics.service.{AnalyticsService, EventProcessor, MarginService}
 import software.amazon.awssdk.regions.Region
-import software.amazon.awssdk.services.eventbridge.EventBridgeClient
+import software.amazon.awssdk.services.eventbridge.EventBridgeAsyncClient
 
 import java.net.URI
 
@@ -56,7 +56,7 @@ object Main:
     // usage-rollup pipeline (EventBridge rule -> SQS -> Lambda upsert).
     val publisher: UsageEventPublisher =
       if config.eventBridge.enabled then
-        val builder = EventBridgeClient.builder().region(Region.of(config.aws.region))
+        val builder = EventBridgeAsyncClient.builder().region(Region.of(config.aws.region))
         config.aws.endpointUrl.foreach(url => builder.endpointOverride(URI.create(url)))
         EventBridgeUsageEventPublisher(builder.build(), config.eventBridge.busName)
       else NoopUsageEventPublisher

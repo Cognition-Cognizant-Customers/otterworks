@@ -62,6 +62,7 @@ resource "aws_sqs_queue" "usage_rollup" {
   visibility_timeout_seconds = 180
   message_retention_seconds  = 259200
   receive_wait_time_seconds  = 20
+  sqs_managed_sse_enabled    = true
 
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.usage_rollup_dlq.arn
@@ -74,6 +75,7 @@ resource "aws_sqs_queue" "usage_rollup" {
 resource "aws_sqs_queue" "usage_rollup_dlq" {
   name                      = "${local.name}-dlq"
   message_retention_seconds = 1209600
+  sqs_managed_sse_enabled   = true
 
   tags = local.common_tags
 }
