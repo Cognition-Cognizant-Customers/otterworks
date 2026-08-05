@@ -13,6 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.routing import Match
 
 from app.api.health import REQUEST_COUNT, REQUEST_LATENCY, health_router
 from app.api.index import router as index_router
@@ -68,9 +69,22 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
         return response
 
     @staticmethod
-    def _record(request: Request, status: int, elapsed: float) -> None:
+    def _endpoint(request: Request) -> str:
         route = request.scope.get("route")
-        endpoint = getattr(route, "path_format", None) or "unknown"
+        if route is None:
+            for candidate in request.app.routes:
+                match, _ = candidate.matches(request.scope)
+                if match == Match.FULL:
+                    route = candidate
+                    break
+        path_format = getattr(route, "path_format", None)
+        if path_format == "/api/v1/search":
+            path_format = "/api/v1/search/"
+        return path_format or "unknown"
+
+    @classmethod
+    def _record(cls, request: Request, status: int, elapsed: float) -> None:
+        endpoint = cls._endpoint(request)
         method = request.method
         REQUEST_COUNT.labels(method=method, endpoint=endpoint, status=status).inc()
         REQUEST_LATENCY.labels(method=method, endpoint=endpoint).observe(elapsed)
