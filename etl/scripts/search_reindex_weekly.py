@@ -29,7 +29,7 @@ def main():
     document_service_url = config.get("services", "document_service_url")
     file_service_url = config.get("services", "file_service_url")
     meilisearch_url = config.get("services", "meilisearch_url")
-    meilisearch_api_key = os.environ.get("MEILISEARCH_API_KEY", "")
+    meilisearch_api_key = os.environ["MEILISEARCH_API_KEY"]
 
     documents_index = "documents"
     files_index = "files"
