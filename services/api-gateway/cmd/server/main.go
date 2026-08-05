@@ -94,6 +94,9 @@ func main() {
 		ProtectedPrefixPath: routePrefixes(routes),
 	}))
 
+	// Admin routes require the ADMIN role from the JWT claims
+	r.Use(middleware.RequireRole("/api/v1/admin", "ADMIN"))
+
 	// Health check
 	r.Get("/health", health.Handler())
 

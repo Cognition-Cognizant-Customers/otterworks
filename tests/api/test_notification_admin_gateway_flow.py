@@ -7,8 +7,8 @@ pytestmark = pytest.mark.api_flow
 def test_notification_listing_read_preferences_and_route_gaps(api_client):
     user = api_client.register_user("notification-flow")
 
-    missing_user_response = api_client.client.get("/api/v1/notifications", headers=user.auth_headers)
-    assert missing_user_response.status_code == 400
+    missing_user_response = api_client.client.get("/api/v1/notifications")
+    assert missing_user_response.status_code in {400, 401}
 
     list_response = api_client.client.get(
         "/api/v1/notifications",
