@@ -58,7 +58,9 @@ initialize: |
   export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
   nvm use default
   (cd frontend/client-app && npm install \
-     && npm install --no-save "@rolldown/binding-linux-x64-gnu@$(node -p "require('rolldown/package.json').version")" \
+     && ROLLDOWN_VERSION=$(node -p "require('rolldown/package.json').version") \
+     && [ -n "$ROLLDOWN_VERSION" ] \
+     && npm install --no-save "@rolldown/binding-linux-x64-gnu@$ROLLDOWN_VERSION" \
      && npm run build && npx cap sync android)
   (cd frontend/client-app/mobile/android && ./gradlew --no-daemon assembleDebug)
 
@@ -125,7 +127,9 @@ maintenance: |
   export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"; nvm use default >/dev/null
   # The rolldown native binding is explicit: an npm optional-deps bug omits it and Vite fails.
   (cd frontend/client-app && npm install \
-     && npm install --no-save "@rolldown/binding-linux-x64-gnu@$(node -p "require('rolldown/package.json').version")")
+     && ROLLDOWN_VERSION=$(node -p "require('rolldown/package.json').version") \
+     && [ -n "$ROLLDOWN_VERSION" ] \
+     && npm install --no-save "@rolldown/binding-linux-x64-gnu@$ROLLDOWN_VERSION")
   (cd frontend/client-app/desktop && npm install)
 knowledge:
   - name: run backend + web
