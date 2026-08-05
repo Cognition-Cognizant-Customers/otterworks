@@ -2,8 +2,10 @@ package com.otterworks.notification.consumer
 
 import aws.sdk.kotlin.services.sqs.SqsClient
 import com.otterworks.notification.config.AppConfig
+import com.otterworks.notification.model.SqsNotificationMessage
 import com.otterworks.notification.service.NotificationService
 import io.mockk.mockk
+import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -118,6 +120,50 @@ class SqsConsumerTest {
         assertEquals("mentioned-user", event.mentionedUserId)
         assertEquals("actor-2", event.actorId)
         assertEquals("doc-789", event.documentId)
+    }
+
+    @Test
+    fun `parseMessage parses legacy epoch seconds timestamp`() {
+        val body = """
+            {
+                "eventType": "file_shared",
+                "fileId": "file-123",
+                "timestamp": 1704067200
+            }
+        """.trimIndent()
+
+        val event = consumer.parseMessage(body)
+
+        assertNotNull(event)
+        assertEquals("2024-01-01T00:00:00Z", event.timestamp)
+    }
+
+    @Test
+    fun `parseMessage parses legacy epoch milliseconds timestamp`() {
+        val body = """
+            {
+                "eventType": "file_shared",
+                "fileId": "file-123",
+                "timestamp": 1704067200000
+            }
+        """.trimIndent()
+
+        val event = consumer.parseMessage(body)
+
+        assertNotNull(event)
+        assertEquals("2024-01-01T00:00:00Z", event.timestamp)
+    }
+
+    @Test
+    fun `strict parser accepts legacy epoch timestamp via flexible serializer`() {
+        val strict = Json {
+            ignoreUnknownKeys = false
+            isLenient = false
+        }
+        val msg = strict.decodeFromString<SqsNotificationMessage>(
+            """{"eventType":"file_shared","timestamp":1704067200}""",
+        )
+        assertEquals("2024-01-01T00:00:00Z", msg.timestamp)
     }
 
     @Test
