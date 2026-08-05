@@ -23,7 +23,7 @@ public class SecurityConfig {
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/health", "/metrics", "/actuator/**").permitAll()
-                .requestMatchers("/swagger-ui/**", "/swagger-resources/**", "/v2/api-docs/**").permitAll()
+                .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/swagger-resources/**", "/v2/api-docs/**", "/v3/api-docs/**").permitAll()
                 .requestMatchers("/api/v1/reports/**").permitAll()  // TODO: Add JWT validation
                 .anyRequest().permitAll())
             .headers(headers -> headers
