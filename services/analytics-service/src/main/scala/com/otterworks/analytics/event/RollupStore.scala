@@ -54,19 +54,30 @@ object DynamoDbRollupStore:
   /** How long processed eventIds are retained for deduplication. */
   val DedupeTtl: java.time.Duration = java.time.Duration.ofDays(14)
 
+  /**
+   * How long first-seen (date, userId) markers are retained. Longer than the
+   * dedupe window so a late event for an already-counted user does not
+   * increment `activeUsers` twice.
+   */
+  val UserMarkerTtl: java.time.Duration = java.time.Duration.ofDays(35)
+
   /** Bounded retries for same-date transaction conflicts under concurrency. */
   val MaxConflictRetries: Int = 5
 
 /**
  * DynamoDB-backed store: one rollup item per calendar date (keyed on `date`)
- * plus a processed-event ledger (keyed on `eventId`, TTL-expired). Each event
- * is applied with a single `TransactWriteItems`: a conditional put of the
- * eventId marker and an `UpdateItem` `ADD` on the numeric counters and the
- * distinct user-id string set. The condition makes redelivered events no-ops
- * and the `ADD` semantics make concurrent same-date updates commutative, so
- * neither duplicates nor races corrupt the rollup. Derived values
- * (`activeUsers`, `netStorageBytes`) are computed on read via
- * [[DailyRollupState.toRollup]] rather than stored.
+ * plus a marker ledger (keyed on `eventId`, TTL-expired) holding both
+ * processed-event markers and first-seen `user#<date>#<userId>` markers. Each
+ * event is applied with a single `TransactWriteItems`: conditional puts of the
+ * eventId marker and (for first-seen users) the user marker, and an
+ * `UpdateItem` `ADD` on the numeric counters including an exact `activeUsers`
+ * counter that is incremented only when the user marker was newly written.
+ * The rollup item therefore stays small and bounded regardless of daily user
+ * cardinality (no user-id set on the item), while `activeUsers` remains an
+ * exact distinct count. The conditions make redelivered events no-ops and the
+ * `ADD` semantics make concurrent same-date updates commutative, so neither
+ * duplicates nor races corrupt the rollup. `netStorageBytes` is derived on
+ * read via [[DailyRollupState.toRollup]].
  */
 final class DynamoDbRollupStore(client: DynamoDbClient, tableName: String, dedupeTableName: String)
     extends RollupStore:
@@ -85,7 +96,7 @@ final class DynamoDbRollupStore(client: DynamoDbClient, tableName: String, dedup
         DailyRollupState(
           date = item.get("date").s(),
           totalEvents = n(item, "totalEvents"),
-          userIds = Option(item.get("userIds")).map(_.ss().asScala.toSet).getOrElse(Set.empty),
+          userIds = Set.empty,
           documentsCreated = n(item, "documentsCreated"),
           documentsViewed = n(item, "documentsViewed"),
           documentsEdited = n(item, "documentsEdited"),
@@ -93,57 +104,69 @@ final class DynamoDbRollupStore(client: DynamoDbClient, tableName: String, dedup
           filesDownloaded = n(item, "filesDownloaded"),
           collabSessions = n(item, "collabSessions"),
           storageAllocatedBytes = n(item, "storageAllocatedBytes"),
-          storageReleasedBytes = n(item, "storageReleasedBytes")
+          storageReleasedBytes = n(item, "storageReleasedBytes"),
+          activeUsersOverride = Some(n(item, "activeUsers"))
         )
       )
 
   def applyEvent(event: AnalyticsEvent): Boolean =
     val date = IncrementalUsageRollup.dateOf(event.timestamp)
     val delta = DailyRollupState.empty(date)(event)
-    val expiresAt = Instant.now().plus(DynamoDbRollupStore.DedupeTtl).getEpochSecond
-    val marker = Put
-      .builder()
-      .tableName(dedupeTableName)
-      .item(
-        Map(
-          "eventId" -> AttributeValue.fromS(event.eventId),
-          "expiresAt" -> AttributeValue.fromN(expiresAt.toString)
-        ).asJava
-      )
-      .conditionExpression("attribute_not_exists(eventId)")
-      .build()
-    val request = TransactWriteItemsRequest
-      .builder()
-      .transactItems(
-        TransactWriteItem.builder().put(marker).build(),
-        TransactWriteItem.builder().update(updateFor(delta)).build()
-      )
-      .build()
-    // All events for one calendar date update the same rollup item, so
-    // concurrent invocations can collide with TransactionConflict, which the
-    // SDK does not retry. Retry with jittered backoff before failing the
-    // record; a ConditionalCheckFailed means the eventId was already applied.
+    val eventMarker = condPut(event.eventId, DynamoDbRollupStore.DedupeTtl)
+    val userMarker = condPut(s"user#$date#${event.userId}", DynamoDbRollupStore.UserMarkerTtl)
+    // Transaction item order matters: cancellation reasons come back in the
+    // same order, letting us tell a duplicate event (index 0) from an
+    // already-counted user (index 1). All events for one calendar date update
+    // the same rollup item, so concurrent invocations can also collide with
+    // TransactionConflict, which the SDK does not retry; retry with jittered
+    // backoff before failing the record.
     var attempt = 0
+    var firstSeenUser = true
     while true do
+      val items =
+        if firstSeenUser then List(eventMarker, userMarker, updateFor(delta, newUsers = 1L))
+        else List(eventMarker, updateFor(delta, newUsers = 0L))
+      val request = TransactWriteItemsRequest.builder().transactItems(items.asJava).build()
       try
         client.transactWriteItems(request)
         return true
       catch
-        case ex: TransactionCanceledException
-            if ex.cancellationReasons().asScala.exists(_.code() == "ConditionalCheckFailed") =>
-          return false
-        case ex: TransactionCanceledException
-            if attempt < DynamoDbRollupStore.MaxConflictRetries &&
-              ex.cancellationReasons()
-                .asScala
-                .exists(r => r.code() == "TransactionConflict" || r.code() == "TransactionInProgress") =>
-          attempt += 1
-          Thread.sleep(scala.util.Random.between(10L, 50L) * attempt)
+        case ex: TransactionCanceledException =>
+          val reasons = ex.cancellationReasons().asScala.map(_.code()).toList
+          if reasons.headOption.contains("ConditionalCheckFailed") then return false // duplicate event
+          else if firstSeenUser && reasons.lift(1).contains("ConditionalCheckFailed") then
+            firstSeenUser = false // user already counted for this date
+          else if attempt < DynamoDbRollupStore.MaxConflictRetries &&
+            reasons.exists(c => c == "TransactionConflict" || c == "TransactionInProgress")
+          then
+            attempt += 1
+            Thread.sleep(scala.util.Random.between(10L, 50L) * attempt)
+          else throw ex
     false
 
-  private def updateFor(delta: DailyRollupState): Update =
+  private def condPut(markerId: String, ttl: java.time.Duration): TransactWriteItem =
+    val expiresAt = Instant.now().plus(ttl).getEpochSecond
+    TransactWriteItem
+      .builder()
+      .put(
+        Put
+          .builder()
+          .tableName(dedupeTableName)
+          .item(
+            Map(
+              "eventId" -> AttributeValue.fromS(markerId),
+              "expiresAt" -> AttributeValue.fromN(expiresAt.toString)
+            ).asJava
+          )
+          .conditionExpression("attribute_not_exists(eventId)")
+          .build()
+      )
+      .build()
+
+  private def updateFor(delta: DailyRollupState, newUsers: Long): TransactWriteItem =
     val counters = List(
       "totalEvents" -> delta.totalEvents,
+      "activeUsers" -> newUsers,
       "documentsCreated" -> delta.documentsCreated,
       "documentsViewed" -> delta.documentsViewed,
       "documentsEdited" -> delta.documentsEdited,
@@ -159,20 +182,19 @@ final class DynamoDbRollupStore(client: DynamoDbClient, tableName: String, dedup
       adds += s"#$name :$name"
       values(s":$name") = AttributeValue.fromN(value.toString)
     }
-    // DynamoDB string sets cannot be empty.
-    if delta.userIds.nonEmpty then
-      adds += "#userIds :userIds"
-      values(":userIds") = AttributeValue.fromSs(delta.userIds.toList.sorted.asJava)
-    val names = (counters.map(_._1) ++ (if delta.userIds.nonEmpty then List("userIds") else Nil))
-      .map(name => s"#$name" -> name)
-      .toMap
-    Update
+    val names = counters.map { case (name, _) => s"#$name" -> name }.toMap
+    TransactWriteItem
       .builder()
-      .tableName(tableName)
-      .key(Map("date" -> AttributeValue.fromS(delta.date)).asJava)
-      .updateExpression("ADD " + adds.mkString(", "))
-      .expressionAttributeNames(names.asJava)
-      .expressionAttributeValues(values.toMap.asJava)
+      .update(
+        Update
+          .builder()
+          .tableName(tableName)
+          .key(Map("date" -> AttributeValue.fromS(delta.date)).asJava)
+          .updateExpression("ADD " + adds.mkString(", "))
+          .expressionAttributeNames(names.asJava)
+          .expressionAttributeValues(values.toMap.asJava)
+          .build()
+      )
       .build()
 
   private def n(item: java.util.Map[String, AttributeValue], key: String): Long =
