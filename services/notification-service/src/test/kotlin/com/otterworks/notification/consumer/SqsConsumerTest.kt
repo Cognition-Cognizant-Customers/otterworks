@@ -2,8 +2,10 @@ package com.otterworks.notification.consumer
 
 import aws.sdk.kotlin.services.sqs.SqsClient
 import com.otterworks.notification.config.AppConfig
+import com.otterworks.notification.model.SqsNotificationMessage
 import com.otterworks.notification.service.NotificationService
 import io.mockk.mockk
+import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -136,5 +138,63 @@ class SqsConsumerTest {
         assertEquals("", event.fileId)
         assertEquals("", event.ownerId)
         assertEquals("", event.sharedWithUserId)
+    }
+
+    @Test
+    fun `parseMessage parses legacy epoch-seconds timestamp`() {
+        val body = """
+            {
+                "eventType": "file_shared",
+                "fileId": "file-123",
+                "timestamp": 1704067200
+            }
+        """.trimIndent()
+
+        val event = consumer.parseMessage(body)
+
+        assertNotNull(event)
+        assertEquals("2024-01-01T00:00:00Z", event.timestamp)
+    }
+
+    @Test
+    fun `parseMessage parses legacy epoch-milliseconds timestamp`() {
+        val body = """
+            {
+                "eventType": "file_shared",
+                "fileId": "file-123",
+                "timestamp": 1704067200000
+            }
+        """.trimIndent()
+
+        val event = consumer.parseMessage(body)
+
+        assertNotNull(event)
+        assertEquals("2024-01-01T00:00:00Z", event.timestamp)
+    }
+
+    @Test
+    fun `strict parser accepts epoch timestamp via flexible serializer`() {
+        val strictJson = Json {
+            ignoreUnknownKeys = false
+            isLenient = false
+        }
+        val body = """{"eventType":"file_shared","timestamp":1704067200}"""
+
+        val message = strictJson.decodeFromString<SqsNotificationMessage>(body)
+
+        assertEquals("2024-01-01T00:00:00Z", message.timestamp)
+    }
+
+    @Test
+    fun `strict parser still accepts RFC 3339 timestamp`() {
+        val strictJson = Json {
+            ignoreUnknownKeys = false
+            isLenient = false
+        }
+        val body = """{"eventType":"file_shared","timestamp":"2024-01-01T00:00:00Z"}"""
+
+        val message = strictJson.decodeFromString<SqsNotificationMessage>(body)
+
+        assertEquals("2024-01-01T00:00:00Z", message.timestamp)
     }
 }
