@@ -1,0 +1,77 @@
+version: "3.8"
+
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.8.4-python3.11
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+    _PIP_ADDITIONAL_REQUIREMENTS: apache-airflow-providers-amazon==8.19.0 apache-airflow-providers-postgres==5.10.2
+    # Connections (override in a .env file or a secrets backend; do not commit secrets)
+    AIRFLOW_CONN_AWS_DEFAULT: ${AIRFLOW_CONN_AWS_DEFAULT:-aws://}
+    AIRFLOW_CONN_OTTERWORKS_POSTGRES: ${AIRFLOW_CONN_OTTERWORKS_POSTGRES:-postgresql://etl_user:changeme@analytics-db.internal.otterworks.dev:5432/otterworks_analytics}
+    # Variables
+    AIRFLOW_VAR_OTTERWORKS_FILE_STORAGE_BUCKET: ${OTTERWORKS_FILE_STORAGE_BUCKET:-otterworks-file-storage}
+    AIRFLOW_VAR_OTTERWORKS_QUARANTINE_BUCKET: ${OTTERWORKS_QUARANTINE_BUCKET:-otterworks-file-quarantine}
+    AIRFLOW_VAR_OTTERWORKS_DATA_LAKE_BUCKET: ${OTTERWORKS_DATA_LAKE_BUCKET:-otterworks-data-lake}
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - airflow-logs:/opt/airflow/logs
+  depends_on:
+    airflow-db:
+      condition: service_healthy
+
+services:
+  airflow-db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+    volumes:
+      - airflow-db-data:/var/lib/postgresql/data
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username admin --password admin \
+          --firstname Admin --lastname User \
+          --role Admin --email admin@otterworks.dev
+    restart: "no"
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8090:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+volumes:
+  airflow-db-data:
+  airflow-logs:
