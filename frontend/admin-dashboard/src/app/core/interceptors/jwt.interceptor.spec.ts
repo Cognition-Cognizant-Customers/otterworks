@@ -44,9 +44,24 @@ describe('JwtInterceptor', () => {
     expect(authService.refreshSession).toHaveBeenCalledTimes(1);
   });
 
+  it('should propagate retried request failures without logging out', () => {
+    authService.refreshSession.and.returnValue(of('new-token'));
+    let error: unknown;
+    http.get('/api/v1/admin/data').subscribe({ error: err => error = err });
+    httpTestingController.expectOne('/api/v1/admin/data')
+      .flush({}, { status: 401, statusText: 'Unauthorized' });
+    httpTestingController.expectOne('/api/v1/admin/data')
+      .flush({}, { status: 500, statusText: 'Server Error' });
+    expect((error as { status: number }).status).toBe(500);
+    expect(authService.logout).not.toHaveBeenCalled();
+  });
+
   it('should logout when refresh fails', () => {
     const refreshError = new Error('refresh failed');
-    authService.refreshSession.and.returnValue(throwError(() => refreshError));
+    authService.refreshSession.and.callFake(() => {
+      authService.logout();
+      return throwError(() => refreshError);
+    });
     let error: unknown;
     http.get('/api/v1/admin/data').subscribe({ error: err => error = err });
     httpTestingController.expectOne('/api/v1/admin/data')

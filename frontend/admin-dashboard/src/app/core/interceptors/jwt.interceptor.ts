@@ -49,14 +49,11 @@ export class JwtInterceptor implements HttpInterceptor {
         }
 
         return this.authService.refreshSession().pipe(
+          catchError(refreshError => throwError(() => refreshError)),
           switchMap(newToken => next.handle(request.clone({
             setHeaders: { Authorization: `Bearer ${newToken}` },
             context: request.context.set(RETRIED_REQUEST, true),
           }))),
-          catchError(refreshError => {
-            this.authService.logout();
-            return throwError(() => refreshError);
-          }),
         );
       })
     );
