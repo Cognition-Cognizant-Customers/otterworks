@@ -10,6 +10,7 @@
 # TODO ETL-188: Add timeout handling everywhere (never done)
 
 import configparser
+import os
 import json
 import sys
 import time
@@ -28,7 +29,7 @@ def main():
     document_service_url = config.get("services", "document_service_url")
     file_service_url = config.get("services", "file_service_url")
     meilisearch_url = config.get("services", "meilisearch_url")
-    meilisearch_api_key = config.get("services", "meilisearch_api_key")
+    meilisearch_api_key = os.environ.get("MEILISEARCH_API_KEY", "")
 
     documents_index = "documents"
     files_index = "files"

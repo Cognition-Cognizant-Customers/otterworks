@@ -10,6 +10,7 @@
 # TODO ETL-203: Add dry-run mode for testing (never implemented)
 
 import configparser
+import os
 import json
 import sys
 from datetime import datetime, timezone
@@ -24,8 +25,8 @@ def main():
     config = configparser.ConfigParser()
     config.read("/opt/etl/config.ini")
 
-    aws_access_key = config.get("aws", "access_key")
-    aws_secret_key = config.get("aws", "secret_key")
+    aws_access_key = os.environ["AWS_ACCESS_KEY_ID"]
+    aws_secret_key = os.environ["AWS_SECRET_ACCESS_KEY"]
     aws_region = config.get("aws", "region")
 
     file_storage_bucket = config.get("s3", "file_storage_bucket")

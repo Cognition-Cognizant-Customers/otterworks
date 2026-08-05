@@ -15,6 +15,20 @@ CVE-2025-66412
 CVE-2026-22610
 CVE-2026-27970
 CVE-2026-32635
+# @angular/common|compiler|core 17.3.12 -> >=19.2.23 is the same deferred Angular
+# major upgrade. Review by 2026-11-01.
+CVE-2026-50170
+CVE-2026-50171
+CVE-2026-54266
+CVE-2026-54268
+CVE-2026-54267
+CVE-2026-68945
+CVE-2026-69151
+
+# --- frontend/client-app ---
+# react-router 7.18.1 -> 8.3.0 is a major version bump with breaking route API
+# changes. Review by 2026-11-01.
+GHSA-qwww-vcr4-c8h2
 
 # --- frontend/web-app: requires Next.js 14.2.25+ or 15.x upgrade ---
 CVE-2025-29927
@@ -29,17 +43,45 @@ GHSA-q4gf-8mx6-v5v3
 CVE-2025-30204
 CVE-2026-24051
 CVE-2026-39883
-CVE-2026-33186
 
-# --- services/admin-service: requires Rails 7.2+ upgrade (activestorage CVEs) ---
-CVE-2026-33195
+# --- services/admin-service ---
 CVE-2026-33658
+# puma 6.6.1 -> 7.2.1 is a major version bump (puma 7 drops APIs used by config/puma.rb);
+# deferred pending puma 7 migration. Review by 2026-11-01.
+CVE-2026-47736
+CVE-2026-47737
 
 # --- services/document-service: Python dependency upgrades require poetry ---
 CVE-2026-0994
 CVE-2024-53981
 CVE-2026-24486
 CVE-2024-47874
+# starlette 0.37.2 -> 1.1.0/1.3.1 is a major version bump; fastapi ^0.110 pins
+# starlette <0.38, so the fix requires a coordinated FastAPI upgrade with breaking
+# API changes. Review by 2026-11-01.
+CVE-2026-48818
+CVE-2026-54283
+
+# --- services/collab-service ---
+# @opentelemetry/sdk-node 0.49.1 -> 0.217.0 (and propagator-jaeger 1.x -> 2.x) is a
+# semver-major upgrade of the OpenTelemetry JS SDK with breaking API changes to
+# tracing setup. Review by 2026-11-01.
+CVE-2026-59892
+CVE-2026-44902
+
+# --- services/file-service ---
+# rustls-webpki 0.101.7 comes via aws-smithy-http-client -> hyper-rustls 0.24 ->
+# rustls 0.21; fixing to 0.103.13 requires the rustls 0.23 stack, i.e. an AWS SDK
+# upgrade that raises MSRV above the pinned Rust 1.83 toolchain (breaking).
+# Review by 2026-11-01.
+GHSA-82j2-j2ch-gfr8
+
+# --- services/report-service ---
+# commons-io 2.6 -> 2.14.0. report-service is the intentional legacy Java 8 /
+# Spring Boot 2.5 service kept as-is for the upgrade exercise (see AGENTS.md and
+# services/report-service/UPGRADE_GUIDE.md); dependency bumps there would erase
+# the lab. Review by 2026-11-01.
+CVE-2024-47554
 
 # Bulk ignore — revisit in Q4
 CVE-2021-*

@@ -10,6 +10,7 @@
 
 import configparser
 import gzip
+import os
 import io
 import json
 import sys
@@ -29,15 +30,15 @@ def main():
     config = configparser.ConfigParser()
     config.read("/opt/etl/config.ini")
 
-    aws_access_key = config.get("aws", "access_key")
-    aws_secret_key = config.get("aws", "secret_key")
+    aws_access_key = os.environ["AWS_ACCESS_KEY_ID"]
+    aws_secret_key = os.environ["AWS_SECRET_ACCESS_KEY"]
     aws_region = config.get("aws", "region")
 
     db_host = config.get("database", "host")
     db_port = config.getint("database", "port")
     db_name = config.get("database", "database")
     db_user = config.get("database", "user")
-    db_password = config.get("database", "password")
+    db_password = os.environ["ETL_DB_PASSWORD"]
 
     data_lake_bucket = config.get("s3", "data_lake_bucket")
     analytics_prefix = config.get("s3", "analytics_prefix")
