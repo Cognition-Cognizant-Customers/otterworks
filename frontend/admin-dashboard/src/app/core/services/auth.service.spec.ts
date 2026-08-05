@@ -9,6 +9,11 @@ describe('AuthService', () => {
   let router: Router;
   let httpTestingController: HttpTestingController;
 
+  const loginResponse = (accessToken = 'access-token', refreshToken = 'refresh-token') => ({
+    accessToken, refreshToken, tokenType: 'Bearer', expiresIn: 3600,
+    user: { id: 'user-id', email: 'admin@otterworks.io', displayName: 'Admin User', avatarUrl: null },
+  });
+
   beforeEach(() => {
     localStorage.clear();
     TestBed.configureTestingModule({
@@ -24,28 +29,15 @@ describe('AuthService', () => {
     localStorage.clear();
   });
 
-  function createToken(roles: string[]): string {
-    const encode = (value: object): string =>
-      btoa(JSON.stringify(value)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    return `${encode({ alg: 'none', typ: 'JWT' })}.${encode({ roles })}.`;
-  }
-
-  function flushLogin(roles: string[] = ['ADMIN']): string {
-    const accessToken = createToken(roles);
-    const request = httpTestingController.expectOne('/api/v1/auth/login');
-    request.flush({
-      accessToken,
-      refreshToken: 'refresh-token',
-      tokenType: 'Bearer',
-      expiresIn: 3600,
-      user: {
-        id: 'user-id',
-        email: 'admin@otterworks.io',
-        displayName: 'Admin User',
-        avatarUrl: null,
-      },
+  function completeLogin(roles: string[] = ['ADMIN']): void {
+    const login = httpTestingController.expectOne('/api/v1/auth/login');
+    login.flush(loginResponse());
+    const profile = httpTestingController.expectOne('/api/v1/auth/profile');
+    expect(profile.request.headers.get('Authorization')).toBe('Bearer access-token');
+    profile.flush({
+      id: 'user-id', email: 'admin@otterworks.io', displayName: 'Admin User',
+      avatarUrl: null, roles,
     });
-    return accessToken;
   }
 
   it('should be created', () => {
@@ -57,57 +49,103 @@ describe('AuthService', () => {
     expect(service.currentUser).toBeNull();
   });
 
-  it('should login successfully with valid credentials', () => {
-    let loggedInUser;
-    service.login('admin@otterworks.io', 'admin123').subscribe(user => {
-      loggedInUser = user;
-    });
-    const accessToken = flushLogin();
-    expect(loggedInUser).toBeTruthy();
-    expect(loggedInUser!.email).toBe('admin@otterworks.io');
-    expect(loggedInUser!.role).toBe('admin');
-    expect(loggedInUser!.token).toBe(accessToken);
+  it('should login and verify the role through the profile endpoint', () => {
+    let loggedInUser: AuthUser | undefined;
+    service.login('admin@otterworks.io', 'admin123').subscribe(user => loggedInUser = user);
+    completeLogin();
+    expect(loggedInUser?.role).toBe('admin');
     expect(service.isAuthenticated).toBeTrue();
-    expect(service.currentUser).toBeTruthy();
+    expect(localStorage.getItem('ow_admin_token')).toBe('access-token');
+    expect(localStorage.getItem('ow_admin_refresh_token')).toBe('refresh-token');
   });
 
-  it('should store token and user in localStorage after login', () => {
-    service.login('admin@otterworks.io', 'admin123').subscribe();
-    const accessToken = flushLogin();
-    expect(localStorage.getItem('ow_admin_token')).toBe(accessToken);
-    expect(JSON.parse(localStorage.getItem('ow_admin_user')!)).toEqual(service.currentUser);
-  });
-
-  it('should reject non-admin users', () => {
+  it('should reject non-admin users without persisting the session', () => {
     let error: Error | undefined;
     service.login('user@otterworks.io', 'user123').subscribe({
-      error: (e: Error) => { error = e; },
+      error: (err: Error) => error = err,
     });
-    flushLogin(['USER']);
+    completeLogin(['USER']);
     expect(error?.message).toBe('Insufficient privileges: admin access required');
     expect(localStorage.getItem('ow_admin_token')).toBeNull();
-    expect(localStorage.getItem('ow_admin_user')).toBeNull();
+    expect(localStorage.getItem('ow_admin_refresh_token')).toBeNull();
     expect(service.currentUser).toBeNull();
   });
 
-  it('should map HTTP 401 to invalid credentials', () => {
+  it('should map login HTTP 401 to invalid credentials', () => {
     let error: Error | undefined;
     service.login('admin@otterworks.io', 'wrong').subscribe({
-      error: (e: Error) => { error = e; },
+      error: (err: Error) => error = err,
     });
-    const request = httpTestingController.expectOne('/api/v1/auth/login');
-    request.flush({}, { status: 401, statusText: 'Unauthorized' });
+    httpTestingController.expectOne('/api/v1/auth/login')
+      .flush({}, { status: 401, statusText: 'Unauthorized' });
     expect(error?.message).toBe('Invalid credentials');
   });
 
+  it('should refresh the session and rotate both tokens', () => {
+    localStorage.setItem('ow_admin_token', 'old-access');
+    localStorage.setItem('ow_admin_refresh_token', 'old-refresh');
+    localStorage.setItem('ow_admin_user', JSON.stringify({
+      id: 'user-id', email: 'admin@otterworks.io', displayName: 'Admin User',
+      role: 'admin', token: 'old-access',
+    }));
+    let token: string | undefined;
+    service.refreshSession().subscribe(value => token = value);
+    const request = httpTestingController.expectOne('/api/v1/auth/refresh');
+    expect(request.request.headers.get('Authorization')).toBe('Bearer old-refresh');
+    expect(request.request.body).toEqual({});
+    request.flush(loginResponse('new-access', 'new-refresh'));
+    const profile = httpTestingController.expectOne('/api/v1/auth/profile');
+    expect(profile.request.headers.get('Authorization')).toBe('Bearer new-access');
+    profile.flush({
+      id: 'user-id', email: 'admin@otterworks.io', displayName: 'Admin User',
+      avatarUrl: null, roles: ['ADMIN'],
+    });
+    expect(token).toBe('new-access');
+    expect(localStorage.getItem('ow_admin_token')).toBe('new-access');
+    expect(localStorage.getItem('ow_admin_refresh_token')).toBe('new-refresh');
+    expect(service.currentUser?.token).toBe('new-access');
+  });
+
+  it('should share one in-flight refresh request', () => {
+    localStorage.setItem('ow_admin_refresh_token', 'old-refresh');
+    const tokens: string[] = [];
+    service.refreshSession().subscribe(token => tokens.push(token));
+    service.refreshSession().subscribe(token => tokens.push(token));
+    const requests = httpTestingController.match('/api/v1/auth/refresh');
+    expect(requests.length).toBe(1);
+    requests[0].flush(loginResponse('new-access', 'new-refresh'));
+    const profiles = httpTestingController.match('/api/v1/auth/profile');
+    expect(profiles.length).toBe(1);
+    profiles[0].flush({
+      id: 'user-id', email: 'admin@otterworks.io', displayName: 'Admin User',
+      avatarUrl: null, roles: ['ADMIN'],
+    });
+    expect(tokens).toEqual(['new-access', 'new-access']);
+  });
+
+  it('should clear the session when refresh fails', () => {
+    localStorage.setItem('ow_admin_token', 'old-access');
+    localStorage.setItem('ow_admin_refresh_token', 'old-refresh');
+    spyOn(router, 'navigate');
+    let error: Error | undefined;
+    service.refreshSession().subscribe({ error: (err: Error) => error = err });
+    httpTestingController.expectOne('/api/v1/auth/refresh')
+      .flush({}, { status: 401, statusText: 'Unauthorized' });
+    expect(error).toBeTruthy();
+    expect(localStorage.getItem('ow_admin_token')).toBeNull();
+    expect(localStorage.getItem('ow_admin_refresh_token')).toBeNull();
+    expect(router.navigate).toHaveBeenCalledWith(['/login']);
+  });
+
   it('should clear auth state on logout', () => {
-    service.login('admin@otterworks.io', 'admin123').subscribe();
-    flushLogin();
+    localStorage.setItem('ow_admin_token', 'access-token');
+    localStorage.setItem('ow_admin_refresh_token', 'refresh-token');
     spyOn(router, 'navigate');
     service.logout();
     expect(service.isAuthenticated).toBeFalse();
     expect(service.currentUser).toBeNull();
     expect(localStorage.getItem('ow_admin_token')).toBeNull();
+    expect(localStorage.getItem('ow_admin_refresh_token')).toBeNull();
     expect(router.navigate).toHaveBeenCalledWith(['/login']);
   });
 
@@ -115,7 +153,7 @@ describe('AuthService', () => {
     const emitted: (AuthUser | null)[] = [];
     service.currentUser$.subscribe(user => emitted.push(user));
     service.login('admin@otterworks.io', 'admin123').subscribe();
-    flushLogin();
+    completeLogin();
     expect(emitted.length).toBeGreaterThanOrEqual(2);
     expect(emitted[emitted.length - 1]).toBeTruthy();
   });
@@ -123,10 +161,9 @@ describe('AuthService', () => {
   it('should reject login with empty password', () => {
     let error: Error | undefined;
     service.login('admin@otterworks.io', '').subscribe({
-      error: (e: Error) => { error = e; },
+      error: (err: Error) => error = err,
     });
-    expect(error).toBeTruthy();
-    expect(error!.message).toBe('Invalid credentials');
+    expect(error?.message).toBe('Invalid credentials');
     httpTestingController.expectNone('/api/v1/auth/login');
   });
 });
