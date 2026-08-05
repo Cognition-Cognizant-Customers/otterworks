@@ -216,6 +216,17 @@ function FileBrowserContent() {
       : sortedFiles.filter((f) => getFileCategory(f.name) === typeFilter);
   const items = [...folders, ...files];
 
+  const handleFilterChange = (filter: FileTypeFilter) => {
+    setTypeFilter(filter);
+    const visibleIds = new Set([
+      ...folders.map((f) => f.id),
+      ...rawFiles
+        .filter((f) => filter === "all" || getFileCategory(f.name) === filter)
+        .map((f) => f.id),
+    ]);
+    setSelectedIds((prev) => new Set([...prev].filter((id) => visibleIds.has(id))));
+  };
+
   const toggleSort = (field: SortField) => {
     if (sortConfig.field === field) {
       setSortConfig({ field, direction: sortConfig.direction === "asc" ? "desc" : "asc" });
@@ -416,7 +427,7 @@ function FileBrowserContent() {
         {FILE_TYPE_FILTERS.map(({ value, label }) => (
           <button
             key={value}
-            onClick={() => setTypeFilter(value)}
+            onClick={() => handleFilterChange(value)}
             aria-pressed={typeFilter === value}
             className={cn(
               "px-3 py-1.5 text-sm rounded-full border transition",

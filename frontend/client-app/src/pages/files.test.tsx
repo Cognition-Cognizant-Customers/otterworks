@@ -157,6 +157,17 @@ describe("Files page file-type filter", () => {
     expectVisible(allFileNames);
   });
 
+  it("drops hidden files from the selection when the filter changes", async () => {
+    renderFilesPage();
+    await waitForListing();
+    fireEvent.click(screen.getByRole("button", { name: /Select/ }));
+    const photoCard = screen.getByText("photo.png").closest("a")!.parentElement!;
+    fireEvent.click(photoCard.querySelector('input[type="checkbox"]')!);
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Documents" }));
+    expect(screen.queryByText("1 selected")).not.toBeInTheDocument();
+  });
+
   it("shows an empty message when the filter matches no files", async () => {
     const { filesApi } = await import("@/lib/api");
     vi.mocked(filesApi.list).mockResolvedValueOnce({
