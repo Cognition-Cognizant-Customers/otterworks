@@ -270,6 +270,27 @@ class MeiliSearchService:
 
         return suggestions
 
+    def suggest_ranked(self, prefix: str, size: int = 10) -> list[str]:
+        """Autocomplete suggestions sorted by MeiliSearch ranking score."""
+        ranked: list[tuple[float, str]] = []
+        seen: set[str] = set()
+
+        for index_name in [self.documents_index_name, self.files_index_name]:
+            index = self.client.index(index_name)
+            result = index.search(prefix, {
+                "limit": size,
+                "attributesToRetrieve": ["title", "name"],
+                "showRankingScore": True,
+            })
+            for hit in result["hits"]:
+                text = hit.get("title") or hit.get("name", "")
+                if text and text not in seen:
+                    ranked.append((float(hit.get("_rankingScore", 0.0)), text))
+                    seen.add(text)
+
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        return [text for _, text in ranked[:size]]
+
     def _wait_and_check(self, task_uid: int, timeout_in_ms: int = 10000) -> None:
         """Wait for a MeiliSearch task and raise on failure."""
         result = self.client.wait_for_task(task_uid, timeout_in_ms=timeout_in_ms)
