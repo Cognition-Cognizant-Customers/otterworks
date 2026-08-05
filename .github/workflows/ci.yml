@@ -28,6 +28,8 @@ jobs:
       admin-dashboard: ${{ steps.changes.outputs.admin-dashboard }}
       demo-platform: ${{ steps.changes.outputs.demo-platform }}
       infrastructure: ${{ steps.changes.outputs.infrastructure }}
+      platform: ${{ steps.changes.outputs.platform }}
+      helm-charts: ${{ steps.changes.outputs.helm-charts }}
       report-service: ${{ steps.changes.outputs.report-service }}
       legacy-portal: ${{ steps.changes.outputs.legacy-portal }}
       api-tests: ${{ steps.changes.outputs.api-tests }}
@@ -66,6 +68,11 @@ jobs:
               - 'scripts/**'
             infrastructure:
               - 'infrastructure/**'
+            platform:
+              - 'platform/**'
+            helm-charts:
+              - 'infrastructure/helm/**'
+              - 'demo-platform/helm/**'
             report-service:
               - 'services/report-service/**'
             legacy-portal:
@@ -415,6 +422,39 @@ jobs:
       - run: terraform fmt -check -recursive
       - run: terraform init -backend=false
       - run: terraform validate
+
+  # Terraform validation for the platform layer (vpc, eks, ecr)
+  platform-terraform:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.platform == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: platform/terraform
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.7.0
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false
+      - run: terraform validate
+
+  # Helm chart validation for the service charts and the demo control plane chart
+  helm-lint:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.helm-charts == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.14.0
+      - run: |
+          set -e
+          for chart in infrastructure/helm/* demo-platform/helm/demo-platform; do
+            helm lint "$chart"
+          done
 
   # Black-box API flow test validation
   api-flow-tests:

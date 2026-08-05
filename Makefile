@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed dev-backend dev-web dev-admin dev-android dev-electron
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect test-demo-platform lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed dev-backend dev-web dev-admin dev-android dev-electron
 
 SHELL := /bin/bash
 
@@ -104,7 +104,7 @@ build-audit: ## Build Audit Service
 	cd services/audit-service && dotnet build
 
 build-web: ## Build Web Frontend
-	cd frontend/web-app && npm run build
+	cd frontend/client-app && npm run build
 
 build-admin-dash: ## Build Admin Dashboard
 	cd frontend/admin-dashboard && npm run build
@@ -122,7 +122,7 @@ test: ## Run tests for all services
 	@echo "=== Analytics Service (Scala) ===" && cd services/analytics-service && sbt test
 	@echo "=== Admin Service (Ruby) ===" && cd services/admin-service && bundle exec rspec
 	@echo "=== Audit Service (C#) ===" && cd services/audit-service && dotnet test
-	@echo "=== Web Frontend ===" && cd frontend/web-app && npm test
+	@echo "=== Web Frontend ===" && cd frontend/client-app && npm test
 	@echo "=== Admin Dashboard ===" && cd frontend/admin-dashboard && npm test
 
 test-coverage: ## Run tests with coverage for all services
@@ -133,6 +133,12 @@ test-coverage: ## Run tests with coverage for all services
 	@echo "=== Admin Service ===" && cd services/admin-service && bundle exec rspec --format documentation || true
 	@echo "=== Auth Service ===" && cd services/auth-service && ./gradlew test jacocoTestReport || true
 	@echo "=== File Service ===" && cd services/file-service && cargo test 2>&1 | tail -5 || true
+
+test-demo-platform: ## Run the demo-platform control-plane test suites
+	./demo-platform/reaper/test-reaper.sh
+	./demo-platform/reaper/test-idle-suspend.sh
+	./demo-platform/reaper/test-infra-sweep.sh
+	./demo-platform/reaper/test-orphan-sweep.sh
 
 test-api-flows: ## Run black-box API flow tests against the local API gateway
 	UV_PROJECT_ENVIRONMENT=.venv uv run python -m pytest tests/api
@@ -147,7 +153,7 @@ lint: ## Lint all services
 	@echo "=== Document Service ===" && cd services/document-service && ruff check .
 	@echo "=== Collab Service ===" && cd services/collab-service && npm run lint
 	@echo "=== Search Service ===" && cd services/search-service && ruff check .
-	@echo "=== Web Frontend ===" && cd frontend/web-app && npm run lint
+	@echo "=== Web Frontend ===" && cd frontend/client-app && npm run lint
 	@echo "=== Admin Dashboard ===" && cd frontend/admin-dashboard && npm run lint
 
 # --- Synthetic Test Data ---
