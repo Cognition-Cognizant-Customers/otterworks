@@ -4,8 +4,9 @@ Delivery plan for the dispositions in `analysis/MODERNIZATION_STRATEGY.md`, usin
 dependency map in `analysis/ESTATE_INVENTORY.md` and the gate inventory in
 `analysis/GATE_BASELINE.md`.
 
-Three waves. Units **within** a wave have no dependency on each other and can run in
-parallel (one branch / one demo tenant per unit). Waves are ordered by blast radius:
+Three waves. Units **within** a wave run in parallel (one branch / one demo tenant per
+unit), with two ordering exceptions noted in "Cross-wave dependency notes" (1.1 merges
+first in Wave 1; 3.3 follows 3.1 in Wave 3). Waves are ordered by blast radius:
 
 - **Wave 1 — leaves and gate repair.** Components no other service calls, plus the
   cross-cutting work that makes the gates in later waves able to fail at all.
@@ -76,8 +77,9 @@ are proven on lower-risk units.
   admin-dashboard job). The remaining Wave 1 units are mutually parallel.
 - 3.3 depends on 1.3 (replatform before decomposition) and on 3.1 (gateway routing).
   3.1 depends on 1.2 (the rewritten report-service API surface it must route to).
-- No unit depends on another unit **within** its own wave, so each wave can be executed
-  as one batch of parallel `demo-<id>` tenants.
+- Apart from the two intra-wave ordering constraints above (1.1 lands first in Wave 1;
+  3.3 follows 3.1 in Wave 3), units within a wave are mutually independent and can be
+  executed as one batch of parallel `demo-<id>` tenants.
 - Verification limits: units whose behavior depends on SNS/SQS eventing cannot be fully
   verified on an ephemeral tenant (eventing is disabled for tenants per `AGENTS.md`).
   These are identified per-unit in `analysis/RISK_REGISTER.md`.
