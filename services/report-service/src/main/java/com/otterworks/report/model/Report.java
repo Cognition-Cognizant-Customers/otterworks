@@ -98,7 +98,7 @@ public class Report {
     @Schema(description = "Number of data rows in the report")
     private Integer rowCount;
 
-    @JdbcTypeCode(SqlTypes.LONGVARCHAR)
+    @JdbcTypeCode(SqlTypes.LONG32VARCHAR)
     @Column(name = "error_message")
     @Schema(description = "Error message if generation failed")
     private String errorMessage;

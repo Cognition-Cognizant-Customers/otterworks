@@ -108,10 +108,11 @@ byte-for-byte identical and run through the **JUnit Vintage engine**:
 One mapping change was required: Hibernate 6 binds `@Lob String` on PostgreSQL
 through the large-object (`oid`) JDBC API instead of Hibernate 5's `text`
 column mapping. `Report.errorMessage` (`model/Report.java`) therefore replaces
-`@Lob` with `@JdbcTypeCode(SqlTypes.LONGVARCHAR)`, which maps to `text` on
-PostgreSQL and a character large object on H2 — matching the column the
-pre-upgrade version created and avoiding both runtime read/write failures on
-existing databases and leaked server-side large objects on fresh ones.
+`@Lob` with `@JdbcTypeCode(SqlTypes.LONG32VARCHAR)`, which maps to an unbounded
+`text` column on PostgreSQL (plain `LONGVARCHAR` would produce a length-limited
+`varchar(32600)` under Hibernate 6's DDL type registry) — matching the column
+the pre-upgrade version created and avoiding both runtime read/write failures
+on existing databases and leaked server-side large objects on fresh ones.
 
 Everything else needed no change: the entity's other mappings
 (`@Enumerated(STRING)`, `@Temporal`) are portable and the repository uses
