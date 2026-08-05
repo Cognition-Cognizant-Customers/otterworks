@@ -16,7 +16,7 @@ coverage is reported.
 
 | Service | Language | Test framework / coverage tool | Test command (from repo root) | Line coverage | Test files | Run succeeded |
 |---|---|---|---|---|---|---|
-| admin-service | Ruby (Rails API) | RSpec + SimpleCov | `cd services/admin-service && bundle exec rspec` | 36.8% (426/1157 lines) | 16 spec files (120 examples) | Yes — 120 passed. Requires Postgres up (`make infra-up`) and `DATABASE_PASSWORD=otterworks_dev RAILS_ENV=test bundle exec rake db:create db:schema:load` first |
+| admin-service | Ruby (Rails API) | RSpec + SimpleCov | `cd services/admin-service && bundle exec rspec` | 36.8% (426/1157 lines) | 16 spec files (120 examples) | Yes — 120 passed. Requires Postgres up (`make infra-up`) and `DATABASE_PASSWORD=<local dev password from docker-compose.infra.yml> RAILS_ENV=test bundle exec rake db:create db:schema:load` first |
 | analytics-service | Scala | ScalaTest via sbt — **no scoverage plugin** | `cd services/analytics-service && sbt test` | not reported | 9 spec files (56 tests) | Yes — 56 passed; coverage not measurable (no scoverage in `build.sbt`/`project/plugins.sbt`) |
 | api-gateway | Go | `go test -cover` | `cd services/api-gateway && go test -cover ./...` | health 100%, middleware 69.7%, proxy 56.8%, config 0%, cmd/server 0% | 6 `_test.go` files | Yes |
 | audit-service | C# (.NET 8) | xUnit + coverlet | `cd services/audit-service/tests/AuditService.Tests && dotnet test --collect:"XPlat Code Coverage"` | 54.5% | 3 test files (24 tests) | Yes — 24 passed (needs .NET 8 runtime; not in `make test-coverage` target) |
@@ -49,7 +49,8 @@ coverage is reported.
   the Document Service line in the Makefile invokes bare `pytest`, which cannot
   see the Poetry-managed virtualenv; it must be run via `poetry run pytest`.
 - **admin-service**: `bundle exec rspec` reports 0% unless Postgres is running
-  with the test DB created (`admin_service_test`, password `otterworks_dev`),
+  with the test DB created (`admin_service_test`; set `DATABASE_PASSWORD` to the
+  local dev Postgres password from `docker-compose.infra.yml`),
   and Ruby 3.3.0 specifically cannot load the locked `connection_pool` 3.0.2
   gem (parser bug, fixed in 3.3.1+) — Ruby 3.3.6 works.
 
