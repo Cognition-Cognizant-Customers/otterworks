@@ -32,6 +32,32 @@ import { useUIStore } from "@/stores/ui-store";
 import { cn } from "@/lib/utils";
 import type { ViewMode, SortField } from "@/types";
 
+type FileTypeFilter = "all" | "documents" | "images" | "other";
+
+const FILE_TYPE_FILTERS: { value: FileTypeFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "documents", label: "Documents" },
+  { value: "images", label: "Images" },
+  { value: "other", label: "Other" },
+];
+
+const DOCUMENT_EXTENSIONS = new Set([
+  "pdf", "doc", "docx", "txt", "md", "rtf", "odt",
+  "xls", "xlsx", "csv", "ppt", "pptx",
+]);
+
+const IMAGE_EXTENSIONS = new Set([
+  "png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "heic", "tiff",
+]);
+
+function getFileCategory(name: string): Exclude<FileTypeFilter, "all"> {
+  const dotIdx = name.lastIndexOf(".");
+  const ext = dotIdx > 0 ? name.slice(dotIdx + 1).toLowerCase() : "";
+  if (DOCUMENT_EXTENSIONS.has(ext)) return "documents";
+  if (IMAGE_EXTENSIONS.has(ext)) return "images";
+  return "other";
+}
+
 // Run a delete operation over a list of ids, tallying successes and failures
 // so a single failure doesn't abort the rest of a bulk action.
 async function runDeletions(
@@ -63,6 +89,7 @@ function FileBrowserContent() {
   const [shareFileId, setShareFileId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectionActive, setSelectionActive] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<FileTypeFilter>("all");
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -183,7 +210,10 @@ function FileBrowserContent() {
     }
   });
 
-  const files = sortedFiles;
+  const files =
+    typeFilter === "all"
+      ? sortedFiles
+      : sortedFiles.filter((f) => getFileCategory(f.name) === typeFilter);
   const items = [...folders, ...files];
 
   const toggleSort = (field: SortField) => {
@@ -381,6 +411,25 @@ function FileBrowserContent() {
         </div>
       </div>
 
+      {/* File type filter chips */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {FILE_TYPE_FILTERS.map(({ value, label }) => (
+          <button
+            key={value}
+            onClick={() => setTypeFilter(value)}
+            aria-pressed={typeFilter === value}
+            className={cn(
+              "px-3 py-1.5 text-sm rounded-full border transition",
+              typeFilter === value
+                ? "bg-otter-600 text-white border-otter-600"
+                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* New folder input */}
       {showNewFolder && (
         <div className="flex items-center gap-2 p-3 bg-white rounded-lg border border-gray-200">
@@ -429,7 +478,7 @@ function FileBrowserContent() {
       {/* File listing */}
       {isLoading ? (
         viewMode === "list" ? <FileListSkeleton /> : <FileGridSkeleton />
-      ) : items.length === 0 ? (
+      ) : folders.length === 0 && rawFiles.length === 0 ? (
         <EmptyState
           icon={FolderOpen}
           title="This folder is empty"
@@ -502,6 +551,10 @@ function FileBrowserContent() {
                 ))}
               </div>
             </section>
+          )}
+
+          {typeFilter !== "all" && files.length === 0 && (
+            <p className="text-sm text-gray-500 text-center py-6">No matching files</p>
           )}
         </div>
       )}
