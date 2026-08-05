@@ -1,6 +1,6 @@
 # OtterWorks Trivy Ignore List
 # These CVEs are acknowledged and tracked for remediation in future upgrade cycles.
-# report-service is excluded via skip-dirs (intentional legacy Java 8 service for upgrade exercise).
+# report-service is scanned like every other service (upgraded to Java 17 / Spring Boot 3.2).
 
 # --- etl/airflow: requires Airflow 2.9+ upgrade (major version) ---
 CVE-2024-39877

@@ -4,9 +4,9 @@ import com.otterworks.report.model.Report;
 import com.otterworks.report.model.ReportCategory;
 import com.otterworks.report.model.ReportStatus;
 import com.otterworks.report.model.ReportType;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -18,9 +18,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Unit tests for {@link PdfReportGenerator}.
@@ -29,26 +29,20 @@ import static org.junit.Assert.assertTrue;
  * correct size, header bytes, and non-trivial content. Does not require a
  * Spring context -- instantiates the generator directly.
  *
- * Written in JUnit 4 style to match the current stack. After the JUnit 5
- * migration (Axis 4), replace:
- *   - org.junit.Test   -> org.junit.jupiter.api.Test
- *   - org.junit.Before -> org.junit.jupiter.api.BeforeEach
- *   - org.junit.After  -> org.junit.jupiter.api.AfterEach
- *   - org.junit.Assert -> org.junit.jupiter.api.Assertions
- */
+  */
 public class PdfReportGeneratorTest {
 
     private PdfReportGenerator generator;
     private File outputDir;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         generator = new PdfReportGenerator();
         outputDir = new File(System.getProperty("java.io.tmpdir"), "pdf-test-" + System.currentTimeMillis());
         outputDir.mkdirs();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         if (outputDir != null && outputDir.exists()) {
             File[] files = outputDir.listFiles();
@@ -68,10 +62,10 @@ public class PdfReportGeneratorTest {
 
         File pdf = generator.generatePdf(report, data, outputDir.getAbsolutePath());
 
-        assertNotNull("PDF file should not be null", pdf);
-        assertTrue("PDF file should exist", pdf.exists());
-        assertTrue("PDF file should have content", pdf.length() > 0);
-        assertTrue("PDF file should have .pdf extension", pdf.getName().endsWith(".pdf"));
+        assertNotNull(pdf, "PDF file should not be null");
+        assertTrue(pdf.exists(), "PDF file should exist");
+        assertTrue(pdf.length() > 0, "PDF file should have content");
+        assertTrue(pdf.getName().endsWith(".pdf"), "PDF file should have .pdf extension");
     }
 
     @Test
@@ -84,14 +78,14 @@ public class PdfReportGeneratorTest {
         byte[] header = new byte[5];
         try (FileInputStream fis = new FileInputStream(pdf)) {
             int bytesRead = fis.read(header);
-            assertEquals("Should read 5 header bytes", 5, bytesRead);
+            assertEquals(5, bytesRead, "Should read 5 header bytes");
         }
         // PDF files always start with %PDF-
-        assertEquals("First byte should be '%'", '%', (char) header[0]);
-        assertEquals("Second byte should be 'P'", 'P', (char) header[1]);
-        assertEquals("Third byte should be 'D'", 'D', (char) header[2]);
-        assertEquals("Fourth byte should be 'F'", 'F', (char) header[3]);
-        assertEquals("Fifth byte should be '-'", '-', (char) header[4]);
+        assertEquals('%', (char) header[0], "First byte should be '%'");
+        assertEquals('P', (char) header[1], "Second byte should be 'P'");
+        assertEquals('D', (char) header[2], "Third byte should be 'D'");
+        assertEquals('F', (char) header[3], "Fourth byte should be 'F'");
+        assertEquals('-', (char) header[4], "Fifth byte should be '-'");
     }
 
     @Test
@@ -104,8 +98,7 @@ public class PdfReportGeneratorTest {
         List<Map<String, Object>> largeData = buildSampleData(50);
         File largePdf = generator.generatePdf(report2, largeData, outputDir.getAbsolutePath());
 
-        assertTrue("Larger dataset should produce a larger PDF",
-                largePdf.length() > smallPdf.length());
+        assertTrue(largePdf.length() > smallPdf.length(), "Larger dataset should produce a larger PDF");
     }
 
     @Test
@@ -115,9 +108,9 @@ public class PdfReportGeneratorTest {
 
         File pdf = generator.generatePdf(report, emptyData, outputDir.getAbsolutePath());
 
-        assertNotNull("PDF file should not be null", pdf);
-        assertTrue("PDF file should exist even with no data", pdf.exists());
-        assertTrue("PDF file should have content (header/footer)", pdf.length() > 0);
+        assertNotNull(pdf, "PDF file should not be null");
+        assertTrue(pdf.exists(), "PDF file should exist even with no data");
+        assertTrue(pdf.length() > 0, "PDF file should have content (header/footer)");
 
         byte[] header = new byte[5];
         try (FileInputStream fis = new FileInputStream(pdf)) {
@@ -134,8 +127,7 @@ public class PdfReportGeneratorTest {
 
         File pdf = generator.generatePdf(report, data, outputDir.getAbsolutePath());
 
-        assertTrue("File name should contain sanitized report name",
-                pdf.getName().startsWith("quarterly_audit_summary_"));
+        assertTrue(pdf.getName().startsWith("quarterly_audit_summary_"), "File name should contain sanitized report name");
     }
 
     // ---- Helpers ----

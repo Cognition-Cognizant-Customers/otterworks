@@ -34,7 +34,6 @@ jobs:
       - name: Scan pull request head
         run: |
           trivy fs . --severity CRITICAL,HIGH \
-            --skip-dirs services/report-service \
             --ignorefile .trivyignore \
             --offline-scan \
             --format json --output trivy-head.json
@@ -49,7 +48,6 @@ jobs:
           (
             cd ../otterworks-base
             trivy fs . --severity CRITICAL,HIGH \
-            --skip-dirs services/report-service \
             --ignorefile .trivyignore \
             --offline-scan \
             --format json --output "$GITHUB_WORKSPACE/trivy-base.json"
@@ -185,7 +183,6 @@ jobs:
         run: |
           set +e
           trivy fs . --severity CRITICAL,HIGH \
-            --skip-dirs services/report-service \
             --ignorefile .trivyignore \
             --offline-scan \
             --format json --output trivy.json

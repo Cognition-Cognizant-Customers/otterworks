@@ -4,14 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.otterworks.report.model.ReportCategory;
 import com.otterworks.report.model.ReportRequest;
 import com.otterworks.report.model.ReportType;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Date;
@@ -27,21 +25,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Integration tests for the Report Service.
  *
- * LEGACY PATTERNS:
- * - JUnit 4 with @RunWith(SpringRunner.class) instead of JUnit 5 @ExtendWith(SpringExtension.class)
- * - @Test from org.junit.Test instead of org.junit.jupiter.api.Test
- * - No @DisplayName or @Nested (JUnit 5 features)
- * - java.util.Date in test data
- * - Static imports from hamcrest (still valid but JUnit 5 prefers assertj)
  *
- * UPGRADE TARGET:
- * - Replace @RunWith(SpringRunner.class) with @ExtendWith(SpringExtension.class) or just @SpringBootTest
- * - Replace org.junit.Test with org.junit.jupiter.api.Test
- * - Replace Hamcrest matchers with AssertJ assertions
- * - Use @DisplayName for readable test names
- * - Use @Nested for test grouping
  */
-@RunWith(SpringRunner.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")

@@ -224,7 +224,8 @@ security-scan: ## Run security scans across all services
 	@echo "=== Ruby Audit (admin-service) ==="
 	cd services/admin-service && bundle-audit check 2>/dev/null || true
 	@echo ""
-	@echo "=== Report Service (skipped - legacy) ==="
+	@echo "=== Report Service (Maven dependency scan) ==="
+	cd services/report-service && trivy fs . --severity CRITICAL,HIGH --ignorefile ../../.trivyignore || true
 
 test-report: ## Run report-service tests only
 	cd services/report-service && mvn test

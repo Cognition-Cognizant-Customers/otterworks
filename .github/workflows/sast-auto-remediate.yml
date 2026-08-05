@@ -71,7 +71,6 @@ jobs:
             --severity "${{ env.SEVERITY_THRESHOLD }}" \
             --format json \
             --output trivy-results.json \
-            --skip-dirs services/report-service \
             --ignorefile .trivyignore \
             || true
 

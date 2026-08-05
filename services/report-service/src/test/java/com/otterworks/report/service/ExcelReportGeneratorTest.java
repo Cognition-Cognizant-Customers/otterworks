@@ -8,9 +8,9 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -21,9 +21,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Unit tests for {@link ExcelReportGenerator}.
@@ -32,26 +32,20 @@ import static org.junit.Assert.assertTrue;
  * structure: sheet names, summary metadata, column headers, and data rows.
  * Does not require a Spring context.
  *
- * Written in JUnit 4 style to match the current stack. After the JUnit 5
- * migration (Axis 4), replace:
- *   - org.junit.Test   -> org.junit.jupiter.api.Test
- *   - org.junit.Before -> org.junit.jupiter.api.BeforeEach
- *   - org.junit.After  -> org.junit.jupiter.api.AfterEach
- *   - org.junit.Assert -> org.junit.jupiter.api.Assertions
- */
+  */
 public class ExcelReportGeneratorTest {
 
     private ExcelReportGenerator generator;
     private File outputDir;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         generator = new ExcelReportGenerator();
         outputDir = new File(System.getProperty("java.io.tmpdir"), "excel-test-" + System.currentTimeMillis());
         outputDir.mkdirs();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         if (outputDir != null && outputDir.exists()) {
             File[] files = outputDir.listFiles();
@@ -71,10 +65,10 @@ public class ExcelReportGeneratorTest {
 
         File xlsx = generator.generateExcel(report, data, outputDir.getAbsolutePath());
 
-        assertNotNull("Excel file should not be null", xlsx);
-        assertTrue("Excel file should exist", xlsx.exists());
-        assertTrue("Excel file should have content", xlsx.length() > 0);
-        assertTrue("Excel file should have .xlsx extension", xlsx.getName().endsWith(".xlsx"));
+        assertNotNull(xlsx, "Excel file should not be null");
+        assertTrue(xlsx.exists(), "Excel file should exist");
+        assertTrue(xlsx.length() > 0, "Excel file should have content");
+        assertTrue(xlsx.getName().endsWith(".xlsx"), "Excel file should have .xlsx extension");
     }
 
     @Test
@@ -86,9 +80,8 @@ public class ExcelReportGeneratorTest {
 
         try (FileInputStream fis = new FileInputStream(xlsx);
              Workbook workbook = new XSSFWorkbook(fis)) {
-            assertNotNull("Workbook should not be null", workbook);
-            assertTrue("Workbook should have at least one sheet",
-                    workbook.getNumberOfSheets() > 0);
+            assertNotNull(workbook, "Workbook should not be null");
+            assertTrue(workbook.getNumberOfSheets() > 0, "Workbook should have at least one sheet");
         }
     }
 
@@ -101,11 +94,9 @@ public class ExcelReportGeneratorTest {
 
         try (FileInputStream fis = new FileInputStream(xlsx);
              Workbook workbook = new XSSFWorkbook(fis)) {
-            assertEquals("Workbook should have 2 sheets", 2, workbook.getNumberOfSheets());
-            assertEquals("First sheet should be 'Summary'",
-                    "Summary", workbook.getSheetName(0));
-            assertEquals("Second sheet should be 'Data'",
-                    "Data", workbook.getSheetName(1));
+            assertEquals(2, workbook.getNumberOfSheets(), "Workbook should have 2 sheets");
+            assertEquals("Summary", workbook.getSheetName(0), "First sheet should be 'Summary'");
+            assertEquals("Data", workbook.getSheetName(1), "Second sheet should be 'Data'");
         }
     }
 
@@ -119,34 +110,30 @@ public class ExcelReportGeneratorTest {
         try (FileInputStream fis = new FileInputStream(xlsx);
              Workbook workbook = new XSSFWorkbook(fis)) {
             Sheet summary = workbook.getSheet("Summary");
-            assertNotNull("Summary sheet should exist", summary);
+            assertNotNull(summary, "Summary sheet should exist");
 
             // Row 0: Title "OtterWorks Report"
             Row titleRow = summary.getRow(0);
-            assertNotNull("Title row should exist", titleRow);
-            assertEquals("Title should be 'OtterWorks Report'",
-                    "OtterWorks Report", titleRow.getCell(0).getStringCellValue());
+            assertNotNull(titleRow, "Title row should exist");
+            assertEquals("OtterWorks Report", titleRow.getCell(0).getStringCellValue(), "Title should be 'OtterWorks Report'");
 
             // Row 2: Report Name label and value
             Row nameRow = summary.getRow(2);
-            assertNotNull("Name row should exist", nameRow);
-            assertEquals("Name label", "Report Name:", nameRow.getCell(0).getStringCellValue());
-            assertEquals("Name value", "Metadata Verification Report",
-                    nameRow.getCell(1).getStringCellValue());
+            assertNotNull(nameRow, "Name row should exist");
+            assertEquals("Report Name:", nameRow.getCell(0).getStringCellValue(), "Name label");
+            assertEquals("Metadata Verification Report", nameRow.getCell(1).getStringCellValue(), "Name value");
 
             // Row 3: Category
             Row catRow = summary.getRow(3);
-            assertNotNull("Category row should exist", catRow);
-            assertEquals("Category label", "Category:", catRow.getCell(0).getStringCellValue());
-            assertEquals("Category value", "STORAGE_SUMMARY",
-                    catRow.getCell(1).getStringCellValue());
+            assertNotNull(catRow, "Category row should exist");
+            assertEquals("Category:", catRow.getCell(0).getStringCellValue(), "Category label");
+            assertEquals("STORAGE_SUMMARY", catRow.getCell(1).getStringCellValue(), "Category value");
 
             // Row 6: Total Rows
             Row countRow = summary.getRow(6);
-            assertNotNull("Count row should exist", countRow);
-            assertEquals("Count label", "Total Rows:", countRow.getCell(0).getStringCellValue());
-            assertEquals("Row count should match data size",
-                    7.0, countRow.getCell(1).getNumericCellValue(), 0.001);
+            assertNotNull(countRow, "Count row should exist");
+            assertEquals("Total Rows:", countRow.getCell(0).getStringCellValue(), "Count label");
+            assertEquals(7.0, countRow.getCell(1).getNumericCellValue(), 0.001, "Row count should match data size");
         }
     }
 
@@ -160,10 +147,10 @@ public class ExcelReportGeneratorTest {
         try (FileInputStream fis = new FileInputStream(xlsx);
              Workbook workbook = new XSSFWorkbook(fis)) {
             Sheet dataSheet = workbook.getSheet("Data");
-            assertNotNull("Data sheet should exist", dataSheet);
+            assertNotNull(dataSheet, "Data sheet should exist");
 
             Row headerRow = dataSheet.getRow(0);
-            assertNotNull("Header row should exist", headerRow);
+            assertNotNull(headerRow, "Header row should exist");
 
             // Column names are formatted by ExcelReportGenerator.formatColumnName
             // which replaces underscores with spaces and capitalizes
@@ -175,9 +162,7 @@ public class ExcelReportGeneratorTest {
             expectedHeaders.add("Created at");
 
             for (int i = 0; i < expectedHeaders.size(); i++) {
-                assertEquals("Column " + i + " header",
-                        expectedHeaders.get(i),
-                        headerRow.getCell(i).getStringCellValue());
+                assertEquals(expectedHeaders.get(i), headerRow.getCell(i).getStringCellValue(), "Column " + i + " header");
             }
         }
     }
@@ -193,11 +178,10 @@ public class ExcelReportGeneratorTest {
         try (FileInputStream fis = new FileInputStream(xlsx);
              Workbook workbook = new XSSFWorkbook(fis)) {
             Sheet dataSheet = workbook.getSheet("Data");
-            assertNotNull("Data sheet should exist", dataSheet);
+            assertNotNull(dataSheet, "Data sheet should exist");
 
             // Physical rows = 1 header + N data rows
-            assertEquals("Data sheet should have header + data rows",
-                    expectedRows + 1, dataSheet.getPhysicalNumberOfRows());
+            assertEquals(expectedRows + 1, dataSheet.getPhysicalNumberOfRows(), "Data sheet should have header + data rows");
         }
     }
 
@@ -214,14 +198,12 @@ public class ExcelReportGeneratorTest {
 
             // Row 1 (first data row) should have the first record's values
             Row firstDataRow = dataSheet.getRow(1);
-            assertNotNull("First data row should exist", firstDataRow);
+            assertNotNull(firstDataRow, "First data row should exist");
 
             // file_id column (index 0) should be "file-0"
-            assertEquals("First data row, file_id", "file-0",
-                    firstDataRow.getCell(0).getStringCellValue());
+            assertEquals("file-0", firstDataRow.getCell(0).getStringCellValue(), "First data row, file_id");
             // file_name column (index 1) should be "document_0.pdf"
-            assertEquals("First data row, file_name", "document_0.pdf",
-                    firstDataRow.getCell(1).getStringCellValue());
+            assertEquals("document_0.pdf", firstDataRow.getCell(1).getStringCellValue(), "First data row, file_name");
         }
     }
 
@@ -232,14 +214,14 @@ public class ExcelReportGeneratorTest {
 
         File xlsx = generator.generateExcel(report, emptyData, outputDir.getAbsolutePath());
 
-        assertNotNull("Excel file should not be null", xlsx);
-        assertTrue("Excel file should exist", xlsx.exists());
+        assertNotNull(xlsx, "Excel file should not be null");
+        assertTrue(xlsx.exists(), "Excel file should exist");
 
         try (FileInputStream fis = new FileInputStream(xlsx);
              Workbook workbook = new XSSFWorkbook(fis)) {
-            assertNotNull("Workbook should be readable", workbook);
+            assertNotNull(workbook, "Workbook should be readable");
             Sheet summary = workbook.getSheet("Summary");
-            assertNotNull("Summary sheet should exist even with no data", summary);
+            assertNotNull(summary, "Summary sheet should exist even with no data");
         }
     }
 
@@ -250,8 +232,7 @@ public class ExcelReportGeneratorTest {
 
         File xlsx = generator.generateExcel(report, data, outputDir.getAbsolutePath());
 
-        assertTrue("File name should contain sanitized report name",
-                xlsx.getName().startsWith("weekly_file_usage_stats_"));
+        assertTrue(xlsx.getName().startsWith("weekly_file_usage_stats_"), "File name should contain sanitized report name");
     }
 
     // ---- Helpers ----
