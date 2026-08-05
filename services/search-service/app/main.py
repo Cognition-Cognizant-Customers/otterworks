@@ -58,14 +58,22 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
         if request.url.path in ("/metrics", "/health"):
             return await call_next(request)
         start = time.monotonic()
-        response = await call_next(request)
-        elapsed = time.monotonic() - start
-        route = request.scope.get("route")
-        endpoint = getattr(route, "path_format", None) or request.url.path
-        method = request.method
-        REQUEST_COUNT.labels(method=method, endpoint=endpoint, status=response.status_code).inc()
-        REQUEST_LATENCY.labels(method=method, endpoint=endpoint).observe(elapsed)
+        try:
+            response = await call_next(request)
+            status = response.status_code
+        except Exception:
+            self._record(request, 500, time.monotonic() - start)
+            raise
+        self._record(request, status, time.monotonic() - start)
         return response
+
+    @staticmethod
+    def _record(request: Request, status: int, elapsed: float) -> None:
+        route = request.scope.get("route")
+        endpoint = getattr(route, "path_format", None) or "unknown"
+        method = request.method
+        REQUEST_COUNT.labels(method=method, endpoint=endpoint, status=status).inc()
+        REQUEST_LATENCY.labels(method=method, endpoint=endpoint).observe(elapsed)
 
 
 def create_app(config: AppConfig | None = None) -> FastAPI:
@@ -135,7 +143,6 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:3000", "http://localhost:4200"],
-        allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
