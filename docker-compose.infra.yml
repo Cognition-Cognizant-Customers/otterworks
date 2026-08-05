@@ -48,7 +48,7 @@ services:
     image: localstack/localstack:3.8
     container_name: otterworks-localstack
     environment:
-      SERVICES: s3,sqs,sns,dynamodb,ses,cognito-idp,secretsmanager
+      SERVICES: s3,sqs,sns,dynamodb,ses,cognito-idp,secretsmanager,events
       DEFAULT_REGION: us-east-1
       DOCKER_HOST: unix:///var/run/docker.sock
       # Persist emulated AWS state (e.g. DynamoDB) to the localstack_data volume so

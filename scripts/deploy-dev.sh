@@ -106,17 +106,17 @@ fi
 
 if [ "${SKIP_TERRAFORM}" = false ]; then
   DB_PASSWORD="${DB_PASSWORD:?ERROR: DB_PASSWORD must be set when running Terraform}"
-  # The usage-rollup Lambda deploys the analytics-service assembly jar; build it
-  # first so the function is created in this apply. If it cannot be built here,
-  # the module skips the Lambda and a later apply (after `sbt assembly`) adds it.
+  # The usage-rollup Lambda deploys the analytics-service assembly jar; rebuild
+  # it every deploy (sbt assembly is incremental) so the function ships current
+  # code. If the jar can't be produced, the module skips the Lambda and a later
+  # apply (after `sbt assembly`) adds it.
   USAGE_ROLLUP_JAR="${REPO_ROOT}/services/analytics-service/target/scala-3.4.0/analytics-service-assembly-0.1.0.jar"
-  if [ ! -f "${USAGE_ROLLUP_JAR}" ]; then
-    if command -v sbt >/dev/null 2>&1; then
-      log "Building analytics-service assembly jar for the usage-rollup Lambda..."
-      (cd "${REPO_ROOT}/services/analytics-service" && sbt -batch assembly)
-    else
-      log "WARNING: ${USAGE_ROLLUP_JAR} missing and sbt unavailable; the usage-rollup Lambda will be skipped this apply. Run 'sbt assembly' in services/analytics-service and re-apply to create it."
-    fi
+  if command -v sbt >/dev/null 2>&1; then
+    log "Building analytics-service assembly jar for the usage-rollup Lambda..."
+    (cd "${REPO_ROOT}/services/analytics-service" && sbt -batch assembly) ||
+      log "WARNING: sbt assembly failed; the usage-rollup Lambda will be deployed from a stale jar or skipped this apply."
+  elif [ ! -f "${USAGE_ROLLUP_JAR}" ]; then
+    log "WARNING: ${USAGE_ROLLUP_JAR} missing and sbt unavailable; the usage-rollup Lambda will be skipped this apply. Run 'sbt assembly' in services/analytics-service and re-apply to create it."
   fi
   log "Provisioning application infrastructure (RDS, DynamoDB, S3, SQS, etc.)..."
   cd "${REPO_ROOT}/infrastructure/terraform"

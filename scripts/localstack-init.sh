@@ -103,4 +103,13 @@ table_exists otterworks-file-shares || awslocal dynamodb create-table \
   --key-schema AttributeName=id,KeyType=HASH \
   --billing-mode PAY_PER_REQUEST
 
+# Usage-rollup event path (EventBridge rule -> SQS), mirroring
+# infrastructure/terraform/modules/usage-rollup so locally published analytics
+# events land on an inspectable queue.
+awslocal sqs create-queue --queue-name otterworks-usage-rollup-local-events >/dev/null
+awslocal events put-rule --name otterworks-usage-rollup-local \
+  --event-pattern '{"source":["otterworks.analytics"],"detail-type":["AnalyticsEvent"]}' >/dev/null
+awslocal events put-targets --rule otterworks-usage-rollup-local \
+  --targets 'Id=sqs,Arn=arn:aws:sqs:us-east-1:000000000000:otterworks-usage-rollup-local-events' >/dev/null
+
 echo "LocalStack initialization complete!"
