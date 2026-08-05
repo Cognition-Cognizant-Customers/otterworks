@@ -86,19 +86,34 @@
    > endpoint (`demo-platform/dashboard/app/api/tenants/[id]/inject/route.ts`) returns
    > `409 tenant is persistent; inject a bug into an ephemeral tenant instead`.
 
-2. Code-level fix (if the KeyError appears without the chaos flag): the sort in `suggest()`
-   in `services/search-service/app/api/search.py` must not assume `_rankingScore` is
-   present. Either request the score explicitly in `MeiliSearchService.suggest()`
-   (`services/search-service/app/services/meilisearch_client.py`) by adding
-   `"showRankingScore": True` to the search options, or make the sort tolerant:
-   ```python
-   ranked = sorted(raw_suggestions, key=lambda s: s.get("_rankingScore", 0.0), reverse=True)
-   ```
-3. Prove the fix with the search-service test suite (covers
-   `GET /api/v1/search/suggest` in `TestSuggestEndpoint`):
+2. Code-level fix (if the KeyError appears without the chaos flag): the ranking-score
+   enrichment branch in `suggest()` in `services/search-service/app/api/search.py` sorts
+   suggestions by `s["_rankingScore"]`, but `MeiliSearchService.suggest()`
+   (`services/search-service/app/services/meilisearch_client.py`) returns a `list[str]` of
+   titles/names — the hit dicts (and any ranking score) are discarded before they reach the
+   handler, so any per-item key lookup there will fail. Correct options:
+   - Drop the ranking-score sort in the handler entirely (MeiliSearch already returns hits
+     in relevance order), i.e. return `raw_suggestions` as-is like the non-chaos path; or
+   - If relevance re-ranking is genuinely needed, do it inside
+     `MeiliSearchService.suggest()`: add `"showRankingScore": True` to the `index.search()`
+     options and sort the hit dicts by `hit["_rankingScore"]` **before** extracting the
+     title/name strings.
+
+   > **Do not "fix" this on `main`.** This branch is the planted chaos bug behind the
+   > `search-suggest-500` scenario (see `AGENTS.md` — planted bugs are a feature of the
+   > golden app). The code-level guidance above applies only if the same KeyError ever
+   > appears on a bespoke variant branch without the chaos flag set.
+3. Regression-check the suggest endpoint with the search-service test suite. Note that
+   `TestSuggestEndpoint` in `tests/test_search_api.py` only exercises the normal (non-chaos)
+   path — the chaos branch is gated on the Redis flag, which is inactive under test — so
+   this confirms no regression, not the chaos-branch behaviour itself:
    ```
    cd services/search-service && .venv/bin/pytest tests/test_search_api.py -k suggest
    ```
+   To exercise the failing branch directly, patch `app.api.search._chaos_active` to return
+   `True` (e.g. `monkeypatch.setattr("app.api.search._chaos_active", lambda key: True)`) in
+   a test and assert on the response, or set the Redis flag in a live tenant and curl
+   `GET /api/v1/search/suggest?q=te`.
 
 ## Post-Incident
 
