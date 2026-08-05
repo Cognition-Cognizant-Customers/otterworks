@@ -52,8 +52,9 @@ final class InMemoryRollupStore extends RollupStore:
   def snapshot: Map[String, DailyRollupState] = states
 
 object DynamoDbRollupStore:
-  /** How long processed eventIds are retained for deduplication. */
-  val DedupeTtl: java.time.Duration = java.time.Duration.ofDays(14)
+  /** How long processed eventIds are retained for deduplication. Must exceed
+    * the DLQ retention window (14 d) so a late redrive cannot double-count. */
+  val DedupeTtl: java.time.Duration = java.time.Duration.ofDays(30)
 
   /**
    * How long first-seen (date, userId) markers are retained. Longer than the

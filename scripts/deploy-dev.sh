@@ -113,12 +113,12 @@ if [ "${SKIP_TERRAFORM}" = false ]; then
   if command -v sbt >/dev/null 2>&1; then
     log "Building analytics-service assembly jar for the usage-rollup Lambda..."
     (cd "${REPO_ROOT}/services/analytics-service" && sbt -batch assembly) ||
-      { log "ERROR: sbt assembly failed; aborting so a stale usage-rollup Lambda jar is not deployed."; exit 1; }
+      { err "sbt assembly failed; aborting so a stale usage-rollup Lambda jar is not deployed."; exit 1; }
   elif [ ! -f "${USAGE_ROLLUP_JAR}" ]; then
-    log "ERROR: sbt is unavailable and no jar exists at ${USAGE_ROLLUP_JAR}; aborting. Run 'sbt assembly' in services/analytics-service (or copy a built jar there) and re-run."
+    err "sbt is unavailable and no jar exists at ${USAGE_ROLLUP_JAR}; aborting. Run 'sbt assembly' in services/analytics-service (or copy a built jar there) and re-run."
     exit 1
   else
-    log "WARNING: sbt unavailable; deploying the existing jar at ${USAGE_ROLLUP_JAR} (may be stale)."
+    warn "sbt unavailable; deploying the existing jar at ${USAGE_ROLLUP_JAR} (may be stale)."
   fi
   log "Provisioning application infrastructure (RDS, DynamoDB, S3, SQS, etc.)..."
   cd "${REPO_ROOT}/infrastructure/terraform"
