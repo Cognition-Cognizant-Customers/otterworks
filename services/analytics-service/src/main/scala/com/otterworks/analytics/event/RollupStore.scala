@@ -1,6 +1,6 @@
 package com.otterworks.analytics.event
 
-import com.otterworks.analytics.model.AnalyticsEvent
+import com.otterworks.analytics.model.{AnalyticsEvent, DailyUsageRollup}
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient
 import software.amazon.awssdk.services.dynamodb.model.{
   AttributeValue,
@@ -23,7 +23,8 @@ import scala.jdk.CollectionConverters.*
  * invocations touching the same date never lose updates.
  */
 trait RollupStore:
-  def get(date: String): Option[DailyRollupState]
+  /** Read the finished rollup projection for a date (derived values included). */
+  def get(date: String): Option[DailyUsageRollup]
 
   /**
    * Atomically apply one event's delta to the state for its date, recording
@@ -36,7 +37,7 @@ final class InMemoryRollupStore extends RollupStore:
   private var states: Map[String, DailyRollupState] = Map.empty
   private var processed: Set[String] = Set.empty
 
-  def get(date: String): Option[DailyRollupState] = states.get(date)
+  def get(date: String): Option[DailyUsageRollup] = states.get(date).map(_.toRollup)
 
   def applyEvent(event: AnalyticsEvent): Boolean = synchronized {
     if processed.contains(event.eventId) then false
@@ -76,13 +77,13 @@ object DynamoDbRollupStore:
  * cardinality (no user-id set on the item), while `activeUsers` remains an
  * exact distinct count. The conditions make redelivered events no-ops and the
  * `ADD` semantics make concurrent same-date updates commutative, so neither
- * duplicates nor races corrupt the rollup. `netStorageBytes` is derived on
- * read via [[DailyRollupState.toRollup]].
+ * duplicates nor races corrupt the rollup. `get` returns the finished
+ * [[DailyUsageRollup]] projection with `netStorageBytes` derived on read.
  */
 final class DynamoDbRollupStore(client: DynamoDbClient, tableName: String, dedupeTableName: String)
     extends RollupStore:
 
-  def get(date: String): Option[DailyRollupState] =
+  def get(date: String): Option[DailyUsageRollup] =
     val request = GetItemRequest
       .builder()
       .tableName(tableName)
@@ -92,20 +93,22 @@ final class DynamoDbRollupStore(client: DynamoDbClient, tableName: String, dedup
     val item = client.getItem(request).item()
     if item == null || item.isEmpty then None
     else
+      val allocated = n(item, "storageAllocatedBytes")
+      val released = n(item, "storageReleasedBytes")
       Some(
-        DailyRollupState(
+        DailyUsageRollup(
           date = item.get("date").s(),
           totalEvents = n(item, "totalEvents"),
-          userIds = Set.empty,
+          activeUsers = n(item, "activeUsers"),
           documentsCreated = n(item, "documentsCreated"),
           documentsViewed = n(item, "documentsViewed"),
           documentsEdited = n(item, "documentsEdited"),
           filesUploaded = n(item, "filesUploaded"),
           filesDownloaded = n(item, "filesDownloaded"),
           collabSessions = n(item, "collabSessions"),
-          storageAllocatedBytes = n(item, "storageAllocatedBytes"),
-          storageReleasedBytes = n(item, "storageReleasedBytes"),
-          activeUsersOverride = Some(n(item, "activeUsers"))
+          storageAllocatedBytes = allocated,
+          storageReleasedBytes = released,
+          netStorageBytes = allocated - released
         )
       )
 

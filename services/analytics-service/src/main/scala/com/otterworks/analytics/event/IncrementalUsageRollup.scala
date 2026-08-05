@@ -26,11 +26,7 @@ final case class DailyRollupState(
     filesDownloaded: Long,
     collabSessions: Long,
     storageAllocatedBytes: Long,
-    storageReleasedBytes: Long,
-    // Read-model only: exact distinct-user count maintained externally (e.g. as
-    // a DynamoDB counter with one first-seen marker per (date, userId)), used
-    // instead of userIds.size when the full id set is not materialised.
-    activeUsersOverride: Option[Long] = None
+    storageReleasedBytes: Long
 ):
 
   /** Apply one event to this day's state (the incremental upsert step). */
@@ -70,7 +66,7 @@ final case class DailyRollupState(
     DailyUsageRollup(
       date = date,
       totalEvents = totalEvents,
-      activeUsers = activeUsersOverride.getOrElse(userIds.size.toLong),
+      activeUsers = userIds.size.toLong,
       documentsCreated = documentsCreated,
       documentsViewed = documentsViewed,
       documentsEdited = documentsEdited,
