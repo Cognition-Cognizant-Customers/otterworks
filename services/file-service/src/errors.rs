@@ -102,3 +102,88 @@ impl fmt::Display for ErrorResponse {
         write!(f, "{}: {}", self.error, self.message)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use actix_web::http::StatusCode;
+
+    async fn body_json(resp: HttpResponse) -> serde_json::Value {
+        let bytes = actix_web::body::to_bytes(resp.into_body()).await.unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    #[actix_rt::test]
+    async fn test_not_found_variants_map_to_404() {
+        for (err, error_type) in [
+            (ServiceError::FileNotFound("f1".into()), "file_not_found"),
+            (
+                ServiceError::FolderNotFound("d1".into()),
+                "folder_not_found",
+            ),
+            (
+                ServiceError::VersionNotFound("v1".into()),
+                "version_not_found",
+            ),
+            (ServiceError::ShareNotFound("s1".into()), "share_not_found"),
+        ] {
+            let resp = err.error_response();
+            assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+            let json = body_json(resp).await;
+            assert_eq!(json["error"], error_type);
+        }
+    }
+
+    #[actix_rt::test]
+    async fn test_bad_request_maps_to_400_with_message() {
+        let resp = ServiceError::BadRequest("owner_id is required".into()).error_response();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let json = body_json(resp).await;
+        assert_eq!(json["error"], "bad_request");
+        assert_eq!(json["message"], "Bad request: owner_id is required");
+    }
+
+    #[actix_rt::test]
+    async fn test_file_too_large_maps_to_413_with_sizes() {
+        let resp = ServiceError::FileTooLarge {
+            max_bytes: 100,
+            actual_bytes: 250,
+        }
+        .error_response();
+        assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        let json = body_json(resp).await;
+        assert_eq!(json["error"], "file_too_large");
+        assert_eq!(
+            json["message"],
+            "File too large: max 100 bytes, got 250 bytes"
+        );
+    }
+
+    #[actix_rt::test]
+    async fn test_auth_variants_map_to_401_and_403() {
+        let resp = ServiceError::Unauthorized("no token".into()).error_response();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(body_json(resp).await["error"], "unauthorized");
+
+        let resp = ServiceError::Forbidden("not owner".into()).error_response();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        assert_eq!(body_json(resp).await["error"], "forbidden");
+    }
+
+    #[actix_rt::test]
+    async fn test_backend_errors_map_to_500_with_distinct_types() {
+        for (err, error_type) in [
+            (ServiceError::S3Error("s3 down".into()), "storage_error"),
+            (
+                ServiceError::DynamoError("ddb down".into()),
+                "metadata_error",
+            ),
+            (ServiceError::SnsError("sns down".into()), "event_error"),
+            (ServiceError::Internal("boom".into()), "internal_error"),
+        ] {
+            let resp = err.error_response();
+            assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+            assert_eq!(body_json(resp).await["error"], error_type);
+        }
+    }
+}

@@ -14,20 +14,20 @@ coverage is reported.
 
 ## 1. Per-service baseline
 
-| Service | Language | Test framework / coverage tool | Test command (from repo root) | Line coverage | Test files | Run succeeded |
-|---|---|---|---|---|---|---|
-| admin-service | Ruby (Rails API) | RSpec + SimpleCov | `cd services/admin-service && bundle exec rspec` | 36.8% (426/1157 lines) | 16 spec files (120 examples) | Yes — 120 passed. Requires Postgres up (`make infra-up`) and `DATABASE_PASSWORD=<local dev password from docker-compose.infra.yml> RAILS_ENV=test bundle exec rake db:create db:schema:load` first |
-| analytics-service | Scala | ScalaTest via sbt — **no scoverage plugin** | `cd services/analytics-service && sbt test` | not reported | 9 spec files (56 tests) | Yes — 56 passed; coverage not measurable (no scoverage in `build.sbt`/`project/plugins.sbt`) |
-| api-gateway | Go | `go test -cover` | `cd services/api-gateway && go test -cover ./...` | health 100%, middleware 69.7%, proxy 56.8%, config 0%, cmd/server 0% | 6 `_test.go` files | Yes |
-| audit-service | C# (.NET 8) | xUnit + coverlet | `cd services/audit-service/tests/AuditService.Tests && dotnet test --collect:"XPlat Code Coverage"` | 54.5% | 3 test files (24 tests) | Yes — 24 passed (needs .NET 8 runtime; not in `make test-coverage` target) |
-| auth-service | Java (Spring Boot) | JUnit 5 + JaCoCo | `cd services/auth-service && ./gradlew test jacocoTestReport` | 73.3% (316/431 lines) | 3 test classes (29 tests) | Yes |
-| collab-service | Node.js (TypeScript) | Jest (built-in coverage) | `cd services/collab-service && npm test -- --coverage` | 65.1% lines (64.0% stmts, 37.4% branch) | 3 test files (45 tests) | Yes |
-| document-service | Python (FastAPI) | pytest + pytest-cov | `cd services/document-service && poetry run pytest --cov=app --cov-report=term-missing` | 78% | 6 test files (42 tests) | Partial — **9 of 42 tests fail** (auth: expected 200/204, got 401 on `tests/test_documents_api.py`). Bare `pytest` in the Makefile fails; deps live in the Poetry venv |
-| file-service | Rust (Actix-web) | `cargo test` — **no coverage tool** (no tarpaulin/llvm-cov) | `cd services/file-service && cargo test` | not reported | 0 test files; 3 inline `#[cfg(test)]` modules (11 tests) | Yes — 11 passed; coverage not measurable. Requires Rust ≥1.85 (edition2024); stock 1.83 toolchain fails |
-| legacy-portal | Java (Spring Boot) | JUnit + Surefire — **no JaCoCo** | `cd services/legacy-portal && ./mvnw test` | not reported | 4 test classes (13 tests) | Yes — 13 passed (not in `make test-coverage` target) |
-| notification-service | Kotlin (Ktor) | JUnit 5 via Gradle — **no JaCoCo** | `cd services/notification-service && ./gradlew test` | not reported | 3 test classes (28 tests) | Yes — 28 passed (not in `make test-coverage` target) |
-| report-service | Java (Spring Boot, legacy) | JUnit + Surefire — **no JaCoCo** | `cd services/report-service && mvn test` | not reported | 5 test classes (44 tests) | Partial — **1 of 44 tests fails**: `ReportControllerIntegrationTest.downloadPendingReportReturns409` (expected 409, got 404) |
-| search-service | Python (Flask) | pytest + pytest-cov | `cd services/search-service && .venv/bin/pytest --cov=app --cov-report=term-missing` | 75% | 5 test files (41 tests) | Yes — 41 passed |
+| Service | Language | Test framework / coverage tool | Test command (from repo root) | Line coverage | Test files | Run succeeded | After |
+|---|---|---|---|---|---|---|---|
+| admin-service | Ruby (Rails API) | RSpec + SimpleCov | `cd services/admin-service && bundle exec rspec` | 36.8% (426/1157 lines) | 16 spec files (120 examples) | Yes — 120 passed. Requires Postgres up (`make infra-up`) and `DATABASE_PASSWORD=<local dev password from docker-compose.infra.yml> RAILS_ENV=test bundle exec rake db:create db:schema:load` first | — |
+| analytics-service | Scala | ScalaTest via sbt — **no scoverage plugin** | `cd services/analytics-service && sbt test` | not reported | 9 spec files (56 tests) | Yes — 56 passed; coverage not measurable (no scoverage in `build.sbt`/`project/plugins.sbt`) | — |
+| api-gateway | Go | `go test -cover` | `cd services/api-gateway && go test -cover ./...` | health 100%, middleware 69.7%, proxy 56.8%, config 0%, cmd/server 0% | 6 `_test.go` files | Yes | — |
+| audit-service | C# (.NET 8) | xUnit + coverlet | `cd services/audit-service/tests/AuditService.Tests && dotnet test --collect:"XPlat Code Coverage"` | 54.5% | 3 test files (24 tests) | Yes — 24 passed (needs .NET 8 runtime; not in `make test-coverage` target) | — |
+| auth-service | Java (Spring Boot) | JUnit 5 + JaCoCo | `cd services/auth-service && ./gradlew test jacocoTestReport` | 73.3% (316/431 lines) | 3 test classes (29 tests) | Yes | — |
+| collab-service | Node.js (TypeScript) | Jest (built-in coverage) | `cd services/collab-service && npm test -- --coverage` | 65.1% lines (64.0% stmts, 37.4% branch) | 3 test files (45 tests) | Yes | — |
+| document-service | Python (FastAPI) | pytest + pytest-cov | `cd services/document-service && poetry run pytest --cov=app --cov-report=term-missing` | 78% | 6 test files (42 tests) | Partial — **9 of 42 tests fail** (auth: expected 200/204, got 401 on `tests/test_documents_api.py`). Bare `pytest` in the Makefile fails; deps live in the Poetry venv | — |
+| file-service | Rust (Actix-web) | `cargo test` — **no coverage tool** (no tarpaulin/llvm-cov) | `cd services/file-service && cargo test` | not reported | 0 test files; 3 inline `#[cfg(test)]` modules (11 tests) | Yes — 11 passed; coverage not measurable. Requires Rust ≥1.85 (edition2024); stock 1.83 toolchain fails | **37 tests** (was 11) across 6 inline `#[cfg(test)]` modules in 4 files; all pass — see §4 |
+| legacy-portal | Java (Spring Boot) | JUnit + Surefire — **no JaCoCo** | `cd services/legacy-portal && ./mvnw test` | not reported | 4 test classes (13 tests) | Yes — 13 passed (not in `make test-coverage` target) | — |
+| notification-service | Kotlin (Ktor) | JUnit 5 via Gradle — **no JaCoCo** | `cd services/notification-service && ./gradlew test` | not reported | 3 test classes (28 tests) | Yes — 28 passed (not in `make test-coverage` target) | — |
+| report-service | Java (Spring Boot, legacy) | JUnit + Surefire — **no JaCoCo** | `cd services/report-service && mvn test` | not reported | 5 test classes (44 tests) | Partial — **1 of 44 tests fails**: `ReportControllerIntegrationTest.downloadPendingReportReturns409` (expected 409, got 404) | — |
+| search-service | Python (Flask) | pytest + pytest-cov | `cd services/search-service && .venv/bin/pytest --cov=app --cov-report=term-missing` | 75% | 5 test files (41 tests) | Yes — 41 passed | — |
 
 ### Where coverage could not be measured, and why
 
@@ -134,3 +134,80 @@ mapping (NotFound/BadRequest/FileTooLarge/Conflict/Internal…) untested.
 
 **Middleware (`middleware.rs`)** — `RequestId` middleware (`new_transform`,
 `call`) and `render_metrics` untested.
+
+## 4. After: file-service test additions
+
+26 tests were added to file-service (11 → 37), in the service's existing style
+(inline `#[cfg(test)]` modules in `src/`). DynamoDB and SNS interactions are
+exercised against the AWS SDK's `StaticReplayClient` HTTP mock (new
+dev-dependencies: `aws-smithy-http-client`/`test-util`,
+`aws-credential-types`/`test-util`, `http`), so the tests verify real request
+shapes and response parsing without a live LocalStack.
+
+### `make test-coverage` — file-service section, before vs. after
+
+Before (on the baseline branch, prior to this change):
+
+```
+=== File Service ===
+test handlers::tests::test_health_endpoint ... ok
+test handlers::tests::test_metrics_endpoint ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+After:
+
+```
+=== File Service ===
+test metadata::dynamo_tests::test_trash_file_maps_conditional_failure_to_not_found ... ok
+test handlers::tests::test_rename_file_rejects_blank_name ... ok
+
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+```
+
+(Line coverage is still "not reported" for this service — `cargo test` has no
+coverage instrumentation; adding tarpaulin/llvm-cov remains open. The other
+six services in the target were unchanged by this work.)
+
+### Critical paths now covered
+
+- **Error mapping (`errors.rs`)** — `ServiceError::error_response` for all 12
+  variants: 404 family, 400, 413 (with size details in the message), 401/403,
+  and the three 500 backend error types, asserting both status code and JSON
+  `error`/`message` body.
+- **Persistence (`metadata.rs`)** — `get_file` success (item parsing + request
+  targets the files table with the right key), `get_file` missing item →
+  `FileNotFound`, `put_file` writes every attribute including optional
+  `folder_id`, `list_files` applies `owner_id`/`is_trashed` filter expressions
+  and parses multiple items, `find_existing_share` returns `None` on empty
+  scan, and `trash_file` maps `ConditionalCheckFailedException` → `FileNotFound`
+  (the `is_conditional_check_failed` branch). Plus parser error branches:
+  invalid permission, invalid UUID, negative number, invalid datetime.
+- **Event publishing (`events.rs`)** — `publish` is skipped (no HTTP call) when
+  no topic is configured; `file_shared` publishes the expected message shape
+  (event type, file id, `sharedWithUserId`) with no FIFO params on a standard
+  topic; `.fifo` topics set `MessageGroupId`/`MessageDeduplicationId`; SNS
+  failure surfaces as `ServiceError::SnsError`; serialization omits
+  `name`/`mimeType`/`sizeBytes` when absent while keeping
+  `folderId`/`sharedWithUserId` as explicit nulls.
+- **Request handlers (`handlers.rs`)** — `resolve_owner_id` header-over-query
+  precedence (the anti-spoofing rule) incl. invalid-header fallback;
+  `get_file_metadata` invalid-id 400 and success path returning the file with
+  its shares; `list_files` pagination (page/page_size windowing and `total`);
+  `list_shared_files` and `list_activity` missing `X-User-ID` → 400;
+  `rename_file` blank-name → 400.
+
+### Still open
+
+- `upload_file` multipart parsing, the `FileTooLarge` limit branch, and the
+  S3 upload → metadata → version → event sequencing (needs S3 mock + multipart
+  fixtures); `download_file`/`delete_file` S3 paths and `storage.rs`
+  (`S3Client`) generally.
+- Trash/restore/move/share handler success paths and the duplicate-share
+  update branch in `share_file`; folder CRUD handlers; `list_activity`
+  aggregation/sort/truncate on real data.
+- Remaining `metadata.rs` operations (folders, versions, share list/delete
+  variants) beyond the representative ones covered above.
+- `middleware.rs` (`RequestId`, `render_metrics`) still has no direct tests.
+- No line-coverage tooling for Rust yet (tarpaulin or `cargo llvm-cov`).

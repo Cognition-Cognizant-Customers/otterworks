@@ -710,6 +710,10 @@ pub async fn list_activity(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use actix_web::http::StatusCode;
+    use actix_web::test::TestRequest;
+    use aws_smithy_http_client::test_util::{ReplayEvent, StaticReplayClient};
+    use aws_smithy_types::body::SdkBody;
 
     #[actix_rt::test]
     async fn test_health_endpoint() {
@@ -721,5 +725,202 @@ mod tests {
     async fn test_metrics_endpoint() {
         let resp = metrics().await;
         assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+    }
+
+    fn mock_meta(events: Vec<ReplayEvent>) -> web::Data<MetadataClient> {
+        let http_client = StaticReplayClient::new(events);
+        let conf = aws_sdk_dynamodb::Config::builder()
+            .behavior_version(aws_sdk_dynamodb::config::BehaviorVersion::latest())
+            .region(aws_sdk_dynamodb::config::Region::new("us-east-1"))
+            .credentials_provider(aws_credential_types::Credentials::for_tests())
+            .http_client(http_client)
+            .build();
+        web::Data::new(MetadataClient {
+            client: aws_sdk_dynamodb::Client::from_conf(conf),
+            files_table: "test-files".into(),
+            folders_table: "test-folders".into(),
+            versions_table: "test-versions".into(),
+            shares_table: "test-shares".into(),
+        })
+    }
+
+    fn ddb_event(response_body: &str) -> ReplayEvent {
+        ReplayEvent::new(
+            http::Request::builder()
+                .uri("https://dynamodb.us-east-1.amazonaws.com/")
+                .body(SdkBody::empty())
+                .unwrap(),
+            http::Response::builder()
+                .status(200)
+                .body(SdkBody::from(response_body.to_string()))
+                .unwrap(),
+        )
+    }
+
+    fn file_item_json(id: &Uuid, owner: &Uuid, name: &str) -> String {
+        format!(
+            r#"{{"id":{{"S":"{id}"}},"name":{{"S":"{name}"}},"mime_type":{{"S":"text/plain"}},"size_bytes":{{"N":"512"}},"s3_key":{{"S":"files/{owner}/{id}"}},"owner_id":{{"S":"{owner}"}},"version":{{"N":"1"}},"is_trashed":{{"BOOL":false}},"created_at":{{"S":"2026-01-02T03:04:05+00:00"}},"updated_at":{{"S":"2026-01-02T03:04:05+00:00"}}}}"#
+        )
+    }
+
+    async fn body_json(resp: HttpResponse) -> serde_json::Value {
+        let bytes = actix_web::body::to_bytes(resp.into_body()).await.unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    #[actix_rt::test]
+    async fn test_resolve_owner_id_prefers_header_over_query() {
+        let header_owner = Uuid::new_v4();
+        let query_owner = Uuid::new_v4();
+        let req = TestRequest::default()
+            .insert_header(("X-User-ID", header_owner.to_string()))
+            .to_http_request();
+
+        assert_eq!(
+            resolve_owner_id(&req, Some(query_owner)),
+            Some(header_owner)
+        );
+    }
+
+    #[actix_rt::test]
+    async fn test_resolve_owner_id_falls_back_to_query() {
+        let query_owner = Uuid::new_v4();
+
+        let req = TestRequest::default().to_http_request();
+        assert_eq!(resolve_owner_id(&req, Some(query_owner)), Some(query_owner));
+        assert_eq!(resolve_owner_id(&req, None), None);
+
+        // Invalid header value also falls back to the query parameter
+        let req = TestRequest::default()
+            .insert_header(("X-User-ID", "not-a-uuid"))
+            .to_http_request();
+        assert_eq!(resolve_owner_id(&req, Some(query_owner)), Some(query_owner));
+    }
+
+    #[actix_rt::test]
+    async fn test_get_file_metadata_rejects_invalid_file_id() {
+        let meta = mock_meta(vec![]);
+
+        let err = get_file_metadata(meta, web::Path::from("not-a-uuid".to_string()))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ServiceError::BadRequest(msg) if msg.contains("invalid file id")));
+    }
+
+    #[actix_rt::test]
+    async fn test_list_shared_files_requires_user_header() {
+        let meta = mock_meta(vec![]);
+        let req = TestRequest::default().to_http_request();
+        let query = web::Query(ListFilesQuery {
+            folder_id: None,
+            owner_id: None,
+            page: None,
+            page_size: None,
+            include_trashed: None,
+        });
+
+        let err = list_shared_files(meta, req, query).await.unwrap_err();
+        assert!(
+            matches!(err, ServiceError::BadRequest(msg) if msg.contains("missing X-User-ID header"))
+        );
+    }
+
+    #[actix_rt::test]
+    async fn test_list_activity_requires_owner_context() {
+        let meta = mock_meta(vec![]);
+        let req = TestRequest::default().to_http_request();
+        let query = web::Query(ActivityQuery { limit: None });
+
+        let err = list_activity(req, meta, query).await.unwrap_err();
+        assert!(
+            matches!(err, ServiceError::BadRequest(msg) if msg.contains("missing owner context"))
+        );
+    }
+
+    #[actix_rt::test]
+    async fn test_list_files_paginates_results() {
+        let owner = Uuid::new_v4();
+        let items: Vec<String> = (0..3)
+            .map(|i| file_item_json(&Uuid::new_v4(), &owner, &format!("f{i}.txt")))
+            .collect();
+        let body = format!(
+            r#"{{"Items":[{}],"Count":3,"ScannedCount":3}}"#,
+            items.join(",")
+        );
+        let meta = mock_meta(vec![ddb_event(&body)]);
+
+        let req = TestRequest::default()
+            .insert_header(("X-User-ID", owner.to_string()))
+            .to_http_request();
+        let query = web::Query(ListFilesQuery {
+            folder_id: None,
+            owner_id: None,
+            page: Some(2),
+            page_size: Some(2),
+            include_trashed: None,
+        });
+
+        let resp = list_files(req, meta, query).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["total"], 3);
+        assert_eq!(json["page"], 2);
+        assert_eq!(json["page_size"], 2);
+        // Page 2 with page_size 2 holds only the third file
+        assert_eq!(json["files"].as_array().unwrap().len(), 1);
+        assert_eq!(json["files"][0]["name"], "f2.txt");
+    }
+
+    #[actix_rt::test]
+    async fn test_rename_file_rejects_blank_name() {
+        let meta = mock_meta(vec![]);
+        let events = web::Data::new(
+            EventPublisher::new(
+                &crate::config::SnsConfig { topic_arn: None },
+                &crate::config::AwsConfig {
+                    region: "us-east-1".into(),
+                    endpoint_url: None,
+                    s3_bucket: "test".into(),
+                    dynamodb_table: "test-files".into(),
+                    dynamodb_folders_table: "test-folders".into(),
+                    dynamodb_versions_table: "test-versions".into(),
+                    dynamodb_shares_table: "test-shares".into(),
+                },
+            )
+            .await,
+        );
+
+        let err = rename_file(
+            meta,
+            events,
+            web::Path::from(Uuid::new_v4().to_string()),
+            web::Json(RenameFileRequest { name: "   ".into() }),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            matches!(err, ServiceError::BadRequest(msg) if msg.contains("name cannot be empty"))
+        );
+    }
+
+    #[actix_rt::test]
+    async fn test_get_file_metadata_returns_file_with_shares() {
+        let file_id = Uuid::new_v4();
+        let owner = Uuid::new_v4();
+        let get_item = format!(
+            r#"{{"Item":{}}}"#,
+            file_item_json(&file_id, &owner, "doc.txt")
+        );
+        let shares_scan = r#"{"Items":[],"Count":0}"#;
+        let meta = mock_meta(vec![ddb_event(&get_item), ddb_event(shares_scan)]);
+
+        let resp = get_file_metadata(meta, web::Path::from(file_id.to_string()))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["id"], file_id.to_string());
+        assert_eq!(json["name"], "doc.txt");
+        assert_eq!(json["shared_with"].as_array().unwrap().len(), 0);
     }
 }

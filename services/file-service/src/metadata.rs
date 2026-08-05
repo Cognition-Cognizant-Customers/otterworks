@@ -890,4 +890,223 @@ mod tests {
         );
         assert_eq!(SharePermission::from_str_value("invalid"), None);
     }
+
+    #[test]
+    fn test_parse_file_share_invalid_permission() {
+        let now = Utc::now();
+        let mut item = HashMap::new();
+        item.insert("id".into(), AttributeValue::S(Uuid::new_v4().to_string()));
+        item.insert(
+            "file_id".into(),
+            AttributeValue::S(Uuid::new_v4().to_string()),
+        );
+        item.insert(
+            "shared_with".into(),
+            AttributeValue::S(Uuid::new_v4().to_string()),
+        );
+        item.insert("permission".into(), AttributeValue::S("owner".into()));
+        item.insert(
+            "shared_by".into(),
+            AttributeValue::S(Uuid::new_v4().to_string()),
+        );
+        item.insert("created_at".into(), AttributeValue::S(now.to_rfc3339()));
+
+        let err = parse_file_share(&item).unwrap_err();
+        assert!(
+            matches!(err, ServiceError::DynamoError(msg) if msg.contains("invalid permission: owner"))
+        );
+    }
+
+    #[test]
+    fn test_parse_file_metadata_invalid_values() {
+        let mut item = make_file_item();
+        item.insert("id".into(), AttributeValue::S("not-a-uuid".into()));
+        assert!(matches!(
+            parse_file_metadata(&item).unwrap_err(),
+            ServiceError::DynamoError(msg) if msg.contains("invalid UUID")
+        ));
+
+        let mut item = make_file_item();
+        item.insert("size_bytes".into(), AttributeValue::N("-5".into()));
+        assert!(matches!(
+            parse_file_metadata(&item).unwrap_err(),
+            ServiceError::DynamoError(msg) if msg.contains("size_bytes")
+        ));
+
+        let mut item = make_file_item();
+        item.insert("created_at".into(), AttributeValue::S("yesterday".into()));
+        assert!(matches!(
+            parse_file_metadata(&item).unwrap_err(),
+            ServiceError::DynamoError(msg) if msg.contains("invalid datetime")
+        ));
+    }
+}
+
+#[cfg(test)]
+mod dynamo_tests {
+    use super::*;
+    use aws_smithy_http_client::test_util::{ReplayEvent, StaticReplayClient};
+    use aws_smithy_types::body::SdkBody;
+
+    fn mock_client(events: Vec<ReplayEvent>) -> (MetadataClient, StaticReplayClient) {
+        let http_client = StaticReplayClient::new(events);
+        let conf = aws_sdk_dynamodb::Config::builder()
+            .behavior_version(aws_sdk_dynamodb::config::BehaviorVersion::latest())
+            .region(aws_sdk_dynamodb::config::Region::new("us-east-1"))
+            .credentials_provider(aws_credential_types::Credentials::for_tests())
+            .http_client(http_client.clone())
+            .build();
+        let meta = MetadataClient {
+            client: aws_sdk_dynamodb::Client::from_conf(conf),
+            files_table: "test-files".into(),
+            folders_table: "test-folders".into(),
+            versions_table: "test-versions".into(),
+            shares_table: "test-shares".into(),
+        };
+        (meta, http_client)
+    }
+
+    fn ddb_event(response_body: &str) -> ReplayEvent {
+        ReplayEvent::new(
+            http::Request::builder()
+                .uri("https://dynamodb.us-east-1.amazonaws.com/")
+                .body(SdkBody::empty())
+                .unwrap(),
+            http::Response::builder()
+                .status(200)
+                .body(SdkBody::from(response_body.to_string()))
+                .unwrap(),
+        )
+    }
+
+    fn file_item_json(id: &Uuid, owner: &Uuid, name: &str, is_trashed: bool) -> String {
+        format!(
+            r#"{{"id":{{"S":"{id}"}},"name":{{"S":"{name}"}},"mime_type":{{"S":"text/plain"}},"size_bytes":{{"N":"512"}},"s3_key":{{"S":"files/{owner}/{id}"}},"owner_id":{{"S":"{owner}"}},"version":{{"N":"1"}},"is_trashed":{{"BOOL":{is_trashed}}},"created_at":{{"S":"2026-01-02T03:04:05+00:00"}},"updated_at":{{"S":"2026-01-02T03:04:05+00:00"}}}}"#
+        )
+    }
+
+    fn request_body(http_client: &StaticReplayClient, index: usize) -> String {
+        let req = http_client.actual_requests().nth(index).expect("request");
+        String::from_utf8(req.body().bytes().expect("body").to_vec()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_get_file_parses_item_and_targets_files_table() {
+        let file_id = Uuid::new_v4();
+        let owner = Uuid::new_v4();
+        let body = format!(
+            r#"{{"Item":{}}}"#,
+            file_item_json(&file_id, &owner, "a.txt", false)
+        );
+        let (meta, http_client) = mock_client(vec![ddb_event(&body)]);
+
+        let file = meta.get_file(&file_id).await.unwrap();
+        assert_eq!(file.id, file_id);
+        assert_eq!(file.owner_id, owner);
+        assert_eq!(file.name, "a.txt");
+        assert_eq!(file.size_bytes, 512);
+        assert!(!file.is_trashed);
+
+        let sent = request_body(&http_client, 0);
+        assert!(sent.contains(r#""TableName":"test-files""#));
+        assert!(sent.contains(&file_id.to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_get_file_missing_item_is_file_not_found() {
+        let file_id = Uuid::new_v4();
+        let (meta, _http_client) = mock_client(vec![ddb_event("{}")]);
+
+        let err = meta.get_file(&file_id).await.unwrap_err();
+        assert!(matches!(err, ServiceError::FileNotFound(id) if id == file_id.to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_put_file_writes_all_attributes() {
+        let now = Utc::now();
+        let folder_id = Uuid::new_v4();
+        let file = FileMetadata {
+            id: Uuid::new_v4(),
+            name: "report.pdf".into(),
+            mime_type: "application/pdf".into(),
+            size_bytes: 2048,
+            s3_key: "files/key".into(),
+            folder_id: Some(folder_id),
+            owner_id: Uuid::new_v4(),
+            version: 3,
+            is_trashed: false,
+            created_at: now,
+            updated_at: now,
+        };
+        let (meta, http_client) = mock_client(vec![ddb_event("{}")]);
+
+        meta.put_file(&file).await.unwrap();
+
+        let sent = request_body(&http_client, 0);
+        assert!(sent.contains(r#""TableName":"test-files""#));
+        assert!(sent.contains("report.pdf"));
+        assert!(sent.contains("application/pdf"));
+        assert!(sent.contains(r#""size_bytes":{"N":"2048"}"#));
+        assert!(sent.contains(&folder_id.to_string()));
+        assert!(sent.contains(r#""version":{"N":"3"}"#));
+    }
+
+    #[tokio::test]
+    async fn test_list_files_filters_trashed_and_parses_items() {
+        let owner = Uuid::new_v4();
+        let id_a = Uuid::new_v4();
+        let id_b = Uuid::new_v4();
+        let body = format!(
+            r#"{{"Items":[{},{}],"Count":2,"ScannedCount":2}}"#,
+            file_item_json(&id_a, &owner, "a.txt", false),
+            file_item_json(&id_b, &owner, "b.txt", false)
+        );
+        let (meta, http_client) = mock_client(vec![ddb_event(&body)]);
+
+        let files = meta.list_files(None, Some(owner), false).await.unwrap();
+        assert_eq!(files.len(), 2);
+        assert_eq!(files[0].id, id_a);
+        assert_eq!(files[1].id, id_b);
+
+        let sent = request_body(&http_client, 0);
+        assert!(sent.contains("owner_id = :owner_id"));
+        assert!(sent.contains("is_trashed = :trashed"));
+        assert!(sent.contains(r#"":trashed":{"BOOL":false}"#));
+    }
+
+    #[tokio::test]
+    async fn test_find_existing_share_returns_none_when_no_items() {
+        let (meta, http_client) = mock_client(vec![ddb_event(r#"{"Items":[],"Count":0}"#)]);
+
+        let result = meta
+            .find_existing_share(&Uuid::new_v4(), &Uuid::new_v4())
+            .await
+            .unwrap();
+        assert!(result.is_none());
+
+        let sent = request_body(&http_client, 0);
+        assert!(sent.contains("file_id = :fid AND shared_with = :uid"));
+        assert!(sent.contains(r#""TableName":"test-shares""#));
+    }
+
+    #[tokio::test]
+    async fn test_trash_file_maps_conditional_failure_to_not_found() {
+        let file_id = Uuid::new_v4();
+        let error_event = ReplayEvent::new(
+            http::Request::builder()
+                .uri("https://dynamodb.us-east-1.amazonaws.com/")
+                .body(SdkBody::empty())
+                .unwrap(),
+            http::Response::builder()
+                .status(400)
+                .body(SdkBody::from(
+                    r#"{"__type":"com.amazonaws.dynamodb.v20120810#ConditionalCheckFailedException","message":"The conditional request failed"}"#,
+                ))
+                .unwrap(),
+        );
+        let (meta, _http_client) = mock_client(vec![error_event]);
+
+        let err = meta.trash_file(&file_id).await.unwrap_err();
+        assert!(matches!(err, ServiceError::FileNotFound(id) if id == file_id.to_string()));
+    }
 }

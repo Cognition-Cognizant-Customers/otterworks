@@ -264,4 +264,148 @@ mod tests {
         assert!(json.contains(&folder.to_string()));
         assert!(json.contains("folderId"));
     }
+
+    #[test]
+    fn test_file_event_omits_optional_fields_when_absent() {
+        let event = FileEvent {
+            event_type: "file_deleted".into(),
+            file_id: Uuid::new_v4().to_string(),
+            owner_id: Uuid::new_v4().to_string(),
+            folder_id: None,
+            shared_with: None,
+            timestamp: Utc::now().to_rfc3339(),
+            name: None,
+            mime_type: None,
+            size_bytes: None,
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(!json.contains("\"name\""));
+        assert!(!json.contains("mimeType"));
+        assert!(!json.contains("sizeBytes"));
+        // folder_id and shared_with are always present (as null) for consumers
+        assert!(json.contains("\"folderId\":null"));
+        assert!(json.contains("\"sharedWithUserId\":null"));
+    }
+}
+
+#[cfg(test)]
+mod publish_tests {
+    use super::*;
+    use aws_smithy_http_client::test_util::{ReplayEvent, StaticReplayClient};
+    use aws_smithy_types::body::SdkBody;
+
+    const PUBLISH_OK: &str = r#"<PublishResponse xmlns="http://sns.amazonaws.com/doc/2010-03-31/"><PublishResult><MessageId>00000000-0000-0000-0000-000000000000</MessageId></PublishResult><ResponseMetadata><RequestId>req-1</RequestId></ResponseMetadata></PublishResponse>"#;
+
+    fn mock_publisher(
+        topic_arn: Option<String>,
+        events: Vec<ReplayEvent>,
+    ) -> (EventPublisher, StaticReplayClient) {
+        let http_client = StaticReplayClient::new(events);
+        let conf = aws_sdk_sns::Config::builder()
+            .behavior_version(aws_sdk_sns::config::BehaviorVersion::latest())
+            .region(aws_sdk_sns::config::Region::new("us-east-1"))
+            .credentials_provider(aws_credential_types::Credentials::for_tests())
+            .http_client(http_client.clone())
+            .build();
+        let publisher = EventPublisher {
+            client: aws_sdk_sns::Client::from_conf(conf),
+            topic_arn,
+        };
+        (publisher, http_client)
+    }
+
+    fn sns_event() -> ReplayEvent {
+        ReplayEvent::new(
+            http::Request::builder()
+                .uri("https://sns.us-east-1.amazonaws.com/")
+                .body(SdkBody::empty())
+                .unwrap(),
+            http::Response::builder()
+                .status(200)
+                .body(SdkBody::from(PUBLISH_OK))
+                .unwrap(),
+        )
+    }
+
+    fn sent_body(http_client: &StaticReplayClient) -> String {
+        let req = http_client.actual_requests().next().expect("request");
+        String::from_utf8(req.body().bytes().expect("body").to_vec()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_publish_skipped_when_topic_not_configured() {
+        // No replay events: any HTTP call would fail the test
+        let (publisher, http_client) = mock_publisher(None, vec![]);
+
+        publisher
+            .file_deleted(&Uuid::new_v4(), &Uuid::new_v4())
+            .await
+            .unwrap();
+
+        assert_eq!(http_client.actual_requests().count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_file_shared_publishes_expected_message() {
+        let topic = "arn:aws:sns:us-east-1:000000000000:file-events";
+        let (publisher, http_client) = mock_publisher(Some(topic.into()), vec![sns_event()]);
+
+        let file_id = Uuid::new_v4();
+        let owner = Uuid::new_v4();
+        let shared_with = Uuid::new_v4();
+        publisher
+            .file_shared(&file_id, &owner, &shared_with)
+            .await
+            .unwrap();
+
+        let body = sent_body(&http_client);
+        assert!(body.contains("Action=Publish"));
+        assert!(body.contains("file_shared"));
+        assert!(body.contains(&file_id.to_string()));
+        assert!(body.contains(&shared_with.to_string()));
+        // Standard (non-FIFO) topics must not carry FIFO-only parameters
+        assert!(!body.contains("MessageGroupId"));
+        assert!(!body.contains("MessageDeduplicationId"));
+    }
+
+    #[tokio::test]
+    async fn test_fifo_topic_sets_group_and_dedup_ids() {
+        let topic = "arn:aws:sns:us-east-1:000000000000:file-events.fifo";
+        let (publisher, http_client) = mock_publisher(Some(topic.into()), vec![sns_event()]);
+
+        let file_id = Uuid::new_v4();
+        publisher
+            .file_trashed(&file_id, &Uuid::new_v4())
+            .await
+            .unwrap();
+
+        let body = sent_body(&http_client);
+        assert!(body.contains("MessageGroupId=file_trashed"));
+        assert!(body.contains("MessageDeduplicationId="));
+        assert!(body.contains(&file_id.to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_publish_failure_surfaces_sns_error() {
+        let topic = "arn:aws:sns:us-east-1:000000000000:file-events";
+        let error_event = ReplayEvent::new(
+            http::Request::builder()
+                .uri("https://sns.us-east-1.amazonaws.com/")
+                .body(SdkBody::empty())
+                .unwrap(),
+            http::Response::builder()
+                .status(404)
+                .body(SdkBody::from(
+                    r#"<ErrorResponse><Error><Type>Sender</Type><Code>NotFound</Code><Message>Topic does not exist</Message></Error></ErrorResponse>"#,
+                ))
+                .unwrap(),
+        );
+        let (publisher, _http_client) = mock_publisher(Some(topic.into()), vec![error_event]);
+
+        let err = publisher
+            .file_deleted(&Uuid::new_v4(), &Uuid::new_v4())
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ServiceError::SnsError(_)));
+    }
 }
