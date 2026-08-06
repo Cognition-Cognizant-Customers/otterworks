@@ -64,6 +64,9 @@ between toolchain patch versions).
 - A unit that *is* in the summary but produced no number, and had one in the
   baseline, **fails**. Silently losing the measurement is indistinguishable from
   losing all of the coverage.
+- A unit with no number **and** no baseline is reported `UNGATED` and passes:
+  there is nothing to compare it against, but it does not get to sit there
+  unmentioned either. `admin-service` is today's example.
 - Lowering a number is allowed but must be explicit: update the baseline in the
   same PR, where a reviewer sees it.
 

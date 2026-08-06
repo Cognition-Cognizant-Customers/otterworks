@@ -10,7 +10,9 @@ A unit missing from the baseline is new -- it is recorded, not failed. A unit
 missing from the summary was not run in this job (the CI jobs are path-filtered)
 and is ignored. A unit that ran but produced no usable number, having had one
 before, is a failure: losing the measurement is how a coverage drop would
-otherwise slip through unnoticed.
+otherwise slip through unnoticed. With no number and no baseline there is
+nothing to compare, so it is reported as UNGATED rather than failed -- a unit
+may sit there until its toolchain works, but not invisibly.
 """
 
 from __future__ import annotations
@@ -65,6 +67,10 @@ def main() -> int:
     # A unit in the baseline that reported in without a number has lost its
     # measurement -- indistinguishable from 100% coverage loss, so fail on it.
     lost = sorted((unit, note) for unit, note in unmeasured.items() if unit in baseline)
+    # One with no number and no floor cannot regress, but it also cannot ever
+    # acquire a floor, so it would stay ungated in silence. Say so; do not fail,
+    # since a unit is deliberately allowed to sit here until its toolchain works.
+    ungated = sorted((unit, note) for unit, note in unmeasured.items() if unit not in baseline)
 
     regressions, improvements, new = [], [], []
     for unit, pct in sorted(current.items()):
@@ -83,6 +89,8 @@ def main() -> int:
         print(f"REGRESSED  {unit}: {was:.2f}% -> {now:.2f}% (tolerance {tolerance}pp)")
     for unit, note in lost:
         print(f"UNMEASURED {unit}: was {baseline[unit]:.2f}%, now {note}")
+    for unit, note in ungated:
+        print(f"UNGATED    {unit}: {note}, and no baseline to fall back on -- nothing gates this unit")
 
     if lost:
         print(f"\n{len(lost)} unit(s) stopped reporting coverage. Fix the report, or drop "
