@@ -31,7 +31,25 @@ FAIL_FAST="${FAIL_FAST:-0}"
 SELECTED=("$@")
 
 mkdir -p "$COVERAGE_DIR"
-# Nothing downstream should be able to read the previous run's summary.
+
+known=()
+for record in "${COVERAGE_UNITS[@]}"; do known+=("${record%%|*}"); done
+
+# Reject an unknown name up front rather than quietly measuring the subset that
+# did match: `run-coverage.sh api-gatway client-app` would otherwise exit 0
+# having never run api-gateway, and summary.json would look like a clean result.
+unknown=()
+for want in "${SELECTED[@]}"; do
+  [[ " ${known[*]} " == *" $want "* ]] || unknown+=("$want")
+done
+if [[ ${#unknown[@]} -gt 0 ]]; then
+  echo "Unknown unit(s): ${unknown[*]}" >&2
+  echo "Known units: ${known[*]}" >&2
+  exit 2
+fi
+
+# Past the point of no return: nothing downstream may read the previous run's
+# summary, whether or not this one gets as far as writing a new one.
 rm -f "$COVERAGE_DIR/summary.json" "$COVERAGE_DIR/summary.md"
 
 selected() {
@@ -104,11 +122,6 @@ for record in "${COVERAGE_UNITS[@]}"; do
     break
   fi
 done
-
-if [[ ${#ran[@]} -eq 0 ]]; then
-  echo "No units matched: ${SELECTED[*]}" >&2
-  exit 2
-fi
 
 echo ""
 # Only the units this invocation ran. coverage/ still holds directories from
