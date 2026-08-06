@@ -34,12 +34,18 @@ collect() {
   cp -r "$repo_root/$1" "$out_dir/" 2>/dev/null || true
 }
 
+# notification-service has no gradle wrapper; auth-service does.
+gradle_for() {
+  if [ -x "$repo_root/$1/gradlew" ]; then echo ./gradlew; else echo gradle; fi
+}
+
 case "$unit" in
   api-gateway)
     run services/api-gateway go test -race -covermode=atomic -coverprofile="$out_dir/coverage.out" ./...
     ;;
   auth-service)
-    run services/auth-service ./gradlew test jacocoTestReport --no-daemon
+    run services/auth-service "$(gradle_for services/auth-service)" \
+      test jacocoTestReport --no-daemon
     collect services/auth-service/build/reports/jacoco/test/jacocoTestReport.xml
     ;;
   file-service)
@@ -63,7 +69,8 @@ case "$unit" in
       --coverageDirectory="$out_dir" --coverageReporters=lcovonly --coverageReporters=text
     ;;
   notification-service)
-    run services/notification-service ./gradlew test jacocoTestReport --no-daemon
+    run services/notification-service "$(gradle_for services/notification-service)" \
+      test jacocoTestReport --no-daemon
     collect services/notification-service/build/reports/jacoco/test/jacocoTestReport.xml
     ;;
   analytics-service)
@@ -71,8 +78,10 @@ case "$unit" in
     run services/analytics-service sbt test
     ;;
   admin-service)
-    # simplecov is already wired in spec/spec_helper.rb; it writes coverage/.last_run.json.
+    # simplecov is already wired in spec/spec_helper.rb. .resultset.json carries
+    # real per-line hits; .last_run.json is the percentage-only fallback.
     run services/admin-service bundle exec rspec
+    collect services/admin-service/coverage/.resultset.json
     collect services/admin-service/coverage/.last_run.json
     ;;
   audit-service)

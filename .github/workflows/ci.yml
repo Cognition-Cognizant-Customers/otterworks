@@ -330,6 +330,8 @@ jobs:
         if: always()
         with:
           name: coverage-admin-service
+          # simplecov's reports are dotfiles, which v4 drops by default.
+          include-hidden-files: true
           path: coverage-reports/admin-service
 
   # C# - Audit Service
@@ -597,11 +599,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         run: |
+          marker='<!-- otterworks-coverage-table -->'
           {
-            echo "<!-- otterworks-coverage-table -->"
+            echo "$marker"
             echo "### Coverage by build unit"
             echo
             cat coverage-reports/summary.md
           } > comment.md
-          gh pr comment "$PR" --body-file comment.md --edit-last \
-            || gh pr comment "$PR" --body-file comment.md
+          # Match on the marker, not on authorship: --edit-last would happily
+          # overwrite some other workflow's github-actions[bot] comment.
+          existing=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
+            --jq ".[] | select(.body | contains(\"$marker\")) | .id" | head -1)
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" \
+              -F body=@comment.md
+          else
+            gh pr comment "$PR" --body-file comment.md
+          fi

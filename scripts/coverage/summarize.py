@@ -43,6 +43,10 @@ class UnitCoverage:
     total: int = 0
     sources: list[str] = field(default_factory=list)
     status: int | None = None
+    # True when `total` is a synthetic denominator (a report that carries only a
+    # percentage). Such a unit keeps its percentage but is kept out of the
+    # aggregate row, where fake line counts would distort the weighting.
+    synthetic: bool = False
 
     @property
     def measured(self) -> bool:
@@ -102,23 +106,47 @@ def parse_lcov(path: Path) -> tuple[int, int]:
     return covered, total
 
 
-def parse_simplecov(path: Path) -> tuple[int, int]:
-    """simplecov's .last_run.json carries a percentage, not line counts."""
+def parse_simplecov_resultset(path: Path) -> tuple[int, int]:
+    """Real line counts from simplecov's .resultset.json.
+
+    Each file maps to a per-line hit array; `null` means the line is not
+    relevant (blank, comment, `end`). Both the modern `{"lines": [...]}` and the
+    legacy bare-array shapes appear in the wild.
+    """
+    covered = total = 0
+    for suite in json.loads(path.read_text()).values():
+        for hits in suite.get("coverage", {}).values():
+            if isinstance(hits, dict):
+                hits = hits.get("lines", [])
+            for hit in hits:
+                if hit is None:
+                    continue
+                total += 1
+                if hit > 0:
+                    covered += 1
+    return covered, total
+
+
+def parse_simplecov_last_run(path: Path) -> tuple[int, int]:
+    """Fallback: .last_run.json carries a percentage and no line counts."""
     data = json.loads(path.read_text())
     percent = data.get("result", {}).get("line")
     if percent is None:
         return 0, 0
-    # Scale to a 10,000-line pseudo-total so the percentage survives rounding.
+    # Synthetic denominator so the percentage survives; `synthetic` keeps these
+    # counts out of the aggregate row.
     return round(float(percent) * 100), 10_000
 
 
-PARSERS: list[tuple[str, callable]] = [
-    ("coverage.out", parse_go_profile),
-    ("jacocoTestReport.xml", parse_jacoco),
-    ("coverage.cobertura.xml", parse_cobertura),
-    ("coverage.xml", parse_cobertura),
-    ("lcov.info", parse_lcov),
-    (".last_run.json", parse_simplecov),
+# filename, parser, synthetic-denominator. Order is priority order.
+PARSERS: list[tuple[str, callable, bool]] = [
+    ("coverage.out", parse_go_profile, False),
+    ("jacocoTestReport.xml", parse_jacoco, False),
+    ("coverage.cobertura.xml", parse_cobertura, False),
+    ("coverage.xml", parse_cobertura, False),
+    ("lcov.info", parse_lcov, False),
+    (".resultset.json", parse_simplecov_resultset, False),
+    (".last_run.json", parse_simplecov_last_run, True),
 ]
 
 
@@ -132,16 +160,17 @@ def collect(unit_dir: Path) -> UnitCoverage:
         except ValueError:
             result.status = None
 
-    for filename, parser in PARSERS:
+    for filename, parser, synthetic in PARSERS:
         for path in sorted(unit_dir.rglob(filename)):
             try:
                 covered, total = parser(path)
-            except (ET.ParseError, ValueError, OSError) as exc:
+            except (ET.ParseError, ValueError, OSError, AttributeError) as exc:
                 print(f"warning: cannot parse {path}: {exc}", file=sys.stderr)
                 continue
             if total:
                 result.covered += covered
                 result.total += total
+                result.synthetic = synthetic
                 result.sources.append(str(path.relative_to(unit_dir)))
         if result.measured:
             break  # first format that yields numbers wins; don't double-count
@@ -156,7 +185,8 @@ def status_label(unit: UnitCoverage) -> str:
 
 def coverage_label(unit: UnitCoverage) -> str:
     if unit.measured:
-        return f"{unit.percent:.1f}%"
+        suffix = " (percentage only)" if unit.synthetic else ""
+        return f"{unit.percent:.1f}%{suffix}"
     pending = PENDING_INSTRUMENTATION.get(unit.unit)
     return f"not instrumented — {pending}" if pending else "no report produced"
 
@@ -170,23 +200,28 @@ def render(units: list[UnitCoverage], baseline: dict[str, float] | None) -> str:
 
     rows = [header, divider]
     for unit in units:
-        lines = f"{unit.covered:,} / {unit.total:,}" if unit.measured else "—"
+        lines = (
+            f"{unit.covered:,} / {unit.total:,}"
+            if unit.measured and not unit.synthetic
+            else "—"
+        )
         cells = [unit.unit, coverage_label(unit), lines, status_label(unit)]
         if baseline is not None:
             previous = baseline.get(unit.unit)
             if previous is None or not unit.measured:
                 delta = "—"
             else:
-                delta = f"{unit.percent - previous:+.1f} pp"
+                delta = f"{round(unit.percent, 2) - previous:+.1f} pp"
             cells.insert(2, delta)
         rows.append("| " + " | ".join(cells) + " |")
 
-    measured = [u for u in units if u.measured]
+    measured = [u for u in units if u.measured and not u.synthetic]
     if measured:
         covered = sum(u.covered for u in measured)
         total = sum(u.total for u in measured)
         rows.append(
-            f"| **Total ({len(measured)} instrumented units)** | "
+            f"| **Total ({len(measured)} instrumented "
+            f"unit{'' if len(measured) == 1 else 's'})** | "
             f"**{100.0 * covered / total:.1f}%** | "
             + ("— | " if baseline is not None else "")
             + f"**{covered:,} / {total:,}** | |"
@@ -213,12 +248,18 @@ def main() -> int:
         return 1
 
     baseline: dict[str, float] | None = None
-    if args.baseline and args.baseline.is_file():
-        baseline = {
-            name: entry["percent"]
-            for name, entry in json.loads(args.baseline.read_text())["units"].items()
-            if entry.get("percent") is not None
-        }
+    if args.baseline:
+        if args.baseline.is_file():
+            baseline = {
+                name: entry["percent"]
+                for name, entry in json.loads(args.baseline.read_text())["units"].items()
+                if entry.get("percent") is not None
+            }
+        else:
+            # Never let a missing baseline turn the ratchet into a silent no-op.
+            print(f"warning: no baseline at {args.baseline}; the ratchet is NOT enforced "
+                  f"on this run. Seed it with `cp {args.dir}/summary.json "
+                  f"{args.baseline}`.", file=sys.stderr)
 
     table = render(units, baseline)
     (args.dir / "summary.md").write_text(table)
@@ -247,11 +288,13 @@ def main() -> int:
             (u.unit, baseline[u.unit], u.percent)
             for u in units
             if u.measured and u.unit in baseline
-            and u.percent < baseline[u.unit] - args.tolerance
+            # Compare at the precision the baseline was written with, so an
+            # unchanged run can never read as a drop.
+            and round(u.percent, 2) < baseline[u.unit] - args.tolerance
         ]
         if drops:
             for unit, was, now in drops:
-                print(f"coverage regression: {unit} {was:.1f}% -> {now:.1f}%", file=sys.stderr)
+                print(f"coverage regression: {unit} {was:.2f}% -> {now:.2f}%", file=sys.stderr)
             return 1
     return 0
 
