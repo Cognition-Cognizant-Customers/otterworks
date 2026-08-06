@@ -23,7 +23,10 @@ table → table-driven tests → traceability — not the insurance domain.
 
 Code lives in `services/document-service/app/services/share_decline_rules.py`
 (pure decision logic, no I/O), `app/services/trust_score.py` (score lookup) and
-`app/api/share_requests.py` (transport + notice emission).
+`app/api/share_requests.py` (transport + notice emission). The endpoint is
+owner-only: it authenticates the caller like the other document routes and 404s
+or 403s before any rule is evaluated, so notices cannot be forged for someone
+else's document.
 
 ## Rule table (BRD section 3)
 
@@ -73,11 +76,17 @@ poetry run pytest --cov=app --cov-report=term-missing
 ```
 
 The new modules are at 100% statement coverage; document-service overall moves
-from 78% to 82%.
+from 81% to 85%.
+
+Coverage was also under-reporting before this change: SQLAlchemy's async bridge
+switches greenlets, so every line after the first awaited query went unrecorded
+until `concurrency = ["thread", "greenlet"]` was set in `pyproject.toml`. On
+`main` that understates the service by three points (78% reported vs 81%
+actual) and hides most of `app/api/documents.py`.
 
 ```bash
 curl -sX POST localhost:8083/api/v1/share-requests \
-  -H 'Content-Type: application/json' \
+  -H 'Content-Type: application/json' -H "Authorization: Bearer $JWT" \
   -d '{"document_id":"11111111-1111-1111-1111-111111111111","source":"CLIENT_PORTAL",
        "region":"MA","workspace_type":"HOME_DRIVE","share_type":"PUBLIC_LINK",
        "transaction":"NEW_SHARE","requester":{"first_name":"Olive","last_name":"Otter",

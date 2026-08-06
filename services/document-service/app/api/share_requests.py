@@ -1,9 +1,13 @@
 """Share-request declination API endpoints."""
 
 import structlog
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.documents import ensure_owner, require_user_id
+from app.db.session import get_db
 from app.schemas.share_request import ShareDecisionResponse, ShareRequestCreate
+from app.services.document_service import DocumentService
 from app.services.event_publisher import event_publisher
 from app.services.share_decline_rules import ShareRequest, evaluate
 from app.services.trust_score import RequesterProfile, resolve_trust_score
@@ -37,12 +41,23 @@ def _trust_score_for(body: ShareRequestCreate) -> int:
 
 
 @router.post("/", response_model=ShareDecisionResponse)
-async def evaluate_share_request(body: ShareRequestCreate) -> ShareDecisionResponse:
+async def evaluate_share_request(
+    body: ShareRequestCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> ShareDecisionResponse:
     """Evaluate a share request against the auto-decline rules.
 
-    A declined request (client portal only) emits a declination notice event
-    for the audit service; blocked and allowed requests emit nothing.
+    Only the document owner may request a share decision. A declined request
+    (client portal only) emits a declination notice event for the audit
+    service; blocked and allowed requests emit nothing.
     """
+    user_id = require_user_id(request)
+    document = await DocumentService(db).get(body.document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    ensure_owner(document, user_id)
+
     trust_score = _trust_score_for(body)
     decision = evaluate(
         ShareRequest(
@@ -86,6 +101,10 @@ async def evaluate_share_request(body: ShareRequestCreate) -> ShareDecisionRespo
 
 
 @router.post("", response_model=ShareDecisionResponse, include_in_schema=False)
-async def evaluate_share_request_no_slash(body: ShareRequestCreate) -> ShareDecisionResponse:
+async def evaluate_share_request_no_slash(
+    body: ShareRequestCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> ShareDecisionResponse:
     """Evaluate a share request (no trailing slash)."""
-    return await evaluate_share_request(body)
+    return await evaluate_share_request(body, request, db)

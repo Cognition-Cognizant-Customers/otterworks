@@ -1,11 +1,32 @@
 """API tests for the share-request declination endpoint (BRD section 5)."""
 
+import os
 import uuid
 
+import jwt
 import pytest
 from httpx import AsyncClient
 
 from app.api import share_requests
+
+TEST_JWT_SECRET = "test-jwt-secret-for-unit-tests-pad32"  # noqa: S105
+os.environ.setdefault("JWT_SECRET", TEST_JWT_SECRET)
+
+
+def auth_headers(user_id: uuid.UUID) -> dict[str, str]:
+    token = jwt.encode({"user_id": str(user_id)}, TEST_JWT_SECRET, algorithm="HS256")
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+async def document(client: AsyncClient, owner_id: uuid.UUID) -> dict:
+    """A document owned by ``owner_id`` — the subject of the share requests."""
+    resp = await client.post(
+        "/api/v1/documents/",
+        json={"title": "Shareable", "content": "Body", "owner_id": str(owner_id)},
+    )
+    assert resp.status_code == 201
+    return resp.json()
 
 
 @pytest.fixture
@@ -20,9 +41,9 @@ def published(monkeypatch) -> list[tuple[str, dict]]:
     return events
 
 
-def payload(**overrides) -> dict:
+def payload(document: dict, **overrides) -> dict:
     body = {
-        "document_id": str(uuid.uuid4()),
+        "document_id": document["id"],
         "source": "CLIENT_PORTAL",
         "region": "MA",
         "workspace_type": "HOME_DRIVE",
@@ -36,10 +57,14 @@ def payload(**overrides) -> dict:
 
 @pytest.mark.asyncio
 async def test_criteria_met_in_client_portal_declines_and_sends_notice(
-    client: AsyncClient, published
+    client: AsyncClient, owner_id: uuid.UUID, document: dict, published
 ):
     """BRD 5.1 — declined in the portal, declination notice generated."""
-    resp = await client.post("/api/v1/share-requests/", json=payload(trust_score=545))
+    resp = await client.post(
+        "/api/v1/share-requests/",
+        json=payload(document, trust_score=545),
+        headers=auth_headers(owner_id),
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["outcome"] == "DECLINED"
@@ -55,10 +80,14 @@ async def test_criteria_met_in_client_portal_declines_and_sends_notice(
 
 @pytest.mark.asyncio
 async def test_criteria_not_met_in_client_portal_allows_and_sends_nothing(
-    client: AsyncClient, published
+    client: AsyncClient, owner_id: uuid.UUID, document: dict, published
 ):
     """BRD 5.2 — not declined, no declination notice."""
-    resp = await client.post("/api/v1/share-requests/", json=payload(trust_score=590))
+    resp = await client.post(
+        "/api/v1/share-requests/",
+        json=payload(document, trust_score=590),
+        headers=auth_headers(owner_id),
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["outcome"] == "ALLOWED"
@@ -69,12 +98,15 @@ async def test_criteria_not_met_in_client_portal_allows_and_sends_nothing(
 
 @pytest.mark.asyncio
 async def test_criteria_met_in_admin_console_blocks_without_notice(
-    client: AsyncClient, published
+    client: AsyncClient, owner_id: uuid.UUID, document: dict, published
 ):
     """BRD 5.3 — the share is blocked, no declination notice."""
     resp = await client.post(
         "/api/v1/share-requests/",
-        json=payload(source="ADMIN_CONSOLE", share_type="EXTERNAL_EMAIL", trust_score=579),
+        json=payload(
+            document, source="ADMIN_CONSOLE", share_type="EXTERNAL_EMAIL", trust_score=579
+        ),
+        headers=auth_headers(owner_id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -85,11 +117,16 @@ async def test_criteria_met_in_admin_console_blocks_without_notice(
 
 
 @pytest.mark.asyncio
-async def test_criteria_not_met_in_admin_console_allows(client: AsyncClient, published):
+async def test_criteria_not_met_in_admin_console_allows(
+    client: AsyncClient, owner_id: uuid.UUID, document: dict, published
+):
     """BRD 5.4 — the share is issued successfully, no declination notice."""
     resp = await client.post(
         "/api/v1/share-requests/",
-        json=payload(source="ADMIN_CONSOLE", share_type="EXTERNAL_EMAIL", trust_score=580),
+        json=payload(
+            document, source="ADMIN_CONSOLE", share_type="EXTERNAL_EMAIL", trust_score=580
+        ),
+        headers=auth_headers(owner_id),
     )
     assert resp.status_code == 200
     assert resp.json()["outcome"] == "ALLOWED"
@@ -97,11 +134,14 @@ async def test_criteria_not_met_in_admin_console_allows(client: AsyncClient, pub
 
 
 @pytest.mark.asyncio
-async def test_requester_details_resolve_the_trust_score(client: AsyncClient, published):
+async def test_requester_details_resolve_the_trust_score(
+    client: AsyncClient, owner_id: uuid.UUID, document: dict, published
+):
     """BRD 4 — designated test data reproduces the intended score band."""
     resp = await client.post(
         "/api/v1/share-requests/",
         json=payload(
+            document,
             trust_score=None,
             requester={
                 "first_name": "Olive",
@@ -110,6 +150,7 @@ async def test_requester_details_resolve_the_trust_score(client: AsyncClient, pu
                 "address": "12 Harbor St, Boston, MA",
             },
         ),
+        headers=auth_headers(owner_id),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -118,10 +159,13 @@ async def test_requester_details_resolve_the_trust_score(client: AsyncClient, pu
 
 
 @pytest.mark.asyncio
-async def test_explicit_trust_score_overrides_requester_details(client: AsyncClient, published):
+async def test_explicit_trust_score_overrides_requester_details(
+    client: AsyncClient, owner_id: uuid.UUID, document: dict, published
+):
     resp = await client.post(
         "/api/v1/share-requests/",
         json=payload(
+            document,
             trust_score=700,
             requester={
                 "first_name": "Olive",
@@ -130,6 +174,7 @@ async def test_explicit_trust_score_overrides_requester_details(client: AsyncCli
                 "address": "12 Harbor St, Boston, MA",
             },
         ),
+        headers=auth_headers(owner_id),
     )
     assert resp.status_code == 200
     assert resp.json()["trust_score"] == 700
@@ -137,16 +182,62 @@ async def test_explicit_trust_score_overrides_requester_details(client: AsyncCli
 
 
 @pytest.mark.asyncio
-async def test_missing_score_and_requester_is_rejected(client: AsyncClient):
-    resp = await client.post("/api/v1/share-requests/", json=payload(trust_score=None))
+async def test_missing_score_and_requester_is_rejected(
+    client: AsyncClient, owner_id: uuid.UUID, document: dict
+):
+    resp = await client.post(
+        "/api/v1/share-requests/",
+        json=payload(document, trust_score=None),
+        headers=auth_headers(owner_id),
+    )
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_no_trailing_slash_route(client: AsyncClient, published):
-    resp = await client.post("/api/v1/share-requests", json=payload(trust_score=545))
+async def test_no_trailing_slash_route(
+    client: AsyncClient, owner_id: uuid.UUID, document: dict, published
+):
+    resp = await client.post(
+        "/api/v1/share-requests",
+        json=payload(document, trust_score=545),
+        headers=auth_headers(owner_id),
+    )
     assert resp.status_code == 200
     assert resp.json()["outcome"] == "DECLINED"
+
+
+@pytest.mark.asyncio
+async def test_unauthenticated_request_is_rejected(
+    client: AsyncClient, document: dict, published
+):
+    resp = await client.post("/api/v1/share-requests/", json=payload(document))
+    assert resp.status_code == 401
+    assert published == []
+
+
+@pytest.mark.asyncio
+async def test_non_owner_cannot_request_a_decision(
+    client: AsyncClient, document: dict, published
+):
+    resp = await client.post(
+        "/api/v1/share-requests/",
+        json=payload(document),
+        headers=auth_headers(uuid.uuid4()),
+    )
+    assert resp.status_code == 403
+    assert published == []
+
+
+@pytest.mark.asyncio
+async def test_unknown_document_is_not_found(
+    client: AsyncClient, owner_id: uuid.UUID, document: dict
+):
+    resp = await client.post(
+        "/api/v1/share-requests/",
+        json=payload(document, document_id=str(uuid.uuid4())),
+        headers=auth_headers(owner_id),
+    )
+    assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -161,6 +252,12 @@ async def test_no_trailing_slash_route(client: AsyncClient, published):
         {"requester": {"first_name": "Olive"}},
     ],
 )
-async def test_invalid_input_is_rejected(client: AsyncClient, override):
-    resp = await client.post("/api/v1/share-requests/", json=payload(**override))
+async def test_invalid_input_is_rejected(
+    client: AsyncClient, owner_id: uuid.UUID, document: dict, override
+):
+    resp = await client.post(
+        "/api/v1/share-requests/",
+        json=payload(document, **override),
+        headers=auth_headers(owner_id),
+    )
     assert resp.status_code == 422

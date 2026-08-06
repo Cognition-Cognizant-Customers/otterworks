@@ -46,6 +46,13 @@ ignore = ["B008"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# pytest-cov defaults to .coveragerc, which does not exist here.
+addopts = "--cov-config=pyproject.toml"
+
+[tool.coverage.run]
+# SQLAlchemy's async bridge switches greenlets, which otherwise hides every
+# line executed after the first awaited query.
+concurrency = ["thread", "greenlet"]
 
 [build-system]
 requires = ["poetry-core"]

@@ -87,14 +87,14 @@ def _extract_user_id(request: Request) -> UUID | None:
     return None
 
 
-def _require_user_id(request: Request) -> UUID:
+def require_user_id(request: Request) -> UUID:
     user_id = _extract_user_id(request)
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required")
     return user_id
 
 
-def _ensure_owner(document: object, user_id: UUID) -> None:
+def ensure_owner(document: object, user_id: UUID) -> None:
     if getattr(document, "owner_id", None) != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -227,12 +227,12 @@ async def get_document(
 ):
     """Get a document by ID."""
     await _maybe_inject_latency()
-    user_id = _require_user_id(request)
+    user_id = require_user_id(request)
     service = DocumentService(db)
     document = await service.get(document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
-    _ensure_owner(document, user_id)
+    ensure_owner(document, user_id)
     return document
 
 
@@ -245,12 +245,12 @@ async def update_document(
 ):
     """Full replace of a document."""
     await _maybe_inject_latency()
-    user_id = _require_user_id(request)
+    user_id = require_user_id(request)
     service = DocumentService(db)
     existing = await service.get(document_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Document not found")
-    _ensure_owner(existing, user_id)
+    ensure_owner(existing, user_id)
     document = await service.update(document_id, body)
     logger.info("document_updated", document_id=str(document_id))
     return document
@@ -265,12 +265,12 @@ async def patch_document(
 ):
     """Partial update of a document."""
     await _maybe_inject_latency()
-    user_id = _require_user_id(request)
+    user_id = require_user_id(request)
     service = DocumentService(db)
     existing = await service.get(document_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Document not found")
-    _ensure_owner(existing, user_id)
+    ensure_owner(existing, user_id)
     document = await service.patch(document_id, body)
     logger.info("document_patched", document_id=str(document_id))
     return document
@@ -284,12 +284,12 @@ async def delete_document(
 ):
     """Delete a document (soft delete)."""
     await _maybe_inject_latency()
-    user_id = _require_user_id(request)
+    user_id = require_user_id(request)
     service = DocumentService(db)
     existing = await service.get(document_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Document not found")
-    _ensure_owner(existing, user_id)
+    ensure_owner(existing, user_id)
     await service.delete(document_id)
     logger.info("document_deleted", document_id=str(document_id))
 
@@ -301,12 +301,12 @@ async def list_versions(
     db: AsyncSession = Depends(get_db),
 ):
     """List document versions."""
-    user_id = _require_user_id(request)
+    user_id = require_user_id(request)
     service = DocumentService(db)
     document = await service.get(document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
-    _ensure_owner(document, user_id)
+    ensure_owner(document, user_id)
     versions = await service.list_versions(document_id)
     return versions
 
@@ -322,12 +322,12 @@ async def restore_version(
     db: AsyncSession = Depends(get_db),
 ):
     """Restore a document to a previous version."""
-    user_id = _require_user_id(request)
+    user_id = require_user_id(request)
     service = DocumentService(db)
     existing = await service.get(document_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Document or version not found")
-    _ensure_owner(existing, user_id)
+    ensure_owner(existing, user_id)
     document = await service.restore_version(document_id, version_id)
     if not document:
         raise HTTPException(
@@ -349,12 +349,12 @@ async def export_document(
     db: AsyncSession = Depends(get_db),
 ):
     """Export a document in the requested format."""
-    user_id = _require_user_id(request)
+    user_id = require_user_id(request)
     service = DocumentService(db)
     document = await service.get(document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
-    _ensure_owner(document, user_id)
+    ensure_owner(document, user_id)
 
     body, content_type = service.export_document(document, format)
     return PlainTextResponse(content=body, media_type=content_type)
