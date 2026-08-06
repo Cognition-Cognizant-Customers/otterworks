@@ -328,11 +328,14 @@ describe('Collaboration protocol edges (WP-11)', () => {
       await joinDocument(member, 'doc-writable-by-anyone');
       await joinDocument(outsider, 'doc-outsider-home');
 
+      // The relayed broadcast is emitted after the server applied the update,
+      // so waiting for it orders the assertion across the two connections.
+      const relayed = nextEvent(member, 'document-update');
       outsider.emit('document-update', {
         documentId: 'doc-writable-by-anyone',
         update: base64Update((doc) => doc.getText('content').insert(0, 'injected')),
       });
-      await barrier(member, 'doc-writable-by-anyone');
+      await relayed;
 
       expect(
         harness.manager
