@@ -39,13 +39,19 @@ public final class JwtFixtures {
     return Keys.hmacShaKeyFor(FOREIGN_SECRET.getBytes(StandardCharsets.UTF_8));
   }
 
-  /** An access token whose lifetime is {@code [issuedAt, expiresAt)}. */
+  /** An access token for a {@code USER} whose lifetime is {@code [issuedAt, expiresAt)}. */
   public static String accessToken(String userId, Instant issuedAt, Instant expiresAt) {
+    return accessToken(userId, List.of("USER"), issuedAt, expiresAt);
+  }
+
+  /** An access token with the given roles whose lifetime is {@code [issuedAt, expiresAt)}. */
+  public static String accessToken(
+      String userId, List<String> roles, Instant issuedAt, Instant expiresAt) {
     return Jwts.builder()
         .subject(userId)
         .claim("email", "fixture@otterworks.dev")
         .claim("name", "Fixture User")
-        .claim("roles", List.of("USER"))
+        .claim("roles", roles)
         .claim("type", "access")
         .issuedAt(Date.from(issuedAt))
         .expiration(Date.from(expiresAt))

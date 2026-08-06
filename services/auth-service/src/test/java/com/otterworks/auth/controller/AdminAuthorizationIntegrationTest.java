@@ -161,16 +161,24 @@ class AdminAuthorizationIntegrationTest {
         .andExpect(status().isForbidden());
   }
 
+  /** The roles claim says {@code ADMIN}, so expiry is the only thing that can cause the 403. */
   @Test
   void listUsers_shouldRejectAnExpiredAdminToken() throws Exception {
     Instant now = Instant.now();
+    String userId = UUID.randomUUID().toString();
     String expired =
         JwtFixtures.accessToken(
-            UUID.randomUUID().toString(), now.minusSeconds(7200), now.minusSeconds(60));
+            userId, List.of("ADMIN"), now.minusSeconds(7200), now.minusSeconds(60));
+    String live = JwtFixtures.accessToken(userId, List.of("ADMIN"), now, now.plusSeconds(3600));
 
     mockMvc
         .perform(get("/api/v1/auth/users").header("Authorization", "Bearer " + expired))
         .andExpect(status().isForbidden());
+
+    // The same claims, unexpired, are accepted — the rejection above is about `exp`, nothing else.
+    mockMvc
+        .perform(get("/api/v1/auth/users").header("Authorization", "Bearer " + live))
+        .andExpect(status().isOk());
   }
 
   @Test

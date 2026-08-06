@@ -151,13 +151,15 @@ class AuthServiceTokenLifecycleTest {
 
   // ---------- boundary: stored-token expiry ----------
   //
-  // `expiresAt == now` is deliberately not asserted: AuthService compares against
-  // Instant.now() at call time, so an exactly-equal instant is a wall-clock race.
-  // The trio is expressed as "one second either side of now" plus "already elapsed".
+  // AuthService compares expiresAt against Instant.now() at call time and takes no injectable
+  // clock, so neither `expiresAt == now` nor a sub-second cushion can be asserted without a
+  // race — a GC pause between building the fixture and the comparison would flip the result.
+  // The trio is therefore "comfortably ahead" / "just elapsed" / "long elapsed"; the exact
+  // instant is covered deterministically against a fixed clock in JwtClockSkewTest.
 
   @Test
-  void refresh_shouldAcceptATokenExpiringOneSecondFromNow() {
-    RefreshToken stored = storedToken("jti-edge", Instant.now().plusSeconds(1), false);
+  void refresh_shouldAcceptATokenThatHasNotYetExpired() {
+    RefreshToken stored = storedToken("jti-edge", Instant.now().plusSeconds(60), false);
     stubRefreshFlow("edge-refresh", "jti-edge", stored);
     stubTokenIssuance("new-access", "new-refresh", "jti-new");
 
