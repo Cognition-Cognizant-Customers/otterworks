@@ -403,7 +403,7 @@ it is not yet on `main`, the ids are still stable and match the SOW's §5 table.
 | Threshold | Value | Defined at | Decision | Trio owner |
 |---|---|---|---|---|
 | feedback rating range | 1 … 5 | `.../legacyportal/feedback/FeedbackService.java:10-11`, check at `:21` | throws outside | WP-12 (`PORTAL-RATING-001`) |
-| rating bean validation | `@Max(5)` | `.../legacyportal/feedback/FeedbackController.java:56` | 400 outside — note: **no `@Min`** on the controller, only the service guard | WP-12 |
+| rating bean validation | `@Min(1)`, `@Max(5)` | `.../legacyportal/feedback/FeedbackController.java:55-56` | 400 outside — bound duplicated in the service guard, so assert **both** layers | WP-12 |
 | feedback subject length | 100 | `.../legacyportal/feedback/FeedbackController.java:52` | validation reject | WP-12 |
 | feedback message length | 2,000 | `.../feedback/FeedbackController.java:60`, column `Feedback.java:28` | validation reject | WP-12 |
 | announcement title length | 200 | `.../announcements/AnnouncementController.java:57`, column `Announcement.java:22` | validation reject | WP-12 |
@@ -515,11 +515,11 @@ deliberately planted bugs; nothing here was changed.
    (`NotificationRepository.kt:87-88`). **Judged: genuine gap, plausibly the same area as the
    documented live `400` bug in `docs/exploratory-qa-report.md`; not verified as planted.**
    Owner: WP-08 — pin current behavior, do not change it.
-3. **legacy-portal rating has `@Max(5)` but no `@Min`** on the controller DTO
-   (`FeedbackController.java:56`); the lower bound exists only in the service guard
-   (`FeedbackService.java:21`). The two layers therefore reject `0` with different mechanisms and
-   different responses. **Judged: genuine inconsistency, cannot determine planted vs. incidental.**
-   Owner: WP-12 — assert both paths, change neither.
+3. **legacy-portal rating bound is duplicated, not missing.** `FeedbackController.java:55-56`
+   carries `@Min(1) @Max(5)` *and* `FeedbackService.java:21` re-checks the same range, throwing
+   `IllegalArgumentException`. **Judged: not a defect** — but two sources of truth for one
+   threshold, so the trio must be run against both layers (`0` and `6` via the controller, and the
+   service invoked directly) or a future divergence goes unnoticed. Owner: WP-12.
 4. **`maxFrameSize = Long.MAX_VALUE`** on the notification WebSocket (`Application.kt:76`) means no
    frame-size ceiling. **Judged: intentional-looking configuration, not a bug per se**, but it is an
    unbounded input and belongs in WP-08's negative cases as documented behavior.
@@ -541,7 +541,7 @@ Binding for every package in this program:
 4. **No shared mutable fixtures.** Two cases in the same table must not share a mutable object,
    a database row, a Redis key, or a module-level cache.
 5. **Deterministic identities.** Where a rule keys on an identity or a hash (e.g. the feature-flag
-   bucketing at `feature_flag.rb:23`), pick fixed inputs and assert the computed bucket, so the case
+   bucketing at `feature_flag.rb:24`), pick fixed inputs and assert the computed bucket, so the case
    cannot flake on a different hash.
 
 ## 9. Interaction with the golden-app policy

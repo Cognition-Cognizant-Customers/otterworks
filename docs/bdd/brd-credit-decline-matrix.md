@@ -24,7 +24,7 @@ package. It exists for two reasons:
    the exact shape of OtterWorks' own rules (`MAX_UPLOAD_BYTES`, `used_bytes >= quota_bytes`, the
    gateway rate limiter, every pagination clamp) and the exact shape its tests are missing.
 2. **It is a ready-to-run matrix** if the credit-decline rule engine is ever actually built — as a
-   product feature with its own scope, not as part of the test-coverage program. The 24 cases below
+   product feature with its own scope, not as part of the test-coverage program. The cases below
    are derivable from the BRD today and are reusable against whatever implements it: a real Agency
    Portal, a mock, or an OtterWorks demo variant.
 
@@ -144,7 +144,12 @@ G1 blocks without generating a notice; G3 declines *and* generates one. A test s
 only "was it declined?" passes with G1 and G3 implemented identically — and that would be wrong.
 This is the concrete reason the standard requires outcomes to be listed per downstream system.
 
-**Total: 8 boundary + 6 scope negatives + 4 quadrants = 24 cases.**
+**Total: 8 boundary rows + 6 scope-negative rows + 4 quadrants = 18 enumerated rows, which expand
+to 24 executable cases.** The N-rows are multi-valued: N1 names two out-of-scope sources, N2 three
+states, N4 two policy types, N5 three transactions, N3 and N6 one each — 12 negatives once each
+value gets its own case. 8 + 12 + 4 = 24. SOW §4b quotes the 24 figure against the 18 rows; the
+expansion above is the reconciliation. Do not collapse a multi-valued row into one parametrised
+case that stops at the first value.
 
 ---
 
@@ -182,7 +187,7 @@ identity** — first name + last name + date of birth + address. A designated id
 designated credit band; change any part of the identity, or let the upstream test-data set drift,
 and the quote silently lands in a different band.
 
-The consequence: **every one of the 24 cases above depends on a maintained identity → band fixture
+The consequence: **every one of the cases above depends on a maintained identity → band fixture
 set**, and none of them fails loudly when that set rots. A case expecting 589 (decline) that
 silently receives 620 will report "not declined" and look like a product bug, or worse, will be
 "fixed" by relaxing the assertion.
