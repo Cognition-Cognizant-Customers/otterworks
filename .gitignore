@@ -25,6 +25,9 @@ services/auth-service/.gradle/
 services/auth-service/out/
 *.class
 *.jar
+# The Gradle wrapper jar is part of the build contract and must be committed,
+# otherwise ./gradlew cannot bootstrap.
+!**/gradle/wrapper/gradle-wrapper.jar
 
 # --- Rust ---
 services/file-service/target/

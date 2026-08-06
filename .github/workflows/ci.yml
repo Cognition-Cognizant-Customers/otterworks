@@ -31,6 +31,8 @@ jobs:
       report-service: ${{ steps.changes.outputs.report-service }}
       legacy-portal: ${{ steps.changes.outputs.legacy-portal }}
       api-tests: ${{ steps.changes.outputs.api-tests }}
+      testdata: ${{ steps.changes.outputs.testdata }}
+      platform-terraform: ${{ steps.changes.outputs.platform-terraform }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -76,6 +78,10 @@ jobs:
               - 'services/api-gateway/internal/config/**'
               - 'docker-compose*.yml'
               - 'Makefile'
+            testdata:
+              - 'testdata/**'
+            platform-terraform:
+              - 'platform/terraform/**'
 
   # Go - API Gateway
   api-gateway:
@@ -147,7 +153,7 @@ jobs:
       - run: pip install poetry==1.8.2
       - run: poetry install
       - run: poetry run ruff check .
-      - run: poetry run pytest --cov=app
+      - run: poetry run pytest --cov=app --cov-fail-under=75
 
   # Node.js - Collaboration Service
   collab-service:
@@ -200,7 +206,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements-dev.txt
-      - run: python -m pytest --cov=app
+      - run: python -m pytest --cov=app --cov-fail-under=70
 
   # Scala - Analytics Service
   analytics-service:
@@ -278,7 +284,10 @@ jobs:
           dotnet-version: '8.0.x'
       - run: dotnet restore
       - run: dotnet build --no-restore
-      - run: dotnet test --no-build
+      # AuditService.csproj is a web project that excludes tests/**, so `dotnet test`
+      # here discovers no test project and exits 0. Point it at the xUnit project so
+      # the suite can actually fail the build.
+      - run: dotnet test tests/AuditService.Tests
 
   # React/Next.js - Web App
   web-app:
@@ -415,6 +424,36 @@ jobs:
       - run: terraform fmt -check -recursive
       - run: terraform init -backend=false
       - run: terraform validate
+
+  # Terraform validation for the shared platform stack
+  platform-terraform:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.platform-terraform == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: platform/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.0
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false
+      - run: terraform validate
+
+  # Synthetic test-data generation harness
+  testdata-harness:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.testdata == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r testdata/generated/retail-drive/requirements.txt pytest
+      - run: python -m pytest testdata/generated/retail-drive/tests -q
 
   # Black-box API flow test validation
   api-flow-tests:

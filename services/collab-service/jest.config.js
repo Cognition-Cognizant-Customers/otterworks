@@ -11,12 +11,14 @@ module.exports = {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'clover'],
+  // Ratchet set just below the coverage measured on main so the suite fails on a
+  // regression. Raise these as coverage improves; never lower them.
   coverageThreshold: {
     global: {
-      branches: 0,
-      functions: 0,
-      lines: 0,
-      statements: 0,
+      branches: 35,
+      functions: 45,
+      lines: 60,
+      statements: 60,
     },
   },
   moduleFileExtensions: ['ts', 'js', 'json'],

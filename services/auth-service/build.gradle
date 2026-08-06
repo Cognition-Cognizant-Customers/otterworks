@@ -72,6 +72,22 @@ jacocoTestReport {
     }
 }
 
+// Ratchet set just below the line coverage measured on main so `gradle check`
+// fails on a regression. Raise as coverage improves; never lower it.
+jacocoTestCoverageVerification {
+    violationRules {
+        rule {
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.70
+            }
+        }
+    }
+}
+
+check.dependsOn jacocoTestCoverageVerification
+
 test {
     useJUnitPlatform()
     finalizedBy jacocoTestReport

@@ -89,7 +89,7 @@ build-collab: ## Build Collaboration Service
 	cd services/collab-service && npm run build
 
 build-notification: ## Build Notification Service
-	cd services/notification-service && ./gradlew build
+	cd services/notification-service && gradle build
 
 build-search: ## Build Search Service
 	cd services/search-service && pip install -e .
@@ -104,7 +104,7 @@ build-audit: ## Build Audit Service
 	cd services/audit-service && dotnet build
 
 build-web: ## Build Web Frontend
-	cd frontend/web-app && npm run build
+	cd frontend/client-app && npm run build
 
 build-admin-dash: ## Build Admin Dashboard
 	cd frontend/admin-dashboard && npm run build
@@ -115,24 +115,35 @@ test: ## Run tests for all services
 	@echo "=== API Gateway (Go) ===" && cd services/api-gateway && go test ./...
 	@echo "=== Auth Service (Java) ===" && cd services/auth-service && ./gradlew test
 	@echo "=== File Service (Rust) ===" && cd services/file-service && cargo test
-	@echo "=== Document Service (Python) ===" && cd services/document-service && pytest
+	@echo "=== Document Service (Python) ===" && cd services/document-service && poetry run pytest
 	@echo "=== Collab Service (Node.js) ===" && cd services/collab-service && npm test
-	@echo "=== Notification Service (Kotlin) ===" && cd services/notification-service && ./gradlew test
+	@echo "=== Notification Service (Kotlin) ===" && cd services/notification-service && gradle test
 	@echo "=== Search Service (Python) ===" && cd services/search-service && pytest
 	@echo "=== Analytics Service (Scala) ===" && cd services/analytics-service && sbt test
 	@echo "=== Admin Service (Ruby) ===" && cd services/admin-service && bundle exec rspec
-	@echo "=== Audit Service (C#) ===" && cd services/audit-service && dotnet test
-	@echo "=== Web Frontend ===" && cd frontend/web-app && npm test
+	@echo "=== Audit Service (C#) ===" && cd services/audit-service && dotnet test tests/AuditService.Tests
+	@echo "=== Report Service (Java) ===" && cd services/report-service && mvn -B test
+	@echo "=== Legacy Portal (Java) ===" && cd services/legacy-portal && ./mvnw -B test
+	@echo "=== Web Frontend ===" && cd frontend/client-app && npm test
 	@echo "=== Admin Dashboard ===" && cd frontend/admin-dashboard && npm test
+	@echo "=== Demo Platform (shell) ===" && $(MAKE) test-reaper
 
+test-reaper: ## Run the demo-platform control-plane shell suites
+	./demo-platform/reaper/test-reaper.sh
+	./demo-platform/reaper/test-idle-suspend.sh
+	./demo-platform/reaper/test-infra-sweep.sh
+	./demo-platform/reaper/test-orphan-sweep.sh
+
+# `|| true` is deliberately absent: a coverage run that swallows test failures
+# reports coverage for a suite that did not pass.
 test-coverage: ## Run tests with coverage for all services
-	@echo "=== Document Service ===" && cd services/document-service && pytest --cov=app --cov-report=term-missing || true
-	@echo "=== Search Service ===" && cd services/search-service && pytest --cov=app --cov-report=term-missing || true
-	@echo "=== Collab Service ===" && cd services/collab-service && npm test -- --coverage || true
-	@echo "=== API Gateway ===" && cd services/api-gateway && go test -cover ./... || true
-	@echo "=== Admin Service ===" && cd services/admin-service && bundle exec rspec --format documentation || true
-	@echo "=== Auth Service ===" && cd services/auth-service && ./gradlew test jacocoTestReport || true
-	@echo "=== File Service ===" && cd services/file-service && cargo test 2>&1 | tail -5 || true
+	@echo "=== Document Service ===" && cd services/document-service && poetry run pytest --cov=app --cov-report=term-missing
+	@echo "=== Search Service ===" && cd services/search-service && pytest --cov=app --cov-report=term-missing
+	@echo "=== Collab Service ===" && cd services/collab-service && npm test -- --coverage
+	@echo "=== API Gateway ===" && cd services/api-gateway && go test -cover ./...
+	@echo "=== Admin Service ===" && cd services/admin-service && bundle exec rspec --format documentation
+	@echo "=== Auth Service ===" && cd services/auth-service && ./gradlew test jacocoTestReport
+	@echo "=== File Service ===" && cd services/file-service && cargo test
 
 test-api-flows: ## Run black-box API flow tests against the local API gateway
 	UV_PROJECT_ENVIRONMENT=.venv uv run python -m pytest tests/api
@@ -147,7 +158,7 @@ lint: ## Lint all services
 	@echo "=== Document Service ===" && cd services/document-service && ruff check .
 	@echo "=== Collab Service ===" && cd services/collab-service && npm run lint
 	@echo "=== Search Service ===" && cd services/search-service && ruff check .
-	@echo "=== Web Frontend ===" && cd frontend/web-app && npm run lint
+	@echo "=== Web Frontend ===" && cd frontend/client-app && npm run lint
 	@echo "=== Admin Dashboard ===" && cd frontend/admin-dashboard && npm run lint
 
 # --- Synthetic Test Data ---
