@@ -31,5 +31,15 @@ export default defineConfig({
   },
   test: {
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    coverage: {
+      provider: "v8",
+      // `all` counts untested files as 0% instead of omitting them, which is the
+      // difference between "4 tests over 9.3 KLOC looks fine" and a real number.
+      all: true,
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: ["src/**/*.{test,spec}.{ts,tsx}", "src/**/*.d.ts", "src/main.tsx"],
+      reportsDirectory: "coverage",
+      reporter: ["text-summary", "lcov"],
+    },
   },
 });

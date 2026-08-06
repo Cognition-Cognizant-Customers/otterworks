@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed dev-backend dev-web dev-admin dev-android dev-electron
+.PHONY: help infra-up infra-down up down build test test-coverage coverage-aggregate coverage-ratchet coverage-baseline-update test-contract test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed dev-backend dev-web dev-admin dev-android dev-electron
 
 SHELL := /bin/bash
 
@@ -104,35 +104,57 @@ build-audit: ## Build Audit Service
 	cd services/audit-service && dotnet build
 
 build-web: ## Build Web Frontend
-	cd frontend/web-app && npm run build
+	cd frontend/client-app && npm run build
 
 build-admin-dash: ## Build Admin Dashboard
 	cd frontend/admin-dashboard && npm run build
 
 # --- Testing ---
 
-test: ## Run tests for all services
+# Every build unit that has an automated test suite. Keep in sync with
+# scripts/coverage/units.sh, which is the single source of truth for how each
+# unit is tested and where it writes its coverage report.
+test: ## Run tests for all services (fails on the first failing unit)
 	@echo "=== API Gateway (Go) ===" && cd services/api-gateway && go test ./...
-	@echo "=== Auth Service (Java) ===" && cd services/auth-service && ./gradlew test
+	@echo "=== Auth Service (Java 17) ===" && cd services/auth-service && ../../scripts/gradle.sh test
 	@echo "=== File Service (Rust) ===" && cd services/file-service && cargo test
-	@echo "=== Document Service (Python) ===" && cd services/document-service && pytest
+	@echo "=== Document Service (Python) ===" && cd services/document-service && poetry run pytest
 	@echo "=== Collab Service (Node.js) ===" && cd services/collab-service && npm test
-	@echo "=== Notification Service (Kotlin) ===" && cd services/notification-service && ./gradlew test
-	@echo "=== Search Service (Python) ===" && cd services/search-service && pytest
+	@echo "=== Notification Service (Kotlin) ===" && cd services/notification-service && ../../scripts/gradle.sh test
+	@echo "=== Search Service (Python) ===" && cd services/search-service && .venv/bin/python -m pytest
 	@echo "=== Analytics Service (Scala) ===" && cd services/analytics-service && sbt test
 	@echo "=== Admin Service (Ruby) ===" && cd services/admin-service && bundle exec rspec
-	@echo "=== Audit Service (C#) ===" && cd services/audit-service && dotnet test
-	@echo "=== Web Frontend ===" && cd frontend/web-app && npm test
-	@echo "=== Admin Dashboard ===" && cd frontend/admin-dashboard && npm test
+	@echo "=== Audit Service (C#) ===" && cd services/audit-service && dotnet test tests/AuditService.Tests
+	@echo "=== Report Service (Java 8) ===" && cd services/report-service && mvn test -B
+	@echo "=== Legacy Portal (Java 11) ===" && cd services/legacy-portal && ./mvnw test -B
+	@echo "=== Client App (Vitest) ===" && cd frontend/client-app && npm test
+	@echo "=== Admin Dashboard (Karma) ===" && cd frontend/admin-dashboard && npm test
+	@$(MAKE) --no-print-directory test-contract
 
-test-coverage: ## Run tests with coverage for all services
-	@echo "=== Document Service ===" && cd services/document-service && pytest --cov=app --cov-report=term-missing || true
-	@echo "=== Search Service ===" && cd services/search-service && pytest --cov=app --cov-report=term-missing || true
-	@echo "=== Collab Service ===" && cd services/collab-service && npm test -- --coverage || true
-	@echo "=== API Gateway ===" && cd services/api-gateway && go test -cover ./... || true
-	@echo "=== Admin Service ===" && cd services/admin-service && bundle exec rspec --format documentation || true
-	@echo "=== Auth Service ===" && cd services/auth-service && ./gradlew test jacocoTestReport || true
-	@echo "=== File Service ===" && cd services/file-service && cargo test 2>&1 | tail -5 || true
+test-coverage: ## Run every suite with coverage, print an aggregate table, fail if any unit fails
+	@scripts/coverage/run-coverage.sh $(UNITS)
+
+coverage-aggregate: ## Re-print the aggregate table from already-collected reports in coverage/
+	@scripts/coverage/aggregate.py --coverage-dir coverage --markdown coverage/summary.md --json coverage/summary.json
+
+coverage-ratchet: ## Fail if any unit's coverage dropped below coverage-baseline.json
+	@scripts/coverage/ratchet.py --summary coverage/summary.json --baseline coverage-baseline.json
+
+coverage-baseline-update: ## Record the current coverage/summary.json as the new ratchet baseline
+	@scripts/coverage/ratchet.py --summary coverage/summary.json --baseline coverage-baseline.json --update
+
+# The contract suite talks to a running search-service, so it cannot run in a
+# bare checkout. It is executed when the service answers and loudly skipped when
+# it does not -- a skip here is a missing stack, not a passing suite. Wiring it
+# into CI against a composed stack is WP-19.
+SEARCH_SERVICE_URL ?= http://localhost:8087
+test-contract: ## Run OpenAPI contract tests (needs a running search-service)
+	@if curl -sfo /dev/null --max-time 3 "$(SEARCH_SERVICE_URL)/health"; then \
+		echo "=== Contract tests (vs $(SEARCH_SERVICE_URL)) ==="; \
+		UV_PROJECT_ENVIRONMENT=.venv uv run python -m pytest tests/contract; \
+	else \
+		echo "!!! SKIPPED contract tests: no search-service at $(SEARCH_SERVICE_URL) (run 'make up' first)"; \
+	fi
 
 test-api-flows: ## Run black-box API flow tests against the local API gateway
 	UV_PROJECT_ENVIRONMENT=.venv uv run python -m pytest tests/api
@@ -147,7 +169,7 @@ lint: ## Lint all services
 	@echo "=== Document Service ===" && cd services/document-service && ruff check .
 	@echo "=== Collab Service ===" && cd services/collab-service && npm run lint
 	@echo "=== Search Service ===" && cd services/search-service && ruff check .
-	@echo "=== Web Frontend ===" && cd frontend/web-app && npm run lint
+	@echo "=== Web Frontend ===" && cd frontend/client-app && npm run lint
 	@echo "=== Admin Dashboard ===" && cd frontend/admin-dashboard && npm run lint
 
 # --- Synthetic Test Data ---

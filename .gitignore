@@ -47,6 +47,20 @@ node_modules/
 coverage/
 *.tsbuildinfo
 
+# --- Coverage ---
+# `coverage/` above already covers the per-unit report dirs collected by
+# scripts/coverage/run-coverage.sh -- but it is unanchored, so it would also
+# swallow the harness itself.
+!scripts/coverage/
+# These are the raw per-language artefacts.
+lcov.info
+coverage.out
+coverage.xml
+.coverage
+.scoverage/
+scoverage-data/
+services/audit-service/TestResults/
+
 # --- Kotlin ---
 services/notification-service/build/
 services/notification-service/.gradle/
@@ -54,6 +68,8 @@ services/notification-service/.gradle/
 # --- Scala ---
 services/analytics-service/target/
 services/analytics-service/project/target/
+services/report-service/target/
+services/legacy-portal/target/
 services/analytics-service/project/project/
 
 # --- Ruby ---

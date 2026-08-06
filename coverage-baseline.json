@@ -1,0 +1,17 @@
+{
+  "tolerance": 0.5,
+  "units": {
+    "analytics-service": 80.94,
+    "api-gateway": 52.44,
+    "audit-service": 54.47,
+    "auth-service": 73.32,
+    "client-app": 0.44,
+    "collab-service": 65.12,
+    "document-service": 78.34,
+    "file-service": 14.5,
+    "legacy-portal": 69.8,
+    "notification-service": 27.5,
+    "report-service": 81.55,
+    "search-service": 75.42
+  }
+}

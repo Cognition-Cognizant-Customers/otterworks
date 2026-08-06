@@ -91,8 +91,21 @@ jobs:
         with:
           go-version: '1.22'
       - run: go vet ./...
-      - run: go test -race -coverprofile=coverage.out ./...
+      - run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
       - run: go build -o /dev/null ./cmd/server
+      - name: Stage coverage report
+        if: always()
+        run: |
+          mkdir -p ../../coverage/api-gateway
+          echo goprofile > ../../coverage/api-gateway/format.txt
+          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/api-gateway/status.txt
+          cp coverage.out ../../coverage/api-gateway/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-api-gateway
+          path: coverage/api-gateway
+          if-no-files-found: warn
 
   # Java - Auth Service
   auth-service:
@@ -111,7 +124,20 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.6'
-      - run: gradle check --no-daemon
+      - run: gradle check jacocoTestReport --no-daemon
+      - name: Stage coverage report
+        if: always()
+        run: |
+          mkdir -p ../../coverage/auth-service
+          echo jacoco > ../../coverage/auth-service/format.txt
+          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/auth-service/status.txt
+          cp build/reports/jacoco/test/jacocoTestReport.xml ../../coverage/auth-service/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-auth-service
+          path: coverage/auth-service
+          if-no-files-found: warn
 
   # Rust - File Service
   file-service:
@@ -128,8 +154,22 @@ jobs:
           components: clippy, rustfmt
       - run: cargo fmt --check
       - run: cargo clippy -- -D warnings
-      - run: cargo test
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - run: cargo llvm-cov --lcov --output-path lcov.info
       - run: cargo build --release
+      - name: Stage coverage report
+        if: always()
+        run: |
+          mkdir -p ../../coverage/file-service
+          echo lcov > ../../coverage/file-service/format.txt
+          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/file-service/status.txt
+          cp lcov.info ../../coverage/file-service/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-file-service
+          path: coverage/file-service
+          if-no-files-found: warn
 
   # Python - Document Service
   document-service:
@@ -147,7 +187,20 @@ jobs:
       - run: pip install poetry==1.8.2
       - run: poetry install
       - run: poetry run ruff check .
-      - run: poetry run pytest --cov=app
+      - run: poetry run pytest --cov=app --cov-report=xml:coverage.xml --cov-report=term-missing
+      - name: Stage coverage report
+        if: always()
+        run: |
+          mkdir -p ../../coverage/document-service
+          echo cobertura > ../../coverage/document-service/format.txt
+          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/document-service/status.txt
+          cp coverage.xml ../../coverage/document-service/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-document-service
+          path: coverage/document-service
+          if-no-files-found: warn
 
   # Node.js - Collaboration Service
   collab-service:
@@ -164,8 +217,21 @@ jobs:
           node-version: '20'
       - run: npm ci
       - run: npm run lint
-      - run: npm test
+      - run: npm test -- --coverage --coverageReporters=text-summary --coverageReporters=lcov
       - run: npm run build
+      - name: Stage coverage report
+        if: always()
+        run: |
+          mkdir -p ../../coverage/collab-service
+          echo lcov > ../../coverage/collab-service/format.txt
+          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/collab-service/status.txt
+          cp coverage/lcov.info ../../coverage/collab-service/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-collab-service
+          path: coverage/collab-service
+          if-no-files-found: warn
 
   # Kotlin - Notification Service
   notification-service:
@@ -184,7 +250,20 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.6'
-      - run: gradle check --no-daemon
+      - run: gradle check jacocoTestReport --no-daemon
+      - name: Stage coverage report
+        if: always()
+        run: |
+          mkdir -p ../../coverage/notification-service
+          echo jacoco > ../../coverage/notification-service/format.txt
+          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/notification-service/status.txt
+          cp build/reports/jacoco/test/jacocoTestReport.xml ../../coverage/notification-service/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-notification-service
+          path: coverage/notification-service
+          if-no-files-found: warn
 
   # Python - Search Service
   search-service:
@@ -200,7 +279,20 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements-dev.txt
-      - run: python -m pytest --cov=app
+      - run: python -m pytest --cov=app --cov-report=xml:coverage.xml --cov-report=term-missing
+      - name: Stage coverage report
+        if: always()
+        run: |
+          mkdir -p ../../coverage/search-service
+          echo cobertura > ../../coverage/search-service/format.txt
+          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/search-service/status.txt
+          cp coverage.xml ../../coverage/search-service/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-search-service
+          path: coverage/search-service
+          if-no-files-found: warn
 
   # Scala - Analytics Service
   analytics-service:
@@ -223,7 +315,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y sbt
       - run: sbt compile
-      - run: sbt test
+      - run: sbt coverage test coverageReport
+      - name: Stage coverage report
+        if: always()
+        run: |
+          mkdir -p ../../coverage/analytics-service
+          echo cobertura > ../../coverage/analytics-service/format.txt
+          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/analytics-service/status.txt
+          cp target/scala-*/coverage-report/cobertura.xml ../../coverage/analytics-service/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-analytics-service
+          path: coverage/analytics-service
+          if-no-files-found: warn
 
   # Ruby - Admin Service
   admin-service:
@@ -262,6 +367,19 @@ jobs:
           working-directory: services/admin-service
       - run: bundle exec rails db:schema:load
       - run: bundle exec rspec
+      - name: Stage coverage report
+        if: always()
+        run: |
+          mkdir -p ../../coverage/admin-service
+          echo simplecov > ../../coverage/admin-service/format.txt
+          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/admin-service/status.txt
+          cp coverage/.last_run.json ../../coverage/admin-service/last_run.json 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-admin-service
+          path: coverage/admin-service
+          if-no-files-found: warn
 
   # C# - Audit Service
   audit-service:
@@ -276,9 +394,25 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      - run: dotnet restore
-      - run: dotnet build --no-restore
-      - run: dotnet test --no-build
+      - run: dotnet restore tests/AuditService.Tests
+      - run: dotnet build tests/AuditService.Tests --no-restore
+      # The test project must be named: a bare `dotnet test` here resolves to
+      # AuditService.csproj (the web app, not a test project) and exits 0 having
+      # run none of the 24 xUnit tests.
+      - run: dotnet test tests/AuditService.Tests --no-build --collect:"XPlat Code Coverage" --results-directory TestResults
+      - name: Stage coverage report
+        if: always()
+        run: |
+          mkdir -p ../../coverage/audit-service
+          echo cobertura > ../../coverage/audit-service/format.txt
+          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/audit-service/status.txt
+          cp "$(find TestResults -name coverage.cobertura.xml -print -quit)" ../../coverage/audit-service/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-audit-service
+          path: coverage/audit-service
+          if-no-files-found: warn
 
   # React/Next.js - Web App
   web-app:
@@ -295,8 +429,24 @@ jobs:
           node-version: '20'
       - run: npm ci
       - run: npm run lint
-      - run: npm test
+      # `--passWithNoTests` is still in the npm script: 4 unit tests over 9.3 KLOC
+      # means this job cannot fail today. Removing it is WP-14's call, not this
+      # job's, so that the two changes do not collide.
+      - run: npm test -- --coverage --coverage.reporter=text-summary --coverage.reporter=lcov
       - run: npm run build
+      - name: Stage coverage report
+        if: always()
+        run: |
+          mkdir -p ../../coverage/client-app
+          echo lcov > ../../coverage/client-app/format.txt
+          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/client-app/status.txt
+          cp coverage/lcov.info ../../coverage/client-app/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-client-app
+          path: coverage/client-app
+          if-no-files-found: warn
 
   # Angular - Admin Dashboard
   admin-dashboard:
@@ -312,9 +462,25 @@ jobs:
         with:
           node-version: '20'
       - run: npm ci
+      # The two `|| true`s below make this job unfailable. Removing them is
+      # WP-16's call (it has to fix whatever they are currently hiding); this
+      # job only adds the coverage measurement.
       - run: npm run lint || true
-      - run: npm test || true
+      - run: npm test -- --browsers=ChromeHeadlessNoSandbox --code-coverage || true
       - run: npm run build
+      - name: Stage coverage report
+        if: always()
+        run: |
+          mkdir -p ../../coverage/admin-dashboard
+          echo lcov > ../../coverage/admin-dashboard/format.txt
+          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/admin-dashboard/status.txt
+          cp coverage/admin-dashboard/lcov.info ../../coverage/admin-dashboard/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-admin-dashboard
+          path: coverage/admin-dashboard
+          if-no-files-found: warn
 
   # Java 8 / Maven - Report Service (LEGACY)
   report-service:
@@ -333,6 +499,19 @@ jobs:
       - run: mvn compile -B -q
       - run: mvn test -B
       - run: mvn package -DskipTests -B -q
+      - name: Stage coverage report
+        if: always()
+        run: |
+          mkdir -p ../../coverage/report-service
+          echo jacoco > ../../coverage/report-service/format.txt
+          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/report-service/status.txt
+          cp target/site/jacoco/jacoco.xml ../../coverage/report-service/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report-service
+          path: coverage/report-service
+          if-no-files-found: warn
 
   # Java 11 / Maven - Legacy Portal. Uses the checked-in wrapper rather than the
   # runner's mvn: the portal builds on Spring Boot 2.x and pins its own Maven.
@@ -351,6 +530,19 @@ jobs:
           java-version: '11'
           cache: maven
       - run: ./mvnw test -B
+      - name: Stage coverage report
+        if: always()
+        run: |
+          mkdir -p ../../coverage/legacy-portal
+          echo jacoco > ../../coverage/legacy-portal/format.txt
+          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/legacy-portal/status.txt
+          cp target/site/jacoco/jacoco.xml ../../coverage/legacy-portal/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-legacy-portal
+          path: coverage/legacy-portal
+          if-no-files-found: warn
 
   # Terraform validation
   infrastructure:
@@ -428,4 +620,102 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r tests/api/requirements.txt
       - run: python -m py_compile tests/api/*.py
+      # Collect-only: these 24 flows are syntax-checked, never executed. Standing
+      # up a composed stack so they actually run is WP-17.
       - run: python -m pytest tests/api --collect-only -q
+
+  # Aggregate every unit's coverage artifact into one table, publish it on the
+  # PR, and enforce the ratchet. This is the job that makes coverage a number
+  # anyone can act on: before it, four suites produced coverage and zero gated
+  # on it, so no change could be scored.
+  #
+  # `if: always()` because the unit jobs above are path-filtered -- on a typical
+  # PR most of them are skipped, and a skipped job must not skip the report.
+  coverage-report:
+    needs:
+      - api-gateway
+      - auth-service
+      - file-service
+      - document-service
+      - collab-service
+      - notification-service
+      - search-service
+      - analytics-service
+      - admin-service
+      - audit-service
+      - web-app
+      - admin-dashboard
+      - report-service
+      - legacy-portal
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: artifacts
+      - name: Normalise artifact layout
+        run: |
+          mkdir -p coverage
+          shopt -s nullglob
+          for dir in artifacts/coverage-*; do
+            mv "$dir" "coverage/$(basename "$dir" | sed 's/^coverage-//')"
+          done
+          find coverage -type f | sort
+      - name: Aggregate
+        id: aggregate
+        run: |
+          scripts/coverage/aggregate.py \
+            --coverage-dir coverage \
+            --markdown coverage/summary.md \
+            --json coverage/summary.json
+          {
+            echo "## Coverage by build unit"
+            echo ""
+            echo "_Units absent from this table were not rebuilt by this PR (CI is path-filtered)._"
+            echo ""
+            tail -n +3 coverage/summary.md
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-summary
+          path: |
+            coverage/summary.md
+            coverage/summary.json
+      - name: Publish coverage table on the PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- otterworks-coverage-report -->';
+            const table = fs.readFileSync('coverage/summary.md', 'utf8');
+            const body = `${marker}\n${table}\n\n_Units absent from this table were not rebuilt by this PR (CI is path-filtered). Baseline: \`coverage-baseline.json\`._`;
+            const {owner, repo} = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number});
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
+            } else {
+              await github.rest.issues.createComment({owner, repo, issue_number, body});
+            }
+      - name: Coverage ratchet
+        run: scripts/coverage/ratchet.py --summary coverage/summary.json --baseline coverage-baseline.json
+      # Codecov is optional: the upload is skipped entirely when no token is
+      # configured, so a fork or a token-less org still gets the table above.
+      - name: Upload to Codecov
+        if: env.CODECOV_TOKEN != ''
+        uses: codecov/codecov-action@v4
+        with:
+          directory: coverage
+          fail_ci_if_error: false

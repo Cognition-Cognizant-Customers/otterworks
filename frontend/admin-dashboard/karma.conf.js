@@ -19,7 +19,9 @@ module.exports = function (config) {
     coverageReporter: {
       dir: require('path').join(__dirname, './coverage/admin-dashboard'),
       subdir: '.',
-      reporters: [{ type: 'html' }, { type: 'text-summary' }],
+      // lcovonly is what scripts/coverage/aggregate.py parses; html and
+      // text-summary are for humans.
+      reporters: [{ type: 'html' }, { type: 'text-summary' }, { type: 'lcovonly' }],
     },
     reporters: ['progress', 'kjhtml'],
     browsers: ['ChromeHeadlessNoSandbox'],
