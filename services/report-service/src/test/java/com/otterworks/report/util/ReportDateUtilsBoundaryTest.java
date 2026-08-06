@@ -3,8 +3,10 @@ package com.otterworks.report.util;
 import org.junit.Ignore;
 import org.junit.Test;
 
+import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.Locale;
 import java.util.TimeZone;
 
 import static org.junit.Assert.assertEquals;
@@ -18,7 +20,9 @@ import static org.junit.Assert.fail;
  * Range, parsing and formatting boundaries of {@link ReportDateUtils}.
  *
  * All fixed instants are epoch-millis literals and every formatting expectation is
- * UTC, because the formatting helpers format in UTC. Parsing is the exception:
+ * UTC, because the formatting helpers format in UTC; the one locale-sensitive stamp
+ * ({@code toDisplayString}) is compared against a formatter built with the runner's own
+ * FORMAT locale rather than an English literal. Parsing is the exception:
  * {@code parseIsoDate} resolves text in the JVM's default zone (see
  * {@link #aTimestampIsParsedInTheJvmZoneRatherThanAsUtc()}), so parse expectations
  * are built from a default-zone {@link Calendar} instead of a hard-coded UTC string,
@@ -169,7 +173,19 @@ public class ReportDateUtilsBoundaryTest {
 
     @Test
     public void displayFormattingIsUtc() {
-        assertEquals("Jul 01, 2024 00:30", ReportDateUtils.toDisplayString(new Date(1_719_793_800_000L)));
+        // DISPLAY_FORMAT pins its zone to UTC but not its locale, so the "MMM" month
+        // abbreviation is rendered in the runner's FORMAT locale ("Jul" on an English JVM,
+        // "juil." on a French one). The expectation is therefore built with that same locale
+        // and the locale-free remainder of the stamp is asserted separately.
+        Date instant = new Date(1_719_793_800_000L);
+        SimpleDateFormat utcInRunnerLocale =
+                new SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault(Locale.Category.FORMAT));
+        utcInRunnerLocale.setTimeZone(TimeZone.getTimeZone("UTC"));
+
+        String displayed = ReportDateUtils.toDisplayString(instant);
+
+        assertEquals(utcInRunnerLocale.format(instant), displayed);
+        assertTrue(displayed, displayed.endsWith("01, 2024 00:30"));
     }
 
     // ------------------------------------------------------- duration arithmetic
