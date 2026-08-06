@@ -21,6 +21,7 @@ from tests.conftest_wp07 import (
     last_search_params,
     seed_documents,
     seed_files,
+    stub_source_services,
 )
 from tests.fakes import FakeMeiliClient
 
@@ -206,7 +207,9 @@ class TestIndexApiAuthz:
 
     def test_a_user_can_trigger_a_global_reindex(self, client):
         """Reindex is an admin operation but is reachable by any identity."""
-        assert client.post("/api/v1/search/reindex", headers=USER_B).status_code == 200
+        with stub_source_services():
+            response = client.post("/api/v1/search/reindex", headers=USER_B)
+        assert response.status_code == 200
 
     def test_deleting_a_document_owned_by_the_caller_succeeds(self, client, meili):
         response = client.delete("/api/v1/search/index/document/doc-a1", headers=USER_A)

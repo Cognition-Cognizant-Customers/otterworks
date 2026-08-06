@@ -12,7 +12,13 @@ from app.services.meilisearch_client import (
     get_search_analytics,
     record_search_analytics,
 )
-from tests.conftest_wp07 import build_app, build_config, fake_meili, seed_documents
+from tests.conftest_wp07 import (
+    build_app,
+    build_config,
+    fake_meili,
+    seed_documents,
+    stub_source_services,
+)
 from tests.fakes import FakeMeiliClient, make_communication_error
 
 ENV_VARS = (
@@ -216,7 +222,9 @@ class TestIndexApiErrorPaths:
         assert response.get_json() == {"error": "Failed to remove from index"}
 
     def test_reindex_returns_500_when_meilisearch_fails(self, client, meili):
-        with patch.object(meili, "create_index", side_effect=RuntimeError("boom")):
+        with stub_source_services(), patch.object(
+            meili, "create_index", side_effect=RuntimeError("boom")
+        ):
             response = client.post("/api/v1/search/reindex")
         assert response.status_code == 500
         assert response.get_json() == {"error": "Failed to reindex"}

@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from app.config import AppConfig, AuthConfig, MeiliSearchConfig, SQSConfig
 from app.main import create_app
@@ -80,6 +80,35 @@ def seed_files(fake_client: FakeMeiliClient, *files: dict[str, Any]) -> None:
     index = fake_client.index(FILES_INDEX)
     for file_data in files:
         index.documents[str(file_data["id"])] = {"type": "file", **file_data}
+
+
+@contextmanager
+def stub_source_services(
+    documents: list[dict[str, Any]] | None = None,
+    files: list[dict[str, Any]] | None = None,
+) -> Iterator[Any]:
+    """Patch the outbound reindex fetches to document-service / file-service.
+
+    ``Indexer.reindex`` paginates over both services with ``requests.get``; every
+    test that triggers a reindex must go through here so the suite never touches
+    the network. Each service yields one page and then an empty page to end the
+    loop.
+    """
+    pages: dict[str, list[dict[str, Any]]] = {
+        "documents": [{"documents": documents or []}, {"documents": []}],
+        "files": [{"files": files or []}, {"files": []}],
+    }
+
+    def fake_get(url: str, params: Any = None, timeout: Any = None) -> Any:
+        key = "documents" if "documents" in url else "files"
+        payload = pages[key].pop(0) if pages[key] else {}
+        response = Mock()
+        response.status_code = 200
+        response.json.return_value = payload
+        return response
+
+    with patch("app.services.indexer.requests.get", side_effect=fake_get) as mocked:
+        yield mocked
 
 
 def last_search_params(fake_client: FakeMeiliClient, index_name: str) -> dict[str, Any]:

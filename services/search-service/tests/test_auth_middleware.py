@@ -9,7 +9,12 @@ from __future__ import annotations
 
 import pytest
 
-from tests.conftest_wp07 import DOCUMENTS_INDEX, build_app, build_config
+from tests.conftest_wp07 import (
+    DOCUMENTS_INDEX,
+    build_app,
+    build_config,
+    stub_source_services,
+)
 from tests.fakes import FakeMeiliClient
 
 SERVICE_TOKEN = "svc-token-value"
@@ -216,4 +221,5 @@ class TestAuthDisabled:
         config = build_config(require_auth=False, service_token=SERVICE_TOKEN)
         client = build_app(meili, config).test_client()
         assert client.get(SEARCH_PATH).status_code == 200
-        assert client.post("/api/v1/search/reindex").status_code == 200
+        with stub_source_services():
+            assert client.post("/api/v1/search/reindex").status_code == 200
