@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import axios from "axios";
 import type { AxiosRequestConfig, AxiosResponse } from "axios";
 import { apiClient, API_BASE_URL } from "./api-client";
 
@@ -53,10 +54,30 @@ function fail(status: number, config: AxiosRequestConfig) {
   );
 }
 
+/**
+ * The 401 interceptor re-checks the session with the *bare* axios default
+ * instance, not with apiClient, so stubbing apiClient's transport alone leaves
+ * the probe running against the real adapter (which rejects on a relative URL
+ * under Node, with no `response`, and silently skips the whole logout branch).
+ * This stubs the default instance so each test decides what the probe returns.
+ */
+function stubSessionProbe(
+  respond: (config: AxiosRequestConfig) => Promise<AxiosResponse> | AxiosResponse,
+): AxiosRequestConfig[] {
+  const probed: AxiosRequestConfig[] = [];
+  axios.defaults.adapter = async (config) => {
+    probed.push(config);
+    return respond(config);
+  };
+  return probed;
+}
+
 let originalAdapter: unknown;
+let originalDefaultAdapter: unknown;
 
 beforeEach(() => {
   originalAdapter = apiClient.defaults.adapter;
+  originalDefaultAdapter = axios.defaults.adapter;
   tokenStore.clear();
   const stubWindow: StubWindow = { location: { href: "/" } };
   vi.stubGlobal("window", stubWindow);
@@ -65,9 +86,14 @@ beforeEach(() => {
 
 afterEach(() => {
   apiClient.defaults.adapter = originalAdapter as never;
+  axios.defaults.adapter = originalDefaultAdapter as never;
   vi.unstubAllGlobals();
   tokenStore.clear();
 });
+
+function currentHref(): string {
+  return (globalThis.window as unknown as StubWindow).location.href;
+}
 
 describe("apiClient base URL", () => {
   it("test_apiClient_webBuild_targetsTheSameOriginProxyPrefix", () => {
@@ -197,66 +223,135 @@ describe("apiClient response key transform", () => {
 });
 
 describe("apiClient 401 handling", () => {
-  it("test_apiClient_401OnAnAuthEndpoint_doesNotClearTheSession", async () => {
+  beforeEach(() => {
+    localStorage.setItem("otter_access_token", "token-abc");
+    localStorage.setItem("otter_refresh_token", "refresh-abc");
+  });
+
+  function expectSessionKept() {
+    expect(localStorage.getItem("otter_access_token")).toBe("token-abc");
+    expect(localStorage.getItem("otter_refresh_token")).toBe("refresh-abc");
+    expect(currentHref()).toBe("/");
+  }
+
+  it("test_apiClient_401OnAnAuthEndpoint_doesNotProbeAndKeepsTheSession", async () => {
     // A failed login must surface as a rejected promise the form can render, not
     // as a redirect that throws the user's half-typed credentials away.
-    localStorage.setItem("otter_access_token", "token-abc");
     stubTransport((config) => fail(401, config));
+    const probed = stubSessionProbe((config) => ok({}, config));
 
     await expect(apiClient.post("/auth/login", {})).rejects.toThrow();
 
-    expect(localStorage.getItem("otter_access_token")).toBe("token-abc");
-    expect((globalThis.window as unknown as StubWindow).location.href).toBe("/");
+    expect(probed).toHaveLength(0);
+    expectSessionKept();
   });
 
   it("test_apiClient_401OnAResourceWithAStillValidToken_keepsTheSession", async () => {
     // The gateway 401s a request the user is simply not entitled to make. The
-    // profile probe succeeds, so the session is intact and must not be dropped.
-    localStorage.setItem("otter_access_token", "token-abc");
-    localStorage.setItem("otter_refresh_token", "refresh-abc");
-    stubTransport((config) =>
-      String(config.url).includes("/auth/profile") ? ok({}, config) : fail(401, config),
-    );
+    // probe succeeds, so the session is intact and must not be dropped.
+    stubTransport((config) => fail(401, config));
+    const probed = stubSessionProbe((config) => ok({}, config));
 
     await expect(apiClient.get("/files/someone-elses")).rejects.toThrow();
 
-    expect(localStorage.getItem("otter_access_token")).toBe("token-abc");
-    expect(localStorage.getItem("otter_refresh_token")).toBe("refresh-abc");
+    expect(probed).toHaveLength(1);
+    expect(probed[0].url).toBe(`${API_BASE_URL}/auth/profile`);
+    expectSessionKept();
   });
 
-  it("test_apiClient_401OnAResourceWithARejectedToken_stillRejectsTheCaller", async () => {
-    localStorage.setItem("otter_access_token", "token-abc");
+  it("test_apiClient_401OnAResourceWithARejectedToken_clearsBothTokensAndRedirects", async () => {
     stubTransport((config) => fail(401, config));
-
-    await expect(apiClient.get("/files")).rejects.toThrow();
-  });
-
-  it("test_apiClient_403Response_isPassedStraightThrough", async () => {
-    localStorage.setItem("otter_access_token", "token-abc");
-    stubTransport((config) => fail(403, config));
+    stubSessionProbe((config) => fail(401, config));
 
     await expect(apiClient.get("/files")).rejects.toThrow();
 
-    expect(localStorage.getItem("otter_access_token")).toBe("token-abc");
+    expect(localStorage.getItem("otter_access_token")).toBeNull();
+    expect(localStorage.getItem("otter_refresh_token")).toBeNull();
+    expect(currentHref()).toBe("/login");
   });
 
-  it("test_apiClient_500Response_isPassedStraightThrough", async () => {
-    localStorage.setItem("otter_access_token", "token-abc");
-    stubTransport((config) => fail(500, config));
+  it("test_apiClient_401OnAResourceWithTheProbeSentTheStoredToken_reusesTheSameCredential", async () => {
+    stubTransport((config) => fail(401, config));
+    const probed = stubSessionProbe((config) => ok({}, config));
 
     await expect(apiClient.get("/files")).rejects.toThrow();
 
-    expect(localStorage.getItem("otter_access_token")).toBe("token-abc");
+    expect(probed[0].headers?.Authorization).toBe("Bearer token-abc");
   });
 
-  it("test_apiClient_networkErrorWithNoResponse_isPassedStraightThrough", async () => {
-    localStorage.setItem("otter_access_token", "token-abc");
-    apiClient.defaults.adapter = async () => {
+  it("test_apiClient_401WhileTheProbeItselfIsDown_keepsTheSession", async () => {
+    // Only a 401 from the probe means the credential is dead. A 503 means the
+    // auth service is unavailable, and signing the user out for that would turn
+    // a transient dependency outage into a mass logout.
+    stubTransport((config) => fail(401, config));
+    stubSessionProbe((config) => fail(503, config));
+
+    await expect(apiClient.get("/files")).rejects.toThrow();
+
+    expectSessionKept();
+  });
+
+  it("test_apiClient_401WithTheProbeUnreachable_keepsTheSession", async () => {
+    // A transport-level failure has no `response`, so `status` is undefined and
+    // the logout branch is skipped. Going offline must not sign the user out.
+    stubTransport((config) => fail(401, config));
+    axios.defaults.adapter = async () => {
       throw Object.assign(new Error("Network Error"), { isAxiosError: true });
     };
 
+    await expect(apiClient.get("/files")).rejects.toThrow();
+
+    expectSessionKept();
+  });
+
+  it("test_apiClient_concurrent401s_probeOnceAndStillRejectEveryCaller", async () => {
+    // isVerifyingToken guards against a probe storm when a page fires several
+    // requests at once; every caller must still see its own rejection.
+    stubTransport((config) => fail(401, config));
+    const probed = stubSessionProbe(
+      (config) => new Promise<AxiosResponse>((resolve) => resolve(ok({}, config))),
+    );
+
+    const results = await Promise.allSettled([
+      apiClient.get("/files/a"),
+      apiClient.get("/files/b"),
+      apiClient.get("/files/c"),
+    ]);
+
+    expect(results.every((r) => r.status === "rejected")).toBe(true);
+    expect(probed.length).toBeLessThan(3);
+    expectSessionKept();
+  });
+
+  it("test_apiClient_403Response_isPassedStraightThroughWithoutProbing", async () => {
+    stubTransport((config) => fail(403, config));
+    const probed = stubSessionProbe((config) => ok({}, config));
+
+    await expect(apiClient.get("/files")).rejects.toThrow();
+
+    expect(probed).toHaveLength(0);
+    expectSessionKept();
+  });
+
+  it("test_apiClient_500Response_isPassedStraightThroughWithoutProbing", async () => {
+    stubTransport((config) => fail(500, config));
+    const probed = stubSessionProbe((config) => ok({}, config));
+
+    await expect(apiClient.get("/files")).rejects.toThrow();
+
+    expect(probed).toHaveLength(0);
+    expectSessionKept();
+  });
+
+  it("test_apiClient_networkErrorWithNoResponse_isPassedStraightThrough", async () => {
+    apiClient.defaults.adapter = async () => {
+      throw Object.assign(new Error("Network Error"), { isAxiosError: true });
+    };
+    const probed = stubSessionProbe((config) => ok({}, config));
+
     await expect(apiClient.get("/files")).rejects.toThrow("Network Error");
 
-    expect(localStorage.getItem("otter_access_token")).toBe("token-abc");
+    expect(probed).toHaveLength(0);
+    expectSessionKept();
   });
 });
