@@ -128,7 +128,7 @@ test: ## Run tests for all services (fails on the first failing unit)
 	@echo "=== Report Service (Java 8) ===" && cd services/report-service && mvn test -B
 	@echo "=== Legacy Portal (Java 11) ===" && cd services/legacy-portal && ./mvnw test -B
 	@echo "=== Client App (Vitest) ===" && cd frontend/client-app && npm test
-	@echo "=== Admin Dashboard (Karma) ===" && cd frontend/admin-dashboard && npm test
+	@echo "=== Admin Dashboard (Karma) ===" && cd frontend/admin-dashboard && npm test -- --watch=false --browsers=ChromeHeadlessNoSandbox
 	@$(MAKE) --no-print-directory test-contract
 
 test-coverage: ## Run every suite with coverage, print an aggregate table, fail if any unit fails

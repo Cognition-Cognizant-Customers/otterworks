@@ -58,6 +58,11 @@ for record in "${COVERAGE_UNITS[@]}"; do
   rm -rf "$dest" && mkdir -p "$dest"
   echo "$fmt" >"$dest/format.txt"
 
+  # Delete last run's report before this one starts. A command that dies before
+  # writing a report (compile error, absent toolchain) would otherwise leave the
+  # previous file in place, and it would be collected as though it were current.
+  while IFS= read -r stale; do rm -f "$stale"; done < <(compgen -G "$workdir/$report" || true)
+
   if (cd "$workdir" && eval "$cmd"); then
     status=0
   else

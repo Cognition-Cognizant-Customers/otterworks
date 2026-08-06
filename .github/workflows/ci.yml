@@ -661,6 +661,8 @@ jobs:
           python-version: '3.12'
       - uses: actions/download-artifact@v4
         with:
+          # Per-unit artifacts only. This job's own output is uploaded under a
+          # name outside this pattern so a re-run does not ingest it as a unit.
           pattern: coverage-*
           path: artifacts
       - name: Normalise artifact layout
@@ -687,7 +689,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
-          name: coverage-summary
+          name: aggregate-coverage-summary
           path: |
             coverage/summary.md
             coverage/summary.json
