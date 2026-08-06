@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
-import redis as redis_lib
 import structlog
 from flask import Blueprint, current_app, jsonify, request
 
@@ -14,26 +11,6 @@ from app.services.meilisearch_client import MeiliSearchService, get_search_analy
 logger = structlog.get_logger()
 
 search_bp = Blueprint("search", __name__)
-
-_redis_client: redis_lib.Redis | None = None
-
-
-def _get_redis() -> redis_lib.Redis:
-    """Return a shared Redis client (lazy-initialised)."""
-    global _redis_client
-    if _redis_client is None:
-        host = os.getenv("REDIS_HOST", "localhost")
-        port = int(os.getenv("REDIS_PORT", "6379"))
-        _redis_client = redis_lib.Redis(host=host, port=port, decode_responses=True, socket_timeout=1)
-    return _redis_client
-
-
-def _chaos_active(key: str) -> bool:
-    """Return True if the given chaos flag is set in Redis."""
-    try:
-        return bool(_get_redis().exists(key))
-    except Exception:
-        return False
 
 
 def _get_service() -> MeiliSearchService:
@@ -89,23 +66,6 @@ def suggest() -> tuple:
     prefix = request.args.get("q", "")
     if not prefix or len(prefix) < 2:
         return jsonify({"suggestions": [], "query": prefix}), 200
-
-    # CHAOS: when this flag is active the ranking-score enrichment path runs.
-    # This path was introduced to sort suggestions by relevance using
-    # _rankingScore, but MeiliSearch only returns that field when explicitly
-    # requested via attributesToRetrieve — without it the key lookup raises
-    # KeyError and crashes the handler with a 500.
-    if _chaos_active("chaos:search-service:suggest_500"):
-        service = _get_service()
-        raw_suggestions = service.suggest(prefix)
-        if not raw_suggestions:
-            # Simulate the same KeyError that fires when results exist but
-            # _rankingScore is missing — ensures chaos fires even with an
-            # empty index.
-            raw_suggestions = [{}]
-        # Sort by MeiliSearch ranking score for better relevance ordering.
-        ranked = sorted(raw_suggestions, key=lambda s: s["_rankingScore"], reverse=True)  # type: ignore[index]
-        return jsonify({"suggestions": ranked, "query": prefix}), 200
 
     try:
         service = _get_service()
