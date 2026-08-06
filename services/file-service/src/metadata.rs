@@ -2648,6 +2648,8 @@ mod folder_trash_share_tests {
         let fake = matrix_backend().await;
         let meta = fake.metadata();
 
+        let mut denied_by_policy = 0;
+
         for permission in [SharePermission::Viewer, SharePermission::Editor] {
             for action in GatedAction::ALL {
                 let outcome = action.attempt(&meta).await;
@@ -2655,12 +2657,20 @@ mod folder_trash_share_tests {
                     outcome.is_ok(),
                     "{permission}/{action:?} unexpectedly failed: {outcome:?}"
                 );
-                assert!(
-                    intended_to_be_allowed(&permission, action) || outcome.is_ok(),
-                    "{permission}/{action:?} should be denied but the layer has no check"
-                );
+                if !intended_to_be_allowed(&permission, action) {
+                    denied_by_policy += 1;
+                }
             }
         }
+
+        // The count is the finding: 10 of the 18 cells are ones the policy
+        // means to refuse, and every one of them went through. Pinning it as a
+        // number means adding a tier or an action cannot quietly shrink the
+        // gap this test is here to record.
+        assert_eq!(
+            denied_by_policy, 10,
+            "cells that the policy denies but the metadata layer allows"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
