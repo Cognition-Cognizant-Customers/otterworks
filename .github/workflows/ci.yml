@@ -554,6 +554,9 @@ jobs:
         with:
           python-version: '3.12'
       - uses: actions/download-artifact@v4
+        # A docs-only PR filters every service job out, leaving the run with no
+        # artifacts at all; that must not redden this check.
+        continue-on-error: true
         with:
           pattern: coverage-*
           path: coverage-artifacts
@@ -576,7 +579,7 @@ jobs:
           scripts/coverage/summarize.py --dir coverage-reports \
             --baseline coverage-baseline.json --fail-on-drop
       - name: Publish table
-        if: always() && steps.aggregate.outputs.skipped != 'true'
+        if: always() && hashFiles('coverage-reports/summary.md') != ''
         run: |
           {
             echo "## Coverage by build unit"
@@ -587,14 +590,15 @@ jobs:
             echo "\"not instrumented\" are tracked in docs/TEST-COVERAGE-EXPANSION-SOW.md._"
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
-        if: always() && steps.aggregate.outputs.skipped != 'true'
+        if: always() && hashFiles('coverage-reports/summary.md') != ''
         with:
           name: coverage-summary
           path: |
             coverage-reports/summary.md
             coverage-reports/summary.json
       - name: Comment on the pull request
-        if: always() && github.event_name == 'pull_request' && steps.aggregate.outputs.skipped != 'true'
+        if: always() && github.event_name == 'pull_request'
+          && hashFiles('coverage-reports/summary.md') != ''
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
