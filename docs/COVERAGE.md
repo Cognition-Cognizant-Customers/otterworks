@@ -83,15 +83,16 @@ This is the floor in `coverage-baseline.json`.
 | `collab-service` | 65.12% | 308 / 473 | pass |
 | `audit-service` | 54.47% | 512 / 940 | pass (24 tests, previously never run) |
 | `api-gateway` | 52.44% | 215 / 410 | pass |
+| `admin-dashboard` | 40.98% | 159 / 388 | **7 of 64 failing** (see findings) |
 | `notification-service` | 27.50% | 209 / 760 | pass |
 | `file-service` | 14.50% | 276 / 1903 | pass |
 | `client-app` | 0.44% | 7 / 1585 | pass (4 tests) |
-| **aggregate** | **48.03%** | **5106 / 10630** | |
+| **aggregate** | **47.79%** | **5265 / 11018** | |
 
-`admin-service` and `admin-dashboard` are **not** in the baseline: neither can be
-measured in a bare container (`admin-dashboard` needs a real Chrome for Karma;
-`admin-service`'s bundle resolves `connection_pool 3.0.2`, which does not parse
-on Ruby 3.3). Their first CI run records them via the ratchet's `NEW` path.
+`admin-service` is **not** in the baseline: its bundle resolves
+`connection_pool 3.0.2`, which does not parse on Ruby 3.3, so RSpec dies while
+loading the environment. Its first CI run records it via the ratchet's `NEW`
+path.
 
 ## Adding a unit
 
@@ -117,11 +118,14 @@ They are **not** fixed here — WP-00 is a harness package.
    endpoints require a JWT; `tests/test_documents_api.py` still calls them
    unauthenticated and gets 401. `test_restore_version` then fails with
    `KeyError: -1`. Fixing the tests belongs to WP-06.
-3. **`frontend/admin-dashboard`'s suite result is unknown.** CI's
-   `npm test || true` discards it, and it could not be run here (Karma needs a
-   real Chrome). The npm script also asks for `ChromeHeadless` while
-   `karma.conf.js` defines `ChromeHeadlessNoSandbox` for exactly this case; both
-   the harness and CI now pass the latter. WP-16 owns the `|| true`.
+3. **`frontend/admin-dashboard`: 7 of 64 specs fail, and CI has never said so.**
+   `npm test || true` discards the result. Running it against
+   `ChromeHeadlessNoSandbox` — the launcher `karma.conf.js` defines for
+   containers, which the npm script's plain `ChromeHeadless` bypasses — gives
+   `TOTAL: 7 FAILED, 57 SUCCESS` at 40.98% line coverage. The failures cluster in
+   `HealthComponent` (`should load system health data`) and `UsersComponent`
+   (`should display page title`, `should apply text filter`, `should load
+   users`). WP-16 owns both the failures and the `|| true`.
 4. **The Gradle wrapper jars are not in the repo.** `.gitignore` excludes `*.jar`
    repo-wide, so `./gradlew` exists but cannot run in a fresh clone, and
    `notification-service` has no wrapper directory at all. `make test` used

@@ -1,6 +1,7 @@
 {
   "tolerance": 0.5,
   "units": {
+    "admin-dashboard": 40.98,
     "analytics-service": 80.94,
     "api-gateway": 52.44,
     "audit-service": 54.47,
