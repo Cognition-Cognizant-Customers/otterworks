@@ -134,7 +134,9 @@ def collect(coverage_dir: Path) -> list[UnitCoverage]:
         fmt = fmt_file.read_text().strip() if fmt_file.exists() else None
         status = int(status_file.read_text().strip()) if status_file.exists() else None
 
-        reports = [p for p in unit_dir.iterdir() if p.name not in METADATA_FILES and p.is_file()]
+        # Files only: run-coverage.sh puts Sonar-format duplicates in a `sonar/`
+        # subdirectory precisely so they are not mistaken for the report to parse.
+        reports = sorted(p for p in unit_dir.iterdir() if p.name not in METADATA_FILES and p.is_file())
         if not reports:
             results.append(UnitCoverage(unit_dir.name, status, None, None, fmt, "no report produced"))
             continue

@@ -38,11 +38,26 @@ COVERAGE_UNITS=(
   # `dotnet test` with no project argument resolves to AuditService.csproj, the web
   # app, which is not a test project -- it exits 0 having run nothing. The 24
   # xUnit tests only run when the test project is named explicitly.
-  "audit-service|services/audit-service|cobertura|TestResults/*/coverage.cobertura.xml|rm -rf TestResults && dotnet test tests/AuditService.Tests --collect:'XPlat Code Coverage' --results-directory TestResults"
+  "audit-service|services/audit-service|cobertura|TestResults/*/coverage.cobertura.xml|rm -rf TestResults && dotnet test tests/AuditService.Tests --collect:'XPlat Code Coverage;Format=cobertura,opencover' --results-directory TestResults"
   "report-service|services/report-service|jacoco|target/site/jacoco/jacoco.xml|mvn -B test jacoco:report"
   "legacy-portal|services/legacy-portal|jacoco|target/site/jacoco/jacoco.xml|./mvnw -B test jacoco:report"
   "client-app|frontend/client-app|lcov|coverage/lcov.info|npm test -- --coverage --coverage.reporter=text-summary --coverage.reporter=lcov"
   # ChromeHeadlessNoSandbox is the launcher karma.conf.js defines for containers;
   # the npm script's plain ChromeHeadless cannot start without a sandbox.
   "admin-dashboard|frontend/admin-dashboard|lcov|coverage/admin-dashboard/lcov.info|npm test -- --watch=false --browsers=ChromeHeadlessNoSandbox --code-coverage"
+)
+
+# Extra report files to collect into coverage/<unit>/sonar/, for the two units
+# whose aggregate format Sonar cannot import. They go in a subdirectory so the
+# unit still has exactly one top-level report for aggregate.py to parse.
+#
+# `sonar.coverageReportPaths` is the Generic Test Coverage importer, not a
+# Cobertura reader: SonarQube reads .NET coverage only as OpenCover/VSCoverage
+# and Scala coverage only as scoverage.xml. Both tools emit those next to the
+# Cobertura file we aggregate on, so we keep one format for the table and the
+# other for Sonar rather than picking a lowest common denominator.
+# shellcheck disable=SC2034
+declare -A SONAR_EXTRA_REPORTS=(
+  [audit-service]="TestResults/*/coverage.opencover.xml"
+  [analytics-service]="target/scala-*/scoverage-report/scoverage.xml"
 )

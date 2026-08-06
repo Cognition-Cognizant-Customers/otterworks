@@ -58,10 +58,13 @@ for record in "${COVERAGE_UNITS[@]}"; do
   rm -rf "$dest" && mkdir -p "$dest"
   echo "$fmt" >"$dest/format.txt"
 
-  # Delete last run's report before this one starts. A command that dies before
+  # Delete last run's reports before this one starts. A command that dies before
   # writing a report (compile error, absent toolchain) would otherwise leave the
   # previous file in place, and it would be collected as though it were current.
-  while IFS= read -r stale; do rm -f "$stale"; done < <(compgen -G "$workdir/$report" || true)
+  for glob in "$report" "${SONAR_EXTRA_REPORTS[$name]:-}"; do
+    [[ -n "$glob" ]] || continue
+    while IFS= read -r stale; do rm -f "$stale"; done < <(compgen -G "$workdir/$glob" || true)
+  done
 
   if (cd "$workdir" && eval "$cmd"); then
     status=0
@@ -82,6 +85,17 @@ for record in "${COVERAGE_UNITS[@]}"; do
     cp "$found" "$dest/${base#.}"
   else
     echo "!!! $name produced no coverage report at $workdir/$report"
+  fi
+
+  # Sonar-only formats live in a subdirectory: aggregate.py parses whatever
+  # file sits at the top level of the unit's directory, and there must be one.
+  extra_glob="${SONAR_EXTRA_REPORTS[$name]:-}"
+  if [[ -n "$extra_glob" ]]; then
+    extra=$(compgen -G "$workdir/$extra_glob" | head -1 || true)
+    if [[ -n "$extra" ]]; then
+      mkdir -p "$dest/sonar"
+      cp "$extra" "$dest/sonar/"
+    fi
   fi
 
   if [[ "$FAIL_FAST" == "1" && $status -ne 0 ]]; then

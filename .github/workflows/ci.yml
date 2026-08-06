@@ -323,6 +323,9 @@ jobs:
           echo cobertura > ../../coverage/analytics-service/format.txt
           echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/analytics-service/status.txt
           cp target/scala-*/coverage-report/cobertura.xml ../../coverage/analytics-service/ 2>/dev/null || true
+          # Sonar reads Scala coverage as scoverage.xml, not Cobertura.
+          mkdir -p ../../coverage/analytics-service/sonar
+          cp target/scala-*/scoverage-report/scoverage.xml ../../coverage/analytics-service/sonar/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -399,7 +402,9 @@ jobs:
       # The test project must be named: a bare `dotnet test` here resolves to
       # AuditService.csproj (the web app, not a test project) and exits 0 having
       # run none of the 24 xUnit tests.
-      - run: dotnet test tests/AuditService.Tests --no-build --collect:"XPlat Code Coverage" --results-directory TestResults
+      # Cobertura feeds the aggregate table; OpenCover is the only .NET format
+      # Sonar imports.
+      - run: dotnet test tests/AuditService.Tests --no-build --collect:"XPlat Code Coverage;Format=cobertura,opencover" --results-directory TestResults
       - name: Stage coverage report
         if: always()
         run: |
@@ -407,6 +412,8 @@ jobs:
           echo cobertura > ../../coverage/audit-service/format.txt
           echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/audit-service/status.txt
           cp "$(find TestResults -name coverage.cobertura.xml -print -quit)" ../../coverage/audit-service/ 2>/dev/null || true
+          mkdir -p ../../coverage/audit-service/sonar
+          cp "$(find TestResults -name coverage.opencover.xml -print -quit)" ../../coverage/audit-service/sonar/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -695,6 +702,10 @@ jobs:
             coverage/summary.json
       - name: Publish coverage table on the PR
         if: github.event_name == 'pull_request'
+        # A fork PR's GITHUB_TOKEN is read-only whatever this job declares, so
+        # commenting 403s there. The table is already in the step summary, and
+        # failing to publish it must not skip the gate below.
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
@@ -712,6 +723,7 @@ jobs:
               await github.rest.issues.createComment({owner, repo, issue_number, body});
             }
       - name: Coverage ratchet
+        if: always()
         run: scripts/coverage/ratchet.py --summary coverage/summary.json --baseline coverage-baseline.json
       # Codecov is optional: the upload is skipped entirely when no token is
       # configured, so a fork or a token-less org still gets the table above.
