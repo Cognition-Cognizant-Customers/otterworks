@@ -10,11 +10,15 @@ namespace AuditService.Tests.Support;
 
 /// <summary>
 /// Shuffles execution order so ordering dependencies between cases surface immediately.
-/// The permutation is derived from <c>AUDIT_TEST_SEED</c> (or a fresh random seed) so a run
-/// can be reproduced by re-exporting the seed.
+/// The permutation is derived from <c>AUDIT_TEST_SEED</c>, or from a fresh random seed when
+/// that variable is unset. The effective seed is announced once per run (as an xUnit
+/// diagnostic message and on stdout), so even a default randomised run can be replayed with
+/// <c>AUDIT_TEST_SEED=&lt;announced value&gt; dotnet test</c>.
 /// </summary>
 internal static class TestOrderSeed
 {
+    private static int _announced;
+
     public static int Value { get; } =
         int.TryParse(
             Environment.GetEnvironmentVariable("AUDIT_TEST_SEED"),
@@ -23,6 +27,22 @@ internal static class TestOrderSeed
             out var seed)
             ? seed
             : Random.Shared.Next();
+
+    public static void Announce(IMessageSink? diagnostics)
+    {
+        if (Interlocked.Exchange(ref _announced, 1) != 0)
+        {
+            return;
+        }
+
+        var seedText = Value.ToString(CultureInfo.InvariantCulture);
+        var message =
+            $"Test order is randomised with AUDIT_TEST_SEED={seedText}. " +
+            $"Re-run with AUDIT_TEST_SEED={seedText} to reproduce this exact ordering.";
+
+        diagnostics?.OnMessage(new DiagnosticMessage(message));
+        Console.WriteLine(message);
+    }
 
     public static uint Shuffle(string key)
     {
@@ -41,6 +61,13 @@ internal static class TestOrderSeed
 
 public sealed class RandomTestCaseOrderer : ITestCaseOrderer
 {
+    public RandomTestCaseOrderer()
+        : this(null)
+    {
+    }
+
+    public RandomTestCaseOrderer(IMessageSink? diagnostics) => TestOrderSeed.Announce(diagnostics);
+
     public IEnumerable<TTestCase> OrderTestCases<TTestCase>(IEnumerable<TTestCase> testCases)
         where TTestCase : ITestCase =>
         testCases
@@ -51,6 +78,13 @@ public sealed class RandomTestCaseOrderer : ITestCaseOrderer
 
 public sealed class RandomTestCollectionOrderer : ITestCollectionOrderer
 {
+    public RandomTestCollectionOrderer()
+        : this(null)
+    {
+    }
+
+    public RandomTestCollectionOrderer(IMessageSink? diagnostics) => TestOrderSeed.Announce(diagnostics);
+
     public IEnumerable<ITestCollection> OrderTestCollections(IEnumerable<ITestCollection> testCollections) =>
         testCollections
             .OrderBy(tc => TestOrderSeed.Shuffle(tc.UniqueID.ToString()))
