@@ -203,12 +203,17 @@ async def test_init_db_creates_every_declared_table(sqlite_engine, monkeypatch: 
 async def test_init_db_is_idempotent(sqlite_engine, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(session_module, "engine", sqlite_engine)
 
+    async def table_names() -> set[str]:
+        async with sqlite_engine.connect() as conn:
+            return set(await conn.run_sync(lambda sync: inspect(sync).get_table_names()))
+
     await session_module.init_db()
+    after_first = await table_names()
+
     await session_module.init_db()
 
-    async with sqlite_engine.connect() as conn:
-        names = await conn.run_sync(lambda sync: inspect(sync).get_table_names())
-    assert len(names) == len(set(names))
+    assert after_first
+    assert await table_names() == after_first
 
 
 @pytest.mark.asyncio
