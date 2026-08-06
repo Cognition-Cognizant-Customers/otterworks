@@ -534,18 +534,19 @@ describe('CollaborationManager edges', () => {
     });
 
     it('trims stored snapshots to maxSnapshots once the list grows past it', async () => {
-      const { socket } = await h.join('sock-a', 'user-a', DOC);
       const small = createHarness({ maxSnapshots: 2 });
       try {
-        const { socket: s } = await small.join('sock-s', 'user-s', DOC);
+        const { socket } = await small.join('sock-s', 'user-s', DOC);
         for (let i = 0; i < 3; i++) {
-          await s.fire('request-snapshot', { documentId: DOC, label: `v${i}` });
+          await socket.fire('request-snapshot', { documentId: DOC, label: `v${i}` });
         }
+
         expect(small.redis.lists.get(`doc:snapshots:${DOC}`)).toHaveLength(2);
+        expect(socket.emitsOf('snapshot-created')).toHaveLength(3);
+        expect(socket.emitsOf('snapshot-error')).toHaveLength(0);
       } finally {
         await small.stop();
       }
-      expect(socket.emitsOf('snapshot-error')).toHaveLength(0);
     });
   });
 });
