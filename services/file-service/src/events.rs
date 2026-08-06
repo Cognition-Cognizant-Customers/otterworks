@@ -223,8 +223,24 @@ impl EventPublisher {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+
+    /// A publisher with no SNS topic configured, for use by handler tests.
+    /// Publishing is a no-op in that state, so no network client is exercised.
+    pub(crate) fn publisher_without_topic() -> EventPublisher {
+        let config = aws_sdk_sns::config::Builder::new()
+            .behavior_version(aws_sdk_sns::config::BehaviorVersion::latest())
+            .region(aws_sdk_sns::config::Region::new("us-east-1"))
+            .credentials_provider(aws_sdk_sns::config::Credentials::new(
+                "test", "test", None, None, "test",
+            ))
+            .build();
+        EventPublisher {
+            client: aws_sdk_sns::Client::from_conf(config),
+            topic_arn: None,
+        }
+    }
 
     #[test]
     fn test_file_event_serialization() {
