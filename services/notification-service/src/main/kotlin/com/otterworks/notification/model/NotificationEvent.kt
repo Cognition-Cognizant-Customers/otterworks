@@ -25,8 +25,7 @@ object FlexibleTimestampSerializer : KSerializer<String> {
         val jsonDecoder = decoder as? JsonDecoder ?: return decoder.decodeString()
         val primitive = jsonDecoder.decodeJsonElement().jsonPrimitive
         if (primitive.isString) return primitive.content
-        val epoch = primitive.content.toLongOrNull()
-            ?: throw IllegalArgumentException("Invalid timestamp: ${primitive.content}")
+        val epoch = primitive.content.toLongOrNull() ?: return primitive.content
         val instant = if (epoch >= 100_000_000_000L) Instant.ofEpochMilli(epoch) else Instant.ofEpochSecond(epoch)
         return instant.toString()
     }
