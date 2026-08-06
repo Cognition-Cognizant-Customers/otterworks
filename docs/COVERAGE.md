@@ -66,18 +66,18 @@ This is the floor in `coverage-baseline.json`.
 | Unit | Line coverage | Covered / total | Suite status |
 |---|---:|---:|---|
 | `report-service` | 81.55% | 610 / 748 | pass |
-| `analytics-service` | 80.94% | 2802 / 3462 | pass |
+| `analytics-service` | 80.94% | 1401 / 1731 | pass |
 | `document-service` | 78.34% | 528 / 674 | **9 failing** (see findings) |
 | `search-service` | 75.42% | 583 / 773 | pass |
 | `auth-service` | 73.32% | 316 / 431 | pass |
 | `legacy-portal` | 69.80% | 141 / 202 | pass |
 | `collab-service` | 65.12% | 308 / 473 | pass |
-| `audit-service` | 54.47% | 1024 / 1880 | pass (24 tests, previously never run) |
+| `audit-service` | 54.47% | 512 / 940 | pass (24 tests, previously never run) |
 | `api-gateway` | 52.44% | 215 / 410 | pass |
 | `notification-service` | 27.50% | 209 / 760 | pass |
 | `file-service` | 14.50% | 276 / 1903 | pass |
 | `client-app` | 0.44% | 7 / 1585 | pass (4 tests) |
-| **aggregate** | **52.63%** | **7019 / 13301** | |
+| **aggregate** | **48.03%** | **5106 / 10630** | |
 
 `admin-service` and `admin-dashboard` are **not** in the baseline: neither can be
 measured in a bare container (`admin-dashboard` needs a real Chrome for Karma;

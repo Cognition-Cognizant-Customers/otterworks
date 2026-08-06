@@ -78,12 +78,16 @@ def _parse_cobertura(path: Path) -> tuple[int, int]:
     """
     root = ET.parse(path).getroot()
     covered = total = 0
-    for line in root.iter("line"):
-        if line.get("hits") is None:
-            continue
-        total += 1
-        if int(line.get("hits", "0")) > 0:
-            covered += 1
+    # Only the class-level <lines>: coverlet and scoverage repeat every line
+    # inside <methods>/<method>/<lines>, so a descendant search counts each twice.
+    for cls in root.iter("class"):
+        for lines in cls.findall("lines"):
+            for line in lines.findall("line"):
+                if line.get("hits") is None:
+                    continue
+                total += 1
+                if int(line.get("hits", "0")) > 0:
+                    covered += 1
     if total == 0:  # fall back to the ratio if the report has no <line> detail
         rate = float(root.get("line-rate", 0) or 0)
         lines_valid = int(root.get("lines-valid", 0) or 0)

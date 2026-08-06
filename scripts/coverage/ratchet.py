@@ -27,7 +27,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--summary", type=Path, default=Path("coverage/summary.json"))
     ap.add_argument("--baseline", type=Path, default=Path("coverage-baseline.json"))
-    ap.add_argument("--tolerance", type=float, default=DEFAULT_TOLERANCE)
+    # Left as None so an explicit flag can be told apart from the baseline's own
+    # recorded tolerance, which otherwise wins over the module default.
+    ap.add_argument("--tolerance", type=float, default=None)
     ap.add_argument("--update", action="store_true", help="write the current numbers as the new baseline")
     args = ap.parse_args()
 
@@ -38,14 +40,16 @@ def main() -> int:
     summary = json.loads(args.summary.read_text())
     current = {unit: data["percent"] for unit, data in summary.items() if data.get("percent") is not None}
 
-    baseline: dict[str, float] = {}
+    recorded: dict = {}
     if args.baseline.exists():
-        baseline = json.loads(args.baseline.read_text()).get("units", {})
+        recorded = json.loads(args.baseline.read_text())
+    baseline: dict[str, float] = recorded.get("units", {})
+    tolerance = args.tolerance if args.tolerance is not None else float(recorded.get("tolerance", DEFAULT_TOLERANCE))
 
     if args.update:
         merged = {**baseline, **current}
         args.baseline.write_text(
-            json.dumps({"tolerance": args.tolerance, "units": dict(sorted(merged.items()))}, indent=2) + "\n"
+            json.dumps({"tolerance": tolerance, "units": dict(sorted(merged.items()))}, indent=2) + "\n"
         )
         print(f"baseline updated with {len(current)} unit(s) -> {args.baseline}")
         return 0
@@ -54,9 +58,9 @@ def main() -> int:
     for unit, pct in sorted(current.items()):
         if unit not in baseline:
             new.append((unit, pct))
-        elif pct < baseline[unit] - args.tolerance:
+        elif pct < baseline[unit] - tolerance:
             regressions.append((unit, baseline[unit], pct))
-        elif pct > baseline[unit] + args.tolerance:
+        elif pct > baseline[unit] + tolerance:
             improvements.append((unit, baseline[unit], pct))
 
     for unit, pct in new:
@@ -64,7 +68,7 @@ def main() -> int:
     for unit, was, now in improvements:
         print(f"IMPROVED   {unit}: {was:.2f}% -> {now:.2f}%")
     for unit, was, now in regressions:
-        print(f"REGRESSED  {unit}: {was:.2f}% -> {now:.2f}% (tolerance {args.tolerance}pp)")
+        print(f"REGRESSED  {unit}: {was:.2f}% -> {now:.2f}% (tolerance {tolerance}pp)")
 
     if regressions:
         print(f"\n{len(regressions)} unit(s) lost coverage. Add tests, or justify and run "
