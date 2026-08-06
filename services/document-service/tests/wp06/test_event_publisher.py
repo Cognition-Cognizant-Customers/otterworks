@@ -41,8 +41,15 @@ class FakeSNSClient:
 
 @pytest.fixture
 def sns_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin every SNS setting the publisher reads, including the endpoint.
+
+    ``DOC_SVC_AWS_ENDPOINT_URL`` is set in docker-compose, so leaving
+    ``aws_endpoint_url`` ambient would make these assertions environment-dependent.
+    """
     monkeypatch.setattr(settings, "sns_enabled", True)
     monkeypatch.setattr(settings, "sns_topic_arn", "arn:aws:sns:us-east-1:000000000000:docs")
+    monkeypatch.setattr(settings, "aws_endpoint_url", "")
+    monkeypatch.setattr(settings, "aws_region", "us-east-1")
 
 
 @pytest.fixture
@@ -110,7 +117,7 @@ async def test_client_is_created_once_and_reused(
     assert len(fake_sns.calls) == 2
     assert len(fake_sns.constructor_kwargs) == 1
     assert fake_sns.constructor_kwargs[0]["service_name"] == "sns"
-    assert fake_sns.constructor_kwargs[0]["region_name"] == settings.aws_region
+    assert fake_sns.constructor_kwargs[0]["region_name"] == "us-east-1"
     assert "endpoint_url" not in fake_sns.constructor_kwargs[0]
 
 
