@@ -7,7 +7,7 @@
     "build": "tsc --noEmit && vite build",
     "start": "vite preview",
     "lint": "eslint src --ext .ts,.tsx",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "npx playwright test",
     "test:e2e:headed": "npx playwright test --headed",
