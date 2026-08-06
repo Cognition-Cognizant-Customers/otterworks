@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed dev-backend dev-web dev-admin dev-android dev-electron
+.PHONY: help infra-up infra-down up down build test test-coverage coverage-summary test-contract test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed dev-backend dev-web dev-admin dev-android dev-electron
 
 SHELL := /bin/bash
 
@@ -104,12 +104,20 @@ build-audit: ## Build Audit Service
 	cd services/audit-service && dotnet build
 
 build-web: ## Build Web Frontend
-	cd frontend/web-app && npm run build
+	cd frontend/client-app && npm run build
 
 build-admin-dash: ## Build Admin Dashboard
 	cd frontend/admin-dashboard && npm run build
 
 # --- Testing ---
+
+# The 14 build units with a self-contained (no live stack) test suite. Override
+# to run a subset, e.g. `make test-coverage COVERAGE_UNITS="api-gateway"`.
+COVERAGE_UNITS ?= api-gateway auth-service file-service document-service search-service \
+	collab-service notification-service analytics-service admin-service audit-service \
+	report-service legacy-portal client-app admin-dashboard
+
+COVERAGE_DIR := coverage-reports
 
 test: ## Run tests for all services
 	@echo "=== API Gateway (Go) ===" && cd services/api-gateway && go test ./...
@@ -122,17 +130,32 @@ test: ## Run tests for all services
 	@echo "=== Analytics Service (Scala) ===" && cd services/analytics-service && sbt test
 	@echo "=== Admin Service (Ruby) ===" && cd services/admin-service && bundle exec rspec
 	@echo "=== Audit Service (C#) ===" && cd services/audit-service && dotnet test
-	@echo "=== Web Frontend ===" && cd frontend/web-app && npm test
+	@echo "=== Report Service (Java 8) ===" && cd services/report-service && mvn test -B
+	@echo "=== Legacy Portal (Java 11) ===" && cd services/legacy-portal && ./mvnw test -B
+	@echo "=== Client App ===" && cd frontend/client-app && npm test
 	@echo "=== Admin Dashboard ===" && cd frontend/admin-dashboard && npm test
 
-test-coverage: ## Run tests with coverage for all services
-	@echo "=== Document Service ===" && cd services/document-service && pytest --cov=app --cov-report=term-missing || true
-	@echo "=== Search Service ===" && cd services/search-service && pytest --cov=app --cov-report=term-missing || true
-	@echo "=== Collab Service ===" && cd services/collab-service && npm test -- --coverage || true
-	@echo "=== API Gateway ===" && cd services/api-gateway && go test -cover ./... || true
-	@echo "=== Admin Service ===" && cd services/admin-service && bundle exec rspec --format documentation || true
-	@echo "=== Auth Service ===" && cd services/auth-service && ./gradlew test jacocoTestReport || true
-	@echo "=== File Service ===" && cd services/file-service && cargo test 2>&1 | tail -5 || true
+# Every unit runs even when an earlier one fails, so the aggregate table is
+# complete -- but the target exits non-zero if any unit failed. Pass
+# BASELINE=<summary.json> to also fail when a unit's coverage drops (ratchet).
+test-coverage: ## Run tests with coverage for all units and print an aggregate table
+	@rm -rf $(COVERAGE_DIR)
+	@failed=""; \
+	for unit in $(COVERAGE_UNITS); do \
+		echo "=== $$unit ==="; \
+		scripts/coverage/run-unit.sh $$unit || failed="$$failed $$unit"; \
+	done; \
+	$(MAKE) --no-print-directory coverage-summary || failed="$$failed coverage-summary"; \
+	if [ -n "$$failed" ]; then echo "FAILED UNITS:$$failed" >&2; exit 1; fi
+
+coverage-summary: ## Aggregate existing coverage-reports/ into summary.md + summary.json
+	python3 scripts/coverage/summarize.py --dir $(COVERAGE_DIR) \
+		$(if $(BASELINE),--baseline $(BASELINE) --fail-on-drop,)
+
+# Contract tests need a running service, so they are deliberately not part of
+# `make test`. WP-19 wires them into CI against a composed stack.
+test-contract: ## Run consumer contract tests (requires the target services to be running)
+	UV_PROJECT_ENVIRONMENT=.venv uv run python -m pytest tests/contract
 
 test-api-flows: ## Run black-box API flow tests against the local API gateway
 	UV_PROJECT_ENVIRONMENT=.venv uv run python -m pytest tests/api
@@ -147,7 +170,7 @@ lint: ## Lint all services
 	@echo "=== Document Service ===" && cd services/document-service && ruff check .
 	@echo "=== Collab Service ===" && cd services/collab-service && npm run lint
 	@echo "=== Search Service ===" && cd services/search-service && ruff check .
-	@echo "=== Web Frontend ===" && cd frontend/web-app && npm run lint
+	@echo "=== Web Frontend ===" && cd frontend/client-app && npm run lint
 	@echo "=== Admin Dashboard ===" && cd frontend/admin-dashboard && npm run lint
 
 # --- Synthetic Test Data ---

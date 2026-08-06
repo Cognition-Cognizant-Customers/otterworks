@@ -1,4 +1,5 @@
 plugins {
+    jacoco
     kotlin("jvm") version "1.9.23"
     kotlin("plugin.serialization") version "1.9.23"
     id("io.ktor.plugin") version "2.3.9"
@@ -84,4 +85,13 @@ kotlin {
 
 tasks.withType<Test> {
     useJUnit()
+    finalizedBy(tasks.jacocoTestReport)
+}
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
 }

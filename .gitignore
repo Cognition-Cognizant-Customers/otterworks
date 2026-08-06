@@ -93,3 +93,7 @@ infrastructure/terraform/plan.out
 .terraform.lock.hcl
 *.tfstate
 *.tfstate.backup
+
+# --- Coverage ---
+coverage-reports/
+!scripts/coverage/

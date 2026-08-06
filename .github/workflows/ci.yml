@@ -91,8 +91,15 @@ jobs:
         with:
           go-version: '1.22'
       - run: go vet ./...
-      - run: go test -race -coverprofile=coverage.out ./...
+      - name: Test with coverage
+        run: scripts/coverage/run-unit.sh api-gateway
+        working-directory: .
       - run: go build -o /dev/null ./cmd/server
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-api-gateway
+          path: coverage-reports/api-gateway
 
   # Java - Auth Service
   auth-service:
@@ -111,7 +118,19 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.6'
-      - run: gradle check --no-daemon
+      - run: gradle check jacocoTestReport --no-daemon
+      - name: Collect coverage
+        if: always()
+        run: |
+          mkdir -p coverage-reports/auth-service
+          cp services/auth-service/build/reports/jacoco/test/jacocoTestReport.xml coverage-reports/auth-service/ || true
+          echo "${{ job.status == 'success' && '0' || '1' }}" > coverage-reports/auth-service/status.txt
+        working-directory: .
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-auth-service
+          path: coverage-reports/auth-service
 
   # Rust - File Service
   file-service:
@@ -125,11 +144,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy, rustfmt
+          components: clippy, rustfmt, llvm-tools-preview
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
       - run: cargo fmt --check
       - run: cargo clippy -- -D warnings
-      - run: cargo test
+      - name: Test with coverage
+        run: scripts/coverage/run-unit.sh file-service
+        working-directory: .
       - run: cargo build --release
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-file-service
+          path: coverage-reports/file-service
 
   # Python - Document Service
   document-service:
@@ -147,7 +176,14 @@ jobs:
       - run: pip install poetry==1.8.2
       - run: poetry install
       - run: poetry run ruff check .
-      - run: poetry run pytest --cov=app
+      - name: Test with coverage
+        run: scripts/coverage/run-unit.sh document-service
+        working-directory: .
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-document-service
+          path: coverage-reports/document-service
 
   # Node.js - Collaboration Service
   collab-service:
@@ -164,8 +200,15 @@ jobs:
           node-version: '20'
       - run: npm ci
       - run: npm run lint
-      - run: npm test
+      - name: Test with coverage
+        run: scripts/coverage/run-unit.sh collab-service
+        working-directory: .
       - run: npm run build
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-collab-service
+          path: coverage-reports/collab-service
 
   # Kotlin - Notification Service
   notification-service:
@@ -184,7 +227,19 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.6'
-      - run: gradle check --no-daemon
+      - run: gradle check jacocoTestReport --no-daemon
+      - name: Collect coverage
+        if: always()
+        run: |
+          mkdir -p coverage-reports/notification-service
+          cp services/notification-service/build/reports/jacoco/test/jacocoTestReport.xml coverage-reports/notification-service/ || true
+          echo "${{ job.status == 'success' && '0' || '1' }}" > coverage-reports/notification-service/status.txt
+        working-directory: .
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-notification-service
+          path: coverage-reports/notification-service
 
   # Python - Search Service
   search-service:
@@ -200,7 +255,14 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements-dev.txt
-      - run: python -m pytest --cov=app
+      - name: Test with coverage
+        run: scripts/coverage/run-unit.sh search-service
+        working-directory: .
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-search-service
+          path: coverage-reports/search-service
 
   # Scala - Analytics Service
   analytics-service:
@@ -261,7 +323,14 @@ jobs:
           bundler-cache: true
           working-directory: services/admin-service
       - run: bundle exec rails db:schema:load
-      - run: bundle exec rspec
+      - name: Test with coverage
+        run: scripts/coverage/run-unit.sh admin-service
+        working-directory: .
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-admin-service
+          path: coverage-reports/admin-service
 
   # C# - Audit Service
   audit-service:
@@ -278,7 +347,14 @@ jobs:
           dotnet-version: '8.0.x'
       - run: dotnet restore
       - run: dotnet build --no-restore
-      - run: dotnet test --no-build
+      - name: Test with coverage
+        run: scripts/coverage/run-unit.sh audit-service
+        working-directory: .
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-audit-service
+          path: coverage-reports/audit-service
 
   # React/Next.js - Web App
   web-app:
@@ -295,8 +371,17 @@ jobs:
           node-version: '20'
       - run: npm ci
       - run: npm run lint
-      - run: npm test
+      # `npm test` is still `--passWithNoTests` here; WP-14 owns removing that
+      # once client-app has real unit tests (see the SOW, WP-00 declarations).
+      - name: Test with coverage
+        run: scripts/coverage/run-unit.sh client-app
+        working-directory: .
       - run: npm run build
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-client-app
+          path: coverage-reports/client-app
 
   # Angular - Admin Dashboard
   admin-dashboard:
@@ -312,9 +397,18 @@ jobs:
         with:
           node-version: '20'
       - run: npm ci
+      # `|| true` here is WP-16's to remove, together with fixing the specs it
+      # currently hides (see the SOW, WP-00 declarations).
       - run: npm run lint || true
-      - run: npm test || true
+      - name: Test with coverage
+        run: scripts/coverage/run-unit.sh admin-dashboard || true
+        working-directory: .
       - run: npm run build
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-admin-dashboard
+          path: coverage-reports/admin-dashboard
 
   # Java 8 / Maven - Report Service (LEGACY)
   report-service:
@@ -429,3 +523,85 @@ jobs:
       - run: python -m pip install -r tests/api/requirements.txt
       - run: python -m py_compile tests/api/*.py
       - run: python -m pytest tests/api --collect-only -q
+
+  # Aggregates every unit's coverage artifact into one table on the PR, and
+  # enforces the ratchet: a unit's line coverage may not fall below the number
+  # recorded in coverage-baseline.json. No absolute floor yet -- see
+  # docs/TEST-COVERAGE-EXPANSION-SOW.md (WP-00).
+  coverage-summary:
+    needs:
+      - api-gateway
+      - auth-service
+      - file-service
+      - document-service
+      - collab-service
+      - notification-service
+      - search-service
+      - admin-service
+      - audit-service
+      - web-app
+      - admin-dashboard
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: coverage-artifacts
+      - name: Normalise artifact layout
+        run: |
+          mkdir -p coverage-reports
+          shopt -s nullglob
+          for dir in coverage-artifacts/coverage-*; do
+            mv "$dir" "coverage-reports/$(basename "$dir" | sed 's/^coverage-//')"
+          done
+      - name: Aggregate coverage
+        id: aggregate
+        run: |
+          if [ -z "$(ls -A coverage-reports 2>/dev/null)" ]; then
+            echo "No unit produced a coverage report on this run (all jobs path-filtered out)." \
+              >> "$GITHUB_STEP_SUMMARY"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          scripts/coverage/summarize.py --dir coverage-reports \
+            --baseline coverage-baseline.json --fail-on-drop
+      - name: Publish table
+        if: always() && steps.aggregate.outputs.skipped != 'true'
+        run: |
+          {
+            echo "## Coverage by build unit"
+            echo
+            cat coverage-reports/summary.md
+            echo
+            echo "_Ratchet: a unit may not drop below \`coverage-baseline.json\`. Units marked"
+            echo "\"not instrumented\" are tracked in docs/TEST-COVERAGE-EXPANSION-SOW.md._"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.aggregate.outputs.skipped != 'true'
+        with:
+          name: coverage-summary
+          path: |
+            coverage-reports/summary.md
+            coverage-reports/summary.json
+      - name: Comment on the pull request
+        if: always() && github.event_name == 'pull_request' && steps.aggregate.outputs.skipped != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo "<!-- otterworks-coverage-table -->"
+            echo "### Coverage by build unit"
+            echo
+            cat coverage-reports/summary.md
+          } > comment.md
+          gh pr comment "$PR" --body-file comment.md --edit-last \
+            || gh pr comment "$PR" --body-file comment.md
