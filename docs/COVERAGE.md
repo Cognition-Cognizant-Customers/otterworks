@@ -43,6 +43,12 @@ A single unit, when you do not want to pay for all fourteen toolchains:
 scripts/coverage/run-coverage.sh api-gateway client-app
 ```
 
+`summary.json` then describes *only* those units, even though `coverage/` still
+holds the other directories from a previous run — so a subsequent
+`make coverage-ratchet` or `make coverage-baseline-update` cannot act on numbers
+this run did not measure. `make coverage-aggregate` is the deliberate exception:
+it re-prints everything currently in `coverage/`.
+
 ## The ratchet
 
 There is deliberately **no absolute floor**. A repo whose worst unit is at 0% can

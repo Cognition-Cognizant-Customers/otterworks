@@ -126,9 +126,11 @@ PARSERS = {
 }
 
 
-def collect(coverage_dir: Path) -> list[UnitCoverage]:
+def collect(coverage_dir: Path, units: list[str] | None = None) -> list[UnitCoverage]:
     results: list[UnitCoverage] = []
     for unit_dir in sorted(p for p in coverage_dir.iterdir() if p.is_dir()):
+        if units is not None and unit_dir.name not in units:
+            continue
         fmt_file = unit_dir / "format.txt"
         status_file = unit_dir / "status.txt"
         fmt = fmt_file.read_text().strip() if fmt_file.exists() else None
@@ -186,13 +188,19 @@ def main() -> int:
     ap.add_argument("--coverage-dir", type=Path, default=Path("coverage"))
     ap.add_argument("--markdown", type=Path)
     ap.add_argument("--json", dest="json_out", type=Path)
+    ap.add_argument(
+        "--units",
+        nargs="+",
+        help="only these units; the rest of --coverage-dir is left out of the table "
+        "and the summary, so a partial run cannot republish an earlier run's numbers",
+    )
     args = ap.parse_args()
 
     if not args.coverage_dir.is_dir():
         print(f"no coverage directory at {args.coverage_dir}", file=sys.stderr)
         return 2
 
-    results = collect(args.coverage_dir)
+    results = collect(args.coverage_dir, args.units)
     table = render_markdown(results)
     print("\n## Coverage by build unit\n")
     print(table)

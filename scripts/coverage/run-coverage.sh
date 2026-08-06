@@ -109,10 +109,14 @@ if [[ ${#ran[@]} -eq 0 ]]; then
 fi
 
 echo ""
+# Only the units this invocation ran. coverage/ still holds directories from
+# earlier runs, and summarising those would let `make coverage-baseline-update`
+# after a one-unit run re-freeze every other unit's months-old number.
 "$REPO_ROOT/scripts/coverage/aggregate.py" \
   --coverage-dir "$COVERAGE_DIR" \
   --markdown "$COVERAGE_DIR/summary.md" \
-  --json "$COVERAGE_DIR/summary.json"
+  --json "$COVERAGE_DIR/summary.json" \
+  --units "${ran[@]}"
 
 if [[ ${#failed[@]} -gt 0 ]]; then
   echo ""
