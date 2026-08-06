@@ -7,8 +7,9 @@
 
 This is the worked example for the house decision-table standard. It transcribes an
 insurance-domain business requirements document — Agency Portal → Guidewire PolicyCenter,
-Massachusetts Home new-business quotes auto-declined on credit score — into the full 24-case test
-matrix the standard demands.
+Massachusetts Home new-business quotes auto-declined on credit score — into the full test matrix
+the standard demands: **18 specified cases** (B1-B8, N1-N6, G1-G4) plus **10 open questions**
+(E1-E10) that each become a case once the business analyst answers them. See §7 for the count.
 
 **None of this domain exists in OtterWorks.** A full-text search of the repo for
 `guidewire|policycenter|declination|credit score|agency portal|underwriting` returns zero matches.
@@ -201,8 +202,16 @@ boundary trios are asserting against numbers nobody is checking.
 | Boundary trios (B1-B8) | 8 |
 | Scope negatives (N1-N6) | 6 |
 | Guidewire quadrants (G1-G4) | 4 |
-| Open questions (E1-E10) | 10 |
-| **Total** | **24** |
+| **Specified today** | **18** |
+| Open questions (E1-E10), one or more cases each once answered | 10 |
+| **Total enumerated** | **28** |
+
+> **Note on the "24 cases" label.** `docs/TEST-COVERAGE-EXPANSION-SOW.md` §4b introduces this
+> matrix as "24 cases" and then enumerates the same four groups, which sum to 28. The groups are
+> the authoritative part; the headline figure in the SOW is an arithmetic slip and 28 is the
+> number to work to (18 writable today, 10 blocked on the BA). Several of E1-E10 in fact expand
+> to more than one case each — E2 and E3 to three apiece, E4 and E6 to two — so 28 is a floor,
+> not a ceiling.
 
 Plus, once E1-E10 are answered, one fixture-integrity smoke assertion per designated identity in
 the bank (§6).
