@@ -108,13 +108,21 @@ export class InMemoryRedis {
     this.list(key).unshift(value);
   }
 
+  /** Redis range semantics: negative indices count back from the end of the list. */
+  private slice(key: string, start: number, stop: number): string[] {
+    const list = this.list(key);
+    const from = start < 0 ? Math.max(list.length + start, 0) : start;
+    const to = stop < 0 ? list.length + stop : Math.min(stop, list.length - 1);
+    return to < from ? [] : list.slice(from, to + 1);
+  }
+
   async lrange(key: string, start: number, stop: number): Promise<string[]> {
     await this.enter('lrange');
-    return this.list(key).slice(start, stop + 1);
+    return this.slice(key, start, stop);
   }
 
   async ltrim(key: string, start: number, stop: number): Promise<void> {
-    this.lists.set(key, this.list(key).slice(start, stop + 1));
+    this.lists.set(key, this.slice(key, start, stop));
   }
 
   async llen(key: string): Promise<number> {
