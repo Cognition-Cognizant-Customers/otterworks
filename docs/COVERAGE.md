@@ -46,8 +46,9 @@ scripts/coverage/run-coverage.sh api-gateway client-app
 `summary.json` then describes *only* those units, even though `coverage/` still
 holds the other directories from a previous run — so a subsequent
 `make coverage-ratchet` or `make coverage-baseline-update` cannot act on numbers
-this run did not measure. `make coverage-aggregate` is the deliberate exception:
-it re-prints everything currently in `coverage/`.
+this run did not measure. `make coverage-aggregate` re-prints everything
+currently in `coverage/` regardless of age, which is why it only prints — it
+does not write `summary.json`, so it cannot feed those numbers to the ratchet.
 
 ## The ratchet
 

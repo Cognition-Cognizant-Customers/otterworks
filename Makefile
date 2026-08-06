@@ -134,8 +134,11 @@ test: ## Run tests for all services (fails on the first failing unit)
 test-coverage: ## Run every suite with coverage, print an aggregate table, fail if any unit fails
 	@scripts/coverage/run-coverage.sh $(UNITS)
 
+# Read-only on purpose: it does not write summary.json, because it summarises
+# every directory left in coverage/ regardless of when it was produced, and
+# coverage-ratchet / coverage-baseline-update read that file.
 coverage-aggregate: ## Re-print the aggregate table from already-collected reports in coverage/
-	@scripts/coverage/aggregate.py --coverage-dir coverage --markdown coverage/summary.md --json coverage/summary.json
+	@scripts/coverage/aggregate.py --coverage-dir coverage
 
 coverage-ratchet: ## Fail if any unit's coverage dropped below coverage-baseline.json
 	@scripts/coverage/ratchet.py --summary coverage/summary.json --baseline coverage-baseline.json
