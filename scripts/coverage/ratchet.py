@@ -8,7 +8,9 @@ unit measures today becomes the number it may not fall below.
 
 A unit missing from the baseline is new -- it is recorded, not failed. A unit
 missing from the summary was not run in this job (the CI jobs are path-filtered)
-and is ignored.
+and is ignored. A unit that ran but produced no usable number, having had one
+before, is a failure: losing the measurement is how a coverage drop would
+otherwise slip through unnoticed.
 """
 
 from __future__ import annotations
@@ -38,7 +40,13 @@ def main() -> int:
         return 2
 
     summary = json.loads(args.summary.read_text())
-    current = {unit: data["percent"] for unit, data in summary.items() if data.get("percent") is not None}
+    current: dict[str, float] = {}
+    unmeasured: dict[str, str] = {}
+    for unit, data in summary.items():
+        if data.get("percent") is None:
+            unmeasured[unit] = data.get("note") or "no coverage number"
+        else:
+            current[unit] = data["percent"]
 
     recorded: dict = {}
     if args.baseline.exists():
@@ -53,6 +61,10 @@ def main() -> int:
         )
         print(f"baseline updated with {len(current)} unit(s) -> {args.baseline}")
         return 0
+
+    # A unit in the baseline that reported in without a number has lost its
+    # measurement -- indistinguishable from 100% coverage loss, so fail on it.
+    lost = sorted((unit, note) for unit, note in unmeasured.items() if unit in baseline)
 
     regressions, improvements, new = [], [], []
     for unit, pct in sorted(current.items()):
@@ -69,10 +81,16 @@ def main() -> int:
         print(f"IMPROVED   {unit}: {was:.2f}% -> {now:.2f}%")
     for unit, was, now in regressions:
         print(f"REGRESSED  {unit}: {was:.2f}% -> {now:.2f}% (tolerance {tolerance}pp)")
+    for unit, note in lost:
+        print(f"UNMEASURED {unit}: was {baseline[unit]:.2f}%, now {note}")
 
+    if lost:
+        print(f"\n{len(lost)} unit(s) stopped reporting coverage. Fix the report, or drop "
+              f"the unit from coverage-baseline.json in the same PR.")
     if regressions:
         print(f"\n{len(regressions)} unit(s) lost coverage. Add tests, or justify and run "
               f"`make coverage-baseline-update` in the same PR.")
+    if regressions or lost:
         return 1
     print("\nCoverage ratchet OK.")
     return 0

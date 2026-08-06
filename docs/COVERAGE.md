@@ -55,6 +55,9 @@ between toolchain patch versions).
   `make coverage-baseline-update`.
 - A unit **not in** the summary was not rebuilt by that PR (CI is path-filtered)
   and is ignored.
+- A unit that *is* in the summary but produced no number, and had one in the
+  baseline, **fails**. Silently losing the measurement is indistinguishable from
+  losing all of the coverage.
 - Lowering a number is allowed but must be explicit: update the baseline in the
   same PR, where a reviewer sees it.
 

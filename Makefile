@@ -121,7 +121,7 @@ test: ## Run tests for all services (fails on the first failing unit)
 	@echo "=== Document Service (Python) ===" && cd services/document-service && poetry run pytest
 	@echo "=== Collab Service (Node.js) ===" && cd services/collab-service && npm test
 	@echo "=== Notification Service (Kotlin) ===" && cd services/notification-service && ../../scripts/gradle.sh test
-	@echo "=== Search Service (Python) ===" && cd services/search-service && .venv/bin/python -m pytest
+	@echo "=== Search Service (Python) ===" && cd services/search-service && "$$(test -x .venv/bin/python && echo .venv/bin/python || command -v python3)" -m pytest
 	@echo "=== Analytics Service (Scala) ===" && cd services/analytics-service && sbt test
 	@echo "=== Admin Service (Ruby) ===" && cd services/admin-service && bundle exec rspec
 	@echo "=== Audit Service (C#) ===" && cd services/audit-service && dotnet test tests/AuditService.Tests
