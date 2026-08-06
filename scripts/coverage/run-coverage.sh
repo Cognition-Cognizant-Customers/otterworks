@@ -31,6 +31,8 @@ FAIL_FAST="${FAIL_FAST:-0}"
 SELECTED=("$@")
 
 mkdir -p "$COVERAGE_DIR"
+# Nothing downstream should be able to read the previous run's summary.
+rm -f "$COVERAGE_DIR/summary.json" "$COVERAGE_DIR/summary.md"
 
 selected() {
   [[ ${#SELECTED[@]} -eq 0 ]] && return 0
@@ -112,11 +114,14 @@ echo ""
 # Only the units this invocation ran. coverage/ still holds directories from
 # earlier runs, and summarising those would let `make coverage-baseline-update`
 # after a one-unit run re-freeze every other unit's months-old number.
-"$REPO_ROOT/scripts/coverage/aggregate.py" \
+if ! "$REPO_ROOT/scripts/coverage/aggregate.py" \
   --coverage-dir "$COVERAGE_DIR" \
   --markdown "$COVERAGE_DIR/summary.md" \
   --json "$COVERAGE_DIR/summary.json" \
-  --units "${ran[@]}"
+  --units "${ran[@]}"; then
+  echo "!!! aggregation failed; there is no $COVERAGE_DIR/summary.json to ratchet against" >&2
+  exit 2
+fi
 
 if [[ ${#failed[@]} -gt 0 ]]; then
   echo ""
