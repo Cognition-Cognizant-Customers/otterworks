@@ -153,6 +153,32 @@ class SqsConsumerTest {
     }
 
     @Test
+    fun `parseMessage rejects null timestamp`() {
+        val body = """
+            {
+                "eventType": "file_shared",
+                "fileId": "file-123",
+                "timestamp": null
+            }
+        """.trimIndent()
+
+        assertNull(consumer.parseMessage(body))
+    }
+
+    @Test
+    fun `parseMessage rejects boolean timestamp`() {
+        val body = """
+            {
+                "eventType": "file_shared",
+                "fileId": "file-123",
+                "timestamp": true
+            }
+        """.trimIndent()
+
+        assertNull(consumer.parseMessage(body))
+    }
+
+    @Test
     fun `parseMessage handles missing optional fields`() {
         val body = """
             {
