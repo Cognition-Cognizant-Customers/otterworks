@@ -91,14 +91,15 @@ jobs:
         with:
           go-version: '1.22'
       - run: go vet ./...
-      - run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+      - id: test
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
       - run: go build -o /dev/null ./cmd/server
       - name: Stage coverage report
         if: always()
         run: |
           mkdir -p ../../coverage/api-gateway
           echo goprofile > ../../coverage/api-gateway/format.txt
-          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/api-gateway/status.txt
+          if [ "${{ steps.test.outcome }}" = success ]; then echo 0; else echo 1; fi > ../../coverage/api-gateway/status.txt
           cp coverage.out ../../coverage/api-gateway/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
@@ -124,13 +125,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.6'
-      - run: gradle check jacocoTestReport --no-daemon
+      - id: test
+        run: gradle check jacocoTestReport --no-daemon
       - name: Stage coverage report
         if: always()
         run: |
           mkdir -p ../../coverage/auth-service
           echo jacoco > ../../coverage/auth-service/format.txt
-          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/auth-service/status.txt
+          if [ "${{ steps.test.outcome }}" = success ]; then echo 0; else echo 1; fi > ../../coverage/auth-service/status.txt
           cp build/reports/jacoco/test/jacocoTestReport.xml ../../coverage/auth-service/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
@@ -155,14 +157,15 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy -- -D warnings
       - uses: taiki-e/install-action@cargo-llvm-cov
-      - run: cargo llvm-cov --lcov --output-path lcov.info
+      - id: test
+        run: cargo llvm-cov --lcov --output-path lcov.info
       - run: cargo build --release
       - name: Stage coverage report
         if: always()
         run: |
           mkdir -p ../../coverage/file-service
           echo lcov > ../../coverage/file-service/format.txt
-          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/file-service/status.txt
+          if [ "${{ steps.test.outcome }}" = success ]; then echo 0; else echo 1; fi > ../../coverage/file-service/status.txt
           cp lcov.info ../../coverage/file-service/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
@@ -187,13 +190,14 @@ jobs:
       - run: pip install poetry==1.8.2
       - run: poetry install
       - run: poetry run ruff check .
-      - run: poetry run pytest --cov=app --cov-report=xml:coverage.xml --cov-report=term-missing
+      - id: test
+        run: poetry run pytest --cov=app --cov-report=xml:coverage.xml --cov-report=term-missing
       - name: Stage coverage report
         if: always()
         run: |
           mkdir -p ../../coverage/document-service
           echo cobertura > ../../coverage/document-service/format.txt
-          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/document-service/status.txt
+          if [ "${{ steps.test.outcome }}" = success ]; then echo 0; else echo 1; fi > ../../coverage/document-service/status.txt
           cp coverage.xml ../../coverage/document-service/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
@@ -217,14 +221,15 @@ jobs:
           node-version: '20'
       - run: npm ci
       - run: npm run lint
-      - run: npm test -- --coverage --coverageReporters=text-summary --coverageReporters=lcov
+      - id: test
+        run: npm test -- --coverage --coverageReporters=text-summary --coverageReporters=lcov
       - run: npm run build
       - name: Stage coverage report
         if: always()
         run: |
           mkdir -p ../../coverage/collab-service
           echo lcov > ../../coverage/collab-service/format.txt
-          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/collab-service/status.txt
+          if [ "${{ steps.test.outcome }}" = success ]; then echo 0; else echo 1; fi > ../../coverage/collab-service/status.txt
           cp coverage/lcov.info ../../coverage/collab-service/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
@@ -250,13 +255,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.6'
-      - run: gradle check jacocoTestReport --no-daemon
+      - id: test
+        run: gradle check jacocoTestReport --no-daemon
       - name: Stage coverage report
         if: always()
         run: |
           mkdir -p ../../coverage/notification-service
           echo jacoco > ../../coverage/notification-service/format.txt
-          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/notification-service/status.txt
+          if [ "${{ steps.test.outcome }}" = success ]; then echo 0; else echo 1; fi > ../../coverage/notification-service/status.txt
           cp build/reports/jacoco/test/jacocoTestReport.xml ../../coverage/notification-service/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
@@ -279,13 +285,14 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements-dev.txt
-      - run: python -m pytest --cov=app --cov-report=xml:coverage.xml --cov-report=term-missing
+      - id: test
+        run: python -m pytest --cov=app --cov-report=xml:coverage.xml --cov-report=term-missing
       - name: Stage coverage report
         if: always()
         run: |
           mkdir -p ../../coverage/search-service
           echo cobertura > ../../coverage/search-service/format.txt
-          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/search-service/status.txt
+          if [ "${{ steps.test.outcome }}" = success ]; then echo 0; else echo 1; fi > ../../coverage/search-service/status.txt
           cp coverage.xml ../../coverage/search-service/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
@@ -315,13 +322,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y sbt
       - run: sbt compile
-      - run: sbt coverage test coverageReport
+      - id: test
+        run: sbt coverage test coverageReport
       - name: Stage coverage report
         if: always()
         run: |
           mkdir -p ../../coverage/analytics-service
           echo cobertura > ../../coverage/analytics-service/format.txt
-          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/analytics-service/status.txt
+          if [ "${{ steps.test.outcome }}" = success ]; then echo 0; else echo 1; fi > ../../coverage/analytics-service/status.txt
           cp target/scala-*/coverage-report/cobertura.xml ../../coverage/analytics-service/ 2>/dev/null || true
           # Sonar reads Scala coverage as scoverage.xml, not Cobertura.
           mkdir -p ../../coverage/analytics-service/sonar
@@ -369,13 +377,14 @@ jobs:
           bundler-cache: true
           working-directory: services/admin-service
       - run: bundle exec rails db:schema:load
-      - run: bundle exec rspec
+      - id: test
+        run: bundle exec rspec
       - name: Stage coverage report
         if: always()
         run: |
           mkdir -p ../../coverage/admin-service
           echo simplecov > ../../coverage/admin-service/format.txt
-          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/admin-service/status.txt
+          if [ "${{ steps.test.outcome }}" = success ]; then echo 0; else echo 1; fi > ../../coverage/admin-service/status.txt
           cp coverage/.last_run.json ../../coverage/admin-service/last_run.json 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
@@ -404,13 +413,14 @@ jobs:
       # run none of the 24 xUnit tests.
       # Cobertura feeds the aggregate table; OpenCover is the only .NET format
       # Sonar imports.
-      - run: dotnet test tests/AuditService.Tests --no-build --collect:"XPlat Code Coverage;Format=cobertura,opencover" --results-directory TestResults
+      - id: test
+        run: dotnet test tests/AuditService.Tests --no-build --collect:"XPlat Code Coverage;Format=cobertura,opencover" --results-directory TestResults
       - name: Stage coverage report
         if: always()
         run: |
           mkdir -p ../../coverage/audit-service
           echo cobertura > ../../coverage/audit-service/format.txt
-          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/audit-service/status.txt
+          if [ "${{ steps.test.outcome }}" = success ]; then echo 0; else echo 1; fi > ../../coverage/audit-service/status.txt
           cp "$(find TestResults -name coverage.cobertura.xml -print -quit)" ../../coverage/audit-service/ 2>/dev/null || true
           mkdir -p ../../coverage/audit-service/sonar
           cp "$(find TestResults -name coverage.opencover.xml -print -quit)" ../../coverage/audit-service/sonar/ 2>/dev/null || true
@@ -439,14 +449,15 @@ jobs:
       # `--passWithNoTests` is still in the npm script: 4 unit tests over 9.3 KLOC
       # means this job cannot fail today. Removing it is WP-14's call, not this
       # job's, so that the two changes do not collide.
-      - run: npm test -- --coverage --coverage.reporter=text-summary --coverage.reporter=lcov
+      - id: test
+        run: npm test -- --coverage --coverage.reporter=text-summary --coverage.reporter=lcov
       - run: npm run build
       - name: Stage coverage report
         if: always()
         run: |
           mkdir -p ../../coverage/client-app
           echo lcov > ../../coverage/client-app/format.txt
-          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/client-app/status.txt
+          if [ "${{ steps.test.outcome }}" = success ]; then echo 0; else echo 1; fi > ../../coverage/client-app/status.txt
           cp coverage/lcov.info ../../coverage/client-app/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
@@ -469,18 +480,25 @@ jobs:
         with:
           node-version: '20'
       - run: npm ci
-      # The two `|| true`s below make this job unfailable. Removing them is
-      # WP-16's call (it has to fix whatever they are currently hiding); this
-      # job only adds the coverage measurement.
+      # The `|| true`s here make this job unfailable. Removing them is WP-16's
+      # call (it has to fix whatever they are currently hiding); this job only
+      # adds the coverage measurement.
       - run: npm run lint || true
-      - run: npm test -- --browsers=ChromeHeadlessNoSandbox --code-coverage || true
+      # `|| true` would make outcome always 'success', so the real exit code is
+      # captured instead: the table tells the truth while the job stays green.
+      - id: test
+        run: |
+          set +e
+          npm test -- --browsers=ChromeHeadlessNoSandbox --code-coverage
+          echo "status=$?" >>"$GITHUB_OUTPUT"
       - run: npm run build
       - name: Stage coverage report
         if: always()
         run: |
           mkdir -p ../../coverage/admin-dashboard
           echo lcov > ../../coverage/admin-dashboard/format.txt
-          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/admin-dashboard/status.txt
+          status="${{ steps.test.outputs.status }}"
+          echo "${status:-1}" > ../../coverage/admin-dashboard/status.txt
           cp coverage/admin-dashboard/lcov.info ../../coverage/admin-dashboard/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
@@ -504,14 +522,15 @@ jobs:
           distribution: temurin
           java-version: '8'
       - run: mvn compile -B -q
-      - run: mvn test -B
+      - id: test
+        run: mvn test -B
       - run: mvn package -DskipTests -B -q
       - name: Stage coverage report
         if: always()
         run: |
           mkdir -p ../../coverage/report-service
           echo jacoco > ../../coverage/report-service/format.txt
-          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/report-service/status.txt
+          if [ "${{ steps.test.outcome }}" = success ]; then echo 0; else echo 1; fi > ../../coverage/report-service/status.txt
           cp target/site/jacoco/jacoco.xml ../../coverage/report-service/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
@@ -536,13 +555,14 @@ jobs:
           distribution: temurin
           java-version: '11'
           cache: maven
-      - run: ./mvnw test -B
+      - id: test
+        run: ./mvnw test -B
       - name: Stage coverage report
         if: always()
         run: |
           mkdir -p ../../coverage/legacy-portal
           echo jacoco > ../../coverage/legacy-portal/format.txt
-          echo "${{ job.status == 'success' && '0' || '1' }}" > ../../coverage/legacy-portal/status.txt
+          if [ "${{ steps.test.outcome }}" = success ]; then echo 0; else echo 1; fi > ../../coverage/legacy-portal/status.txt
           cp target/site/jacoco/jacoco.xml ../../coverage/legacy-portal/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
