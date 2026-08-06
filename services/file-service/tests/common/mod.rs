@@ -407,7 +407,22 @@ pub fn state_responder(state: Arc<Mutex<MockState>>) -> Responder {
                 apply_update_expression(item, &body);
                 json_response(200, "{}")
             }
-            Some("DynamoDB_20120810.Query") | Some("DynamoDB_20120810.Scan") => {
+            Some("DynamoDB_20120810.Query") => {
+                let body = req.json();
+                let table = body["TableName"].as_str().unwrap_or_default().to_string();
+                let scanned = state.table(&table).len();
+                let mut items = apply_key_condition(state.table(&table), &body);
+                sort_by_range_key(&mut items, &table);
+                if body["ScanIndexForward"] == json!(false) {
+                    items.reverse();
+                }
+                json_response(
+                    200,
+                    json!({ "Items": items, "Count": items.len(), "ScannedCount": scanned })
+                        .to_string(),
+                )
+            }
+            Some("DynamoDB_20120810.Scan") => {
                 let body = req.json();
                 let table = body["TableName"].as_str().unwrap_or_default().to_string();
                 let items = state.table(&table).clone();
@@ -422,6 +437,44 @@ pub fn state_responder(state: Arc<Mutex<MockState>>) -> Responder {
             None => s3_ok(),
         }
     })
+}
+
+/// Keep only the rows matching the equality terms of a `KeyConditionExpression`
+/// (`attr = :value`, joined by `AND`), the only form the service emits.
+fn apply_key_condition(rows: &[Value], body: &Value) -> Vec<Value> {
+    let condition = body["KeyConditionExpression"].as_str().unwrap_or_default();
+    let names = &body["ExpressionAttributeNames"];
+    let values = &body["ExpressionAttributeValues"];
+
+    let terms: Vec<(String, &Value)> = condition
+        .split("AND")
+        .filter_map(|term| term.split_once('='))
+        .filter_map(|(lhs, rhs)| {
+            let (lhs, rhs) = (lhs.trim(), rhs.trim());
+            let attr = match lhs.strip_prefix('#') {
+                Some(_) => names[lhs].as_str().unwrap_or(lhs).to_string(),
+                None => lhs.to_string(),
+            };
+            values.get(rhs).map(|value| (attr, value))
+        })
+        .collect();
+
+    rows.iter()
+        .filter(|row| terms.iter().all(|(attr, value)| &&row[attr] == value))
+        .cloned()
+        .collect()
+}
+
+/// Order rows by the table's range key, as DynamoDB does for a `Query`.
+fn sort_by_range_key(rows: &mut [Value], table: &str) {
+    if table == VERSIONS_TABLE {
+        rows.sort_by_key(|row| {
+            row["version"]["N"]
+                .as_str()
+                .and_then(|n| n.parse::<u64>().ok())
+                .unwrap_or_default()
+        });
+    }
 }
 
 /// Apply the subset of `UpdateExpression` the service actually emits:

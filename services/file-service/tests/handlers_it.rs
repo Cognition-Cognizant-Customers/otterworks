@@ -980,10 +980,41 @@ async fn versions_of_a_file_with_three_versions_returns_all_of_them() {
     let versions = json["versions"].as_array().unwrap();
     assert_eq!(versions.len(), 3);
     assert_eq!(versions[0]["file_id"], file_id.to_string());
-    assert_eq!(versions[0]["version"], 1);
-    assert_eq!(versions[2]["version"], 3);
-    assert_eq!(versions[2]["size_bytes"], 300);
     assert_eq!(versions[0]["created_by"], owner.to_string());
+    // `list_versions` queries with `scan_index_forward(false)`, i.e. newest version first
+    assert_eq!(versions[0]["version"], 3);
+    assert_eq!(versions[0]["size_bytes"], 300);
+    assert_eq!(versions[1]["version"], 2);
+    assert_eq!(versions[2]["version"], 1);
+    assert_eq!(versions[2]["size_bytes"], 100);
+}
+
+#[actix_web::test]
+async fn versions_are_scoped_to_the_requested_file() {
+    let env = TestEnv::new().await;
+    let owner = Uuid::new_v4();
+    let wanted = Uuid::new_v4();
+    let other = Uuid::new_v4();
+    env.seed_file(file_item(wanted, owner, "wanted.txt", 3, false));
+    env.seed_version(version_item(wanted, owner, 1, 10));
+    env.seed_version(version_item(other, owner, 1, 20));
+    env.seed_version(version_item(other, owner, 2, 30));
+    let app = init_app!(env);
+
+    let resp = test::call_service(
+        &app,
+        test::TestRequest::get()
+            .uri(&format!("/api/v1/files/{wanted}/versions"))
+            .insert_header(("X-User-ID", owner.to_string()))
+            .to_request(),
+    )
+    .await;
+
+    assert_eq!(resp.status(), 200);
+    let json: Value = test::read_body_json(resp).await;
+    let versions = json["versions"].as_array().unwrap();
+    assert_eq!(versions.len(), 1);
+    assert_eq!(versions[0]["file_id"], wanted.to_string());
 }
 
 #[actix_web::test]
