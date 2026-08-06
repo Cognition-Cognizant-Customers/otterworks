@@ -341,6 +341,8 @@ func TestServiceRoutes_MapsEveryPrefixToItsService(t *testing.T) {
 }
 
 func TestServiceRoutes_PrefixesAreWellFormed(t *testing.T) {
+	clearEnv(t)
+
 	for prefix, target := range Load().ServiceRoutes() {
 		assert.True(t, strings.HasPrefix(prefix, "/"), "prefix %q must be absolute", prefix)
 		assert.False(t, strings.HasSuffix(prefix, "/"), "prefix %q must not end in a slash (chi would panic)", prefix)
@@ -353,6 +355,8 @@ func TestServiceRoutes_PrefixesAreWellFormed(t *testing.T) {
 // were closed and the document was not updated (see PR description). These assertions pin
 // the routing that exists now, so removing any of these prefixes again turns the test red.
 func TestServiceRoutes_RouteMatrixGapPrefixesAreRoutedToday_seeRouteMatrix(t *testing.T) {
+	clearEnv(t)
+
 	routes := Load().ServiceRoutes()
 
 	cases := []struct {
@@ -386,6 +390,8 @@ func TestServiceRoutes_UsesLoadedServiceURLs(t *testing.T) {
 }
 
 func TestServiceRoutes_DoesNotRouteUnknownPrefixes(t *testing.T) {
+	clearEnv(t)
+
 	routes := Load().ServiceRoutes()
 
 	for _, prefix := range []string{
