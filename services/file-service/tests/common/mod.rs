@@ -299,10 +299,12 @@ fn reason_phrase(status: u16) -> &'static str {
 
 // ── In-memory DynamoDB / S3 state ──────────────────────────────────────
 
-/// Minimal stand-in for the four DynamoDB tables the service uses.
+/// Minimal stand-in for the four DynamoDB tables the service uses. `PutItem` replaces by
+/// primary key and `Query` honours the key condition and sort direction, so tests see the
+/// same shape of data a real table would return.
 ///
-/// Filter expressions are intentionally *not* evaluated: each test seeds only the rows
-/// it cares about, so returning the whole table is both sufficient and predictable.
+/// `Scan` filter expressions are intentionally *not* evaluated: each test seeds only the
+/// rows it cares about, so returning the whole table is both sufficient and predictable.
 #[derive(Default)]
 pub struct MockState {
     pub files: Vec<Value>,
@@ -343,19 +345,11 @@ pub fn state_responder(state: Arc<Mutex<MockState>>) -> Responder {
                 let body = req.json();
                 let table = body["TableName"].as_str().unwrap_or_default().to_string();
                 let item = body["Item"].clone();
+                let key = key_attrs(&table);
                 let rows = state.table(&table);
                 // DynamoDB PutItem replaces the row with the same primary key.
-                match item["id"]["S"].as_str() {
-                    Some(id) => {
-                        let id = id.to_string();
-                        match rows
-                            .iter_mut()
-                            .find(|row| row["id"]["S"].as_str() == Some(&id))
-                        {
-                            Some(existing) => *existing = item,
-                            None => rows.push(item),
-                        }
-                    }
+                match rows.iter_mut().find(|row| same_key(row, &item, key)) {
+                    Some(existing) => *existing = item,
                     None => rows.push(item),
                 }
                 json_response(200, "{}")
@@ -437,6 +431,21 @@ pub fn state_responder(state: Arc<Mutex<MockState>>) -> Responder {
             None => s3_ok(),
         }
     })
+}
+
+/// The primary-key attributes of a table: `files`, `folders` and `shares` are keyed on
+/// `id`, `versions` on the `(file_id, version)` pair.
+fn key_attrs(table: &str) -> &'static [&'static str] {
+    if table.contains("versions") {
+        &["file_id", "version"]
+    } else {
+        &["id"]
+    }
+}
+
+fn same_key(left: &Value, right: &Value, key: &[&str]) -> bool {
+    key.iter()
+        .all(|attr| !left[attr].is_null() && left[attr] == right[attr])
 }
 
 /// Keep only the rows matching the equality terms of a `KeyConditionExpression`
