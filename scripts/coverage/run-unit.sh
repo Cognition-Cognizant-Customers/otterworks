@@ -104,8 +104,10 @@ case "$unit" in
       --coverage.include='src/**/*.{ts,tsx}' --coverage.exclude='src/**/*.{test,spec}.{ts,tsx}'
     ;;
   admin-dashboard)
+    # karma writes into coverage/admin-dashboard/ (see karma.conf.js); lift
+    # lcov.info to the top of the unit directory where summarize.py looks.
     run frontend/admin-dashboard npm test -- --code-coverage
-    collect frontend/admin-dashboard/coverage
+    collect frontend/admin-dashboard/coverage/admin-dashboard/lcov.info
     ;;
   *)
     echo "unknown unit: $unit" >&2

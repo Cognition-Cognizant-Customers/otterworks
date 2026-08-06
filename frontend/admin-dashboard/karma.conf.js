@@ -19,7 +19,8 @@ module.exports = function (config) {
     coverageReporter: {
       dir: require('path').join(__dirname, './coverage/admin-dashboard'),
       subdir: '.',
-      reporters: [{ type: 'html' }, { type: 'text-summary' }],
+      // lcovonly is what scripts/coverage/run-unit.sh collects and what Sonar reads.
+      reporters: [{ type: 'html' }, { type: 'text-summary' }, { type: 'lcovonly' }],
     },
     reporters: ['progress', 'kjhtml'],
     browsers: ['ChromeHeadlessNoSandbox'],
