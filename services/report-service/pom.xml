@@ -39,6 +39,9 @@
         <commons-io.version>2.6</commons-io.version>
         <!-- LEGACY: Guava 28.0 (2019, many CVEs). Upgrade target: 33+ -->
         <guava.version>28.0-jre</guava.version>
+
+        <!-- Coverage instrumentation (WP-12). -->
+        <jacoco.version>0.8.12</jacoco.version>
     </properties>
 
     <dependencies>
@@ -199,6 +202,28 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>2.22.2</version>
+            </plugin>
+            <!-- Coverage instrumentation (WP-12): `mvn test` emits
+                 target/site/jacoco/jacoco.xml alongside the HTML report. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
