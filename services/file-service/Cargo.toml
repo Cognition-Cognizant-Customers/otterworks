@@ -39,3 +39,9 @@ redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
 actix-rt = "2"
 actix-web = "4"
 tokio = { version = "1", features = ["full", "test-util"] }
+# Test-only: rule-based stubbing of the AWS SDK clients so the suite is hermetic
+# (no LocalStack, no network). Dev-dependencies are not built by `cargo build`,
+# so the `test-util` features never reach the shipped binary.
+aws-smithy-mocks = "0.3"
+aws-sdk-s3 = { version = "1.15", features = ["test-util"] }
+aws-sdk-dynamodb = { version = "1.14", features = ["test-util"] }
