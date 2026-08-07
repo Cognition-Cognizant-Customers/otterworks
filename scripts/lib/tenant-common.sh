@@ -323,7 +323,10 @@ build_helm_args() {
       EXTRA_ARGS+=(--set-string "config.DYNAMODB_VERSIONS_TABLE=${DDB_VERSIONS}")
       EXTRA_ARGS+=(--set-string "config.DYNAMODB_SHARES_TABLE=${DDB_SHARES}")
       EXTRA_ARGS+=(--set-string "config.REDIS_HOST=${T_REDIS_HOST}" --set-string "config.REDIS_PORT=6379")
-      EXTRA_ARGS+=(--set-string "config.SNS_TOPIC_ARN=${sns_topic}") ;;
+      EXTRA_ARGS+=(--set-string "config.SNS_TOPIC_ARN=${sns_topic}")
+      # Chaos scenarios (scripts/inject-bug.sh) are a demo feature; keep them
+      # armed on tenants unless a deploy explicitly opts out.
+      EXTRA_ARGS+=(--set-string "config.CHAOS_ENABLED=${CHAOS_ENABLED:-true}") ;;
     document-service)
       EXTRA_ARGS+=(--set-string "config.REDIS_HOST=${T_REDIS_HOST}" --set-string "config.REDIS_PORT=6379")
       EXTRA_ARGS+=(--set-string "config.DOC_SVC_AWS_REGION=${AWS_REGION}")
