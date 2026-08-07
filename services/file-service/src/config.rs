@@ -11,6 +11,7 @@ pub struct AppConfig {
 pub struct ServerConfig {
     pub port: u16,
     pub max_upload_bytes: u64,
+    pub chaos_enabled: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -50,6 +51,9 @@ impl ServerConfig {
                 .unwrap_or_else(|_| "104857600".into()) // 100 MB
                 .parse()
                 .unwrap_or(104_857_600),
+            chaos_enabled: env::var("CHAOS_ENABLED")
+                .map(|v| v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false),
         }
     }
 }
