@@ -13,6 +13,7 @@ Usage:
 """
 
 import argparse
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -84,11 +85,26 @@ def verify(catalog: dict, only_mutant: str | None, only_service: str | None) -> 
             print(f"error: snippet for {m['id']} not found exactly once in {m['file']}", file=sys.stderr)
             return 2
         print(f"mutant    {m['id']} ... ", end="", flush=True)
+
+        def _restore_and_exit(signum, frame, _target=target, _source=source):
+            _target.write_text(_source)
+            signal.signal(signum, signal.SIG_DFL)
+            signal.raise_signal(signum)
+
+        previous = {
+            sig: signal.signal(sig, _restore_and_exit)
+            for sig in (signal.SIGINT, signal.SIGTERM)
+        }
         try:
             target.write_text(source.replace(m["original"], m["mutated"]))
             killed = not run_tests(cfg)
         finally:
             target.write_text(source)
+            for sig, handler in previous.items():
+                signal.signal(sig, handler)
+        if target.read_text() != source:
+            print(f"error: failed to restore {m['file']} after {m['id']}", file=sys.stderr)
+            return 2
         results.append((m, killed))
         print("KILLED" if killed else "SURVIVED")
 
