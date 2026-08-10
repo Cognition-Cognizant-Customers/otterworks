@@ -41,10 +41,12 @@ healthCheck:
   path: /health
   port: 8080
 
+# Telemetry is served on a dedicated internal listener (INTERNAL_PORT), never
+# on the public HTTP port. Only the ClusterIP Service exposes it, for scraping.
 monitoring:
   enabled: true
   path: /metrics
-  port: 8080
+  port: 9091
 
 env:
   AUTH_SERVICE_URL: "http://auth-service:8081"

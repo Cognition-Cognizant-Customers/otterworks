@@ -12,6 +12,10 @@ spec:
       targetPort: {{ .Values.service.targetPort }}
       protocol: TCP
       name: http
+    - port: {{ .Values.monitoring.port }}
+      targetPort: {{ .Values.monitoring.port }}
+      protocol: TCP
+      name: metrics
   selector:
     app.kubernetes.io/name: {{ .Chart.Name }}
     app.kubernetes.io/instance: {{ .Release.Name }}

@@ -97,9 +97,6 @@ func main() {
 	// Health check
 	r.Get("/health", health.Handler())
 
-	// Prometheus metrics
-	r.Handle("/metrics", promhttp.Handler())
-
 	// Mount reverse proxy routes
 	proxyRouter := proxy.NewRouter(proxy.RouterConfig{
 		Routes:        routes,
@@ -108,6 +105,26 @@ func main() {
 		EnableTracing: true,
 	})
 	r.Mount("/", proxyRouter)
+
+	// Internal listener: operational endpoints (Prometheus metrics) are served
+	// here, never on the public listener. This port must not be exposed beyond
+	// the service network / cluster.
+	internal := chi.NewRouter()
+	internal.Handle("/metrics", promhttp.Handler())
+	internal.Get("/health", health.Handler())
+	internalSrv := &http.Server{
+		Addr:         ":" + cfg.InternalPort,
+		Handler:      internal,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+	go func() {
+		logger.Info().Str("port", cfg.InternalPort).Msg("internal telemetry listener starting")
+		if err := internalSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Fatal().Err(err).Msg("internal listener failed")
+		}
+	}()
 
 	// HTTP server
 	srv := &http.Server{
@@ -137,6 +154,10 @@ func main() {
 
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Fatal().Err(err).Msg("server forced to shutdown")
+	}
+
+	if err := internalSrv.Shutdown(ctx); err != nil {
+		logger.Error().Err(err).Msg("internal listener forced to shutdown")
 	}
 
 	if shutdownTracer != nil {
