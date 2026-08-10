@@ -24,6 +24,11 @@ public class GlobalExceptionHandler {
     return buildErrorResponse(HttpStatus.BAD_REQUEST, ex.getMessage());
   }
 
+  @ExceptionHandler(AccountLockedException.class)
+  public ResponseEntity<Map<String, Object>> handleAccountLocked(AccountLockedException ex) {
+    return buildErrorResponse(HttpStatus.LOCKED, ex.getMessage());
+  }
+
   @ExceptionHandler(MethodArgumentNotValidException.class)
   public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
     String errors =

@@ -55,6 +55,11 @@ public class User {
 
   @Column private Instant lastLoginAt;
 
+  @Column(nullable = false)
+  private int failedLoginAttempts = 0;
+
+  @Column private Instant lockedUntil;
+
   @PrePersist
   protected void onCreate() {
     createdAt = Instant.now();
