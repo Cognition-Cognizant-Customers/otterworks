@@ -57,7 +57,13 @@ def verify(catalog: dict, only_mutant: str | None, only_service: str | None) -> 
             print(f"error: unknown mutant {only_mutant}", file=sys.stderr)
             return 2
     if only_service:
+        if only_service not in catalog["services"]:
+            print(f"error: unknown service {only_service}", file=sys.stderr)
+            return 2
         mutants = [m for m in mutants if m["service"] == only_service]
+    if not mutants:
+        print("error: no mutants selected", file=sys.stderr)
+        return 2
 
     # Baseline: the untouched suite must be green for every service in scope.
     for svc in sorted({m["service"] for m in mutants}):
