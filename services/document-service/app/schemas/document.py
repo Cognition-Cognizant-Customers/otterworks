@@ -8,12 +8,23 @@ from pydantic import BaseModel, Field, field_validator
 # ---- Document schemas ----
 
 
-class DocumentCreate(BaseModel):
+class DocumentCreateRequest(BaseModel):
+    """Create payload as accepted from a client.
+
+    The owner is deliberately absent: it is derived from the authenticated caller,
+    never from the request body.
+    """
+
     title: str = Field(..., min_length=1, max_length=500)
     content: str = Field(default="")
     content_type: str = Field(default="text/markdown")
-    owner_id: UUID | None = None
     folder_id: UUID | None = None
+
+
+class DocumentCreate(DocumentCreateRequest):
+    """Internal create model: the owner is set by the API layer."""
+
+    owner_id: UUID
 
 
 class DocumentUpdate(BaseModel):
@@ -124,7 +135,14 @@ class TemplateResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class DocumentFromTemplate(BaseModel):
+class DocumentFromTemplateRequest(BaseModel):
+    """Instantiate-from-template payload as accepted from a client (no owner)."""
+
     title: str = Field(..., min_length=1, max_length=500)
-    owner_id: UUID
     folder_id: UUID | None = None
+
+
+class DocumentFromTemplate(DocumentFromTemplateRequest):
+    """Internal model: the owner is set by the API layer."""
+
+    owner_id: UUID
