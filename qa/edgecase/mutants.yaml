@@ -1,0 +1,85 @@
+# Edge-case mutant catalog.
+#
+# Each mutant is a small, realistic bug planted into a service module. A test
+# suite with real positive/negative edge-case coverage KILLS the mutant (at
+# least one test fails while the bug is in place). A mutant that SURVIVES
+# proves the suite has a coverage gap for that class of input.
+#
+# Categories:
+#   positive        — happy-path behavior on valid input
+#   boundary        — off-by-one / empty / zero / whitespace edges
+#   negative-input  — hostile or malformed input (wildcards, markup, missing ids)
+#   contract        — API/service contract guarantees (idempotence, versioning)
+#
+# `original` must appear exactly once in `file`; the runner swaps it for
+# `mutated`, runs the service's test command, then restores the file.
+
+services:
+  document-service:
+    dir: services/document-service
+    test_command: poetry run pytest -q tests/test_document_service.py
+
+mutants:
+  - id: EDGE-PAGINATE-ZERO-TOTAL
+    service: document-service
+    category: boundary
+    description: paginate() no longer clamps to a minimum of 1 page for empty result sets
+    file: services/document-service/app/services/document_service.py
+    original: 'return max(1, math.ceil(total / size)) if size > 0 else 1'
+    mutated: 'return math.ceil(total / size) if size > 0 else 1'
+
+  - id: EDGE-DELETE-MISSING-TRUE
+    service: document-service
+    category: negative-input
+    description: delete() reports success for a document that does not exist
+    file: services/document-service/app/services/document_service.py
+    original: "document = await self.get(document_id)\n        if not document:\n            return False"
+    mutated: "document = await self.get(document_id)\n        if not document:\n            return True"
+
+  - id: EDGE-SEARCH-ESCAPE-DROPPED
+    service: document-service
+    category: negative-input
+    description: search() stops escaping SQL LIKE wildcards, so "%" and "_" in a query match everything
+    file: services/document-service/app/services/document_service.py
+    original: 'escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")'
+    mutated: 'escaped = query'
+
+  - id: EDGE-EXPORT-HTML-UNESCAPED
+    service: document-service
+    category: negative-input
+    description: HTML export stops escaping document content, allowing markup injection
+    file: services/document-service/app/services/document_service.py
+    original: 'safe_content = html_mod.escape(document.content)'
+    mutated: 'safe_content = document.content'
+
+  - id: EDGE-PATCH-NOOP-VERSION-BUMP
+    service: document-service
+    category: contract
+    description: an empty PATCH (no fields set) still bumps the document version and writes a new version row
+    file: services/document-service/app/services/document_service.py
+    original: "if changed:\n            document.version += 1"
+    mutated: "if True:\n            document.version += 1"
+
+  - id: EDGE-WORDCOUNT-WHITESPACE
+    service: document-service
+    category: boundary
+    description: word count splits on single spaces only, so runs of whitespace and newlines inflate the count
+    file: services/document-service/app/services/document_service.py
+    original: 'return len(text.split()) if text else 0'
+    mutated: 'return len(text.split(" ")) if text else 0'
+
+  - id: EDGE-LIST-PAGE-OFFSET
+    service: document-service
+    category: boundary
+    description: list_documents() paginates off by one page, silently skipping the first page of results
+    file: services/document-service/app/services/document_service.py
+    original: 'query = query.offset((page - 1) * size).limit(size)'
+    mutated: 'query = query.offset(page * size).limit(size)'
+
+  - id: EDGE-RESTORE-MISSING-VERSION
+    service: document-service
+    category: negative-input
+    description: restoring a nonexistent version returns the document unchanged instead of None
+    file: services/document-service/app/services/document_service.py
+    original: "ver = result.scalar_one_or_none()\n        if not ver:\n            return None"
+    mutated: "ver = result.scalar_one_or_none()\n        if not ver:\n            return document"

@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap edgecase-list edgecase-verify
 
 SHELL := /bin/bash
 
@@ -233,6 +233,20 @@ security-scan: ## Run security scans across all services
 
 DAST_TARGET ?= http://localhost:8080
 DAST := uv run --with httpx --with tabulate security/dast/harness/dast_scan.py
+
+# ── Edge-case mutant harness ─────────────────────────────────────────────────
+#
+# Plants cataloged bugs (mutants) into a service module and runs its tests.
+# A SURVIVED mutant proves the suite is missing positive/negative edge-case
+# coverage for that class of input. See qa/edgecase/README.md.
+
+EDGECASE := uv run --with pyyaml qa/edgecase/edgecase_mutants.py
+
+edgecase-list: ## List the edge-case mutant catalog
+	$(EDGECASE) --list
+
+edgecase-verify: ## Plant each mutant and prove the tests kill it (MUTANT=<id>, SERVICE=<name> optional)
+	$(EDGECASE) --verify $(if $(MUTANT),--mutant $(MUTANT),) $(if $(SERVICE),--service $(SERVICE),)
 
 dast-list: ## List the registered DAST attack probes
 	$(DAST) --list
