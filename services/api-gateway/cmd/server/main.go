@@ -65,6 +65,7 @@ func main() {
 	r := chi.NewRouter()
 
 	// Global middleware stack
+	r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.RequestID)
 	r.Use(chimw.RealIP)
 	r.Use(middleware.Metrics)
