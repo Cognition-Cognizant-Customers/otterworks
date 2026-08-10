@@ -232,6 +232,126 @@ async def test_create_from_nonexistent_template(
 
 
 @pytest.mark.asyncio
+async def test_search_escapes_like_wildcards(
+    db_session: AsyncSession, owner_id: uuid.UUID
+):
+    service = DocumentService(db_session)
+    await service.create(
+        DocumentCreate(title="Plain Doc", content="nothing special", owner_id=owner_id)
+    )
+    await service.create(
+        DocumentCreate(title="Another Doc", content="also plain", owner_id=owner_id)
+    )
+    await service.create(
+        DocumentCreate(title="Progress", content="100% complete", owner_id=owner_id)
+    )
+    await service.create(
+        DocumentCreate(title="Snake", content="snake_case name", owner_id=owner_id)
+    )
+
+    items, total = await service.search("%")
+    titles = {d.title for d in items}
+    assert total <= 1
+    assert titles <= {"Progress"}
+
+    items, total = await service.search("_")
+    titles = {d.title for d in items}
+    assert total <= 1
+    assert titles <= {"Snake"}
+
+
+@pytest.mark.asyncio
+async def test_export_html_escapes_markup(
+    db_session: AsyncSession, owner_id: uuid.UUID
+):
+    service = DocumentService(db_session)
+    doc = await service.create(
+        DocumentCreate(
+            title="XSS <Test>",
+            content='<script>alert("pwned")</script>',
+            owner_id=owner_id,
+        )
+    )
+
+    html_body, html_ct = service.export_document(doc, "html")
+    assert html_ct == "text/html"
+    assert "<script>" not in html_body
+    assert "&lt;script&gt;alert(&quot;pwned&quot;)&lt;/script&gt;" in html_body
+    assert "<h1>XSS &lt;Test&gt;</h1>" in html_body
+
+
+@pytest.mark.asyncio
+async def test_patch_empty_body_is_noop(db_session: AsyncSession, owner_id: uuid.UUID):
+    service = DocumentService(db_session)
+    doc = await service.create(
+        DocumentCreate(title="Untouched", content="Body", owner_id=owner_id)
+    )
+
+    patched = await service.patch(doc.id, DocumentPatch())
+    assert patched is not None
+    assert patched.version == 1
+    assert patched.title == "Untouched"
+    assert patched.content == "Body"
+
+    versions = await service.list_versions(doc.id)
+    assert len(versions) == 1
+
+
+@pytest.mark.asyncio
+async def test_word_count_collapses_whitespace_runs(
+    db_session: AsyncSession, owner_id: uuid.UUID
+):
+    service = DocumentService(db_session)
+    doc = await service.create(
+        DocumentCreate(
+            title="Whitespace",
+            content="one  two\nthree\t four\n\n  five ",
+            owner_id=owner_id,
+        )
+    )
+    assert doc.word_count == 5
+
+
+@pytest.mark.asyncio
+async def test_list_documents_pagination_returns_first_page(
+    db_session: AsyncSession, owner_id: uuid.UUID
+):
+    service = DocumentService(db_session)
+    for title in ("P1", "P2", "P3"):
+        await service.create(
+            DocumentCreate(title=title, content="", owner_id=owner_id)
+        )
+
+    page1, total = await service.list_documents(owner_id=owner_id, page=1, size=2)
+    assert total == 3
+    assert len(page1) == 2
+
+    page2, total = await service.list_documents(owner_id=owner_id, page=2, size=2)
+    assert total == 3
+    assert len(page2) == 1
+
+    assert {d.title for d in page1} | {d.title for d in page2} == {"P1", "P2", "P3"}
+
+
+@pytest.mark.asyncio
+async def test_restore_nonexistent_version_returns_none(
+    db_session: AsyncSession, owner_id: uuid.UUID
+):
+    service = DocumentService(db_session)
+    doc = await service.create(
+        DocumentCreate(title="Keep", content="Original", owner_id=owner_id)
+    )
+
+    result = await service.restore_version(doc.id, uuid.uuid4())
+    assert result is None
+
+    unchanged = await service.get(doc.id)
+    assert unchanged is not None
+    assert unchanged.version == 1
+    assert unchanged.content == "Original"
+
+
+@pytest.mark.asyncio
 async def test_paginate_helper():
     assert DocumentService.paginate(10, 1, 5) == 2
     assert DocumentService.paginate(11, 1, 5) == 3
