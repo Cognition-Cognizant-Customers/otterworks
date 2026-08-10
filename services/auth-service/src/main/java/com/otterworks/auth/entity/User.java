@@ -60,6 +60,9 @@ public class User {
 
   @Column private Instant lockedUntil;
 
+  @Column(nullable = false)
+  private int lockoutCycles = 0;
+
   @PrePersist
   protected void onCreate() {
     createdAt = Instant.now();
