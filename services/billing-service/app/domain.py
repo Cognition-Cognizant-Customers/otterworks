@@ -137,7 +137,7 @@ class RatingRepository(Protocol):
 
 
 def md5_uuid(text: str) -> UUID:
-    return UUID(hex=md5(text.encode()).hexdigest())
+    return UUID(hex=md5(text.encode(), usedforsecurity=False).hexdigest())
 
 
 def months_before(day: date, months: int) -> date:
