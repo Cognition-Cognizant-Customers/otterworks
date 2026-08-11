@@ -127,26 +127,13 @@ class RatingRepository(Protocol):
 
     def list_prior_ratings(self, tenant_id: UUID) -> list[PriorRatingRow]: ...
 
-    def get_rating_period(self, tenant_id: UUID, period_start: date) -> UUID | None: ...
-
-    def insert_rating_period(
+    def upsert_rating_period(
         self, period_id: UUID, tenant_id: UUID, period_start: date, period_end: date
     ) -> None: ...
 
-    def update_rating_period(self, period_id: UUID, period_end: date) -> None: ...
-
     def get_rating_result(self, result_id: UUID) -> RatingResultRow | None: ...
 
-    def insert_rating_result(self, result: RatingResultRow) -> None: ...
-
-    def update_rating_result(
-        self,
-        result_id: UUID,
-        used_units: int,
-        rollover_units: int,
-        billable_units: int,
-        overage_amount: Decimal,
-    ) -> None: ...
+    def upsert_rating_result(self, result: RatingResultRow) -> None: ...
 
 
 def md5_uuid(text: str) -> UUID:
@@ -289,35 +276,22 @@ def finalize_rating(
     if subscription is None or outcome is None:
         return None
     period_id = md5_uuid(f"{tenant_id}{period_start.isoformat()}")
-    existing_period = repository.get_rating_period(tenant_id, period_start)
-    if existing_period is None:
-        repository.insert_rating_period(period_id, tenant_id, period_start, period_end)
-    else:
-        repository.update_rating_period(existing_period, period_end)
+    repository.upsert_rating_period(period_id, tenant_id, period_start, period_end)
     result_id = md5_uuid(str(period_id))
     stored_rollover = max(outcome.quota_units - outcome.used_units, 0)
-    if repository.get_rating_result(result_id) is None:
-        repository.insert_rating_result(
-            RatingResultRow(
-                result_id=result_id,
-                period_id=period_id,
-                subscription_id=subscription.subscription_id,
-                used_units=outcome.used_units,
-                quota_units=outcome.quota_units,
-                rollover_units=stored_rollover,
-                billable_units=outcome.billable_units,
-                overage_amount=outcome.overage_amount,
-                created_at=datetime.combine(period_end, time.min, tzinfo=UTC),
-            )
+    repository.upsert_rating_result(
+        RatingResultRow(
+            result_id=result_id,
+            period_id=period_id,
+            subscription_id=subscription.subscription_id,
+            used_units=outcome.used_units,
+            quota_units=outcome.quota_units,
+            rollover_units=stored_rollover,
+            billable_units=outcome.billable_units,
+            overage_amount=outcome.overage_amount,
+            created_at=datetime.combine(period_end, time.min, tzinfo=UTC),
         )
-    else:
-        repository.update_rating_result(
-            result_id,
-            outcome.used_units,
-            stored_rollover,
-            outcome.billable_units,
-            outcome.overage_amount,
-        )
+    )
     return repository.get_rating_result(result_id)
 
 

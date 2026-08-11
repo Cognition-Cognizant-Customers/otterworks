@@ -145,7 +145,7 @@ class FakeRatingRepository:
         self._priors = priors
         self.periods: dict[UUID, tuple[UUID, date, date]] = {}
         self.results: dict[UUID, RatingResultRow] = {}
-        self.result_updates: list[tuple] = []
+        self.result_upserts: list[RatingResultRow] = []
 
     def list_plans(self):
         return list(self._plans)
@@ -159,38 +159,29 @@ class FakeRatingRepository:
     def list_prior_ratings(self, tenant_id):
         return list(self._priors)
 
-    def get_rating_period(self, tenant_id, period_start):
-        for period_id, (tenant, start, _end) in self.periods.items():
+    def upsert_rating_period(self, period_id, tenant_id, period_start, period_end):
+        for existing_id, (tenant, start, _end) in self.periods.items():
             if tenant == tenant_id and start == period_start:
-                return period_id
-        return None
-
-    def insert_rating_period(self, period_id, tenant_id, period_start, period_end):
+                self.periods[existing_id] = (tenant, start, period_end)
+                return
         self.periods[period_id] = (tenant_id, period_start, period_end)
-
-    def update_rating_period(self, period_id, period_end):
-        tenant, start, _ = self.periods[period_id]
-        self.periods[period_id] = (tenant, start, period_end)
 
     def get_rating_result(self, result_id):
         return self.results.get(result_id)
 
-    def insert_rating_result(self, result):
-        self.results[result.result_id] = result
-
-    def update_rating_result(
-        self, result_id, used_units, rollover_units, billable_units, overage_amount
-    ):
-        self.result_updates.append(
-            (result_id, used_units, rollover_units, billable_units, overage_amount)
-        )
-        self.results[result_id] = replace(
-            self.results[result_id],
-            used_units=used_units,
-            rollover_units=rollover_units,
-            billable_units=billable_units,
-            overage_amount=overage_amount,
-        )
+    def upsert_rating_result(self, result):
+        self.result_upserts.append(result)
+        existing = self.results.get(result.result_id)
+        if existing is None:
+            self.results[result.result_id] = result
+        else:
+            self.results[result.result_id] = replace(
+                existing,
+                used_units=result.used_units,
+                rollover_units=result.rollover_units,
+                billable_units=result.billable_units,
+                overage_amount=result.overage_amount,
+            )
 
 
 @pytest.mark.rule("RATING-008")
@@ -224,7 +215,7 @@ def test_finalize_updates_existing_result_without_touching_quota() -> None:
     repository._events.append(event(40, day=20))
     second = finalize_rating(repository, TENANT, PERIOD_START, PERIOD_END)
     assert first.result_id == second.result_id
-    assert repository.result_updates
+    assert len(repository.result_upserts) == 2
     assert second.used_units == 300
     assert second.quota_units == first.quota_units
     assert second.created_at == first.created_at
