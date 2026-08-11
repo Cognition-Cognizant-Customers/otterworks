@@ -41,8 +41,61 @@ modules:
             subscription_rows:
               json_path: "$.subscriptions"
   rating:
-    status: pending
-    entrypoints: {}
+    status: extracted
+    entrypoints:
+      billing.fn_usage_rating:
+        method: GET
+        path: /api/tenants/{tenant_id}/rating
+        inputs:
+          path:
+            tenant_id: tenant_id
+          query:
+            period_start: period_start
+            period_end: period_end
+        response:
+          business_fields:
+            used_units: {json_path: "$.used_units", type: integer}
+            quota_units: {json_path: "$.quota_units", type: integer}
+            rollover_units: {json_path: "$.rollover_units", type: integer}
+            billable_units: {json_path: "$.billable_units", type: integer}
+            first_tier_units: {json_path: "$.first_tier_units", type: integer}
+            second_tier_units: {json_path: "$.second_tier_units", type: integer}
+            overage_amount: {json_path: "$.overage_amount", type: decimal}
+          probes:
+            rating_values: {json_path: "$.rating_values"}
+      billing.fn_usage_summary:
+        method: GET
+        path: /api/tenants/{tenant_id}/usage-summary
+        inputs:
+          path:
+            tenant_id: tenant_id
+          query:
+            period_start: period_start
+            period_end: period_end
+        response:
+          business_fields:
+            kinds: {json_path: "$.rows[*].kind", type: text, collect: true}
+            units: {json_path: "$.rows[*].units", type: integer, collect: true}
+          probes:
+            summary_values: {json_path: "$.summary_values"}
+      billing.sp_finalize_rating:
+        method: POST
+        path: /api/tenants/{tenant_id}/rating/finalize
+        inputs:
+          path:
+            tenant_id: tenant_id
+          body:
+            period_start: period_start
+            period_end: period_end
+        response:
+          business_fields:
+            used_units: {json_path: "$.used_units", type: integer}
+            quota_units: {json_path: "$.quota_units", type: integer}
+            rollover_units: {json_path: "$.rollover_units", type: integer}
+            billable_units: {json_path: "$.billable_units", type: integer}
+            overage_amount: {json_path: "$.overage_amount", type: decimal}
+          probes:
+            persisted_values: {json_path: "$.persisted_values"}
   invoicing:
     status: pending
     entrypoints: {}
