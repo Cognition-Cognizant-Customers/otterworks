@@ -12,8 +12,15 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.db import connect, migrate, reset
-from app.domain import catalog, change_plan, entitlement
-from app.repository import PostgresPlansRepository
+from app.domain import (
+    catalog,
+    change_plan,
+    entitlement,
+    finalize_rating,
+    rate_tenant,
+    usage_summary,
+)
+from app.repository import PostgresPlansRepository, PostgresRatingRepository
 
 
 @asynccontextmanager
@@ -35,6 +42,11 @@ app.add_middleware(
 class PlanChange(BaseModel):
     plan_id: UUID
     effective_on: date
+
+
+class RatingPeriod(BaseModel):
+    period_start: date
+    period_end: date
 
 
 @app.get("/health")
@@ -93,6 +105,81 @@ def get_entitlement(
         "included_units": row.included_units,
         "subscription_status": row.subscription_status,
         "effective_on": max(row.starts_on, on).isoformat(),
+    }
+
+
+@app.get("/api/tenants/{tenant_id}/rating")
+def get_rating(
+    tenant_id: Annotated[UUID, Path()],
+    period_start: Annotated[date, Query()],
+    period_end: Annotated[date, Query()],
+) -> dict:
+    with connect() as connection:
+        outcome = rate_tenant(
+            PostgresRatingRepository(connection), tenant_id, period_start, period_end
+        )
+    if outcome is None:
+        raise HTTPException(status_code=404, detail="no rateable subscription")
+    return {
+        "tenant_id": str(outcome.tenant_id),
+        "period_start": outcome.period_start.isoformat(),
+        "period_end": outcome.period_end.isoformat(),
+        "used_units": outcome.used_units,
+        "quota_units": outcome.quota_units,
+        "rollover_units": outcome.rollover_units,
+        "billable_units": outcome.billable_units,
+        "first_tier_units": outcome.first_tier_units,
+        "second_tier_units": outcome.second_tier_units,
+        "overage_amount": f"{outcome.overage_amount:.2f}",
+        "rating_values": f"{outcome.billable_units}:{outcome.overage_amount:.2f}",
+    }
+
+
+@app.get("/api/tenants/{tenant_id}/usage-summary")
+def get_usage_summary(
+    tenant_id: Annotated[UUID, Path()],
+    period_start: Annotated[date, Query()],
+    period_end: Annotated[date, Query()],
+) -> dict:
+    with connect() as connection:
+        rows = usage_summary(
+            PostgresRatingRepository(connection).list_usage_events(tenant_id),
+            period_start,
+            period_end,
+        )
+    return {
+        "rows": [
+            {"kind": row.kind, "event_count": row.event_count, "units": row.units}
+            for row in rows
+        ],
+        "summary_values": ",".join(f"{row.kind}:{row.units}" for row in rows),
+    }
+
+
+@app.post("/api/tenants/{tenant_id}/rating/finalize")
+def finalize_tenant_rating(tenant_id: Annotated[UUID, Path()], request: RatingPeriod) -> dict:
+    with connect() as connection:
+        result = finalize_rating(
+            PostgresRatingRepository(connection),
+            tenant_id,
+            request.period_start,
+            request.period_end,
+        )
+    if result is None:
+        raise HTTPException(status_code=404, detail="no rateable subscription")
+    return {
+        "result_id": str(result.result_id),
+        "period_id": str(result.period_id),
+        "subscription_id": str(result.subscription_id),
+        "used_units": result.used_units,
+        "quota_units": result.quota_units,
+        "rollover_units": result.rollover_units,
+        "billable_units": result.billable_units,
+        "overage_amount": f"{result.overage_amount:.2f}",
+        "persisted_values": (
+            f"{result.used_units}:{result.quota_units}:{result.rollover_units}:"
+            f"{result.billable_units}:{result.overage_amount:.2f}"
+        ),
     }
 
 

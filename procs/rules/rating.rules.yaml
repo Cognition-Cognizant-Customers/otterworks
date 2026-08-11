@@ -1,0 +1,195 @@
+module: rating
+rules:
+  - id: RATING-001
+    statement: >-
+      Usage for a period sums all usage_events whose occurred_at date falls
+      within the inclusive [period_start, period_end] window, and billable
+      units are max(used - rollover - included_units, 0). The rated
+      subscription is the one with the latest starts_on that overlaps the
+      period, regardless of subscription status.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [30, 57]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [used_units, quota_units, rollover_units, billable_units]
+    confidence: high
+    scenarios: [RATING-001]
+    question: >-
+      Subscription selection has no status filter, so a cancelled or suspended
+      subscription that overlaps the period is still rated at its plan. Is
+      rating tenants without an active subscription intentional?
+    answer: >-
+      Yes - the SQL rates whichever overlapping subscription started last with
+      no status filter, and the recorded behavior (suspended tenant 2 is
+      rated in RATING-003) depends on it. Reproduce as written.
+    decision:
+      status: approved
+      reviewer: workshop-reviewer
+      date: "2026-08-11"
+      note: Approved per validation-run instruction; reproduce legacy behavior.
+  - id: RATING-002
+    statement: >-
+      Rollover credit sums rating_results.rollover_units from prior periods
+      whose period_start is within the 3 months strictly before the current
+      period_start, capped at twice the plan's included units.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [48, 56]
+    inputs: [tenant_id, period_start]
+    outputs: [rollover_units]
+    confidence: medium
+    scenarios: [RATING-002]
+    question: >-
+      The 2x-included cap is applied twice - inside the aggregate query
+      (LEAST(2 * included, sum)) and again on the variable
+      (LEAST(v_prior, included * 2)). Is a single cap the intended behavior,
+      and is the window boundary (period_start >= current start - 3 months,
+      strictly earlier periods only) inclusive on the 3-month edge as written?
+    answer: >-
+      The double cap is redundant but harmless - both apply LEAST with
+      2 * included_units, so a single cap yields identical results. The
+      window is period_start >= current start - 3 months (inclusive edge) and
+      period_start < current start (strictly earlier), as written.
+    decision:
+      status: approved
+      reviewer: workshop-reviewer
+      date: "2026-08-11"
+      note: Approved per validation-run instruction; reproduce legacy behavior.
+  - id: RATING-003
+    statement: >-
+      When the rated subscription is suspended and suspended_on falls inside
+      the period, billable units and the overage amount are scaled by
+      (period_end - suspended_on + 1) / (period_end - period_start + 1),
+      rounded half-up (units to an integer, amount to cents). The tier split
+      fields are not recomputed after proration.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [62, 72]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [billable_units, overage_amount]
+    confidence: medium
+    scenarios: [RATING-003]
+    question: >-
+      The proration factor counts the days from suspended_on through
+      period_end - i.e. it bills for the suspended tail of the period, not the
+      active head. That looks inverted for a suspension, but it is what the
+      SQL computes. Should the port reproduce this tail-fraction proration
+      exactly, including leaving first/second tier units un-prorated?
+    answer: >-
+      Yes - the SQL multiplies by (period_end - suspended_on + 1) over the
+      inclusive period length (the suspended tail), rounds units half-up to an
+      integer and the amount half-up to cents, and never recomputes the tier
+      split. RATING-003's transcript (billable 100, amount 4.37) encodes
+      exactly this. Reproduce as written.
+    decision:
+      status: approved
+      reviewer: workshop-reviewer
+      date: "2026-08-11"
+      note: Approved per validation-run instruction; reproduce legacy behavior.
+  - id: RATING-004
+    statement: >-
+      Overage is priced at the plan overage_rate for first-tier units, and the
+      total amount is rounded half-up to 2 decimal places before any
+      suspension proration.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [58, 60]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [overage_amount, first_tier_units]
+    confidence: high
+    scenarios: [RATING-004]
+    decision:
+      status: approved
+      reviewer: workshop-reviewer
+      date: "2026-08-11"
+      note: Approved per validation-run instruction; reproduce legacy behavior.
+  - id: RATING-005
+    statement: >-
+      The first pricing tier holds up to 101 billable units
+      (LEAST(billable, 101)); only units beyond 101 fall into the second tier.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [58, 59]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [first_tier_units, second_tier_units]
+    confidence: high
+    scenarios: [RATING-005]
+    question: >-
+      The tier boundary is 101 units, not a round 100 - it reads like an
+      off-by-one that customers' bills now depend on. Preserve 101 exactly?
+    answer: >-
+      Yes - LEAST(v_billable, 101) puts 101 units in the first tier;
+      RATING-004/005 (billable 101, second tier 0, amount 101 * rate) only
+      reproduce with the 101 boundary. Preserve 101 exactly.
+    decision:
+      status: approved
+      reviewer: workshop-reviewer
+      date: "2026-08-11"
+      note: Approved per validation-run instruction; reproduce legacy behavior.
+  - id: RATING-006
+    statement: >-
+      Second-tier units (billable beyond 101) are priced at 1.5 times the plan
+      overage_rate, summed with the first tier before rounding.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [58, 60]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [first_tier_units, second_tier_units, overage_amount]
+    confidence: high
+    scenarios: [RATING-006]
+    decision:
+      status: approved
+      reviewer: workshop-reviewer
+      date: "2026-08-11"
+      note: Approved per validation-run instruction; reproduce legacy behavior.
+  - id: RATING-007
+    statement: >-
+      The usage summary groups the period's usage_events by kind, returning
+      event counts and unit sums ordered alphabetically by kind, using the
+      same inclusive occurred_at date window as rating.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [79, 93]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [kind, event_count, units]
+    confidence: high
+    scenarios: [RATING-007]
+    decision:
+      status: approved
+      reviewer: workshop-reviewer
+      date: "2026-08-11"
+      note: Approved per validation-run instruction; reproduce legacy behavior.
+  - id: RATING-008
+    statement: >-
+      Finalizing a rating upserts a rating_period with a deterministic id of
+      md5(tenant_id || period_start), then upserts a rating_result with id
+      md5(period_id), created_at at period_end midnight, storing the rating's
+      used/quota/billable/overage values - but persisting rollover_units as
+      GREATEST(quota_units - used_units, 0) (the unused quota generated for
+      future periods), not the rollover consumed by the rating. The conflict
+      update refreshes used/rollover/billable/overage but not quota_units,
+      subscription_id, or created_at.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [95, 139]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [used_units, quota_units, rollover_units, billable_units, overage_amount]
+    confidence: medium
+    scenarios: [RATING-008]
+    question: >-
+      The persisted rollover_units column deliberately stores unused quota
+      (GREATEST(quota - used, 0)) rather than the rollover the rating
+      consumed, which is what feeds RATING-002's 3-month window in later
+      periods. Reproduce this exactly? And should the ON CONFLICT update keep
+      omitting quota_units, subscription_id, and created_at as the SQL does?
+    answer: >-
+      Yes - persist rollover_units as GREATEST(quota_units - used_units, 0)
+      exactly as the SQL does (RATING-008 records 0 while the rating consumed
+      200), keep the md5-derived deterministic ids and period_end-midnight
+      created_at, and keep the conflict update omitting quota_units,
+      subscription_id, and created_at. Reproduce as written.
+    decision:
+      status: approved
+      reviewer: workshop-reviewer
+      date: "2026-08-11"
+      note: Approved per validation-run instruction; reproduce legacy behavior.
