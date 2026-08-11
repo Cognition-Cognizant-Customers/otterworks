@@ -131,7 +131,6 @@ def get_rating(
         "first_tier_units": outcome.first_tier_units,
         "second_tier_units": outcome.second_tier_units,
         "overage_amount": f"{outcome.overage_amount:.2f}",
-        "rating_values": f"{outcome.billable_units}:{outcome.overage_amount:.2f}",
     }
 
 
@@ -152,7 +151,6 @@ def get_usage_summary(
             {"kind": row.kind, "event_count": row.event_count, "units": row.units}
             for row in rows
         ],
-        "summary_values": ",".join(f"{row.kind}:{row.units}" for row in rows),
     }
 
 
@@ -176,10 +174,15 @@ def finalize_tenant_rating(tenant_id: Annotated[UUID, Path()], request: RatingPe
         "rollover_units": result.rollover_units,
         "billable_units": result.billable_units,
         "overage_amount": f"{result.overage_amount:.2f}",
-        "persisted_values": (
-            f"{result.used_units}:{result.quota_units}:{result.rollover_units}:"
-            f"{result.billable_units}:{result.overage_amount:.2f}"
-        ),
+        "result_rows": [
+            {
+                "used_units": result.used_units,
+                "quota_units": result.quota_units,
+                "rollover_units": result.rollover_units,
+                "billable_units": result.billable_units,
+                "overage_amount": f"{result.overage_amount:.2f}",
+            }
+        ],
     }
 
 
