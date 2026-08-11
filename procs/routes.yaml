@@ -61,8 +61,7 @@ modules:
             first_tier_units: {json_path: "$.first_tier_units", type: integer}
             second_tier_units: {json_path: "$.second_tier_units", type: integer}
             overage_amount: {json_path: "$.overage_amount", type: decimal}
-          probes:
-            rating_values: {json_path: "$.rating_values"}
+          probes: {}
       billing.fn_usage_summary:
         method: GET
         path: /api/tenants/{tenant_id}/usage-summary
@@ -76,8 +75,7 @@ modules:
           business_fields:
             kinds: {json_path: "$.rows[*].kind", type: text, collect: true}
             units: {json_path: "$.rows[*].units", type: integer, collect: true}
-          probes:
-            summary_values: {json_path: "$.summary_values"}
+          probes: {}
       billing.sp_finalize_rating:
         method: POST
         path: /api/tenants/{tenant_id}/rating/finalize
@@ -95,7 +93,7 @@ modules:
             billable_units: {json_path: "$.billable_units", type: integer}
             overage_amount: {json_path: "$.overage_amount", type: decimal}
           probes:
-            persisted_values: {json_path: "$.persisted_values"}
+            rating_result: {json_path: "$.result_rows"}
   invoicing:
     status: pending
     entrypoints: {}
