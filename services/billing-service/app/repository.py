@@ -165,36 +165,17 @@ class PostgresRatingRepository:
             for row in rows
         ]
 
-    def get_rating_period(self, tenant_id: UUID, period_start: date) -> UUID | None:
-        row = self.connection.execute(
-            """
-            SELECT id
-            FROM billing_svc.rating_periods
-            WHERE tenant_id = %s AND period_start = %s
-            """,
-            (tenant_id, period_start),
-        ).fetchone()
-        return row["id"] if row else None
-
-    def insert_rating_period(
+    def upsert_rating_period(
         self, period_id: UUID, tenant_id: UUID, period_start: date, period_end: date
     ) -> None:
         self.connection.execute(
             """
             INSERT INTO billing_svc.rating_periods (id, tenant_id, period_start, period_end)
             VALUES (%s, %s, %s, %s)
+            ON CONFLICT (tenant_id, period_start) DO UPDATE SET
+                period_end = EXCLUDED.period_end
             """,
             (period_id, tenant_id, period_start, period_end),
-        )
-
-    def update_rating_period(self, period_id: UUID, period_end: date) -> None:
-        self.connection.execute(
-            """
-            UPDATE billing_svc.rating_periods
-            SET period_end = %s
-            WHERE id = %s
-            """,
-            (period_end, period_id),
         )
 
     def get_rating_result(self, result_id: UUID) -> RatingResultRow | None:
@@ -221,13 +202,18 @@ class PostgresRatingRepository:
             created_at=row["created_at"],
         )
 
-    def insert_rating_result(self, result: RatingResultRow) -> None:
+    def upsert_rating_result(self, result: RatingResultRow) -> None:
         self.connection.execute(
             """
             INSERT INTO billing_svc.rating_results (
                 id, period_id, subscription_id, used_units, quota_units,
                 rollover_units, billable_units, overage_amount, created_at
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE SET
+                used_units = EXCLUDED.used_units,
+                rollover_units = EXCLUDED.rollover_units,
+                billable_units = EXCLUDED.billable_units,
+                overage_amount = EXCLUDED.overage_amount
             """,
             (
                 result.result_id,
@@ -242,19 +228,3 @@ class PostgresRatingRepository:
             ),
         )
 
-    def update_rating_result(
-        self,
-        result_id: UUID,
-        used_units: int,
-        rollover_units: int,
-        billable_units: int,
-        overage_amount: Decimal,
-    ) -> None:
-        self.connection.execute(
-            """
-            UPDATE billing_svc.rating_results
-            SET used_units = %s, rollover_units = %s, billable_units = %s, overage_amount = %s
-            WHERE id = %s
-            """,
-            (used_units, rollover_units, billable_units, overage_amount, result_id),
-        )
