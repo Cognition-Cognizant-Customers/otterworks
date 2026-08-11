@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "OtterWorks Collaboration Service - Real-time collaborative editing via CRDT",
   "main": "dist/index.js",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
