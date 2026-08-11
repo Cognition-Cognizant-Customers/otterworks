@@ -33,6 +33,19 @@ impl S3Client {
         }
     }
 
+    /// Verify the configured bucket is reachable so a misconfigured
+    /// `S3_BUCKET` surfaces at startup instead of as opaque 500s on upload.
+    pub async fn verify_bucket(&self) {
+        match self.client.head_bucket().bucket(&self.bucket).send().await {
+            Ok(_) => tracing::info!(bucket = %self.bucket, "S3 bucket verified"),
+            Err(e) => tracing::error!(
+                bucket = %self.bucket,
+                error = %e,
+                "Configured S3 bucket is not accessible; uploads will fail (check S3_BUCKET)"
+            ),
+        }
+    }
+
     /// Upload file content to S3.
     pub async fn upload_object(
         &self,
@@ -48,7 +61,9 @@ impl S3Client {
             .content_type(content_type)
             .send()
             .await
-            .map_err(|e| ServiceError::S3Error(format!("upload failed: {e}")))?;
+            .map_err(|e| {
+                ServiceError::S3Error(format!("upload to bucket '{}' failed: {e}", self.bucket))
+            })?;
 
         tracing::info!(key = %key, bucket = %self.bucket, "Uploaded object to S3");
         Ok(())
