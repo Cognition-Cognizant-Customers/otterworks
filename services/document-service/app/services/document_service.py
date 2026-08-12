@@ -207,7 +207,7 @@ class DocumentService:
         result = await self.db.execute(
             select(DocumentVersion)
             .where(DocumentVersion.document_id == document_id)
-            .order_by(DocumentVersion.version_number.desc())
+            .order_by(DocumentVersion.version_number.asc())
         )
         return list(result.scalars().all())
 

@@ -581,7 +581,7 @@ async def test_service_update_with_updated_by(db_session, owner_id):
     )
     assert updated is not None
     versions = await service.list_versions(doc.id)
-    assert versions[0].created_by == editor
+    assert versions[-1].created_by == editor
 
 
 # ---- Schema validation ----
