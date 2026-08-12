@@ -4,7 +4,7 @@
 
 **Control framework:** NIST SP 800-53 Rev. 5. Every finding maps to **SI-2 (Flaw Remediation)**; a second control is added by vulnerability class: **SC-5** (Denial-of-Service Protection), **SI-10** (Information Input Validation — injection/XSS/traversal/deserialization/RCE), **AC-3** (Access Enforcement — authn/authz bypass, spoofing, CSRF), **SC-7** (Boundary Protection — SSRF), **SI-11** (Error Handling — information leakage). No other control IDs are asserted.
 
-**Severity note:** Trivy's config restricts its report to HIGH/CRITICAL. `pip-audit` and `bundler-audit` report no/partial severity; where shown as Medium/Low/Unknown it comes from the scanner itself or a severity cross-check with the vulnerability database.
+**Severity note:** `bundler-audit` does not honour `.trivyignore`, so two admin-service CVEs it re-surfaced (CVE-2026-33195, CVE-2026-33658) that are already accepted in `.trivyignore` are treated as excluded and kept out of the backlog rows below. Also: Trivy's config restricts its report to HIGH/CRITICAL. `pip-audit` and `bundler-audit` report no/partial severity; where shown as Medium/Low/Unknown it comes from the scanner itself or a severity cross-check with the vulnerability database.
 
 ## Excluded findings (already accepted in `.trivyignore`)
 
@@ -12,7 +12,6 @@
 
 | Service | Package | Finding | Severity | Accepted reason (from .trivyignore) |
 |---|---|---|---|---|
-
 | frontend/admin-dashboard | @angular/common | CVE-2025-66035 | High | requires Angular 19+ upgrade (major) |
 | frontend/admin-dashboard | @angular/compiler | CVE-2025-66412 | High | requires Angular 19+ upgrade (major) |
 | frontend/admin-dashboard | @angular/compiler | CVE-2026-22610 | High | requires Angular 19+ upgrade (major) |
@@ -33,7 +32,7 @@ The `.trivyignore` also lists CVEs for `etl/airflow` and `frontend/web-app` (Nex
 ## Backlog by owning service
 
 
-### services/admin-service — 38 findings (9 high/critical)
+### services/admin-service — 36 findings (9 high/critical)
 
 | Finding | Package | Installed | Severity | Fix | Breaking? | Controls (NIST 800-53) |
 |---|---|---|---|---|---|---|
@@ -46,7 +45,6 @@ The `.trivyignore` also lists CVEs for `etl/airflow` and `frontend/web-app` (Nex
 | CVE-2026-54463 — websocket-driver: websocket-driver: Denial of Service via unbounded memory consumption i | `websocket-driver` | 0.8.0 | High | Version bump: 0.8.0 -> >= 0.8.1 | No | SI-2, SC-5 |
 | CVE-2026-54465 — websocket-driver: websocket-driver: Denial of Service via unbounded memory consumption | `websocket-driver` | 0.8.0 | High | Version bump: 0.8.0 -> >= 0.8.1 | No | SI-2, SC-5 |
 | CVE-2026-61666 — Denial of service via malformed Host header | `websocket-driver` | 0.8.0 | High | Version bump: 0.8.0 -> >= 0.8.2 | No | SI-2, SC-5 |
-| CVE-2026-33658 — Rails Active Storage has a possible DoS vulnerability in proxy mode via multi-range requ | `activestorage` | 7.1.6 | Medium | Version bump: 7.1.6 -> ~> 7.2.3, >= 7.2.3.1, ~> 8.0.4, >= 8.0.4.1, >= 8.1.2.1 | Yes (Rails 7.1 -> >=7.2.3) | SI-2, SC-5 |
 | GHSA-9wjq-cp2p-hrgf — SVG `href` attribute bypasses local-reference restriction in Loofah | `loofah` | 2.25.1 | Medium | Version bump: 2.25.1 -> >= 2.25.2 | No | SI-2, AC-3 |
 | CVE-2026-47240 — Net::IMAP: Command Injection via non-synchronizing literal in "raw" argument | `net-imap` | 0.6.4 | Medium | Version bump: 0.6.4 -> ~> 0.5.15, >= 0.6.4.1 | No | SI-2, SI-10 |
 | CVE-2026-47242 — Net::IMAP: Command Injection via ID command argument | `net-imap` | 0.6.4 | Medium | Version bump: 0.6.4 -> ~> 0.5.15, >= 0.6.4.1 | No | SI-2, SI-10 |
@@ -55,7 +53,6 @@ The `.trivyignore` also lists CVEs for `etl/airflow` and `frontend/web-app` (Nex
 | GHSA-8678-w3jw-xfc2 — Nokogiri: XML::Schema on JRuby allows network requests when NONET is set, bypassing CVE- | `nokogiri` | 1.19.3 | Low | Version bump: 1.19.3 -> >= 1.19.4 | No | SI-2, AC-3 |
 | CVE-2026-33168 — Rails has a possible XSS vulnerability in its Action View tag helpers | `actionview` | 7.1.6 | Unknown | Version bump: 7.1.6 -> ~> 7.2.3, >= 7.2.3.1, ~> 8.0.4, >= 8.0.4.1, >= 8.1.2.1 | Yes (Rails 7.1 -> >=7.2.3) | SI-2, SI-10 |
 | CVE-2026-33173 — Rails Active Storage has possible content type bypass via metadata in direct uploads | `activestorage` | 7.1.6 | Unknown | Version bump: 7.1.6 -> ~> 7.2.3, >= 7.2.3.1, ~> 8.0.4, >= 8.0.4.1, >= 8.1.2.1 | Yes (Rails 7.1 -> >=7.2.3) | SI-2, AC-3 |
-| CVE-2026-33195 — Rails Active Storage has possible Path Traversal in DiskService | `activestorage` | 7.1.6 | Unknown | Version bump: 7.1.6 -> ~> 7.2.3, >= 7.2.3.1, ~> 8.0.4, >= 8.0.4.1, >= 8.1.2.1 | Yes (Rails 7.1 -> >=7.2.3) | SI-2, SI-10 |
 | CVE-2026-33169 — Rails Active Support has a possible ReDoS vulnerability in number_to_delimited | `activesupport` | 7.1.6 | Unknown | Version bump: 7.1.6 -> ~> 7.2.3, >= 7.2.3.1, ~> 8.0.4, >= 8.0.4.1, >= 8.1.2.1 | Yes (Rails 7.1 -> >=7.2.3) | SI-2, SC-5 |
 | CVE-2026-33170 — Rails Active Support has a possible XSS vulnerability in SafeBuffer#% | `activesupport` | 7.1.6 | Unknown | Version bump: 7.1.6 -> ~> 7.2.3, >= 7.2.3.1, ~> 8.0.4, >= 8.0.4.1, >= 8.1.2.1 | Yes (Rails 7.1 -> >=7.2.3) | SI-2, SI-10 |
 | GHSA-6jxj-px6v-747w — Deeply nested CSS blocks and functions can trigger a SystemStackError or excessive memor | `crass` | 1.0.6 | Unknown | Version bump: 1.0.6 -> >= 1.0.7 | No | SI-2 |
@@ -295,7 +292,7 @@ The `.trivyignore` also lists CVEs for `etl/airflow` and `frontend/web-app` (Nex
 
 | Service | Ecosystem | Findings | High/Critical |
 |---|---|---|---|
-| services/admin-service | Ruby (Bundler) | 38 | 9 |
+| services/admin-service | Ruby (Bundler) | 36 | 9 |
 | services/api-gateway | Go (modules) | 6 | 6 |
 | services/collab-service | Node.js (npm) | 20 | 13 |
 | services/document-service | Python (Poetry) | 2 | 2 |
@@ -306,4 +303,4 @@ The `.trivyignore` also lists CVEs for `etl/airflow` and `frontend/web-app` (Nex
 | frontend/admin-dashboard | Node.js (npm/Angular) | 8 | 8 |
 | frontend/client-app | Node.js (npm) | 3 | 3 |
 | demo-platform/dashboard | Node.js (npm) | 10 | 10 |
-| **Total** | | **203** | **157** |
+| **Total** | | **201** | **157** |
