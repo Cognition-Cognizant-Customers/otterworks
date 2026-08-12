@@ -23,11 +23,14 @@ import requests
 def service_auth_headers():
     # A full reindex has to enumerate every owner's content. The services scope
     # listings to the caller, so present a service-scoped token rather than a user's.
+    # Called before the indices are cleared: bailing out here leaves the existing
+    # search index in place instead of wiping it and then failing on the crawl.
     secret = os.environ.get("JWT_SECRET", "")
     if not secret:
-        print("[%s] WARNING: JWT_SECRET unset, service listing calls will be rejected"
+        print("[%s] FATAL: JWT_SECRET unset, the listing calls would be rejected and "
+              "the reindex would leave the search index empty. Aborting."
               % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        return {}
+        sys.exit(1)
     claims = {
         "scope": "service",
         "sub": "etl-search-reindex",

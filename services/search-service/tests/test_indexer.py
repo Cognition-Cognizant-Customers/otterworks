@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.config import MeiliSearchConfig
-from app.services.indexer import Indexer
+from app.services.indexer import Indexer, ReindexUnauthorized
 from app.services.meilisearch_client import MeiliSearchService
 
 
@@ -122,3 +122,16 @@ class TestIndexer:
     def test_process_event_unknown_action(self, indexer: Indexer):
         result = indexer.process_event({"action": "unknown", "data": {}})
         assert result is None
+
+    def test_reindex_when_crawl_is_rejected_leaves_index_alone(
+        self, indexer: Indexer
+    ):
+        """A rebuild the source rejects must not replace the index with an empty one."""
+        indexer.search.reindex = MagicMock()
+        denied = MagicMock(status_code=401)
+
+        with patch("app.services.indexer.requests.get", return_value=denied):
+            with pytest.raises(ReindexUnauthorized):
+                indexer.reindex()
+
+        indexer.search.reindex.assert_not_called()

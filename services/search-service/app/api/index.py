@@ -6,7 +6,7 @@ import structlog
 from flask import Blueprint, jsonify, request
 
 from app.api.health import INDEX_COUNT
-from app.services.indexer import Indexer
+from app.services.indexer import Indexer, ReindexUnauthorized
 from app.services.meilisearch_client import MeiliSearchService
 
 logger = structlog.get_logger()
@@ -88,6 +88,10 @@ def reindex() -> tuple:
         result = indexer.reindex()
         logger.info("api_reindex_triggered")
         return jsonify(result), 200
+    except ReindexUnauthorized:
+        # Bailing out leaves the existing index in place rather than emptying it.
+        logger.exception("api_reindex_unauthorized")
+        return jsonify({"error": "Reindex crawl could not authenticate"}), 503
     except Exception:
         logger.exception("api_reindex_failed")
         return jsonify({"error": "Failed to reindex"}), 500
