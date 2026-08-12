@@ -1,0 +1,198 @@
+module: invoicing
+rules:
+  - id: INV-001
+    statement: >-
+      The invoice preview bills the plan of the latest subscription overlapping
+      the requested period (starts_on <= period_end and ends_on null or >=
+      period_start, ordered by starts_on descending, first row).
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [23, 29]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [plan_code, monthly_fee]
+    confidence: high
+    scenarios: [INVOICE-001, INVOICE-002]
+    decision:
+      status: pending
+  - id: INV-002
+    statement: >-
+      The preview always returns exactly five fixed lines in order: line 1
+      'plan' (plan code, rounded monthly fee), line 2 'usage' ('usage overage',
+      rounded overage amount from billing.fn_usage_rating for the period),
+      lines 3 and 4 'tax' ('regional tax' and 'local tax'), line 5 'credit'
+      ('credit notes'). Lines are emitted even when their amount is zero.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [45, 58]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [line_no, line_type, description, amount, total]
+    confidence: high
+    scenarios: [INVOICE-001, INVOICE-002]
+    decision:
+      status: pending
+  - id: INV-003
+    statement: >-
+      Tax is 8.25% of (monthly_fee + overage_amount), or exactly 0 when the
+      tenant is tax_exempt. The tax is split evenly into the two tax lines as
+      v_tax/2 each, with NO rounding applied to the halves in the preview
+      output.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [39, 54]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [amount, total]
+    confidence: medium
+    scenarios: [INVOICE-001, INVOICE-002]
+    question: >-
+      The preview emits unrounded tax halves (e.g. 2.2506) while every other
+      line amount is rounded to 2 decimals, and sp_issue_invoice later rounds
+      each half independently (round(v_tax/2) + round(v_tax/2)), which can
+      differ by a cent from round(v_tax) (e.g. v_tax=4.05 -> 2.03+2.03=4.06).
+      Should the extracted service reproduce the split-then-round behavior
+      exactly (bug-for-bug), or compute tax once and round?
+    decision:
+      status: pending
+  - id: INV-004
+    statement: >-
+      The tax_amount column of every preview line is always 0; tax is only ever
+      expressed as its own dedicated 'tax' lines, never attached to other
+      lines.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [45, 58]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [tax_amount]
+    confidence: medium
+    scenarios: [INVOICE-002]
+    question: >-
+      tax_amount is a declared output column that is hard-coded to 0 on all
+      five lines, including the tax lines themselves. Is this vestigial and to
+      be preserved as-is in the extracted API, or should the tax lines carry
+      their amount in tax_amount instead?
+    decision:
+      status: pending
+  - id: INV-005
+    statement: >-
+      The available credit pool is the sum of remaining_amount across ALL of
+      the tenant's credit notes with remaining_amount > 0, regardless of issue
+      date or period. The applied credit is capped at
+      round(monthly_fee + overage_amount + v_tax, 2) using the UNROUNDED tax,
+      and the credit preview line shows amount 0, credit_applied equal to the
+      applied credit, and total equal to its negation.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [34, 58]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [credit_applied, total]
+    confidence: medium
+    scenarios: [INVOICE-003, INVOICE-004]
+    question: >-
+      The credit cap uses the unrounded tax (round(fee + overage + v_tax, 2))
+      while the invoice total uses the sum of the two independently-rounded
+      tax lines, so the cap and the invoice tax can disagree by a cent, and
+      credit notes are not scoped to the invoiced period at all. Reproduce
+      both behaviors exactly?
+    decision:
+      status: pending
+  - id: INV-006
+    statement: >-
+      Invoice identity is deterministic and issuing is idempotent: period_id =
+      md5(tenant_id || period_start)::uuid, invoice_id = md5(period_id ||
+      'invoice')::uuid, line id = md5(invoice_id || line_no)::uuid. Re-issuing
+      upserts the invoice (ON CONFLICT sets status='issued') and deletes and
+      re-inserts all invoice lines.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [84, 113]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [invoices, invoice_lines]
+    confidence: high
+    scenarios: [INVOICE-005]
+    decision:
+      status: pending
+  - id: INV-007
+    statement: >-
+      Persisted invoice lines store the preview line's amount, EXCEPT the
+      credit line, which stores the (negative) total instead of its amount
+      (which is 0).
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [103, 121]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [invoice_lines]
+    confidence: medium
+    scenarios: [INVOICE-003, INVOICE-004, INVOICE-006]
+    question: >-
+      Storing the negative total for the credit line but the raw amount for
+      all other lines looks accidental (the 'amount' column means different
+      things per line_type). Preserve exactly?
+    decision:
+      status: pending
+  - id: INV-008
+    statement: >-
+      Invoice totals are accumulated per line with per-line rounding: subtotal
+      = sum of round(amount, 2) over 'plan' and 'usage' lines; tax = sum of
+      round(amount, 2) over 'tax' lines; credit = credit_applied of the
+      'credit' line; total = round(subtotal + tax - credit, 2). issued_at is
+      set to period_end cast to timestamptz.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [94, 125]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [subtotal, tax, total, status]
+    confidence: high
+    scenarios: [INVOICE-003, INVOICE-004, INVOICE-005]
+    decision:
+      status: pending
+  - id: INV-009
+    statement: >-
+      After issuing, credit notes are consumed FIFO ordered by (issued_on, id):
+      each note's remaining_amount becomes GREATEST(remaining - outstanding
+      credit, 0) and the outstanding credit is reduced by the note's prior
+      remaining_amount, stopping once the outstanding credit reaches 0. Notes
+      with equal issued_on are consumed in id order.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [127, 138]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [credit_notes]
+    confidence: high
+    scenarios: [INVOICE-003, INVOICE-004]
+    decision:
+      status: pending
+  - id: INV-010
+    statement: >-
+      Issuing an invoice first finalizes rating for the period by calling
+      billing.sp_finalize_rating, which upserts billing.rating_periods and
+      billing.rating_results before the invoice is computed. The preview's
+      usage line likewise depends on billing.fn_usage_rating (rating module).
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [93, 93]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [rating_periods, rating_results]
+    confidence: medium
+    scenarios: [INVOICE-005]
+    question: >-
+      This is a cross-module dependency on the still-pending 'rating' module
+      (fn_usage_rating and sp_finalize_rating). To keep the invoicing
+      extraction self-contained, may the billing service internally
+      re-implement the rating computation and the finalize-rating side effects
+      (rating_periods/rating_results upserts) needed by invoicing, without
+      marking the rating module extracted or changing its routes.yaml entry?
+    decision:
+      status: pending
+  - id: INV-011
+    statement: >-
+      billing.fn_invoice_lines returns the persisted lines (line_no, line_type,
+      description, amount) of the requested invoice ordered by line_no, and
+      returns an empty set for an unknown invoice id.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [62, 75]
+    inputs: [invoice_id]
+    outputs: [line_no, line_type, description, amount]
+    confidence: high
+    scenarios: [INVOICE-006]
+    decision:
+      status: pending
