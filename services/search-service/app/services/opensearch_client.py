@@ -23,6 +23,10 @@ from app.services.meilisearch_client import record_search_analytics
 
 logger = structlog.get_logger()
 
+# Date mapping accepts full ISO timestamps and date-only values; a date-only
+# upper bound (e.g. lte 2024-06-30) is rounded up to the end of that day.
+DATE_FIELD: dict[str, Any] = {"type": "date", "format": "strict_date_optional_time||epoch_millis"}
+
 DOCUMENTS_MAPPINGS: dict[str, Any] = {
     "properties": {
         "id": {"type": "keyword"},
@@ -31,8 +35,8 @@ DOCUMENTS_MAPPINGS: dict[str, Any] = {
         "tags": {"type": "text", "fields": {"raw": {"type": "keyword"}}},
         "type": {"type": "keyword"},
         "owner_id": {"type": "keyword"},
-        "created_at": {"type": "keyword"},
-        "updated_at": {"type": "keyword"},
+        "created_at": DATE_FIELD,
+        "updated_at": DATE_FIELD,
     }
 }
 
@@ -46,8 +50,8 @@ FILES_MAPPINGS: dict[str, Any] = {
         "owner_id": {"type": "keyword"},
         "folder_id": {"type": "keyword"},
         "size": {"type": "long"},
-        "created_at": {"type": "keyword"},
-        "updated_at": {"type": "keyword"},
+        "created_at": DATE_FIELD,
+        "updated_at": DATE_FIELD,
     }
 }
 
