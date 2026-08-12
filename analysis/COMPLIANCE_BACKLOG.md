@@ -8,7 +8,7 @@
 
 ## Excluded findings (already accepted in `.trivyignore`)
 
-**14 findings were excluded** from this backlog because they are suppressed by the repo's `.trivyignore` (Trivy reports them as ignored). They are pre-accepted risks tracked for future upgrade cycles and therefore not new backlog items:
+**15 findings were excluded** from this backlog because they are suppressed by the repo's `.trivyignore` (Trivy reports them as ignored). They are pre-accepted risks tracked for future upgrade cycles and therefore not new backlog items:
 
 | Service | Package | Finding | Severity | Accepted reason (from .trivyignore) |
 |---|---|---|---|---|
@@ -20,6 +20,7 @@
 | frontend/admin-dashboard | @angular/core | CVE-2026-22610 | High | requires Angular 19+ upgrade (major) |
 | frontend/admin-dashboard | @angular/core | CVE-2026-27970 | High | requires Angular 19+ upgrade (major) |
 | services/admin-service | activestorage | CVE-2026-33195 | Critical | requires Rails 7.2+ upgrade (activestorage) |
+| services/admin-service | activestorage | CVE-2026-33658 | Medium | requires Rails 7.2+ upgrade (activestorage) |
 | services/api-gateway | github.com/golang-jwt/jwt/v5 | CVE-2025-30204 | High | Go dependency upgrades require build tool |
 | services/api-gateway | go.opentelemetry.io/otel/sdk | CVE-2026-24051 | High | Go dependency upgrades require build tool |
 | services/api-gateway | go.opentelemetry.io/otel/sdk | CVE-2026-39883 | High | Go dependency upgrades require build tool |
@@ -27,7 +28,7 @@
 | services/document-service | protobuf | CVE-2026-0994 | High | Python dependency upgrades require poetry |
 | services/document-service | starlette | CVE-2024-47874 | High | Python dependency upgrades require poetry |
 
-The `.trivyignore` also lists CVEs for `etl/airflow` and `frontend/web-app` (Next.js) plus a bulk `CVE-2021-*` ignore; only the 14 above matched packages actually present in this scan at HIGH/CRITICAL severity.
+The `.trivyignore` also lists CVEs for `etl/airflow` and `frontend/web-app` (Next.js) plus a bulk `CVE-2021-*` ignore; only the 15 above matched packages actually reported by this scan (14 suppressed by Trivy at HIGH/CRITICAL, plus CVE-2026-33658 re-surfaced by bundler-audit).
 
 ## Backlog by owning service
 
@@ -113,7 +114,7 @@ The `.trivyignore` also lists CVEs for `etl/airflow` and `frontend/web-app` (Nex
 
 | Finding | Package | Installed | Severity | Fix | Breaking? | Controls (NIST 800-53) |
 |---|---|---|---|---|---|---|
-| CVE-2026-48818 — starlette: Starlette: SSRF and NTLM credential theft via UNC paths in StaticFiles on Win | `starlette` | 0.37.2 | High | Version bump: 0.37.2 -> 1.1.0 | Yes (major upgrade) | SI-2, SI-10 |
+| CVE-2026-48818 — starlette: Starlette: SSRF and NTLM credential theft via UNC paths in StaticFiles on Win | `starlette` | 0.37.2 | High | Version bump: 0.37.2 -> 1.1.0 | Yes (major upgrade) | SI-2, SC-7 |
 | CVE-2026-54283 — starlette: Starlette: request.form() limits silently ignored for application/x-www-form- | `starlette` | 0.37.2 | High | Version bump: 0.37.2 -> 1.3.1 | Yes (major upgrade) | SI-2, SC-5 |
 
 ### services/file-service — 1 findings (1 high/critical)
@@ -281,8 +282,8 @@ The `.trivyignore` also lists CVEs for `etl/airflow` and `frontend/web-app` (Nex
 | GHSA-5p4m-2wfm-xmqj — JS-YAML: Quadratic CPU consumption in !!omap resolution (3.x and 4.x) — CVE-2026-59870 f | `js-yaml` | 4.3.0 | High | Version bump: 4.3.0 -> 4.3.1, 3.15.1 | No | SI-2, SC-5 |
 | CVE-2026-67213 — nanoid: nanoid: Denial of Service via infinite loop in random ID generation | `nanoid` | 3.3.16 | High | Version bump: 3.3.16 -> 3.3.17, 5.1.6 | No | SI-2, SC-5 |
 | CVE-2026-64641 — next: Next.js: Denial of Service via crafted requests to App Router with Server Actions | `next` | 15.5.20 | High | Version bump: 15.5.20 -> 15.5.21, 16.2.11 | No | SI-2, SC-5 |
-| CVE-2026-64645 — next: Next.js: Server-Side Request Forgery vulnerability | `next` | 15.5.20 | High | Version bump: 15.5.20 -> 15.5.21, 16.2.11 | No | SI-2, AC-3 |
-| CVE-2026-64649 — next: Next.js: Server-Side Request Forgery via malicious host redirection in Server Acti | `next` | 15.5.20 | High | Version bump: 15.5.20 -> 15.5.21, 16.2.11 | No | SI-2, AC-3 |
+| CVE-2026-64645 — next: Next.js: Server-Side Request Forgery vulnerability | `next` | 15.5.20 | High | Version bump: 15.5.20 -> 15.5.21, 16.2.11 | No | SI-2, SC-7 |
+| CVE-2026-64649 — next: Next.js: Server-Side Request Forgery via malicious host redirection in Server Acti | `next` | 15.5.20 | High | Version bump: 15.5.20 -> 15.5.21, 16.2.11 | No | SI-2, SC-7 |
 | CVE-2026-45623 — postcss: PostCSS: Information disclosure and denial of service via crafted CSS input | `postcss` | 8.4.31 | High | Version bump: 8.4.31 -> 8.5.12 | No | SI-2, SC-5 |
 | GHSA-r28c-9q8g-f849 — PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL) leads to  | `postcss` | 8.4.31 | High | Version bump: 8.4.31 -> 8.5.18 | No | SI-2, SI-10 |
 | GHSA-f88m-g3jw-g9cj — sharp inherited vulnerabilities in libvips: CVE-2026-33327, CVE-2026-33328, CVE-2026-355 | `sharp` | 0.34.5 | High | Version bump: 0.34.5 -> 0.35.0 | No | SI-2 |
