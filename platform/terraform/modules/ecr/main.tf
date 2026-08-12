@@ -52,12 +52,14 @@ resource "aws_ecr_lifecycle_policy" "services" {
           type = "expire"
         }
       },
+      # Multiple entries in a tagPatternList are ANDed by ECR (an image must
+      # carry tags matching every pattern), so each pattern gets its own rule.
       {
         rulePriority = 2
-        description  = "Keep last 20 demo/workshop branch builds (incl. TENANT_PREFIX-ed fork tags)"
+        description  = "Keep last 20 demo branch builds (incl. TENANT_PREFIX-ed fork tags)"
         selection = {
           tagStatus      = "tagged"
-          tagPatternList = ["*demo-*", "*workshop-*"]
+          tagPatternList = ["*demo-*"]
           countType      = "imageCountMoreThan"
           countNumber    = 20
         }
@@ -67,6 +69,19 @@ resource "aws_ecr_lifecycle_policy" "services" {
       },
       {
         rulePriority = 3
+        description  = "Keep last 20 workshop branch builds (incl. TENANT_PREFIX-ed fork tags)"
+        selection = {
+          tagStatus      = "tagged"
+          tagPatternList = ["*workshop-*"]
+          countType      = "imageCountMoreThan"
+          countNumber    = 20
+        }
+        action = {
+          type = "expire"
+        }
+      },
+      {
+        rulePriority = 4
         description  = "Keep last 30 per-commit golden builds"
         selection = {
           tagStatus      = "tagged"
