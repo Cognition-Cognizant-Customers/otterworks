@@ -48,8 +48,14 @@ export interface QuotaUser {
   id: string;
   email: string;
   displayName: string;
+  role: string;
+  status: string;
   storageUsed: number;
   storageQuota: number;
+  lastLogin: string;
+  createdAt: string;
+  department: string;
+  documentsCount: number;
 }
 
 interface RawIncident {
@@ -74,7 +80,12 @@ interface RawUser {
   id: string;
   email: string;
   displayName: string;
+  role?: string;
+  status?: string;
   storageQuota?: { usedBytes?: number; quotaBytes?: number } | null;
+  lastLoginAt?: string | null;
+  createdAt?: string;
+  metadata?: { department?: string; documentsCount?: number } | null;
 }
 
 function mapIncident(raw: RawIncident): Incident {
@@ -102,8 +113,14 @@ function mapQuotaUser(raw: RawUser): QuotaUser {
     id: raw.id,
     email: raw.email,
     displayName: raw.displayName,
+    role: raw.role ?? "",
+    status: raw.status ?? "",
     storageUsed: raw.storageQuota?.usedBytes ?? 0,
     storageQuota: raw.storageQuota?.quotaBytes ?? 5 * 1024 * 1024 * 1024,
+    lastLogin: raw.lastLoginAt ?? raw.createdAt ?? "",
+    createdAt: raw.createdAt ?? "",
+    department: raw.metadata?.department ?? "",
+    documentsCount: raw.metadata?.documentsCount ?? 0,
   };
 }
 

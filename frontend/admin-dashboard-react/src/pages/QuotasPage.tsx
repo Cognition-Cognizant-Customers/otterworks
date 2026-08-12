@@ -86,9 +86,13 @@ export function QuotasPage() {
   const filtered = useMemo(() => {
     const term = filter.trim().toLowerCase();
     if (!term) return users;
-    return users.filter(
-      (u) =>
-        u.displayName.toLowerCase().includes(term) || u.email.toLowerCase().includes(term)
+    // Match MatTableDataSource's default filterPredicate: substring match
+    // against the concatenation of every field value on the row.
+    return users.filter((u) =>
+      Object.values(u)
+        .reduce((acc, value) => acc + String(value ?? "") + "◬", "")
+        .toLowerCase()
+        .includes(term)
     );
   }, [users, filter]);
 

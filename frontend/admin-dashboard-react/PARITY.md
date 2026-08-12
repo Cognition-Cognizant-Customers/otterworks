@@ -77,7 +77,7 @@ React code. Each line is checked off once the React implementation
 ### Display & formatting
 
 - [x] Title "Storage Quotas"
-- [x] Labeled search field ("Search users", placeholder "Search by name or email") filtering by any field (name/email), case-insensitive
+- [x] Labeled search field ("Search users", placeholder "Search by name or email") filtering by any row field (name, email, role, status, id, ...), case-insensitive, matching MatTableDataSource's default predicate
 - [x] Table columns: User (avatar icon + name + email), Used, Quota, Usage, Update Quota
 - [x] Used/Quota formatted via 1024-based `formatBytes` with one decimal (e.g. "1.5 GB", "0 B")
 - [x] Usage column: determinate progress bar + integer percent label; bar turns warn color above 90%
