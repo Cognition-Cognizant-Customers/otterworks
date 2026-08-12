@@ -46,7 +46,7 @@
         <logback.version>1.2.13</logback.version>
         <snakeyaml.version>1.33</snakeyaml.version>
         <postgresql.version>42.7.13</postgresql.version>
-        <commons-compress.version>1.21</commons-compress.version>
+        <commons-compress.version>1.26.0</commons-compress.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <!-- LEGACY: Guava 28.0 (2019, many CVEs). Upgrade target: 33+ -->
         <guava.version>28.0-jre</guava.version>
