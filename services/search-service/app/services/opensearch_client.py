@@ -81,6 +81,7 @@ class OpenSearchService:
         self.documents_index_name = config.documents_index
         self.files_index_name = config.files_index
         self.client = self._build_client(config)
+        self._indices_ready = False
 
     @staticmethod
     def _build_client(config: OpenSearchConfig) -> OpenSearch:
@@ -117,7 +118,18 @@ class OpenSearchService:
             if not self.client.indices.exists(index=index_name):
                 self.client.indices.create(index=index_name, body={"mappings": mappings})
                 logger.info("opensearch_index_created", index=index_name)
+        self._indices_ready = True
         logger.info("opensearch_indices_configured")
+
+    def _ensure_ready(self) -> None:
+        """Lazily retry index bootstrap if it hasn't succeeded yet.
+
+        Writing to a missing index would auto-create it with dynamic mappings
+        (breaking the tags.raw / owner_id filters), so indexing must never
+        proceed until the explicit mappings are in place.
+        """
+        if not self._indices_ready:
+            self.ensure_indices()
 
     def ping(self) -> bool:
         """Check if OpenSearch is reachable."""
@@ -207,6 +219,7 @@ class OpenSearchService:
         page: int,
         page_size: int,
     ) -> SearchResponse:
+        self._ensure_ready()
         indices_to_search = self._resolve_indices(doc_type)
         multi_index = len(indices_to_search) > 1
 
@@ -284,6 +297,7 @@ class OpenSearchService:
         ``match`` query is not, so the suggest path uses
         ``match_phrase_prefix`` to preserve type-ahead semantics.
         """
+        self._ensure_ready()
         suggestions: list[str] = []
         seen: set[str] = set()
 
@@ -311,6 +325,7 @@ class OpenSearchService:
 
     def index_document(self, document: dict[str, Any]) -> None:
         """Index or update a document."""
+        self._ensure_ready()
         doc = {**document, "type": "document"}
         self.client.index(
             index=self.documents_index_name,
@@ -322,6 +337,7 @@ class OpenSearchService:
 
     def index_file(self, file_data: dict[str, Any]) -> None:
         """Index or update a file."""
+        self._ensure_ready()
         doc = {**file_data, "type": "file"}
         self.client.index(
             index=self.files_index_name,
@@ -350,6 +366,7 @@ class OpenSearchService:
         Raises ``RuntimeError`` if any item in a batch fails, matching the
         MeiliSearch adapter's task-wait failure behavior.
         """
+        self._ensure_ready()
         for start in range(0, len(docs), batch_size):
             batch = docs[start : start + batch_size]
             actions: list[dict[str, Any]] = []
