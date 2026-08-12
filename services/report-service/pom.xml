@@ -35,11 +35,39 @@
         <itext.version>5.5.13.3</itext.version>
         <!-- LEGACY: Commons Lang 2.6 (EOL). Upgrade target: commons-lang3 -->
         <commons-lang.version>2.6</commons-lang.version>
-        <!-- LEGACY: Commons IO 2.6 (2018). Upgrade target: 2.15+ -->
-        <commons-io.version>2.6</commons-io.version>
+        <!-- LEGACY: Commons IO (outdated). Upgrade target: 2.15+ -->
+        <commons-io.version>2.14.0</commons-io.version>
+
+        <!-- Security patch overrides (Java 8 / Spring Boot 2.5.x compatible) -->
+        <tomcat.version>9.0.120</tomcat.version>
+        <spring-framework.version>5.3.39</spring-framework.version>
+        <spring-security.version>5.8.16</spring-security.version>
+        <jackson-bom.version>2.18.9</jackson-bom.version>
+        <logback.version>1.2.13</logback.version>
+        <snakeyaml.version>1.33</snakeyaml.version>
+        <postgresql.version>42.7.13</postgresql.version>
+        <micrometer.version>1.15.12</micrometer.version>
+        <commons-compress.version>1.21</commons-compress.version>
+        <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <!-- LEGACY: Guava 28.0 (2019, many CVEs). Upgrade target: 33+ -->
         <guava.version>28.0-jre</guava.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Transitive dependency security pins -->
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-compress</artifactId>
+                <version>${commons-compress.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>commons-beanutils</groupId>
+                <artifactId>commons-beanutils</artifactId>
+                <version>${commons-beanutils.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <!-- Spring Boot starters -->
