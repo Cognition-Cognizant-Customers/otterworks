@@ -12,6 +12,7 @@ OpenSearch Serverless (SigV4 auth via ``OPENSEARCH_AWS_AUTH=true``,
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 import structlog
@@ -82,6 +83,7 @@ class OpenSearchService:
         self.files_index_name = config.files_index
         self.client = self._build_client(config)
         self._indices_ready = False
+        self._bootstrap_lock = threading.Lock()
 
     @staticmethod
     def _build_client(config: OpenSearchConfig) -> OpenSearch:
@@ -110,15 +112,22 @@ class OpenSearchService:
         return {"refresh": "true"} if self.config.supports_refresh else {}
 
     def ensure_indices(self) -> None:
-        """Create indices with mappings if they don't exist."""
-        for index_name, mappings in [
-            (self.documents_index_name, DOCUMENTS_MAPPINGS),
-            (self.files_index_name, FILES_MAPPINGS),
-        ]:
-            if not self.client.indices.exists(index=index_name):
-                self.client.indices.create(index=index_name, body={"mappings": mappings})
-                logger.info("opensearch_index_created", index=index_name)
-        self._indices_ready = True
+        """Create indices with mappings if they don't exist (idempotent)."""
+        with self._bootstrap_lock:
+            for index_name, mappings in [
+                (self.documents_index_name, DOCUMENTS_MAPPINGS),
+                (self.files_index_name, FILES_MAPPINGS),
+            ]:
+                if not self.client.indices.exists(index=index_name):
+                    try:
+                        self.client.indices.create(index=index_name, body={"mappings": mappings})
+                    except RequestError as exc:
+                        # Another worker/process created it concurrently.
+                        if exc.error != "resource_already_exists_exception":
+                            raise
+                    else:
+                        logger.info("opensearch_index_created", index=index_name)
+            self._indices_ready = True
         logger.info("opensearch_indices_configured")
 
     def _ensure_ready(self) -> None:
