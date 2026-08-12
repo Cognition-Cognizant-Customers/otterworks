@@ -3,7 +3,7 @@ import { Capacitor } from "@capacitor/core";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Collaboration from "@tiptap/extension-collaboration";
-import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
+import CollaborationCaret from "@tiptap/extension-collaboration-caret";
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
 import { useAuthStore } from "@/stores/auth-store";
@@ -93,11 +93,11 @@ export function CollaborativeEditor({ documentId, initialContent, onUpdate }: Co
   const editor = useEditor(
     {
       extensions: [
-        StarterKit.configure({ history: false }),
+        StarterKit.configure({ undoRedo: false }),
         Collaboration.configure({ document: ydoc }),
         ...(provider
           ? [
-              CollaborationCursor.configure({
+              CollaborationCaret.configure({
                 provider,
                 user: {
                   name: user?.displayName || "Anonymous",
