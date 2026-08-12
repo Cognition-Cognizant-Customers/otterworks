@@ -53,9 +53,25 @@ jobs:
           for s in yaml.safe_load(open('incidents/scenarios.yaml'))['scenarios']:
               print(s['id'])
           ")"
+          # Every invocation gets its own report directory (and the directory
+          # is removed first), so a failing scenario's evidence is preserved
+          # in the artifact and a run that dies before writing a report can
+          # never be mistaken for a stale one from an earlier iteration.
+          verdict_of() {
+            uv run python -c "
+          import json, pathlib, sys
+          p = pathlib.Path(sys.argv[1]) / 'incident-report.json'
+          r = json.loads(p.read_text()) if p.exists() else {'results': []}
+          print(r['results'][0]['status'] if r['results'] else 'MISSING')
+          " "$1"
+          }
           rc=0
           for scenario in $scenarios; do
             echo "::group::$scenario"
+            slug="${scenario//:/-}"
+            probe_dir="incidents/reports/$slug/probe"
+            verify_dir="incidents/reports/$slug/verify"
+            rm -rf "$probe_dir" "$verify_dir"
             make incident-inject SCENARIO="$scenario"
             # While the incident is live the probe must reproduce it: a FAIL
             # verdict in the report. Anything else — PASS, or an INCONCLUSIVE
@@ -63,32 +79,31 @@ jobs:
             # rather than the exit status because make collapses every recipe
             # failure to exit 2, erasing the FAIL (1) vs INCONCLUSIVE (3)
             # distinction.
-            make incident-probe SCENARIO="$scenario" || true
-            verdict="$(uv run python -c "
-          import json
-          r = json.load(open('incidents/reports/incident-report.json'))
-          print(r['results'][0]['status'] if r['results'] else 'MISSING')
-          ")"
+            make incident-probe SCENARIO="$scenario" INCIDENT_REPORT_DIR="$probe_dir" || true
+            verdict="$(verdict_of "$probe_dir")"
             if [[ "$verdict" != "FAIL" ]]; then
               echo "::error::$scenario: probe reported $verdict instead of FAIL while the flag was set"
               rc=1
             fi
             make incident-reset
-            # With the flag cleared verification must pass: PASS, exit 0.
-            if ! make incident-verify SCENARIO="$scenario"; then
-              echo "::error::$scenario: verify did not pass after the flag was cleared"
+            # With the flag cleared verification must pass: a PASS verdict.
+            make incident-verify SCENARIO="$scenario" INCIDENT_REPORT_DIR="$verify_dir" || true
+            verdict="$(verdict_of "$verify_dir")"
+            if [[ "$verdict" != "PASS" ]]; then
+              echo "::error::$scenario: verify reported $verdict instead of PASS after the flag was cleared"
               rc=1
             fi
             echo "::endgroup::"
           done
           exit $rc
 
-      - name: Publish the report
+      - name: Publish the reports
         if: always()
         run: |
-          if [[ -f incidents/reports/incident-report.md ]]; then
-            cat incidents/reports/incident-report.md >> "$GITHUB_STEP_SUMMARY"
-          fi
+          find incidents/reports -name incident-report.md | sort | while read -r report; do
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+          done
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()

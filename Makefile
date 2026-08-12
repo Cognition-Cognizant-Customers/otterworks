@@ -326,6 +326,7 @@ dast-zap: ## Run the OWASP ZAP baseline sweep and merge it into the DAST report
 # in incidents/reports/incident-report.{json,md} on every exit path.
 
 INCIDENT_TARGET ?= http://localhost:8080
+INCIDENT_REPORT_DIR ?= incidents/reports
 INCIDENT := uv run --with httpx --with tabulate --with pyyaml incidents/harness/incident_check.py
 
 incident-list: ## List the seeded incident scenarios
@@ -341,13 +342,13 @@ incident-probe: ## Reproduce one scenario's symptom (SCENARIO=<id>); exits 1 whi
 ifndef SCENARIO
 	$(error SCENARIO is required, e.g. make incident-probe SCENARIO=search-service:suggest_500)
 endif
-	$(INCIDENT) probe --target $(INCIDENT_TARGET) --scenario $(SCENARIO)
+	$(INCIDENT) probe --target $(INCIDENT_TARGET) --scenario $(SCENARIO) --report-dir $(INCIDENT_REPORT_DIR)
 
 incident-verify: ## Prove one scenario is resolved (SCENARIO=<id>): symptom gone AND a legitimate request succeeds
 ifndef SCENARIO
 	$(error SCENARIO is required, e.g. make incident-verify SCENARIO=search-service:suggest_500)
 endif
-	$(INCIDENT) verify --target $(INCIDENT_TARGET) --scenario $(SCENARIO)
+	$(INCIDENT) verify --target $(INCIDENT_TARGET) --scenario $(SCENARIO) --report-dir $(INCIDENT_REPORT_DIR)
 
 incident-reset: ## Clear every chaos flag (INCIDENT_TARGET=<url>)
 	$(INCIDENT) reset --target $(INCIDENT_TARGET)
