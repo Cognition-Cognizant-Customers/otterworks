@@ -26,6 +26,7 @@ jobs:
       audit-service: ${{ steps.changes.outputs.audit-service }}
       web-app: ${{ steps.changes.outputs.web-app }}
       admin-dashboard: ${{ steps.changes.outputs.admin-dashboard }}
+      admin-dashboard-react: ${{ steps.changes.outputs.admin-dashboard-react }}
       demo-platform: ${{ steps.changes.outputs.demo-platform }}
       infrastructure: ${{ steps.changes.outputs.infrastructure }}
       report-service: ${{ steps.changes.outputs.report-service }}
@@ -61,6 +62,8 @@ jobs:
               - 'frontend/client-app/**'
             admin-dashboard:
               - 'frontend/admin-dashboard/**'
+            admin-dashboard-react:
+              - 'frontend/admin-dashboard-react/**'
             demo-platform:
               - 'demo-platform/**'
               - 'scripts/**'
@@ -314,6 +317,24 @@ jobs:
       - run: npm ci
       - run: npm run lint || true
       - run: npm test || true
+      - run: npm run build
+
+  # React/Vite - Admin Dashboard (migration slice)
+  admin-dashboard-react:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.admin-dashboard-react == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/admin-dashboard-react
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
       - run: npm run build
 
   # Java 8 / Maven - Report Service (LEGACY)
