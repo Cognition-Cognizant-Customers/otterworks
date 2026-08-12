@@ -1,7 +1,7 @@
 module Api
   module V1
     module Admin
-      class HealthController < ApplicationController
+      class HealthController < BaseController
         # GET /api/v1/admin/health/services
         def services
           result = HealthChecker.check_all

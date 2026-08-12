@@ -1,7 +1,7 @@
 module Api
   module V1
     module Admin
-      class FeaturesController < ApplicationController
+      class FeaturesController < BaseController
         before_action :set_feature_flag, only: %i[show update destroy]
 
         # GET /api/v1/admin/features

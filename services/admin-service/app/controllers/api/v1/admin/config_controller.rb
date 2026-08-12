@@ -1,7 +1,7 @@
 module Api
   module V1
     module Admin
-      class ConfigController < ApplicationController
+      class ConfigController < BaseController
         before_action :set_config, only: %i[show update]
 
         # GET /api/v1/admin/config

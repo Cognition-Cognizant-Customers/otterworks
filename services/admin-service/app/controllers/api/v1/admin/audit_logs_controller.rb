@@ -1,7 +1,7 @@
 module Api
   module V1
     module Admin
-      class AuditLogsController < ApplicationController
+      class AuditLogsController < BaseController
         class InvalidDateError < StandardError; end
 
         rescue_from InvalidDateError do |e|

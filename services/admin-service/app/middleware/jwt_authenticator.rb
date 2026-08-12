@@ -20,6 +20,7 @@ class JwtAuthenticator
     env['jwt.user_id'] = payload['sub']
     env['jwt.user_email'] = payload['email']
     env['jwt.user_role'] = payload['role']
+    env['jwt.user_roles'] = Array(payload['roles']) + Array(payload['role'])
 
     @app.call(env)
   end

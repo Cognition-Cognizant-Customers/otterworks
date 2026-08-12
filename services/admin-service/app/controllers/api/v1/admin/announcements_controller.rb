@@ -1,7 +1,7 @@
 module Api
   module V1
     module Admin
-      class AnnouncementsController < ApplicationController
+      class AnnouncementsController < BaseController
         before_action :set_announcement, only: %i[show update destroy]
 
         # GET /api/v1/admin/announcements

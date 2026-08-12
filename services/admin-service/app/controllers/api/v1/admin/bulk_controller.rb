@@ -1,7 +1,7 @@
 module Api
   module V1
     module Admin
-      class BulkController < ApplicationController
+      class BulkController < BaseController
         # POST /api/v1/admin/bulk/users
         def users
           operation = params.require(:operation)
