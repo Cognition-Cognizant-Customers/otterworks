@@ -83,7 +83,7 @@ class OpenSearchService:
         self.files_index_name = config.files_index
         self.client = self._build_client(config)
         self._indices_ready = False
-        self._bootstrap_lock = threading.Lock()
+        self._bootstrap_lock = threading.RLock()
 
     @staticmethod
     def _build_client(config: OpenSearchConfig) -> OpenSearch:
@@ -334,26 +334,28 @@ class OpenSearchService:
 
     def index_document(self, document: dict[str, Any]) -> None:
         """Index or update a document."""
-        self._ensure_ready()
         doc = {**document, "type": "document"}
-        self.client.index(
-            index=self.documents_index_name,
-            id=doc["id"],
-            body=doc,
-            **self._refresh_kwargs(),
-        )
+        with self._bootstrap_lock:
+            self._ensure_ready()
+            self.client.index(
+                index=self.documents_index_name,
+                id=doc["id"],
+                body=doc,
+                **self._refresh_kwargs(),
+            )
         logger.info("document_indexed", document_id=doc.get("id"))
 
     def index_file(self, file_data: dict[str, Any]) -> None:
         """Index or update a file."""
-        self._ensure_ready()
         doc = {**file_data, "type": "file"}
-        self.client.index(
-            index=self.files_index_name,
-            id=doc["id"],
-            body=doc,
-            **self._refresh_kwargs(),
-        )
+        with self._bootstrap_lock:
+            self._ensure_ready()
+            self.client.index(
+                index=self.files_index_name,
+                id=doc["id"],
+                body=doc,
+                **self._refresh_kwargs(),
+            )
         logger.info("file_indexed", file_id=doc.get("id"))
 
     def delete_document(self, doc_type: str, doc_id: str) -> bool:
@@ -375,7 +377,8 @@ class OpenSearchService:
         Raises ``RuntimeError`` if any item in a batch fails, matching the
         MeiliSearch adapter's task-wait failure behavior.
         """
-        self._ensure_ready()
+        with self._bootstrap_lock:
+            self._ensure_ready()
         for start in range(0, len(docs), batch_size):
             batch = docs[start : start + batch_size]
             actions: list[dict[str, Any]] = []
@@ -405,16 +408,19 @@ class OpenSearchService:
         files: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Delete indices, recreate them, and optionally repopulate."""
-        # Deleting invalidates the bootstrap: if the recreate below fails, later
-        # writes must not proceed against auto-created, dynamically mapped indices.
-        self._indices_ready = False
-        for index_name in [self.documents_index_name, self.files_index_name]:
-            try:
-                self.client.indices.delete(index=index_name)
-                logger.info("opensearch_index_deleted", index=index_name)
-            except NotFoundError:
-                pass
-        self.ensure_indices()
+        # The lock keeps in-process writers out of the delete/recreate window,
+        # and clearing the ready flag first means that if the recreate fails,
+        # later writes must not proceed against auto-created, dynamically
+        # mapped indices.
+        with self._bootstrap_lock:
+            self._indices_ready = False
+            for index_name in [self.documents_index_name, self.files_index_name]:
+                try:
+                    self.client.indices.delete(index=index_name)
+                    logger.info("opensearch_index_deleted", index=index_name)
+                except NotFoundError:
+                    pass
+            self.ensure_indices()
 
         indexed_counts: dict[str, int] = {"documents": 0, "files": 0}
         if documents:
