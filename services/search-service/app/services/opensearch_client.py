@@ -51,6 +51,10 @@ FILES_MAPPINGS: dict[str, Any] = {
     }
 }
 
+# OpenSearch rejects from + size beyond index.max_result_window (default 10000);
+# requests past it return an empty page (with the real total) like MeiliSearch.
+MAX_RESULT_WINDOW = 10000
+
 DOCUMENTS_SEARCH_FIELDS = ["title^3", "content", "tags"]
 FILES_SEARCH_FIELDS = ["name^3", "tags", "mime_type"]
 
@@ -173,10 +177,11 @@ class OpenSearchService:
         else:
             match_query = {"match_all": {}}
 
+        beyond_window = from_ + size > MAX_RESULT_WINDOW
         body: dict[str, Any] = {
             "query": {"bool": {"must": [match_query], "filter": filters}},
-            "from": from_,
-            "size": size,
+            "from": 0 if beyond_window else from_,
+            "size": 0 if beyond_window else size,
             "highlight": HIGHLIGHT_CONFIG,
             "track_total_hits": True,
         }
