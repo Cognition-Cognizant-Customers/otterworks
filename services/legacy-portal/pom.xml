@@ -27,6 +27,16 @@
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- Security overrides (CVE remediation) — same-major bumps compatible with Spring Boot 2.7.x -->
+        <tomcat.version>9.0.118</tomcat.version>
+        <jackson-bom.version>2.18.8</jackson-bom.version>
+        <logback.version>1.2.13</logback.version>
+        <snakeyaml.version>2.0</snakeyaml.version>
+        <h2.version>2.2.224</h2.version>
+        <postgresql.version>42.7.13</postgresql.version>
+        <micrometer.version>1.15.12</micrometer.version>
+        <spring-framework.version>5.3.39</spring-framework.version>
     </properties>
 
     <dependencies>
