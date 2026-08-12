@@ -15,7 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.schemas.document import (
     DocumentCreate,
+    DocumentCreateRequest,
     DocumentFromTemplate,
+    DocumentFromTemplateRequest,
     DocumentListResponse,
     DocumentPatch,
     DocumentResponse,
@@ -99,29 +101,32 @@ def _ensure_owner(document: object, user_id: UUID) -> None:
         raise HTTPException(status_code=403, detail="Access denied")
 
 
+def _resolve_list_owner(request: Request, requested_owner_id: UUID | None) -> UUID:
+    """Listings are always scoped to the caller, whatever the query asks for."""
+    caller_id = _require_user_id(request)
+    if requested_owner_id is not None and requested_owner_id != caller_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    return caller_id
+
+
 async def _do_create_document(
-    body: DocumentCreate,
+    body: DocumentCreateRequest,
     request: Request,
     db: AsyncSession,
 ) -> DocumentResponse:
-    if not body.owner_id:
-        extracted_id = _extract_user_id(request)
-        if not extracted_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="owner_id is required: provide it in the body or authenticate via JWT",
-            )
-        body.owner_id = extracted_id
+    owner_id = _require_user_id(request)
 
     service = DocumentService(db)
-    document = await service.create(body)
+    document = await service.create(
+        DocumentCreate(**body.model_dump(), owner_id=owner_id)
+    )
     logger.info("document_created", document_id=str(document.id))
     return document
 
 
 @router.post("/", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 async def create_document(
-    body: DocumentCreate,
+    body: DocumentCreateRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
@@ -137,7 +142,7 @@ async def create_document(
     include_in_schema=False,
 )
 async def create_document_no_slash(
-    body: DocumentCreate,
+    body: DocumentCreateRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
@@ -148,15 +153,17 @@ async def create_document_no_slash(
 
 @router.get("/search", response_model=DocumentListResponse)
 async def search_documents(
+    request: Request,
     q: str = Query(..., min_length=1),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
-    """Search documents by title or content."""
+    """Search the caller's documents by title or content."""
     await _maybe_inject_latency()
+    owner_id = _require_user_id(request)
     service = DocumentService(db)
-    items, total = await service.search(q, page=page, size=size)
+    items, total = await service.search(q, owner_id=owner_id, page=page, size=size)
     return DocumentListResponse(
         items=items,
         total=total,
@@ -196,8 +203,8 @@ async def list_documents(
     size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
-    """List documents with optional filtering and pagination."""
-    effective_owner = owner_id or _extract_user_id(request)
+    """List the caller's documents with optional filtering and pagination."""
+    effective_owner = _resolve_list_owner(request, owner_id)
     return await _do_list_documents(effective_owner, folder_id, page, size, db)
 
 
@@ -214,8 +221,8 @@ async def list_documents_no_slash(
     size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
-    """List documents (no trailing slash)."""
-    effective_owner = owner_id or _extract_user_id(request)
+    """List the caller's documents (no trailing slash)."""
+    effective_owner = _resolve_list_owner(request, owner_id)
     return await _do_list_documents(effective_owner, folder_id, page, size, db)
 
 
@@ -367,12 +374,16 @@ async def export_document(
 )
 async def create_from_template(
     template_id: UUID,
-    body: DocumentFromTemplate,
+    body: DocumentFromTemplateRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a document from a template."""
+    """Create a document from a template, owned by the caller."""
+    owner_id = _require_user_id(request)
     service = DocumentService(db)
-    document = await service.create_from_template(template_id, body)
+    document = await service.create_from_template(
+        template_id, DocumentFromTemplate(**body.model_dump(), owner_id=owner_id)
+    )
     if not document:
         raise HTTPException(status_code=404, detail="Template not found")
     logger.info(

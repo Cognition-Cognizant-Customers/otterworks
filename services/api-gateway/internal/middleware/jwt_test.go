@@ -34,7 +34,6 @@ func TestJWTAuth_PublicPathsSkipValidation(t *testing.T) {
 
 	publicPaths := []string{
 		"/health",
-		"/metrics",
 		"/api/v1/auth/login",
 		"/api/v1/auth/register",
 	}
@@ -78,7 +77,6 @@ func TestJWTAuth_SubPathsOfExactMatchRequireAuth(t *testing.T) {
 	// Sub-paths of prefix-match paths should skip auth
 	prefixSubPaths := []string{
 		"/health/ready",
-		"/metrics/prometheus",
 	}
 
 	for _, path := range prefixSubPaths {

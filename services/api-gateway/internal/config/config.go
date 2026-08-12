@@ -10,8 +10,9 @@ import (
 
 // Config holds all configuration for the API Gateway.
 type Config struct {
-	Port     string
-	LogLevel string
+	Port        string
+	MetricsPort string
+	LogLevel    string
 
 	// Backend service URLs
 	AuthServiceURL         string
@@ -27,6 +28,9 @@ type Config struct {
 
 	// Rate limiting
 	RateLimitRPS int
+
+	// Proxy hops allowed to assert the client address via forwarding headers
+	TrustedProxies []string
 
 	// JWT
 	JWTSecret string
@@ -58,8 +62,9 @@ func (c *Config) Validate() error {
 // Load reads configuration from environment variables with sensible defaults.
 func Load() *Config {
 	return &Config{
-		Port:     getEnv("PORT", "8080"),
-		LogLevel: getEnv("LOG_LEVEL", "info"),
+		Port:        getEnv("PORT", "8080"),
+		MetricsPort: getEnv("METRICS_PORT", "9091"),
+		LogLevel:    getEnv("LOG_LEVEL", "info"),
 
 		AuthServiceURL:         getEnv("AUTH_SERVICE_URL", "http://auth-service:8081"),
 		FileServiceURL:         getEnv("FILE_SERVICE_URL", "http://file-service:8082"),
@@ -73,6 +78,10 @@ func Load() *Config {
 		ReportServiceURL:       getEnv("REPORT_SERVICE_URL", "http://report-service:8091"),
 
 		RateLimitRPS: getEnvInt("RATE_LIMIT_RPS", 100),
+
+		// Empty by default: without a configured proxy hop the peer address is the
+		// only trustworthy client identity.
+		TrustedProxies: getEnvSlice("TRUSTED_PROXIES", nil),
 
 		JWTSecret: getEnv("JWT_SECRET", ""),
 

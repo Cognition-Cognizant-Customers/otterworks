@@ -8,12 +8,21 @@ from pydantic import BaseModel, Field, field_validator
 # ---- Document schemas ----
 
 
-class DocumentCreate(BaseModel):
+class DocumentCreateRequest(BaseModel):
+    """What a client may send. Ownership is never part of it."""
+
+    model_config = {"extra": "ignore"}
+
     title: str = Field(..., min_length=1, max_length=500)
     content: str = Field(default="")
     content_type: str = Field(default="text/markdown")
-    owner_id: UUID | None = None
     folder_id: UUID | None = None
+
+
+class DocumentCreate(DocumentCreateRequest):
+    """Internal create payload: owner_id comes from the authenticated caller."""
+
+    owner_id: UUID | None = None
 
 
 class DocumentUpdate(BaseModel):
@@ -124,7 +133,16 @@ class TemplateResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class DocumentFromTemplate(BaseModel):
+class DocumentFromTemplateRequest(BaseModel):
+    """What a client may send. Ownership is never part of it."""
+
+    model_config = {"extra": "ignore"}
+
     title: str = Field(..., min_length=1, max_length=500)
-    owner_id: UUID
     folder_id: UUID | None = None
+
+
+class DocumentFromTemplate(DocumentFromTemplateRequest):
+    """Internal payload: owner_id comes from the authenticated caller."""
+
+    owner_id: UUID

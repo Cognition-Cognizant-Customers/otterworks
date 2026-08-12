@@ -13,6 +13,9 @@ service:
   type: ClusterIP
   port: 8080
   targetPort: 8080
+  # Metrics are served on their own listener so /metrics is never routable at the
+  # public edge; only the monitoring namespace may reach it (see networkPolicy).
+  metricsPort: 9091
 
 ingress:
   enabled: true
@@ -44,9 +47,13 @@ healthCheck:
 monitoring:
   enabled: true
   path: /metrics
-  port: 8080
+  port: 9091
 
 env:
+  METRICS_PORT: "9091"
+  # ingress-nginx is the only hop allowed to assert the client address; anything
+  # else keeps its peer address so per-IP limits cannot be spoofed away.
+  TRUSTED_PROXIES: "10.0.0.0/8"
   AUTH_SERVICE_URL: "http://auth-service:8081"
   FILE_SERVICE_URL: "http://file-service:8082"
   DOCUMENT_SERVICE_URL: "http://document-service:8083"

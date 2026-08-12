@@ -66,7 +66,8 @@ func main() {
 
 	// Global middleware stack
 	r.Use(middleware.RequestID)
-	r.Use(chimw.RealIP)
+	r.Use(middleware.RealIP(cfg.TrustedProxies))
+	r.Use(middleware.SecurityHeaders(middleware.DefaultSecurityHeadersConfig()))
 	r.Use(middleware.Metrics)
 	r.Use(middleware.Logger(logger))
 	r.Use(chimw.Recoverer)
@@ -97,9 +98,6 @@ func main() {
 	// Health check
 	r.Get("/health", health.Handler())
 
-	// Prometheus metrics
-	r.Handle("/metrics", promhttp.Handler())
-
 	// Mount reverse proxy routes
 	proxyRouter := proxy.NewRouter(proxy.RouterConfig{
 		Routes:        routes,
@@ -108,6 +106,9 @@ func main() {
 		EnableTracing: true,
 	})
 	r.Mount("/", proxyRouter)
+
+	// Metrics listener, kept off the public edge
+	metricsSrv := startMetricsServer(cfg.MetricsPort, logger)
 
 	// HTTP server
 	srv := &http.Server{
@@ -139,6 +140,10 @@ func main() {
 		logger.Fatal().Err(err).Msg("server forced to shutdown")
 	}
 
+	if err := metricsSrv.Shutdown(ctx); err != nil {
+		logger.Error().Err(err).Msg("metrics server forced to shutdown")
+	}
+
 	if shutdownTracer != nil {
 		if err := shutdownTracer(ctx); err != nil {
 			logger.Error().Err(err).Msg("failed to shutdown tracer")
@@ -146,6 +151,26 @@ func main() {
 	}
 
 	logger.Info().Msg("server exited")
+}
+
+// startMetricsServer serves Prometheus metrics on a separate listener so scraping
+// never depends on a route being public at the edge.
+func startMetricsServer(port string, logger zerolog.Logger) *http.Server {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+
+	srv := &http.Server{
+		Addr:              ":" + port,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() {
+		logger.Info().Str("port", port).Msg("metrics listener starting")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error().Err(err).Msg("metrics server failed")
+		}
+	}()
+	return srv
 }
 
 func routePrefixes(routes []proxy.Route) []string {

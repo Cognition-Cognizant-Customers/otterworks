@@ -13,6 +13,9 @@ import (
 	"github.com/Cognition-Partner-Workshops/otterworks/services/api-gateway/internal/middleware"
 )
 
+// identityHeaders are set from validated claims and never accepted from a client.
+var identityHeaders = []string{"X-User-ID", "X-User-Email", "X-User-Roles"}
+
 // Route defines a mapping from a URL prefix to a backend service.
 type Route struct {
 	Prefix    string
@@ -67,6 +70,11 @@ func newProxyHandler(route Route, cfg RouterConfig) http.HandlerFunc {
 	defaultDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		defaultDirector(req)
+		// Identity headers are the gateway's to set: drop whatever the client sent
+		// before deriving them from validated claims.
+		for _, h := range identityHeaders {
+			req.Header.Del(h)
+		}
 		if claims := middleware.GetJWTClaims(req.Context()); claims != nil {
 			userID := claims.Subject
 			if userID == "" {

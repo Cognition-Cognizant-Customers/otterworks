@@ -38,10 +38,11 @@ func DefaultPublicPaths() []string {
 }
 
 // DefaultPrefixPaths returns paths where any sub-path also skips JWT validation.
+// Metrics are deliberately absent: they are served on an internal listener, not
+// through this router.
 func DefaultPrefixPaths() []string {
 	return []string{
 		"/health",
-		"/metrics",
 		"/socket.io",
 	}
 }

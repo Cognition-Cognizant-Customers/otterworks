@@ -12,7 +12,7 @@ spec:
       app.kubernetes.io/name: {{ .Chart.Name }}
       app.kubernetes.io/instance: {{ .Release.Name }}
   endpoints:
-    - port: http
+    - port: metrics
       path: {{ .Values.monitoring.path }}
       interval: 30s
 {{- end }}

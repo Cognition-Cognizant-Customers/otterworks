@@ -22,7 +22,6 @@ async def test_create_document(client: AsyncClient, owner_id: uuid.UUID):
         json={
             "title": "Test Document",
             "content": "Hello world",
-            "owner_id": str(owner_id),
         },
     )
     assert resp.status_code == 201
@@ -260,10 +259,10 @@ async def test_create_document_via_jwt_hs384(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_create_document_x_user_id_header_ignored(client: AsyncClient):
+async def test_create_document_x_user_id_header_ignored(anon_client: AsyncClient):
     """X-User-Id header alone is not trusted (prevents identity spoofing)."""
     user_id = uuid.uuid4()
-    resp = await client.post(
+    resp = await anon_client.post(
         "/api/v1/documents/",
         json={"title": "Header Doc"},
         headers={"X-User-Id": str(user_id)},
@@ -272,10 +271,56 @@ async def test_create_document_x_user_id_header_ignored(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_create_document_no_auth_returns_401(client: AsyncClient):
+async def test_create_document_no_auth_returns_401(anon_client: AsyncClient):
     """Creating a document without owner_id and without auth returns 401."""
-    resp = await client.post(
+    resp = await anon_client.post(
         "/api/v1/documents/",
         json={"title": "No Auth Doc"},
     )
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_create_document_ignores_body_owner_id(
+    client: AsyncClient, owner_id: uuid.UUID
+):
+    """A client-supplied owner_id cannot assign a document to someone else."""
+    victim_id = uuid.uuid4()
+    resp = await client.post(
+        "/api/v1/documents/",
+        json={"title": "Mass assignment", "owner_id": str(victim_id)},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["owner_id"] == str(owner_id)
+
+
+@pytest.mark.asyncio
+async def test_list_documents_rejects_other_owner(client: AsyncClient):
+    """Listing another user's documents is denied, not silently honoured."""
+    resp = await client.get(
+        "/api/v1/documents/", params={"owner_id": str(uuid.uuid4())}
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_search_documents_scoped_to_caller(
+    client: AsyncClient, anon_client: AsyncClient
+):
+    """Search never returns another user's documents."""
+    await client.post("/api/v1/documents/", json={"title": "Mine", "content": "secret"})
+
+    other_token = _make_jwt(str(uuid.uuid4()))
+    resp = await anon_client.get(
+        "/api/v1/documents/search",
+        params={"q": "secret"},
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_search_documents_requires_auth(anon_client: AsyncClient):
+    resp = await anon_client.get("/api/v1/documents/search", params={"q": "anything"})
     assert resp.status_code == 401

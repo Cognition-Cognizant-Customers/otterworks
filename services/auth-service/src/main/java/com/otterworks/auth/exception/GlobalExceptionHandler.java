@@ -1,6 +1,7 @@
 package com.otterworks.auth.exception;
 
 import io.jsonwebtoken.JwtException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -22,6 +23,16 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(IllegalArgumentException.class)
   public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
     return buildErrorResponse(HttpStatus.BAD_REQUEST, ex.getMessage());
+  }
+
+  @ExceptionHandler(AccountLockedException.class)
+  public ResponseEntity<Map<String, Object>> handleAccountLocked(AccountLockedException ex) {
+    ResponseEntity<Map<String, Object>> response =
+        buildErrorResponse(HttpStatus.LOCKED, ex.getMessage());
+    long retryAfter = Math.max(1, Duration.between(Instant.now(), ex.getLockedUntil()).getSeconds());
+    return ResponseEntity.status(HttpStatus.LOCKED)
+        .header("Retry-After", String.valueOf(retryAfter))
+        .body(response.getBody());
   }
 
   @ExceptionHandler(MethodArgumentNotValidException.class)
