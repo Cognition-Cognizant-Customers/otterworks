@@ -1,5 +1,7 @@
 # systemd unit for running legacy-portal on a VM / on-prem host.
 #
+# Requires a Java 21 runtime on the host (e.g. `sudo apt install openjdk-21-jre-headless`).
+#
 # This is the "runs on a VM today" deployment used as the rehost / decomposition before-state.
 # Install:
 #   sudo useradd -r -s /usr/sbin/nologin legacyportal || true
@@ -22,7 +24,8 @@ Type=simple
 User=legacyportal
 WorkingDirectory=/opt/legacy-portal
 EnvironmentFile=-/etc/legacy-portal.env
-ExecStart=/usr/bin/java -jar /opt/legacy-portal/legacy-portal.jar
+Environment="JAVA_OPTS=-XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError"
+ExecStart=/usr/bin/java $JAVA_OPTS -jar /opt/legacy-portal/legacy-portal.jar
 SuccessExitStatus=143
 Restart=on-failure
 RestartSec=5

@@ -1,7 +1,7 @@
 # Legacy Portal — modular monolith (rehost / decomposition "before" state)
 
 `legacy-portal` is a **legacy modular monolith**: a single deployable Spring Boot application
-(Java 11, Spring Boot 2.7.x, built with Maven) that bundles **three bounded contexts** into one
+(Java 21, Spring Boot 3.3.x, built with Maven) that bundles **three bounded contexts** into one
 process. It exists as a realistic **"before" state** for two migration demos:
 
 - **Rehost (lift-and-shift → EC2)** — it **runs on a VM / on-prem host today** (plain Docker
@@ -69,8 +69,6 @@ This brings up PostgreSQL alongside the app; the three schemas are created by
 [`scripts/initdb.sql`](scripts/initdb.sql). This stack is intentionally separate from the
 Helm/EKS deploy path — it models the on-prem host the rehost demo lifts *from*.
 
-## Legacy markers (upgrade targets)
+## Platform
 
-- Java 11 → 17+/21
-- Spring Boot 2.7.x → 3.2+
-- `javax.*` (Java EE) → `jakarta.*`
+- Java 21, Spring Boot 3.3.x, `jakarta.*` (Jakarta EE) namespaces
