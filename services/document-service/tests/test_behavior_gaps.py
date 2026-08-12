@@ -308,7 +308,7 @@ async def test_restore_recomputes_word_count(client: AsyncClient, owner_id: uuid
         headers=_auth(owner_id),
     )
     versions = await client.get(f"/api/v1/documents/{doc_id}/versions", headers=_auth(owner_id))
-    v1_id = versions.json()[-1]["id"]  # oldest version (list is newest-first)
+    v1_id = versions.json()[0]["id"]  # oldest version (list is oldest-first)
 
     resp = await client.post(
         f"/api/v1/documents/{doc_id}/versions/{v1_id}/restore", headers=_auth(owner_id)
@@ -482,7 +482,7 @@ async def test_competing_updates_last_write_wins_with_full_history(
 
     versions = await client.get(f"/api/v1/documents/{doc_id}/versions", headers=_auth(owner_id))
     contents = [v["content"] for v in versions.json()]
-    assert contents == ["editor B", "editor A", "base"]
+    assert contents == ["base", "editor A", "editor B"]
 
 
 @pytest.mark.asyncio
