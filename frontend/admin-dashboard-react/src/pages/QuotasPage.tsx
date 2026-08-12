@@ -44,6 +44,15 @@ export function QuotasPage() {
   const quotaMutation = useMutation({
     mutationFn: ({ user, quota }: { user: QuotaUser; quota: number }) =>
       updateStorageQuota(user.id, quota),
+    // Optimistically show the chosen quota while the save is in flight,
+    // rolling back if it fails.
+    onMutate: ({ user, quota }) => {
+      const previous = queryClient.getQueryData<QuotaUser[]>(USERS_QUERY_KEY);
+      queryClient.setQueryData<QuotaUser[]>(USERS_QUERY_KEY, (prev) =>
+        (prev ?? []).map((u) => (u.id === user.id ? { ...u, storageQuota: quota } : u))
+      );
+      return { previous };
+    },
     onSuccess: (result, { user }) => {
       queryClient.setQueryData<QuotaUser[]>(USERS_QUERY_KEY, (prev) =>
         (prev ?? []).map((u) =>
@@ -54,7 +63,12 @@ export function QuotasPage() {
       );
       toast.success(`Quota updated for ${user.displayName}`);
     },
-    onError: (_err, { user }) => toast.error(`Failed to update quota for ${user.displayName}`),
+    onError: (_err, { user }, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(USERS_QUERY_KEY, context.previous);
+      }
+      toast.error(`Failed to update quota for ${user.displayName}`);
+    },
     onSettled: (_data, _err, { user }) => {
       setUpdatingIds((prev) => {
         const next = new Set(prev);
