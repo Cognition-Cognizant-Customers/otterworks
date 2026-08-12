@@ -1,11 +1,14 @@
 package middleware
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func serveSecurityHeaders(t *testing.T, requestHeaders map[string]string, next http.HandlerFunc) http.Header {
@@ -58,4 +61,31 @@ func TestSecurityHeaders_NoDuplicateWhenBackendAddsHeader(t *testing.T) {
 	})
 
 	assert.Equal(t, []string{"SAMEORIGIN"}, headers.Values("X-Frame-Options"))
+}
+
+// The proxy hijacks the connection for the /socket.io upgrade, and chi's
+// WrapResponseWriter only forwards Hijack when the writer it wraps also implements
+// http.Flusher and io.ReaderFrom.
+func TestSecurityHeaders_KeepsResponseWriterHijackable(t *testing.T) {
+	var hijackable, flushable, readerFrom bool
+
+	stack := SecurityHeaders(DefaultSecurityHeadersConfig())(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			wrapped := chimw.NewWrapResponseWriter(w, r.ProtoMajor)
+			_, hijackable = wrapped.(http.Hijacker)
+			_, flushable = wrapped.(http.Flusher)
+			_, readerFrom = wrapped.(io.ReaderFrom)
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
+
+	srv := httptest.NewServer(stack)
+	defer srv.Close()
+	resp, err := http.Get(srv.URL + "/socket.io/")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.True(t, hijackable, "chi must still hand the proxy a hijackable writer")
+	assert.True(t, flushable)
+	assert.True(t, readerFrom)
 }

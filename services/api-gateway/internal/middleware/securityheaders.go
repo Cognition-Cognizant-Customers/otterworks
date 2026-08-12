@@ -3,6 +3,7 @@ package middleware
 import (
 	"bufio"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 )
@@ -89,6 +90,17 @@ func (w *securityHeaderWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 		return h.Hijack()
 	}
 	return nil, nil, errors.New("securityHeaderWriter: underlying writer does not support hijacking")
+}
+
+// ReadFrom keeps this writer "fancy" as far as chi's WrapResponseWriter is concerned: it
+// only forwards Hijack when the writer it wraps implements Flusher, Hijacker and
+// io.ReaderFrom, and the proxy needs Hijack for the /socket.io upgrade.
+func (w *securityHeaderWriter) ReadFrom(r io.Reader) (int64, error) {
+	w.apply()
+	if rf, ok := w.ResponseWriter.(io.ReaderFrom); ok {
+		return rf.ReadFrom(r)
+	}
+	return io.Copy(w.ResponseWriter, r)
 }
 
 func (w *securityHeaderWriter) Unwrap() http.ResponseWriter {

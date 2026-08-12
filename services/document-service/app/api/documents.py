@@ -84,6 +84,11 @@ def _decode_token(request: Request) -> dict | None:
         return None
 
 
+def _has_bearer_token(request: Request) -> bool:
+    auth_header = request.headers.get("Authorization", "")
+    return auth_header.startswith("Bearer ")
+
+
 def _extract_user_id(request: Request) -> UUID | None:
     """Extract user ID from the Authorization JWT."""
     payload = _decode_token(request)
@@ -94,7 +99,10 @@ def _extract_user_id(request: Request) -> UUID | None:
                 return UUID(str(user_id_str))
             except ValueError:
                 return None
-    elif not _get_jwt_secret():
+    elif not _get_jwt_secret() and _has_bearer_token(request):
+        # Unsigned local runs only: without a secret there is nothing to verify, so the
+        # gateway-forwarded identity is all there is. A request carrying no credential
+        # at all stays anonymous.
         forwarded_user_id = request.headers.get("X-User-ID")
         if forwarded_user_id:
             try:
