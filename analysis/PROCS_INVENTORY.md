@@ -131,7 +131,7 @@ cursor/record mechanics, deterministic-ID construction, result assembly, upsert 
 | `sp_schedule_dunning` | 31–32 | Every `'overdue'` invoice gets an attempt, processed oldest-first | 20–30, 33 | signature, DECLARE, cursor loop |
 | | 34–36 | Attempt number = max existing attempt + 1 per invoice | | |
 | | 37–42 | Weekend shift: Saturday → +2 days, Sunday → +1 day (attempts always land on a business day) | | |
-| | 48 | `(invoice_id, attempt_no)` conflict silently skipped — re-running the scheduler on the same day is a no-op per invoice | 43–47, 49–51 | INSERT scaffolding, md5 identity |
+| | 48 | `(invoice_id, attempt_no)` conflict clause is effectively dead: `attempt_no` is recomputed as max+1 each run, so re-running the scheduler on the same day inserts an **additional** attempt per overdue invoice rather than skipping | 43–47, 49–51 | INSERT scaffolding, md5 identity |
 | `sp_suspend_overdue` | 60–63 | Suspension threshold: invoice overdue **and** issued ≥ **14 days** before `p_as_of` | 53–59, 64 | signature, DECLARE, cursor loop |
 | | 65–68 | Only currently-`active` tenants are suspended (already-suspended tenants untouched — no duplicate notifications, no re-stamping `suspended_on`) | | |
 | | 69–71 | Tenant status → `'suspended'` | | |
@@ -151,5 +151,7 @@ cursor/record mechanics, deterministic-ID construction, result assembly, upsert 
 5. **`invoices.status = 'overdue'` is set by nothing in this estate** — dunning depends on an
    external state transition.
 6. **Deterministic md5 identities + ON CONFLICT** are the idempotency contract for every
-   write path (periods, results, invoices, lines, attempts, notifications, subscription ids).
+   write path (periods, results, invoices, lines, notifications, subscription ids) — **except**
+   `sp_schedule_dunning`, whose max+1 `attempt_no` defeats its `ON CONFLICT` clause and makes
+   replays additive rather than idempotent.
 7. `fn_usage_summary` is uncalled — confirm external consumers before carrying it forward.
