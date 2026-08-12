@@ -172,7 +172,7 @@ export function IncidentsPage() {
     if (incidentsQuery.isError) {
       toast.error("Failed to load incidents");
     }
-  }, [incidentsQuery.isError]);
+  }, [incidentsQuery.isError, incidentsQuery.errorUpdatedAt]);
 
   useEffect(() => {
     getAutoInvestigate()
