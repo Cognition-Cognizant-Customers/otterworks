@@ -2,6 +2,7 @@
 
 import os
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
@@ -13,6 +14,19 @@ os.environ.setdefault("JWT_SECRET", TEST_JWT_SECRET)
 
 def _make_jwt(user_id: str) -> str:
     return jwt.encode({"user_id": user_id}, TEST_JWT_SECRET, algorithm="HS256")
+
+
+def _make_service_jwt(ttl: int = 300) -> str:
+    """A reindexer credential: service scope, and it expires."""
+    return jwt.encode(
+        {
+            "scope": "service",
+            "sub": "search-indexer",
+            "exp": datetime.now(UTC) + timedelta(seconds=ttl),
+        },
+        TEST_JWT_SECRET,
+        algorithm="HS256",
+    )
 
 
 @pytest.mark.asyncio
@@ -327,17 +341,36 @@ async def test_service_token_lists_every_owner(
     """The search reindexers enumerate all documents with a service-scoped token."""
     await client.post("/api/v1/documents/", json={"title": "Indexed"})
 
-    service_token = jwt.encode(
+    resp = await anon_client.get(
+        "/api/v1/documents/",
+        headers={"Authorization": f"Bearer {_make_service_jwt()}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_service_token_without_expiry_is_not_trusted(anon_client: AsyncClient):
+    """Cross-owner authority is only granted to a credential that expires."""
+    everlasting = jwt.encode(
         {"scope": "service", "sub": "search-indexer"},
         TEST_JWT_SECRET,
         algorithm="HS256",
     )
     resp = await anon_client.get(
         "/api/v1/documents/",
-        headers={"Authorization": f"Bearer {service_token}"},
+        headers={"Authorization": f"Bearer {everlasting}"},
     )
-    assert resp.status_code == 200
-    assert resp.json()["total"] == 1
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_expired_service_token_is_rejected(anon_client: AsyncClient):
+    resp = await anon_client.get(
+        "/api/v1/documents/",
+        headers={"Authorization": f"Bearer {_make_service_jwt(ttl=-60)}"},
+    )
+    assert resp.status_code == 401
 
 
 @pytest.mark.asyncio

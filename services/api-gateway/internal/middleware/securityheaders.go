@@ -78,7 +78,9 @@ func (w *securityHeaderWriter) Write(b []byte) (int, error) {
 }
 
 // Flush keeps streaming responses (SSE, websocket upgrades via the proxy) working.
+// A flush commits the header block, so the defaults have to be in place first.
 func (w *securityHeaderWriter) Flush() {
+	w.apply()
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}

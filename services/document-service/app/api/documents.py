@@ -104,9 +104,18 @@ def _extract_user_id(request: Request) -> UUID | None:
 
 
 def _is_service_caller(request: Request) -> bool:
-    """True for the indexers, which hold a service-scoped token instead of a user."""
+    """True for the indexers, which hold a service-scoped token instead of a user.
+
+    Cross-owner authority is only granted to a token that expires, so a leaked one
+    stops working on its own.
+    """
     payload = _decode_token(request)
-    return payload is not None and payload.get("scope") == SERVICE_SCOPE
+    if payload is None or payload.get("scope") != SERVICE_SCOPE:
+        return False
+    if "exp" not in payload:
+        logger.warning("service_token_without_expiry_rejected", sub=payload.get("sub"))
+        return False
+    return True
 
 
 def _require_user_id(request: Request) -> UUID:
