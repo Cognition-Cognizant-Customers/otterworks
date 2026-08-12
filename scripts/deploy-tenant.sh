@@ -472,13 +472,29 @@ done
 # ---------- Shared ingress (host/path routing, ONE shared ALB/NLB) ----------
 apply_ingress() {
   local sid; sid="$(sanitize_id "${ATTENDEE_ID}")"
+  # Only route to the portal when the profile actually deploys it (core omits it);
+  # a rule pointing at a nonexistent Service would 503 from the default backend.
+  local has_portal=false
+  [[ " ${TENANT_SERVICES[*]} " == *" legacy-portal "* ]] && has_portal=true
   if [ -n "${HOST_SUFFIX}" ]; then
     # Preferred: host-based routing. One shared ingress controller / ELB fronts
     # every tenant; the web host serves the SPA, the api host the gateway.
     local web_host="t-${sid}.${HOST_SUFFIX}"
     local api_host="api-t-${sid}.${HOST_SUFFIX}"
-    local portal_host="portal-t-${sid}.${HOST_SUFFIX}"
-    log "Applying shared ingress for ${NS} (hosts ${web_host}, ${api_host}, ${portal_host})..."
+    local portal_host="portal-t-${sid}.${HOST_SUFFIX}" portal_rule=""
+    if [ "${has_portal}" = true ]; then
+      log "Applying shared ingress for ${NS} (hosts ${web_host}, ${api_host}, ${portal_host})..."
+      portal_rule="
+    - host: ${portal_host}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: legacy-portal, port: { number: 8095 } }"
+    else
+      log "Applying shared ingress for ${NS} (hosts ${web_host}, ${api_host})..."
+    fi
     kubectl apply -n "${NS}" -f - <<YAML
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -500,14 +516,7 @@ spec:
           - path: /
             pathType: Prefix
             backend:
-              service: { name: api-gateway, port: { number: 8080 } }
-    - host: ${portal_host}
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service: { name: legacy-portal, port: { number: 8095 } }
+              service: { name: api-gateway, port: { number: 8080 } }${portal_rule}
 YAML
   else
     # Fallback: path-based routing on the shared ingress IP when no wildcard DNS
@@ -548,7 +557,9 @@ spec:
             pathType: ImplementationSpecific
             backend:
               service: { name: web-app, port: { number: 80 } }
----
+YAML
+    if [ "${has_portal}" = true ]; then
+      kubectl apply -n "${NS}" -f - <<YAML
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -566,6 +577,7 @@ spec:
             backend:
               service: { name: legacy-portal, port: { number: 8095 } }
 YAML
+    fi
   fi
 }
 if kubectl get ns "${INGRESS_NAMESPACE}" >/dev/null 2>&1; then
