@@ -156,8 +156,10 @@ module "opensearch" {
 
   access_principal_arns = [module.irsa.role_arns["search-service"]]
 
-  # Public endpoint only for dev/demo; staging/prod stay VPC-only.
+  # Public endpoint only for dev/demo; staging/prod stay VPC-only and must
+  # supply VPC endpoint IDs.
   allow_public_access = var.environment == "dev"
+  vpc_endpoint_ids    = var.opensearch_vpc_endpoint_ids
 }
 
 module "irsa" {

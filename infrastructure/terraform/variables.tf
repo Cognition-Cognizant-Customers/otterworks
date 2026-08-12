@@ -51,3 +51,9 @@ variable "opensearch_namespace" {
   type        = string
   default     = "os-demo"
 }
+
+variable "opensearch_vpc_endpoint_ids" {
+  description = "OpenSearch Serverless VPC endpoint IDs for the collection's network policy (required in non-dev environments, where the endpoint is VPC-only)"
+  type        = list(string)
+  default     = []
+}
