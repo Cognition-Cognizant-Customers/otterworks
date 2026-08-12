@@ -34,8 +34,8 @@ target unreachable / config error, `3` INCONCLUSIVE — no verdict, which is
 never a pass.
 
 `incident-verify` proves two things at once: the symptom is gone **and** a
-legitimate request on the same path still succeeds — a fix that refuses
-everybody reports INCONCLUSIVE, not PASS. A backend the gateway reports as
+legitimate request on the same path still succeeds (a well-formed 2xx
+response) — a fix that refuses everybody reports INCONCLUSIVE, not PASS. A backend the gateway reports as
 down (502/503/504) is INCONCLUSIVE too. The latency scenario asserts a
 threshold (`INCIDENT_LATENCY_THRESHOLD_MS`, default 2500) and records the
 measured value in the report.

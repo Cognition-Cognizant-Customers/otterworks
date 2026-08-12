@@ -50,9 +50,11 @@
    ```
    make incident-verify SCENARIO=search-service:suggest_500 INCIDENT_TARGET=http://localhost:8080
    ```
-   Verification only reports **PASS** when the suggest endpoint returns 200 *with a
-   suggestion list* for a legitimate authenticated caller — a fix that refuses everybody
-   (401/403 for all users) reports INCONCLUSIVE and does not count as resolved.
+   Verification only reports **PASS** when the suggest endpoint returns 200 with a
+   well-formed suggestions body for a legitimate authenticated caller — a fix that
+   refuses everybody (401/403 for all users) reports INCONCLUSIVE and does not count as
+   resolved. Note the healthy suggest path masks backend errors as an empty suggestion
+   list, so a silently-degraded MeiliSearch is out of this scenario's scope.
 
 ## Post-Incident
 
