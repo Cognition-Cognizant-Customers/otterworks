@@ -477,7 +477,8 @@ apply_ingress() {
     # every tenant; the web host serves the SPA, the api host the gateway.
     local web_host="t-${sid}.${HOST_SUFFIX}"
     local api_host="api-t-${sid}.${HOST_SUFFIX}"
-    log "Applying shared ingress for ${NS} (hosts ${web_host}, ${api_host})..."
+    local portal_host="portal-t-${sid}.${HOST_SUFFIX}"
+    log "Applying shared ingress for ${NS} (hosts ${web_host}, ${api_host}, ${portal_host})..."
     kubectl apply -n "${NS}" -f - <<YAML
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -500,6 +501,13 @@ spec:
             pathType: Prefix
             backend:
               service: { name: api-gateway, port: { number: 8080 } }
+    - host: ${portal_host}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: legacy-portal, port: { number: 8095 } }
 YAML
   else
     # Fallback: path-based routing on the shared ingress IP when no wildcard DNS
@@ -540,6 +548,23 @@ spec:
             pathType: ImplementationSpecific
             backend:
               service: { name: web-app, port: { number: 80 } }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tenant-ingress-portal
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /\$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /${sid}/portal(/|\$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service: { name: legacy-portal, port: { number: 8095 } }
 YAML
   fi
 }

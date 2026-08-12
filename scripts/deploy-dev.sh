@@ -408,6 +408,16 @@ build_helm_args() {
       EXTRA_ARGS+=(--set-string "config.DB_NAME=${DB_NAME}" --set-string "config.DB_USER=${DB_USER}")
       add_secret DB_PASSWORD "${DB_PASSWORD}" ;;
     legacy-portal)
+      # Reached directly on the shared ingress under its own host: the portal's
+      # routes (/api/announcements|preferences|feedback) are not in api-gateway's
+      # route table, and adding them there would change gateway behavior. This
+      # re-enables the Ingress the blanket disable above turned off (last --set
+      # wins) -- still ClusterIP, never a LoadBalancer.
+      EXTRA_ARGS+=(--set ingress.enabled=true --set ingress.className=nginx)
+      EXTRA_ARGS+=(--set-string "ingress.hosts[0].host=$(golden_host "${service}")")
+      EXTRA_ARGS+=(--set-string 'ingress.hosts[0].paths[0].path=/')
+      EXTRA_ARGS+=(--set-string 'ingress.hosts[0].paths[0].pathType=Prefix')
+      EXTRA_ARGS+=(--set 'ingress.tls=null')
       EXTRA_ARGS+=(--set-string "config.SPRING_PROFILES_ACTIVE=postgres")
       EXTRA_ARGS+=(--set-string "config.SPRING_DATASOURCE_URL=jdbc:postgresql://${DB_ENDPOINT_HOST}:${DB_ENDPOINT_PORT}/${DB_NAME}")
       EXTRA_ARGS+=(--set-string "config.SPRING_DATASOURCE_USERNAME=${DB_USER}")
@@ -542,6 +552,7 @@ log "Golden app URLs (shared ingress):"
 echo "  web-app:         https://$(golden_host web-app)"
 echo "  admin-dashboard: https://$(golden_host admin-dashboard)"
 echo "  api-gateway:     https://$(golden_host api-gateway)"
+echo "  legacy-portal:   https://$(golden_host legacy-portal)"
 echo ""
 log "Useful commands:"
 echo "  kubectl get pods -n ${NAMESPACE}"
