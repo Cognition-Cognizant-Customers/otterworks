@@ -84,33 +84,23 @@ def _decode_token(request: Request) -> dict | None:
         return None
 
 
-def _has_bearer_token(request: Request) -> bool:
-    auth_header = request.headers.get("Authorization", "")
-    return auth_header.startswith("Bearer ")
-
-
 def _extract_user_id(request: Request) -> UUID | None:
-    """Extract user ID from the Authorization JWT."""
-    payload = _decode_token(request)
-    if payload is not None:
-        user_id_str = payload.get("user_id") or payload.get("sub")
-        if user_id_str:
-            try:
-                return UUID(str(user_id_str))
-            except ValueError:
-                return None
-    elif not _get_jwt_secret() and _has_bearer_token(request):
-        # Unsigned local runs only: without a secret there is nothing to verify, so the
-        # gateway-forwarded identity is all there is. A request carrying no credential
-        # at all stays anonymous.
-        forwarded_user_id = request.headers.get("X-User-ID")
-        if forwarded_user_id:
-            try:
-                return UUID(str(forwarded_user_id))
-            except ValueError:
-                return None
+    """Extract user ID from the Authorization JWT.
 
-    return None
+    Identity comes from a signed token only. There is deliberately no X-User-ID
+    fallback: an unset JWT_SECRET fails closed rather than letting a caller name
+    whichever user it likes.
+    """
+    payload = _decode_token(request)
+    if payload is None:
+        return None
+    user_id_str = payload.get("user_id") or payload.get("sub")
+    if not user_id_str:
+        return None
+    try:
+        return UUID(str(user_id_str))
+    except ValueError:
+        return None
 
 
 def _is_service_caller(request: Request) -> bool:
