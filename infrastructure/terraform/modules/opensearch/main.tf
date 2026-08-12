@@ -6,11 +6,16 @@
 # ------------------------------------------------------------------------------
 
 locals {
+  # AOSS names are capped at 32 chars, so unlike other modules the environment
+  # is not embedded in the name; the namespace must be unique per environment
+  # within the account/region (e.g. os-demo, stg-os1). Environment is carried
+  # in tags instead.
   collection_name = "${var.project}-search-${var.namespace}"
   common_tags = {
-    Module    = "opensearch"
-    Project   = var.project
-    Namespace = var.namespace
+    Module      = "opensearch"
+    Project     = var.project
+    Namespace   = var.namespace
+    Environment = var.environment
   }
 }
 

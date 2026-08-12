@@ -19,7 +19,7 @@ variable "project" {
 }
 
 variable "namespace" {
-  description = "Namespace suffix applied to all resources so concurrent runs never collide (e.g. os-demo)"
+  description = "Namespace suffix applied to all resources so concurrent runs never collide; must also be unique per environment within the account/region since AOSS names omit the environment (e.g. os-demo, stg-os1)"
   type        = string
 
   validation {
