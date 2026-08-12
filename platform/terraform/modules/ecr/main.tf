@@ -31,11 +31,12 @@ resource "aws_ecr_lifecycle_policy" "services" {
 
   repository = each.value.name
 
-  # Never expire golden images (main / main-<sha> / tenant-main): every tenant
-  # without its own build of a service falls back to `main`, and losing it made
-  # deploy-tenant.sh ship another tenant's demo build into the perpetual t-main
-  # environment. Only branch/demo builds and untagged manifests are pruned;
-  # images matching no rule are retained.
+  # Golden images must survive pruning: every tenant without its own build of a
+  # service falls back to `main`, and losing it made deploy-tenant.sh ship
+  # another tenant's demo build into the perpetual t-main environment. The
+  # floating `main` / `tenant-*` tags match no rule and are retained; branch
+  # builds, per-commit golden builds and untagged manifests are pruned with
+  # bounded keep counts.
   policy = jsonencode({
     rules = [
       {
@@ -53,12 +54,25 @@ resource "aws_ecr_lifecycle_policy" "services" {
       },
       {
         rulePriority = 2
-        description  = "Keep last 20 demo/workshop branch builds"
+        description  = "Keep last 20 demo/workshop branch builds (incl. TENANT_PREFIX-ed fork tags)"
         selection = {
           tagStatus      = "tagged"
-          tagPatternList = ["demo-*", "workshop-*"]
+          tagPatternList = ["*demo-*", "*workshop-*"]
           countType      = "imageCountMoreThan"
           countNumber    = 20
+        }
+        action = {
+          type = "expire"
+        }
+      },
+      {
+        rulePriority = 3
+        description  = "Keep last 30 per-commit golden builds"
+        selection = {
+          tagStatus      = "tagged"
+          tagPatternList = ["main-*"]
+          countType      = "imageCountMoreThan"
+          countNumber    = 30
         }
         action = {
           type = "expire"
