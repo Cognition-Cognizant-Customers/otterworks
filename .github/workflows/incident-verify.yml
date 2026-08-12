@@ -100,6 +100,7 @@ jobs:
       - name: Publish the reports
         if: always()
         run: |
+          [ -d incidents/reports ] || exit 0
           find incidents/reports -name incident-report.md | sort | while read -r report; do
             cat "$report" >> "$GITHUB_STEP_SUMMARY"
             echo >> "$GITHUB_STEP_SUMMARY"
