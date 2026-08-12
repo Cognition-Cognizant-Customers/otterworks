@@ -75,7 +75,7 @@ describe('AuthService', () => {
     service.login('admin@otterworks.io', 'admin123').subscribe();
     tick(900);
     expect(service.getToken()).toBeTruthy();
-    expect(service.getToken()!.startsWith('mock-jwt-token-')).toBeTrue();
+    expect(service.getToken()!.split('.').length).toBe(3);
   }));
 
   it('should reject login with empty password', fakeAsync(() => {
