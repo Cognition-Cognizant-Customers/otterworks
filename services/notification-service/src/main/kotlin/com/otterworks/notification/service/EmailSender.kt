@@ -7,7 +7,7 @@ import aws.sdk.kotlin.services.ses.model.Destination
 import aws.sdk.kotlin.services.ses.model.Message
 import aws.sdk.kotlin.services.ses.model.SendEmailRequest
 import com.otterworks.notification.config.AppConfig
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
 

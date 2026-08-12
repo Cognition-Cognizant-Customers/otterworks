@@ -28,7 +28,7 @@ import io.ktor.server.response.respond
 import io.ktor.server.websocket.WebSockets
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
 import org.koin.ktor.ext.inject
@@ -100,7 +100,7 @@ fun Application.configurePlugins(config: AppConfig = AppConfig.load()) {
 
 fun Application.configureDependencyInjection(
     config: AppConfig,
-    prometheusRegistry: io.micrometer.prometheus.PrometheusMeterRegistry,
+    prometheusRegistry: io.micrometer.prometheusmetrics.PrometheusMeterRegistry,
 ) {
     install(Koin) {
         slf4jLogger()

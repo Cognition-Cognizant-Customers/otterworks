@@ -11,7 +11,7 @@ import com.otterworks.notification.config.AppConfig
 import com.otterworks.notification.model.DeliveryChannel
 import com.otterworks.notification.model.Notification
 import com.otterworks.notification.model.NotificationPreference
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
 

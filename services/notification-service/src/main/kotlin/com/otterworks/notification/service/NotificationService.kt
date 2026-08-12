@@ -9,7 +9,7 @@ import com.otterworks.notification.template.NotificationTemplates
 import com.otterworks.notification.websocket.WebSocketManager
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.Instant
 import java.util.UUID
 
