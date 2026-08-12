@@ -24,11 +24,14 @@ line-level split of business rules vs plumbing. Schema: `services/legacy-billing
 | `sp_suspend_overdue` | dunning.sql (53–88) | procedure (plpgsql) | `(p_as_of date)` | `invoices`, `tenants`, `notifications` | `tenants` (UPDATE), `subscriptions` (UPDATE), `notifications` (INSERT) | `POST /api/dunning/suspend` (app.py:146) | — |
 
 Notes:
-- `fn_usage_summary` has no caller anywhere (app or procs) — it is dead code unless an
-  external consumer exists.
-- All write procedures derive primary keys deterministically via
+- `fn_usage_summary` has no caller in the app or other procs, but it is **not** dead: the
+  parity suite calls it directly (`procs/scenarios/rating/007.yaml`,
+  `procs/transcripts/rating/RATING-007.json`), so extraction must keep it.
+- Most write procedures derive primary keys deterministically via
   `md5(...)::uuid` and rely on `ON CONFLICT` / `DO NOTHING` for idempotency; any extraction
   must preserve those identity schemes or invoice/rating/dunning replays will duplicate rows.
+  Exception: `sp_change_plan`'s subscription INSERT (plans.sql:57–62) has **no** `ON CONFLICT`
+  clause, so replaying the same plan change raises a primary-key violation.
 
 ## 2. Module boundaries by table ownership and call graph
 
@@ -150,8 +153,10 @@ cursor/record mechanics, deterministic-ID construction, result assembly, upsert 
 4. **`tenants` is dunning-written but plans/invoicing-read** (`status`, `tax_exempt`).
 5. **`invoices.status = 'overdue'` is set by nothing in this estate** — dunning depends on an
    external state transition.
-6. **Deterministic md5 identities + ON CONFLICT** are the idempotency contract for every
-   write path (periods, results, invoices, lines, notifications, subscription ids) — **except**
+6. **Deterministic md5 identities + ON CONFLICT** are the idempotency contract for most
+   write paths (periods, results, invoices, lines, notifications) — with two exceptions:
    `sp_schedule_dunning`, whose max+1 `attempt_no` defeats its `ON CONFLICT` clause and makes
-   replays additive rather than idempotent.
-7. `fn_usage_summary` is uncalled — confirm external consumers before carrying it forward.
+   replays additive rather than idempotent, and `sp_change_plan`, whose subscription INSERT
+   has no `ON CONFLICT` clause and errors with a primary-key violation on replay.
+7. `fn_usage_summary` has no app/proc caller, but the parity suite exercises it
+   (`RATING-007`) — it must be carried forward.
