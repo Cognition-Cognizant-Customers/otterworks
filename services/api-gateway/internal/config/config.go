@@ -41,10 +41,10 @@ type Config struct {
 	ShutdownTimeout time.Duration
 
 	// Circuit breaker
-	CBMaxRequests   uint32
-	CBInterval      time.Duration
-	CBTimeout       time.Duration
-	CBFailureRatio  float64
+	CBMaxRequests  uint32
+	CBInterval     time.Duration
+	CBTimeout      time.Duration
+	CBFailureRatio float64
 }
 
 // Validate checks that required security-sensitive configuration is present.

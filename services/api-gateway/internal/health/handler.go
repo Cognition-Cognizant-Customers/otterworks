@@ -1,8 +1,9 @@
 package health
 
 import (
-	"encoding/json"
 	"net/http"
+
+	"github.com/Cognition-Partner-Workshops/otterworks/services/api-gateway/internal/httpx"
 )
 
 const version = "0.1.0"
@@ -16,9 +17,7 @@ type Response struct {
 // Handler returns an HTTP handler that responds with the service health status.
 func Handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(Response{
+		httpx.WriteJSON(w, http.StatusOK, Response{
 			Status:  "healthy",
 			Version: version,
 		})

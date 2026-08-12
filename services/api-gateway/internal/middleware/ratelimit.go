@@ -1,11 +1,12 @@
 package middleware
 
 import (
-	"encoding/json"
 	"net"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/Cognition-Partner-Workshops/otterworks/services/api-gateway/internal/httpx"
 )
 
 // TokenBucket implements a per-IP token bucket rate limiter.
@@ -71,12 +72,8 @@ func (rl *RateLimiter) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ip := extractIP(r)
 		if !rl.Allow(ip) {
-			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Retry-After", "1")
-			w.WriteHeader(http.StatusTooManyRequests)
-			json.NewEncoder(w).Encode(map[string]string{
-				"error": "rate limit exceeded",
-			})
+			httpx.WriteError(w, http.StatusTooManyRequests, "rate limit exceeded")
 			return
 		}
 		next.ServeHTTP(w, r)
