@@ -316,10 +316,10 @@ jobs:
           # check_run payloads only include pull_requests for same-repo PRs;
           # resolve via the commit → PRs association API to be robust.
           PR_JSON=$(gh api "repos/${REPO}/commits/${HEAD_SHA}/pulls" \
-            --jq '[.[] | select(.state == "open")] | first // empty')
+            --jq '[.[] | select(.state == "open" and .base.ref == "main")] | first // empty')
 
           if [ -z "$PR_JSON" ]; then
-            echo "No open PR found for check_run head SHA ${HEAD_SHA}. Skipping."
+            echo "No open PR into main found for check_run head SHA ${HEAD_SHA}. Skipping."
             echo "should_run=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
