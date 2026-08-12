@@ -580,7 +580,8 @@ YAML
     else
       # A prior full-profile deploy may have left this behind; the host-mode
       # rule self-heals on re-apply but this standalone Ingress does not.
-      kubectl delete ingress tenant-ingress-portal -n "${NS}" --ignore-not-found >/dev/null
+      kubectl delete ingress tenant-ingress-portal -n "${NS}" --ignore-not-found >/dev/null || \
+        warn "could not remove stale tenant-ingress-portal in ${NS}"
     fi
   fi
 }
