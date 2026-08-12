@@ -1,0 +1,84 @@
+=== GET /health
+--- status content-type: 200 application/json
+--- response body:
+{"status":"UP","service":"legacy-portal"}
+
+=== GET /actuator/health
+--- status content-type: 200 application/vnd.spring-boot.actuator.v3+json
+--- response body:
+{"status":"UP","groups":["liveness","readiness"]}
+
+=== GET /api/announcements
+--- status content-type: 200 application/json
+--- response body:
+[]
+
+=== POST /api/announcements
+--- request body: {"title":"Parity check announcement","body":"Captured for the on-prem -> platform migration transcript.","published":false}
+--- status content-type: 201 application/json
+--- response body:
+{"id":<ID>,"title":"Parity check announcement","body":"Captured for the on-prem -> platform migration transcript.","published":false,"createdAt":"<TS>"}
+
+=== GET /api/announcements/1
+--- status content-type: 200 application/json
+--- response body:
+{"id":<ID>,"title":"Parity check announcement","body":"Captured for the on-prem -> platform migration transcript.","published":false,"createdAt":"<TS>"}
+
+=== POST /api/announcements/1/publish
+--- status content-type: 200 application/json
+--- response body:
+{"id":<ID>,"title":"Parity check announcement","body":"Captured for the on-prem -> platform migration transcript.","published":true,"createdAt":"<TS>"}
+
+=== GET /api/announcements
+--- status content-type: 200 application/json
+--- response body:
+[{"id":<ID>,"title":"Parity check announcement","body":"Captured for the on-prem -> platform migration transcript.","published":true,"createdAt":"<TS>"}]
+
+=== GET /api/announcements?publishedOnly=false
+--- status content-type: 200 application/json
+--- response body:
+[{"id":<ID>,"title":"Parity check announcement","body":"Captured for the on-prem -> platform migration transcript.","published":true,"createdAt":"<TS>"}]
+
+=== GET /api/announcements/99999
+--- status content-type: 404 application/json
+--- response body:
+{"error":"Not Found","message":"announcement 99999 not found"}
+
+=== GET /api/preferences/parity-user
+--- status content-type: 200 application/json
+--- response body:
+{"userId":"parity-user","theme":"light","locale":"en-US","emailNotifications":true}
+
+=== PUT /api/preferences/parity-user
+--- request body: {"theme":"dark","locale":"en-US","emailNotifications":true}
+--- status content-type: 200 application/json
+--- response body:
+{"userId":"parity-user","theme":"dark","locale":"en-US","emailNotifications":true}
+
+=== GET /api/preferences/parity-user
+--- status content-type: 200 application/json
+--- response body:
+{"userId":"parity-user","theme":"dark","locale":"en-US","emailNotifications":true}
+
+=== POST /api/feedback
+--- request body: {"userId":"parity-user","rating":4,"message":"Parity transcript feedback entry"}
+--- status content-type: 201 application/json
+--- response body:
+{"id":<ID>,"userId":"parity-user","rating":4,"message":"Parity transcript feedback entry","createdAt":"<TS>"}
+
+=== POST /api/feedback
+--- request body: {"userId":"parity-user","rating":5,"message":"Second entry for the average"}
+--- status content-type: 201 application/json
+--- response body:
+{"id":<ID>,"userId":"parity-user","rating":5,"message":"Second entry for the average","createdAt":"<TS>"}
+
+=== GET /api/feedback?userId=parity-user
+--- status content-type: 200 application/json
+--- response body:
+[{"id":<ID>,"userId":"parity-user","rating":5,"message":"Second entry for the average","createdAt":"<TS>"},{"id":<ID>,"userId":"parity-user","rating":4,"message":"Parity transcript feedback entry","createdAt":"<TS>"}]
+
+=== GET /api/feedback/average-rating
+--- status content-type: 200 application/json
+--- response body:
+{"averageRating":4.5}
+

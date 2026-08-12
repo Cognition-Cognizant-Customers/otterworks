@@ -66,8 +66,19 @@ docker compose -f docker-compose.onprem.yml down -v
 ```
 
 This brings up PostgreSQL alongside the app; the three schemas are created by
-[`scripts/initdb.sql`](scripts/initdb.sql). This stack is intentionally separate from the
-Helm/EKS deploy path — it models the on-prem host the rehost demo lifts *from*.
+[`scripts/initdb.sql`](scripts/initdb.sql). This stack models the on-prem host the rehost demo
+lifts *from*, and stays runnable as the migration's before-state.
+
+### On the container platform (Helm/EKS)
+
+The service also has a chart at `infrastructure/helm/legacy-portal` with the same shape as the
+other services (ClusterIP behind the shared ingress, probes on `/health`, config/secrets via
+ConfigMap/Secret, resource requests/limits). It is wired into `scripts/deploy-dev.sh` and the
+tenant deploys (`scripts/lib/tenant-common.sh`) on port 8095 using the `postgres` profile; the
+three per-context schemas are created by Hibernate
+(`-Dspring.jpa.properties.hibernate.hbm2ddl.create_namespaces=true`) since the shared database
+has no initdb hook. Behavior parity between the two paths is proven by the transcripts in
+[`parity/`](parity/README.md).
 
 ## Legacy markers (upgrade targets)
 

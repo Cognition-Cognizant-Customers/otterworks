@@ -1,0 +1,59 @@
+replicaCount: 1
+
+image:
+  repository: <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/workshop/otterworks-legacy-portal
+  tag: ""  # Set at deploy time (ECR uses IMMUTABLE tags)
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8095
+  targetPort: 8095
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: legacy-portal.otterworks.workshop.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: legacy-portal-tls
+      hosts:
+        - legacy-portal.otterworks.workshop.example.com
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1024Mi
+  requests:
+    cpu: 100m
+    memory: 512Mi
+
+healthCheck:
+  path: /health
+  port: 8095
+
+monitoring:
+  enabled: false
+  path: /metrics
+  port: 8095
+
+networkPolicy:
+  enabled: true
+  ingressNamespace: ingress-nginx
+  monitoringNamespace: monitoring
+
+serviceAccount:
+  roleArn: ""
+
+# Non-sensitive service configuration rendered into {{ .Release.Name }}-config
+# and injected via envFrom. Populate at deploy time (e.g. from Terraform outputs).
+config: {}
+
+# Sensitive configuration rendered into {{ .Release.Name }}-secrets (Opaque,
+# stringData) and injected via envFrom. Populate at deploy time; never commit values.
+secrets: {}

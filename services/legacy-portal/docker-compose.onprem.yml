@@ -2,9 +2,9 @@
 #
 # This is the "runs on a VM today" story: a plain Docker Compose stack (app + a local
 # PostgreSQL) that a team would run on an on-prem host or a single VM. It is deliberately
-# SEPARATE from the repo's Helm/EKS deploy path (scripts/deploy-dev.sh) — legacy-portal is the
-# rehost ("lift-and-shift to EC2") and monolith-decomposition "before" state, so it is not part
-# of the golden app's cluster deployment.
+# SEPARATE from the repo's Helm/EKS deploy path (scripts/deploy-dev.sh) — it is the rehost
+# ("lift-and-shift to EC2") and monolith-decomposition "before" state, and stays runnable even
+# though legacy-portal now also ships on the platform path (infrastructure/helm/legacy-portal).
 #
 #   Usage (from services/legacy-portal/):
 #     docker compose -f docker-compose.onprem.yml up --build

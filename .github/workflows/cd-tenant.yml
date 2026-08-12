@@ -76,6 +76,7 @@ jobs:
             admin-service: ['services/admin-service/**']
             audit-service: ['services/audit-service/**']
             report-service: ['services/report-service/**']
+            legacy-portal: ['services/legacy-portal/**']
             web-app: ['frontend/client-app/**']
             admin-dashboard: ['frontend/admin-dashboard/**']
             deployable: ['services/**', 'frontend/**', 'infrastructure/helm/**', 'scripts/**']

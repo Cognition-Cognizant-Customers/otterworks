@@ -33,7 +33,7 @@ INGRESS_NAMESPACE="ingress-nginx"
 BACKEND_SERVICES=(
   api-gateway auth-service file-service document-service collab-service
   notification-service search-service analytics-service admin-service
-  audit-service report-service
+  audit-service report-service legacy-portal
 )
 FRONTEND_SERVICES=(web-app admin-dashboard)
 ALL_SERVICES=("${BACKEND_SERVICES[@]}" "${FRONTEND_SERVICES[@]}")
@@ -63,8 +63,9 @@ declare -A CONTAINER_PORT=(
   [api-gateway]=8080 [auth-service]=8081 [file-service]=8082 [document-service]=8083
   [collab-service]=8084 [notification-service]=8086 [search-service]=8087
   [analytics-service]=8088 [admin-service]=8089 [audit-service]=8090 [report-service]=8091
+  [legacy-portal]=8095
 )
-JVM_SERVICES=" auth-service report-service notification-service analytics-service "
+JVM_SERVICES=" auth-service report-service notification-service analytics-service legacy-portal "
 
 # Naming ----------------------------------------------------------------------
 # Namespace must be RFC-1123 (lowercase alnum + '-'); DB name uses '_'.
@@ -378,5 +379,14 @@ build_helm_args() {
       EXTRA_ARGS+=(--set-string "config.DB_HOST=${DB_ENDPOINT_HOST}" --set-string "config.DB_PORT=${DB_ENDPOINT_PORT}")
       EXTRA_ARGS+=(--set-string "config.DB_NAME=${T_DB_NAME}" --set-string "config.DB_USER=${DB_USER}")
       add_secret DB_PASSWORD "${DB_PASSWORD}" ;;
+    legacy-portal)
+      EXTRA_ARGS+=(--set-string "config.SPRING_PROFILES_ACTIVE=postgres")
+      EXTRA_ARGS+=(--set-string "config.SPRING_DATASOURCE_URL=jdbc:postgresql://${DB_ENDPOINT_HOST}:${DB_ENDPOINT_PORT}/${T_DB_NAME}")
+      EXTRA_ARGS+=(--set-string "config.SPRING_DATASOURCE_USERNAME=${DB_USER}")
+      # On-prem, scripts/initdb.sql creates the three per-context schemas at DB
+      # init time. The tenant database has no such hook, so Hibernate is told
+      # to create the schemas itself before ddl-auto=update runs.
+      EXTRA_ARGS+=(--set-string "config.JAVA_TOOL_OPTIONS=-Dspring.jpa.properties.hibernate.hbm2ddl.create_namespaces=true")
+      add_secret SPRING_DATASOURCE_PASSWORD "${DB_PASSWORD}" ;;
   esac
 }
