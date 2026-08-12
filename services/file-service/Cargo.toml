@@ -21,9 +21,9 @@ opentelemetry = "0.21"
 opentelemetry_sdk = { version = "0.21", features = ["rt-tokio"] }
 opentelemetry-otlp = "0.14"
 aws-config = "1.1"
-aws-sdk-s3 = "1.15"
-aws-sdk-dynamodb = "1.14"
-aws-sdk-sns = "1.13"
+aws-sdk-s3 = { version = "1.15", default-features = false, features = ["sigv4a", "http-1x", "default-https-client", "rt-tokio"] }
+aws-sdk-dynamodb = { version = "1.14", default-features = false, features = ["default-https-client", "rt-tokio"] }
+aws-sdk-sns = { version = "1.13", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-smithy-types = "1.1"
 futures-util = "0.3"
 bytes = "1"
