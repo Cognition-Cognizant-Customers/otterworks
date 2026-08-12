@@ -25,6 +25,22 @@ pub struct MetadataClient {
 }
 
 impl MetadataClient {
+    pub fn from_client(
+        client: aws_sdk_dynamodb::Client,
+        files_table: impl Into<String>,
+        folders_table: impl Into<String>,
+        versions_table: impl Into<String>,
+        shares_table: impl Into<String>,
+    ) -> Self {
+        Self {
+            client,
+            files_table: files_table.into(),
+            folders_table: folders_table.into(),
+            versions_table: versions_table.into(),
+            shares_table: shares_table.into(),
+        }
+    }
+
     pub async fn new(config: &AwsConfig) -> Self {
         let mut aws_config_builder = aws_config::defaults(aws_config::BehaviorVersion::latest())
             .region(aws_config::Region::new(config.region.clone()));
@@ -36,13 +52,13 @@ impl MetadataClient {
         let aws_config = aws_config_builder.load().await;
         let client = aws_sdk_dynamodb::Client::new(&aws_config);
 
-        Self {
+        Self::from_client(
             client,
-            files_table: config.dynamodb_table.clone(),
-            folders_table: config.dynamodb_folders_table.clone(),
-            versions_table: config.dynamodb_versions_table.clone(),
-            shares_table: config.dynamodb_shares_table.clone(),
-        }
+            config.dynamodb_table.clone(),
+            config.dynamodb_folders_table.clone(),
+            config.dynamodb_versions_table.clone(),
+            config.dynamodb_shares_table.clone(),
+        )
     }
 
     // -- File Metadata --
@@ -822,6 +838,13 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_file_metadata_rejects_invalid_optional_folder() {
+        let mut item = make_file_item();
+        item.insert("folder_id".into(), AttributeValue::S("not-a-uuid".into()));
+        assert!(parse_file_metadata(&item).is_err());
+    }
+
+    #[test]
     fn test_parse_folder() {
         let now = Utc::now();
         let id = Uuid::new_v4();
@@ -876,6 +899,23 @@ mod tests {
         let share = parse_file_share(&item).unwrap();
         assert_eq!(share.permission, SharePermission::Editor);
         assert_eq!(share.file_id, file_id);
+    }
+
+    #[test]
+    fn test_parse_file_share_rejects_unknown_permission() {
+        let now = Utc::now();
+        let mut item = HashMap::new();
+        for (key, value) in [
+            ("id", Uuid::new_v4().to_string()),
+            ("file_id", Uuid::new_v4().to_string()),
+            ("shared_with", Uuid::new_v4().to_string()),
+            ("shared_by", Uuid::new_v4().to_string()),
+        ] {
+            item.insert(key.into(), AttributeValue::S(value));
+        }
+        item.insert("permission".into(), AttributeValue::S("owner".into()));
+        item.insert("created_at".into(), AttributeValue::S(now.to_rfc3339()));
+        assert!(parse_file_share(&item).is_err());
     }
 
     #[test]

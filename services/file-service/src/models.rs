@@ -200,3 +200,54 @@ pub struct ActivityQuery {
 pub struct ActivityResponse {
     pub items: Vec<ActivityItem>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn response_types_keep_wire_names_and_nested_shapes() {
+        let id = Uuid::new_v4();
+        let file = FileMetadata {
+            id,
+            name: "a.txt".into(),
+            mime_type: "text/plain".into(),
+            size_bytes: 3,
+            s3_key: "files/a".into(),
+            folder_id: None,
+            owner_id: id,
+            version: 1,
+            is_trashed: false,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        let body = serde_json::to_value(FileDetailResponse {
+            file,
+            shared_with: vec![],
+        })
+        .unwrap();
+        assert_eq!(body["name"], "a.txt");
+        assert_eq!(body["shared_with"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn request_types_deserialize_uuid_and_permission_validation() {
+        let user = Uuid::new_v4();
+        let request: ShareFileRequest = serde_json::from_value(serde_json::json!({
+            "shared_with": user,
+            "permission": "viewer",
+            "shared_by": user
+        }))
+        .unwrap();
+        assert_eq!(request.shared_with, user);
+        assert_eq!(request.permission, SharePermission::Viewer);
+        assert!(
+            serde_json::from_value::<ShareFileRequest>(serde_json::json!({
+                "shared_with": user,
+                "permission": "owner",
+                "shared_by": user
+            }))
+            .is_err()
+        );
+    }
+}

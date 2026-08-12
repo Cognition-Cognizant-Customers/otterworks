@@ -48,7 +48,7 @@ pub async fn upload_file(
     meta: web::Data<MetadataClient>,
     events: web::Data<EventPublisher>,
     config: web::Data<AppConfig>,
-    redis_cm: web::Data<redis::aio::ConnectionManager>,
+    redis_cm: Option<web::Data<redis::aio::ConnectionManager>>,
     mut payload: Multipart,
 ) -> Result<HttpResponse, ServiceError> {
     // Prefer owner_id from X-User-ID header (injected by api-gateway from JWT).
@@ -139,12 +139,17 @@ pub async fn upload_file(
     // CHAOS: when this flag is active the S3 client targets a nonexistent
     // bucket, simulating a misconfigured bucket name after a recent infra
     // change.  The AWS SDK returns NoSuchBucket which surfaces as a 500.
-    let effective_bucket = if chaos_active(
-        &mut redis_cm.get_ref().clone(),
-        "chaos:file-service:upload_s3_error",
-    )
-    .await
-    {
+    let chaos_enabled = match redis_cm {
+        Some(redis_cm) => {
+            chaos_active(
+                &mut redis_cm.get_ref().clone(),
+                "chaos:file-service:upload_s3_error",
+            )
+            .await
+        }
+        None => false,
+    };
+    let effective_bucket = if chaos_enabled {
         tracing::warn!("Chaos flag active: redirecting upload to nonexistent bucket");
         "otterworks-files-chaos-nonexistent".to_string()
     } else {

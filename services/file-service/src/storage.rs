@@ -13,6 +13,13 @@ pub struct S3Client {
 }
 
 impl S3Client {
+    pub fn from_client(client: aws_sdk_s3::Client, bucket: impl Into<String>) -> Self {
+        Self {
+            client,
+            bucket: bucket.into(),
+        }
+    }
+
     pub async fn new(config: &AwsConfig) -> Self {
         let mut aws_config_builder = aws_config::defaults(aws_config::BehaviorVersion::latest())
             .region(aws_config::Region::new(config.region.clone()));
@@ -27,10 +34,7 @@ impl S3Client {
             .build();
         let client = aws_sdk_s3::Client::from_conf(s3_config);
 
-        Self {
-            client,
-            bucket: config.s3_bucket.clone(),
-        }
+        Self::from_client(client, config.s3_bucket.clone())
     }
 
     /// Upload file content to S3.

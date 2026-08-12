@@ -39,3 +39,8 @@ redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
 actix-rt = "2"
 actix-web = "4"
 tokio = { version = "1", features = ["full", "test-util"] }
+aws-smithy-http-client = { version = "1.1.12", features = ["test-util"] }
+aws-smithy-runtime-api = { version = "1.11.6", features = ["test-util"] }
+aws-smithy-types = { version = "1.4.6", features = ["http-body-1-x", "test-util"] }
+aws-credential-types = "1.2"
+http = "1"

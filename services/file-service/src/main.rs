@@ -3,14 +3,7 @@
 use actix_web::{middleware as actix_middleware, web, App, HttpServer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod config;
-mod errors;
-mod events;
-mod handlers;
-mod metadata;
-mod middleware;
-mod models;
-mod storage;
+use file_service::{config, events, handlers, metadata, middleware, storage};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {

@@ -31,6 +31,10 @@ pub struct FileEvent {
 }
 
 impl EventPublisher {
+    pub fn from_client(client: aws_sdk_sns::Client, topic_arn: Option<String>) -> Self {
+        Self { client, topic_arn }
+    }
+
     pub async fn new(sns_config: &SnsConfig, aws_config: &crate::config::AwsConfig) -> Self {
         let mut aws_cfg_builder = aws_config::defaults(aws_config::BehaviorVersion::latest())
             .region(aws_config::Region::new(aws_config.region.clone()));
@@ -42,10 +46,7 @@ impl EventPublisher {
         let aws_cfg = aws_cfg_builder.load().await;
         let client = aws_sdk_sns::Client::new(&aws_cfg);
 
-        Self {
-            client,
-            topic_arn: sns_config.topic_arn.clone(),
-        }
+        Self::from_client(client, sns_config.topic_arn.clone())
     }
 
     async fn publish(&self, event: &FileEvent) -> Result<(), ServiceError> {
