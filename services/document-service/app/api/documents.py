@@ -60,33 +60,55 @@ async def _maybe_inject_latency() -> None:
         await asyncio.sleep(delay)
 
 
+# Claim value the reindexers present to enumerate documents across owners.
+SERVICE_SCOPE = "service"
+
+
 def _get_jwt_secret() -> str:
     return os.environ.get("JWT_SECRET", "")
 
 
+def _decode_token(request: Request) -> dict | None:
+    """Return the validated claims of the Authorization JWT, if any."""
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None
+    secret = _get_jwt_secret()
+    if not secret:
+        return None
+    try:
+        return jwt.decode(
+            auth_header[len("Bearer "):], secret, algorithms=["HS256", "HS384"]
+        )
+    except jwt.PyJWTError:
+        return None
+
+
 def _extract_user_id(request: Request) -> UUID | None:
     """Extract user ID from the Authorization JWT."""
-    auth_header = request.headers.get("Authorization")
-    if auth_header and auth_header.startswith("Bearer "):
-        token = auth_header[len("Bearer "):]
-        secret = _get_jwt_secret()
-        if secret:
+    payload = _decode_token(request)
+    if payload is not None:
+        user_id_str = payload.get("user_id") or payload.get("sub")
+        if user_id_str:
             try:
-                payload = jwt.decode(token, secret, algorithms=["HS256", "HS384"])
-                user_id_str = payload.get("user_id") or payload.get("sub")
-                if user_id_str:
-                    return UUID(str(user_id_str))
-            except (jwt.PyJWTError, ValueError):
-                pass
-        else:
-            forwarded_user_id = request.headers.get("X-User-ID")
-            if forwarded_user_id:
-                try:
-                    return UUID(str(forwarded_user_id))
-                except ValueError:
-                    pass
+                return UUID(str(user_id_str))
+            except ValueError:
+                return None
+    elif not _get_jwt_secret():
+        forwarded_user_id = request.headers.get("X-User-ID")
+        if forwarded_user_id:
+            try:
+                return UUID(str(forwarded_user_id))
+            except ValueError:
+                return None
 
     return None
+
+
+def _is_service_caller(request: Request) -> bool:
+    """True for the indexers, which hold a service-scoped token instead of a user."""
+    payload = _decode_token(request)
+    return payload is not None and payload.get("scope") == SERVICE_SCOPE
 
 
 def _require_user_id(request: Request) -> UUID:
@@ -101,8 +123,14 @@ def _ensure_owner(document: object, user_id: UUID) -> None:
         raise HTTPException(status_code=403, detail="Access denied")
 
 
-def _resolve_list_owner(request: Request, requested_owner_id: UUID | None) -> UUID:
-    """Listings are always scoped to the caller, whatever the query asks for."""
+def _resolve_list_owner(request: Request, requested_owner_id: UUID | None) -> UUID | None:
+    """Listings are scoped to the caller, whatever the query asks for.
+
+    A service-scoped caller (the search indexers) may enumerate any owner, since it
+    has to rebuild the whole index.
+    """
+    if _is_service_caller(request):
+        return requested_owner_id
     caller_id = _require_user_id(request)
     if requested_owner_id is not None and requested_owner_id != caller_id:
         raise HTTPException(status_code=403, detail="Access denied")

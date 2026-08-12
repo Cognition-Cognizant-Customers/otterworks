@@ -11,11 +11,25 @@
 
 import configparser
 import json
+import os
 import sys
 import time
 from datetime import datetime
 
+import jwt
 import requests
+
+
+def service_auth_headers():
+    # A full reindex has to enumerate every owner's content. The services scope
+    # listings to the caller, so present a service-scoped token rather than a user's.
+    secret = os.environ.get("JWT_SECRET", "")
+    if not secret:
+        print("[%s] WARNING: JWT_SECRET unset, service listing calls will be rejected"
+              % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        return {}
+    token = jwt.encode({"scope": "service", "sub": "etl-search-reindex"}, secret, algorithm="HS256")
+    return {"Authorization": "Bearer %s" % token}
 
 
 def main():
@@ -34,6 +48,8 @@ def main():
     files_index = "files"
     bulk_batch_size = 500
     api_page_size = 100
+
+    service_headers = service_auth_headers()
 
     meili_headers = {"Content-Type": "application/json"}
     if meilisearch_api_key:
@@ -158,6 +174,7 @@ def main():
         resp = requests.get(
             "%s/api/v1/documents" % document_service_url,
             params={"page": page, "size": api_page_size},
+            headers=service_headers,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -220,6 +237,7 @@ def main():
         resp = requests.get(
             "%s/api/v1/files" % file_service_url,
             params={"page": page, "page_size": api_page_size},
+            headers=service_headers,
         )
         resp.raise_for_status()
         data = resp.json()

@@ -70,7 +70,15 @@ func newProxyHandler(route Route, cfg RouterConfig) http.HandlerFunc {
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(target)
 			pr.Out.Host = pr.In.Host
+
+			// SetXForwarded derives the scheme from this hop, which is plaintext behind
+			// the TLS-terminating ingress. Keep the scheme the ingress reported; the
+			// RealIP middleware has already dropped it if an untrusted peer sent it.
+			forwardedProto := pr.In.Header.Get("X-Forwarded-Proto")
 			pr.SetXForwarded()
+			if forwardedProto != "" {
+				pr.Out.Header.Set("X-Forwarded-Proto", forwardedProto)
+			}
 
 			// Identity headers are the gateway's to set: drop whatever the client sent
 			// before deriving them from validated claims.

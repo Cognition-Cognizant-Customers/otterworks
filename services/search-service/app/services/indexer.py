@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
+import jwt
 import requests
 import structlog
 
@@ -14,6 +16,22 @@ logger = structlog.get_logger()
 DOCUMENT_SERVICE_URL = "http://document-service:8083"
 FILE_SERVICE_URL = "http://file-service:8082"
 FETCH_TIMEOUT = 30
+
+
+def _service_auth_headers() -> dict[str, str]:
+    """A reindex enumerates every owner's content, which needs a service token.
+
+    The owning services scope listings to the caller for user tokens, so the crawler
+    presents a token carrying scope=service instead of a user id.
+    """
+    secret = os.environ.get("JWT_SECRET", "")
+    if not secret:
+        logger.warning("reindex_service_token_unavailable")
+        return {}
+    token = jwt.encode(
+        {"scope": "service", "sub": "search-service-indexer"}, secret, algorithm="HS256"
+    )
+    return {"Authorization": f"Bearer {token}"}
 
 
 class Indexer:
@@ -112,6 +130,7 @@ class Indexer:
                 resp = requests.get(
                     f"{DOCUMENT_SERVICE_URL}/api/v1/documents/",
                     params={"page": page, "page_size": 100},
+                    headers=_service_auth_headers(),
                     timeout=FETCH_TIMEOUT,
                 )
                 if resp.status_code != 200:
@@ -148,6 +167,7 @@ class Indexer:
                 resp = requests.get(
                     f"{FILE_SERVICE_URL}/api/v1/files",
                     params={"page": page, "page_size": 100},
+                    headers=_service_auth_headers(),
                     timeout=FETCH_TIMEOUT,
                 )
                 if resp.status_code != 200:

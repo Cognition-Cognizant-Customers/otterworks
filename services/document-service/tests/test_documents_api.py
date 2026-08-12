@@ -321,6 +321,26 @@ async def test_search_documents_scoped_to_caller(
 
 
 @pytest.mark.asyncio
+async def test_service_token_lists_every_owner(
+    client: AsyncClient, anon_client: AsyncClient
+):
+    """The search reindexers enumerate all documents with a service-scoped token."""
+    await client.post("/api/v1/documents/", json={"title": "Indexed"})
+
+    service_token = jwt.encode(
+        {"scope": "service", "sub": "search-indexer"},
+        TEST_JWT_SECRET,
+        algorithm="HS256",
+    )
+    resp = await anon_client.get(
+        "/api/v1/documents/",
+        headers={"Authorization": f"Bearer {service_token}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 1
+
+
+@pytest.mark.asyncio
 async def test_search_documents_requires_auth(anon_client: AsyncClient):
     resp = await anon_client.get("/api/v1/documents/search", params={"q": "anything"})
     assert resp.status_code == 401
