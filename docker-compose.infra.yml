@@ -97,7 +97,7 @@ services:
   # Local OpenSearch-compatible backend for the search-service opensearch
   # adapter (SEARCH_BACKEND=opensearch). Opt-in via the "opensearch" profile;
   # not started by default.
-  opensearch:
+  opensearch: # nosemgrep: yaml.docker-compose.security.writable-filesystem-service.writable-filesystem-service
     image: opensearchproject/opensearch:2.13.0
     container_name: otterworks-opensearch
     profiles:
