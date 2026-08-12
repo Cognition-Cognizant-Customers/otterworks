@@ -47,11 +47,13 @@ export function QuotasPage() {
     // Optimistically show the chosen quota while the save is in flight,
     // rolling back if it fails.
     onMutate: ({ user, quota }) => {
-      const previous = queryClient.getQueryData<QuotaUser[]>(USERS_QUERY_KEY);
+      const previousQuota = queryClient
+        .getQueryData<QuotaUser[]>(USERS_QUERY_KEY)
+        ?.find((u) => u.id === user.id)?.storageQuota;
       queryClient.setQueryData<QuotaUser[]>(USERS_QUERY_KEY, (prev) =>
         (prev ?? []).map((u) => (u.id === user.id ? { ...u, storageQuota: quota } : u))
       );
-      return { previous };
+      return { previousQuota };
     },
     onSuccess: (result, { user }) => {
       queryClient.setQueryData<QuotaUser[]>(USERS_QUERY_KEY, (prev) =>
@@ -64,8 +66,13 @@ export function QuotasPage() {
       toast.success(`Quota updated for ${user.displayName}`);
     },
     onError: (_err, { user }, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(USERS_QUERY_KEY, context.previous);
+      const previousQuota = context?.previousQuota;
+      if (previousQuota !== undefined) {
+        queryClient.setQueryData<QuotaUser[]>(USERS_QUERY_KEY, (prev) =>
+          (prev ?? []).map((u) =>
+            u.id === user.id ? { ...u, storageQuota: previousQuota } : u
+          )
+        );
       }
       toast.error(`Failed to update quota for ${user.displayName}`);
     },
