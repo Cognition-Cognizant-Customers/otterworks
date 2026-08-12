@@ -55,7 +55,8 @@ for bin in aws terraform kubectl helm; do
 done
 
 BACKEND_SERVICES=(api-gateway auth-service file-service document-service collab-service \
-  notification-service search-service analytics-service admin-service audit-service report-service)
+  notification-service search-service analytics-service admin-service audit-service report-service \
+  legacy-portal)
 FRONTEND_SERVICES=(web-app admin-dashboard)
 ALL_SERVICES=("${BACKEND_SERVICES[@]}" "${FRONTEND_SERVICES[@]}")
 
