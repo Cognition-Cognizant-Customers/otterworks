@@ -303,7 +303,7 @@ jobs:
       github.event.check_run.conclusion == 'failure'
     runs-on: ubuntu-latest
     concurrency:
-      group: sast-sonar-fix-${{ github.event.check_run.head_branch }}
+      group: sast-sonar-fix-${{ github.event.check_run.check_suite.head_branch || github.event.check_run.head_sha }}
       cancel-in-progress: false
     steps:
       - name: Resolve and validate PR

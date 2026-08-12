@@ -106,8 +106,9 @@ Devin and escalates instead.
 
 **SonarCloud path:** A comment-based check (the "Devin SAST Auto-Fix —
 Remediation In Progress (SonarCloud)" marker) enforces one-time remediation
-per PR, and a concurrency group keyed on the check run's head SHA prevents
-duplicate sessions from concurrent check_run deliveries.
+per PR, and a concurrency group keyed on the check suite's head branch
+(falling back to the head SHA) serializes runs so concurrent check_run
+deliveries cannot race past the marker check.
 
 ## Escalation Policy
 
