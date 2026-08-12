@@ -1,8 +1,9 @@
 import { TestBed, fakeAsync, tick } from '@angular/core/testing';
-import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { Router } from '@angular/router';
 import { AuthService, AuthUser } from './auth.service';
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -11,8 +12,9 @@ describe('AuthService', () => {
   beforeEach(() => {
     localStorage.clear();
     TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule, RouterTestingModule],
-    });
+    imports: [RouterTestingModule],
+    providers: [provideHttpClient(withInterceptorsFromDi()), provideHttpClientTesting()]
+});
     service = TestBed.inject(AuthService);
     router = TestBed.inject(Router);
   });
@@ -75,7 +77,7 @@ describe('AuthService', () => {
     service.login('admin@otterworks.io', 'admin123').subscribe();
     tick(900);
     expect(service.getToken()).toBeTruthy();
-    expect(service.getToken()!.startsWith('mock-jwt-token-')).toBeTrue();
+    expect(service.getToken()!.startsWith('eyJ')).toBeTrue();
   }));
 
   it('should reject login with empty password', fakeAsync(() => {

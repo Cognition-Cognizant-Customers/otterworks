@@ -10,13 +10,12 @@ import { AdminApiService } from '../../core/services/admin-api.service';
 import { ServiceHealth } from '../../core/models/system-health.model';
 
 @Component({
-  selector: 'app-health',
-  standalone: true,
-  imports: [
-    CommonModule, MatCardModule, MatIconModule, MatButtonModule,
-    MatProgressSpinnerModule, MatChipsModule,
-  ],
-  template: `
+    selector: 'app-health',
+    imports: [
+        CommonModule, MatCardModule, MatIconModule, MatButtonModule,
+        MatProgressSpinnerModule, MatChipsModule,
+    ],
+    template: `
     <div class="page-container">
       <div class="page-header">
         <h1 class="page-title">System Health</h1>
@@ -24,79 +23,86 @@ import { ServiceHealth } from '../../core/models/system-health.model';
           <mat-icon>refresh</mat-icon> Refresh
         </button>
       </div>
-
-      <div class="health-summary" *ngIf="!loading">
-        <div class="summary-card healthy">
-          <mat-icon>check_circle</mat-icon>
-          <span class="summary-count">{{ healthyCounts.healthy }}</span>
-          <span class="summary-label">Healthy</span>
+    
+      @if (!loading) {
+        <div class="health-summary">
+          <div class="summary-card healthy">
+            <mat-icon>check_circle</mat-icon>
+            <span class="summary-count">{{ healthyCounts.healthy }}</span>
+            <span class="summary-label">Healthy</span>
+          </div>
+          <div class="summary-card degraded">
+            <mat-icon>warning</mat-icon>
+            <span class="summary-count">{{ healthyCounts.degraded }}</span>
+            <span class="summary-label">Degraded</span>
+          </div>
+          <div class="summary-card down">
+            <mat-icon>error</mat-icon>
+            <span class="summary-count">{{ healthyCounts.down }}</span>
+            <span class="summary-label">Down</span>
+          </div>
         </div>
-        <div class="summary-card degraded">
-          <mat-icon>warning</mat-icon>
-          <span class="summary-count">{{ healthyCounts.degraded }}</span>
-          <span class="summary-label">Degraded</span>
+      }
+    
+      @if (loading) {
+        <div class="loading-container">
+          <mat-spinner diameter="40"></mat-spinner>
         </div>
-        <div class="summary-card down">
-          <mat-icon>error</mat-icon>
-          <span class="summary-count">{{ healthyCounts.down }}</span>
-          <span class="summary-label">Down</span>
+      }
+    
+      @if (error) {
+        <div class="error-container">
+          <mat-icon>error_outline</mat-icon>
+          <p>Failed to load health data. The health endpoint may be unavailable.</p>
+          <button mat-raised-button color="primary" (click)="refresh()">Retry</button>
         </div>
-      </div>
-
-      <div *ngIf="loading" class="loading-container">
-        <mat-spinner diameter="40"></mat-spinner>
-      </div>
-
-      <div *ngIf="error" class="error-container">
-        <mat-icon>error_outline</mat-icon>
-        <p>Failed to load health data. The health endpoint may be unavailable.</p>
-        <button mat-raised-button color="primary" (click)="refresh()">Retry</button>
-      </div>
-
-      <div class="services-grid" *ngIf="!loading">
-        <mat-card *ngFor="let service of services" class="service-card" [class]="'border-' + service.status">
-          <mat-card-content>
-            <div class="service-header">
-              <div class="service-name-row">
-                <span class="status-dot" [class]="'dot-' + service.status"></span>
-                <h3>{{ service.name }}</h3>
-              </div>
-              <span class="service-version">v{{ service.version }}</span>
-            </div>
-
-            <p class="service-details">{{ service.details }}</p>
-
-            <div class="service-meta">
-              <div class="meta-item">
-                <mat-icon>code</mat-icon>
-                <span>{{ service.language }}</span>
-              </div>
-              <div class="meta-item">
-                <mat-icon>lan</mat-icon>
-                <span>Port {{ service.port }}</span>
-              </div>
-              <div class="meta-item">
-                <mat-icon>speed</mat-icon>
-                <span>{{ service.responseTime > 0 ? service.responseTime + 'ms' : 'N/A' }}</span>
-              </div>
-              <div class="meta-item">
-                <mat-icon>schedule</mat-icon>
-                <span>{{ service.uptime }} uptime</span>
-              </div>
-            </div>
-
-            <div class="service-status">
-              <span class="status-badge" [class]="'badge-' + service.status">
-                {{ service.status | uppercase }}
-              </span>
-              <span class="last-checked">Checked {{ service.lastChecked | date:'shortTime' }}</span>
-            </div>
-          </mat-card-content>
-        </mat-card>
-      </div>
+      }
+    
+      @if (!loading) {
+        <div class="services-grid">
+          @for (service of services; track service) {
+            <mat-card class="service-card" [class]="'border-' + service.status">
+              <mat-card-content>
+                <div class="service-header">
+                  <div class="service-name-row">
+                    <span class="status-dot" [class]="'dot-' + service.status"></span>
+                    <h3>{{ service.name }}</h3>
+                  </div>
+                  <span class="service-version">v{{ service.version }}</span>
+                </div>
+                <p class="service-details">{{ service.details }}</p>
+                <div class="service-meta">
+                  <div class="meta-item">
+                    <mat-icon>code</mat-icon>
+                    <span>{{ service.language }}</span>
+                  </div>
+                  <div class="meta-item">
+                    <mat-icon>lan</mat-icon>
+                    <span>Port {{ service.port }}</span>
+                  </div>
+                  <div class="meta-item">
+                    <mat-icon>speed</mat-icon>
+                    <span>{{ service.responseTime > 0 ? service.responseTime + 'ms' : 'N/A' }}</span>
+                  </div>
+                  <div class="meta-item">
+                    <mat-icon>schedule</mat-icon>
+                    <span>{{ service.uptime }} uptime</span>
+                  </div>
+                </div>
+                <div class="service-status">
+                  <span class="status-badge" [class]="'badge-' + service.status">
+                    {{ service.status | uppercase }}
+                  </span>
+                  <span class="last-checked">Checked {{ service.lastChecked | date:'shortTime' }}</span>
+                </div>
+              </mat-card-content>
+            </mat-card>
+          }
+        </div>
+      }
     </div>
-  `,
-  styles: [`
+    `,
+    styles: [`
     .page-container { padding: 0; }
     .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
     .page-title { font-size: 1.5rem; font-weight: 600; color: #333; margin: 0; }
@@ -163,7 +169,7 @@ import { ServiceHealth } from '../../core/models/system-health.model';
     .badge-down { background: #ffebee; color: #c62828; }
 
     .last-checked { font-size: 0.75rem; color: #999; }
-  `],
+  `]
 })
 export class HealthComponent implements OnInit {
   services: ServiceHealth[] = [];

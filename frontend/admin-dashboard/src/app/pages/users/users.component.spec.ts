@@ -1,21 +1,57 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
-import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { of } from 'rxjs';
 import { UsersComponent } from './users.component';
+import { AdminApiService } from '../../core/services/admin-api.service';
+import { User } from '../../core/models/user.model';
+
+const mockUsers: User[] = [
+  {
+    id: 'u1',
+    email: 'alice@otterworks.io',
+    displayName: 'Alice Otter',
+    role: 'admin',
+    status: 'active',
+    storageUsed: 1024,
+    storageQuota: 10240,
+    lastLogin: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    department: 'Engineering',
+    documentsCount: 12,
+  },
+  {
+    id: 'u2',
+    email: 'bob@otterworks.io',
+    displayName: 'Bob Beaver',
+    role: 'viewer',
+    status: 'suspended',
+    storageUsed: 512,
+    storageQuota: 10240,
+    lastLogin: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    department: 'Sales',
+    documentsCount: 3,
+  },
+];
 
 describe('UsersComponent', () => {
   let component: UsersComponent;
   let fixture: ComponentFixture<UsersComponent>;
+  let api: jasmine.SpyObj<AdminApiService>;
 
   beforeEach(async () => {
+    api = jasmine.createSpyObj<AdminApiService>('AdminApiService', [
+      'getUsers',
+      'suspendUser',
+      'restoreUser',
+      'deleteUser',
+    ]);
+    api.getUsers.and.returnValue(of(mockUsers));
+
     await TestBed.configureTestingModule({
-      imports: [
-        UsersComponent,
-        HttpClientTestingModule,
-        RouterTestingModule,
-        NoopAnimationsModule,
-      ],
+      imports: [UsersComponent, RouterTestingModule, NoopAnimationsModule],
+      providers: [{ provide: AdminApiService, useValue: api }],
     }).compileComponents();
 
     fixture = TestBed.createComponent(UsersComponent);

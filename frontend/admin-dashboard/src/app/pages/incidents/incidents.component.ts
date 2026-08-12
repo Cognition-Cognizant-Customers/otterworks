@@ -22,15 +22,14 @@ import { Subscription, interval } from 'rxjs';
 const CHAOS_STATE_KEY = 'ow_admin_chaos_state';
 
 @Component({
-  selector: 'app-incidents',
-  standalone: true,
-  imports: [
-    CommonModule, FormsModule, MatCardModule, MatIconModule, MatButtonModule,
-    MatProgressSpinnerModule, MatChipsModule, MatInputModule, MatFormFieldModule,
-    MatSelectModule, MatSnackBarModule, MatBadgeModule, MatTooltipModule, MatSlideToggleModule,
-    MatDialogModule,
-  ],
-  template: `
+    selector: 'app-incidents',
+    imports: [
+        CommonModule, FormsModule, MatCardModule, MatIconModule, MatButtonModule,
+        MatProgressSpinnerModule, MatChipsModule, MatInputModule, MatFormFieldModule,
+        MatSelectModule, MatSnackBarModule, MatBadgeModule, MatTooltipModule, MatSlideToggleModule,
+        MatDialogModule,
+    ],
+    template: `
     <div class="page-container">
       <div class="page-header">
         <div>
@@ -42,322 +41,358 @@ const CHAOS_STATE_KEY = 'ow_admin_chaos_state';
           {{ showCreateForm ? 'Cancel' : 'Report Incident' }}
         </button>
       </div>
-
+    
       <!-- Demo Controls: chaos injection panel for workshop use -->
       <mat-card class="demo-controls" [class.expanded]="showDemoControls">
         <mat-card-header (click)="showDemoControls = !showDemoControls" style="cursor:pointer">
           <mat-card-title>
             <mat-icon>science</mat-icon>
             Demo Controls
-            <span class="demo-badge" *ngIf="activeChaosCount > 0">{{ activeChaosCount }} active</span>
+            @if (activeChaosCount > 0) {
+              <span class="demo-badge">{{ activeChaosCount }} active</span>
+            }
           </mat-card-title>
           <mat-card-subtitle>Inject realistic failures and control the investigation flow: manual, one-click, or fully automatic</mat-card-subtitle>
         </mat-card-header>
-        <mat-card-content *ngIf="showDemoControls">
-          <div class="auto-investigate-toggle">
-            <div class="toggle-info">
-              <div class="toggle-label">
-                <mat-icon>smart_toy</mat-icon>
-                <span>Auto-Investigate with Devin</span>
+        @if (showDemoControls) {
+          <mat-card-content>
+            <div class="auto-investigate-toggle">
+              <div class="toggle-info">
+                <div class="toggle-label">
+                  <mat-icon>smart_toy</mat-icon>
+                  <span>Auto-Investigate with Devin</span>
+                </div>
+                @if (autoInvestigate) {
+                  <div class="toggle-description">
+                    <strong>ON:</strong> Grafana alerts auto-create incidents AND launch Devin sessions (Flow 3: fully automatic)
+                  </div>
+                }
+                @if (!autoInvestigate) {
+                  <div class="toggle-description">
+                    <strong>OFF:</strong> Grafana alerts auto-create incidents but do NOT launch Devin. Use "Launch Devin" button on individual incidents (Flow 2) or investigate manually via Grafana (Flow 1)
+                  </div>
+                }
               </div>
-              <div class="toggle-description" *ngIf="autoInvestigate">
-                <strong>ON:</strong> Grafana alerts auto-create incidents AND launch Devin sessions (Flow 3: fully automatic)
+              <mat-slide-toggle
+                [checked]="autoInvestigate"
+                [disabled]="autoInvestigateLoading"
+                (change)="toggleAutoInvestigate($event.checked)"
+                color="primary">
+              </mat-slide-toggle>
+            </div>
+            <div class="chaos-grid">
+              <div class="chaos-scenario" [class.chaos-active]="chaosState['search-service']">
+                <div class="chaos-scenario-header">
+                  <mat-icon class="chaos-svc-icon">search</mat-icon>
+                  <div>
+                    <div class="chaos-svc-name">Search Service <span class="chaos-lang">Python/Flask</span></div>
+                    <div class="chaos-svc-desc">Autocomplete suggest endpoint crashes with KeyError on ranking score enrichment → 500s</div>
+                  </div>
+                </div>
+                @if (chaosState['search-service']) {
+                  <div class="chaos-status">
+                    <mat-icon class="chaos-active-icon">bolt</mat-icon>
+                    Chaos active — Grafana alert fires in ~30s
+                  </div>
+                }
+                <button mat-raised-button color="warn" (click)="triggerChaos('search-service', 'suggest_500')"
+                  [disabled]="!!chaosState['search-service'] || chaosLoading">
+                  <mat-icon>{{ chaosState['search-service'] ? 'check' : 'bug_report' }}</mat-icon>
+                  {{ chaosState['search-service'] ? 'Breaking...' : 'Break Search Autocomplete' }}
+                </button>
               </div>
-              <div class="toggle-description" *ngIf="!autoInvestigate">
-                <strong>OFF:</strong> Grafana alerts auto-create incidents but do NOT launch Devin. Use "Launch Devin" button on individual incidents (Flow 2) or investigate manually via Grafana (Flow 1)
+              <div class="chaos-scenario" [class.chaos-active]="chaosState['file-service']">
+                <div class="chaos-scenario-header">
+                  <mat-icon class="chaos-svc-icon">cloud_upload</mat-icon>
+                  <div>
+                    <div class="chaos-svc-name">File Service <span class="chaos-lang">Rust/Actix-Web</span></div>
+                    <div class="chaos-svc-desc">Uploads routed to nonexistent S3 bucket → AWS NoSuchBucket errors → 500s</div>
+                  </div>
+                </div>
+                @if (chaosState['file-service']) {
+                  <div class="chaos-status">
+                    <mat-icon class="chaos-active-icon">bolt</mat-icon>
+                    Chaos active — Grafana alert fires in ~30s
+                  </div>
+                }
+                <button mat-raised-button color="warn" (click)="triggerChaos('file-service', 'upload_s3_error')"
+                  [disabled]="!!chaosState['file-service'] || chaosLoading">
+                  <mat-icon>{{ chaosState['file-service'] ? 'check' : 'bug_report' }}</mat-icon>
+                  {{ chaosState['file-service'] ? 'Breaking...' : 'Break File Uploads' }}
+                </button>
+              </div>
+              <div class="chaos-scenario" [class.chaos-active]="chaosState['notification-service']">
+                <div class="chaos-scenario-header">
+                  <mat-icon class="chaos-svc-icon">notifications</mat-icon>
+                  <div>
+                    <div class="chaos-svc-name">Notification Service <span class="chaos-lang">Kotlin/Ktor</span></div>
+                    <div class="chaos-svc-desc">Strict JSON schema rejects legacy message timestamps → deserialization loop → queue backlog grows</div>
+                  </div>
+                </div>
+                @if (chaosState['notification-service']) {
+                  <div class="chaos-status">
+                    <mat-icon class="chaos-active-icon">bolt</mat-icon>
+                    Chaos active — Grafana alert fires in ~2m
+                  </div>
+                }
+                <button mat-raised-button color="warn" (click)="triggerChaos('notification-service', 'consumer_strict_schema')"
+                  [disabled]="!!chaosState['notification-service'] || chaosLoading">
+                  <mat-icon>{{ chaosState['notification-service'] ? 'check' : 'bug_report' }}</mat-icon>
+                  {{ chaosState['notification-service'] ? 'Breaking...' : 'Break Notification Queue' }}
+                </button>
+              </div>
+              <div class="chaos-scenario" [class.chaos-active]="chaosState['document-service']">
+                <div class="chaos-scenario-header">
+                  <mat-icon class="chaos-svc-icon">description</mat-icon>
+                  <div>
+                    <div class="chaos-svc-name">Document Service <span class="chaos-lang">Python/FastAPI</span></div>
+                    <div class="chaos-svc-desc">Injected 3-5s latency before every database query → P95 latency spike → timeout cascade</div>
+                  </div>
+                </div>
+                @if (chaosState['document-service']) {
+                  <div class="chaos-status">
+                    <mat-icon class="chaos-active-icon">bolt</mat-icon>
+                    Chaos active — Grafana alert fires in ~1m
+                  </div>
+                }
+                <button mat-raised-button color="warn" (click)="triggerChaos('document-service', 'slow_queries')"
+                  [disabled]="!!chaosState['document-service'] || chaosLoading">
+                  <mat-icon>{{ chaosState['document-service'] ? 'check' : 'bug_report' }}</mat-icon>
+                  {{ chaosState['document-service'] ? 'Slowing...' : 'Inject Query Latency' }}
+                </button>
               </div>
             </div>
-            <mat-slide-toggle
-              [checked]="autoInvestigate"
-              [disabled]="autoInvestigateLoading"
-              (change)="toggleAutoInvestigate($event.checked)"
-              color="primary">
-            </mat-slide-toggle>
-          </div>
-          <div class="chaos-grid">
-
-            <div class="chaos-scenario" [class.chaos-active]="chaosState['search-service']">
-              <div class="chaos-scenario-header">
-                <mat-icon class="chaos-svc-icon">search</mat-icon>
-                <div>
-                  <div class="chaos-svc-name">Search Service <span class="chaos-lang">Python/Flask</span></div>
-                  <div class="chaos-svc-desc">Autocomplete suggest endpoint crashes with KeyError on ranking score enrichment → 500s</div>
-                </div>
-              </div>
-              <div class="chaos-status" *ngIf="chaosState['search-service']">
-                <mat-icon class="chaos-active-icon">bolt</mat-icon>
-                Chaos active — Grafana alert fires in ~30s
-              </div>
-              <button mat-raised-button color="warn" (click)="triggerChaos('search-service', 'suggest_500')"
-                [disabled]="!!chaosState['search-service'] || chaosLoading">
-                <mat-icon>{{ chaosState['search-service'] ? 'check' : 'bug_report' }}</mat-icon>
-                {{ chaosState['search-service'] ? 'Breaking...' : 'Break Search Autocomplete' }}
+            <div class="chaos-footer">
+              <span class="chaos-note">Chaos flags auto-expire after 10 minutes</span>
+              <button mat-stroked-button color="warn" (click)="resetAllChaos()" [disabled]="activeChaosCount === 0 || chaosLoading">
+                <mat-icon>refresh</mat-icon>
+                Reset All
               </button>
             </div>
-
-            <div class="chaos-scenario" [class.chaos-active]="chaosState['file-service']">
-              <div class="chaos-scenario-header">
-                <mat-icon class="chaos-svc-icon">cloud_upload</mat-icon>
-                <div>
-                  <div class="chaos-svc-name">File Service <span class="chaos-lang">Rust/Actix-Web</span></div>
-                  <div class="chaos-svc-desc">Uploads routed to nonexistent S3 bucket → AWS NoSuchBucket errors → 500s</div>
-                </div>
-              </div>
-              <div class="chaos-status" *ngIf="chaosState['file-service']">
-                <mat-icon class="chaos-active-icon">bolt</mat-icon>
-                Chaos active — Grafana alert fires in ~30s
-              </div>
-              <button mat-raised-button color="warn" (click)="triggerChaos('file-service', 'upload_s3_error')"
-                [disabled]="!!chaosState['file-service'] || chaosLoading">
-                <mat-icon>{{ chaosState['file-service'] ? 'check' : 'bug_report' }}</mat-icon>
-                {{ chaosState['file-service'] ? 'Breaking...' : 'Break File Uploads' }}
-              </button>
-            </div>
-
-            <div class="chaos-scenario" [class.chaos-active]="chaosState['notification-service']">
-              <div class="chaos-scenario-header">
-                <mat-icon class="chaos-svc-icon">notifications</mat-icon>
-                <div>
-                  <div class="chaos-svc-name">Notification Service <span class="chaos-lang">Kotlin/Ktor</span></div>
-                  <div class="chaos-svc-desc">Strict JSON schema rejects legacy message timestamps → deserialization loop → queue backlog grows</div>
-                </div>
-              </div>
-              <div class="chaos-status" *ngIf="chaosState['notification-service']">
-                <mat-icon class="chaos-active-icon">bolt</mat-icon>
-                Chaos active — Grafana alert fires in ~2m
-              </div>
-              <button mat-raised-button color="warn" (click)="triggerChaos('notification-service', 'consumer_strict_schema')"
-                [disabled]="!!chaosState['notification-service'] || chaosLoading">
-                <mat-icon>{{ chaosState['notification-service'] ? 'check' : 'bug_report' }}</mat-icon>
-                {{ chaosState['notification-service'] ? 'Breaking...' : 'Break Notification Queue' }}
-              </button>
-            </div>
-
-            <div class="chaos-scenario" [class.chaos-active]="chaosState['document-service']">
-              <div class="chaos-scenario-header">
-                <mat-icon class="chaos-svc-icon">description</mat-icon>
-                <div>
-                  <div class="chaos-svc-name">Document Service <span class="chaos-lang">Python/FastAPI</span></div>
-                  <div class="chaos-svc-desc">Injected 3-5s latency before every database query → P95 latency spike → timeout cascade</div>
-                </div>
-              </div>
-              <div class="chaos-status" *ngIf="chaosState['document-service']">
-                <mat-icon class="chaos-active-icon">bolt</mat-icon>
-                Chaos active — Grafana alert fires in ~1m
-              </div>
-              <button mat-raised-button color="warn" (click)="triggerChaos('document-service', 'slow_queries')"
-                [disabled]="!!chaosState['document-service'] || chaosLoading">
-                <mat-icon>{{ chaosState['document-service'] ? 'check' : 'bug_report' }}</mat-icon>
-                {{ chaosState['document-service'] ? 'Slowing...' : 'Inject Query Latency' }}
-              </button>
-            </div>
-
-          </div>
-          <div class="chaos-footer">
-            <span class="chaos-note">Chaos flags auto-expire after 10 minutes</span>
-            <button mat-stroked-button color="warn" (click)="resetAllChaos()" [disabled]="activeChaosCount === 0 || chaosLoading">
-              <mat-icon>refresh</mat-icon>
-              Reset All
-            </button>
-          </div>
-        </mat-card-content>
+          </mat-card-content>
+        }
       </mat-card>
-
+    
       <!-- Status summary chips (only show when there are incidents) -->
-      <div class="status-summary" *ngIf="!loading && incidents.length > 0">
-        <div class="summary-chip active" (click)="filterStatus = filterStatus === 'active' ? '' : 'active'">
-          <mat-icon>warning</mat-icon>
-          <span>{{ activeCount }} Active</span>
-        </div>
-        <div class="summary-chip investigating" (click)="filterStatus = filterStatus === 'investigating' ? '' : 'investigating'">
-          <mat-icon>smart_toy</mat-icon>
-          <span>{{ investigatingCount }} Devin Investigating</span>
-        </div>
-        <div class="summary-chip resolved" (click)="filterStatus = filterStatus === 'resolved' ? '' : 'resolved'">
-          <mat-icon>check_circle</mat-icon>
-          <span>{{ resolvedCount }} Resolved</span>
-        </div>
-        <div class="summary-chip closed" *ngIf="closedCount > 0" (click)="showClosed = !showClosed">
-          <mat-icon>{{ showClosed ? 'visibility' : 'visibility_off' }}</mat-icon>
-          <span>{{ closedCount }} Closed{{ showClosed ? '' : ' (hidden)' }}</span>
-        </div>
-      </div>
-
-      <!-- Create form -->
-      <mat-card *ngIf="showCreateForm" class="create-form">
-        <mat-card-header>
-          <mat-card-title>
-            <mat-icon>add_alert</mat-icon>
-            Report New Incident
-          </mat-card-title>
-          <mat-card-subtitle>A Devin session will automatically be created to investigate this incident</mat-card-subtitle>
-        </mat-card-header>
-        <mat-card-content>
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Incident Title</mat-label>
-            <input matInput [(ngModel)]="newIncident.title" placeholder="Brief description of the issue">
-          </mat-form-field>
-
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Description</mat-label>
-            <textarea matInput [(ngModel)]="newIncident.description" rows="4"
-              placeholder="Detailed description: what's happening, error messages, affected users..."></textarea>
-          </mat-form-field>
-
-          <div class="form-row">
-            <mat-form-field appearance="outline">
-              <mat-label>Severity</mat-label>
-              <mat-select [(ngModel)]="newIncident.severity">
-                <mat-option value="low">Low</mat-option>
-                <mat-option value="medium">Medium</mat-option>
-                <mat-option value="high">High</mat-option>
-                <mat-option value="critical">Critical</mat-option>
-              </mat-select>
-            </mat-form-field>
-
-            <mat-form-field appearance="outline">
-              <mat-label>Affected Service</mat-label>
-              <mat-select [(ngModel)]="newIncident.affectedService">
-                <mat-option *ngFor="let svc of affectedServices" [value]="svc.value">
-                  {{ svc.label }}
-                </mat-option>
-              </mat-select>
-            </mat-form-field>
+      @if (!loading && incidents.length > 0) {
+        <div class="status-summary">
+          <div class="summary-chip active" (click)="filterStatus = filterStatus === 'active' ? '' : 'active'">
+            <mat-icon>warning</mat-icon>
+            <span>{{ activeCount }} Active</span>
           </div>
-
-          <button mat-raised-button color="warn" (click)="createIncident()"
-            [disabled]="!newIncident.title || !newIncident.description || creating">
-            <mat-icon>{{ creating ? 'hourglass_empty' : 'smart_toy' }}</mat-icon>
-            {{ creating ? 'Creating Devin Session...' : 'Create Incident & Launch Devin' }}
-          </button>
-        </mat-card-content>
-      </mat-card>
-
-      <!-- Loading -->
-      <div *ngIf="loading" class="loading-container">
-        <mat-spinner diameter="40"></mat-spinner>
-      </div>
-
-      <!-- Incidents list -->
-      <div class="incidents-list" *ngIf="!loading">
-        <mat-card *ngFor="let incident of filteredIncidents" class="incident-card"
-          [class]="'severity-border-' + incident.severity">
-          <mat-card-content>
-            <div class="incident-header">
-              <div class="incident-info">
-                <div class="incident-title-row">
-                  <h3>{{ incident.title }}</h3>
-                </div>
-                <div class="incident-badges">
-                  <span class="severity-chip" [class]="'severity-' + incident.severity">
-                    {{ incident.severity }}
-                  </span>
-                  <span class="status-chip" [class]="'status-' + incident.status">
-                    <mat-icon class="chip-icon">{{ getStatusIcon(incident.status) }}</mat-icon>
-                    {{ incident.status }}
-                  </span>
-                  <span class="service-chip" *ngIf="incident.affectedService">
-                    <mat-icon class="chip-icon">dns</mat-icon>
-                    {{ incident.affectedService }}
-                  </span>
-                </div>
-              </div>
+          <div class="summary-chip investigating" (click)="filterStatus = filterStatus === 'investigating' ? '' : 'investigating'">
+            <mat-icon>smart_toy</mat-icon>
+            <span>{{ investigatingCount }} Devin Investigating</span>
+          </div>
+          <div class="summary-chip resolved" (click)="filterStatus = filterStatus === 'resolved' ? '' : 'resolved'">
+            <mat-icon>check_circle</mat-icon>
+            <span>{{ resolvedCount }} Resolved</span>
+          </div>
+          @if (closedCount > 0) {
+            <div class="summary-chip closed" (click)="showClosed = !showClosed">
+              <mat-icon>{{ showClosed ? 'visibility' : 'visibility_off' }}</mat-icon>
+              <span>{{ closedCount }} Closed{{ showClosed ? '' : ' (hidden)' }}</span>
             </div>
-
-            <p class="incident-description">{{ incident.description }}</p>
-
-            <!-- Devin Session Status -->
-            <div class="devin-session" *ngIf="incident.devinSessionId">
-              <div class="devin-header">
-                <mat-icon class="devin-icon">smart_toy</mat-icon>
-                <span class="devin-label">Devin Session</span>
-                <span class="devin-status" [class]="'devin-' + (incident.devinSessionStatus || 'unknown')">
-                  {{ incident.devinSessionStatus || 'pending' }}
-                </span>
-              </div>
-              <div class="devin-details">
-                <span class="session-id">{{ incident.devinSessionId }}</span>
-                <a *ngIf="incident.devinSessionUrl" [href]="incident.devinSessionUrl"
-                  target="_blank" rel="noopener" class="session-link">
-                  <mat-icon>open_in_new</mat-icon>
-                  View Session
-                </a>
-              </div>
-            </div>
-
-            <div class="devin-session devin-pending" *ngIf="!incident.devinSessionId && incident.active">
-              <mat-icon class="devin-icon">smart_toy</mat-icon>
-              <span>No Devin session</span>
-              <button mat-stroked-button color="primary" (click)="triggerSession(incident)"
-                [disabled]="incident.devinSessionStatus === 'triggering'" class="trigger-btn">
-                <mat-icon>play_arrow</mat-icon>
-                {{ incident.devinSessionStatus === 'triggering' ? 'Launching...' : 'Launch Devin' }}
-              </button>
-            </div>
-
-            <div class="incident-actions">
-              <button mat-stroked-button color="primary" *ngIf="incident.status === 'open' || incident.status === 'investigating'"
-                (click)="resolveIncident(incident)">
-                <mat-icon>check_circle</mat-icon> Resolve
-              </button>
-              <button mat-stroked-button *ngIf="incident.status === 'resolved'"
-                (click)="closeIncident(incident)">
-                <mat-icon>cancel</mat-icon> Close
-              </button>
-              <button mat-stroked-button color="warn" (click)="deleteIncident(incident)">
-                <mat-icon>delete</mat-icon> Delete
-              </button>
-            </div>
-
-            <div class="incident-meta">
-              <span>Created {{ incident.createdAt | date:'medium' }}</span>
-              <span *ngIf="incident.resolvedAt">Resolved {{ incident.resolvedAt | date:'medium' }}</span>
-              <span *ngIf="incident.closedAt">Closed {{ incident.closedAt | date:'medium' }}</span>
-            </div>
-          </mat-card-content>
-        </mat-card>
-      </div>
-
-      <!-- Empty state -->
-      <div *ngIf="!loading && filteredIncidents.length === 0 && filterStatus" class="empty-state">
-        <mat-icon>filter_list_off</mat-icon>
-        <p>No {{ filterStatus }} incidents</p>
-        <button mat-stroked-button (click)="filterStatus = ''">Clear Filter</button>
-      </div>
-
-      <!-- First-run onboarding (no incidents at all) -->
-      <div *ngIf="!loading && incidents.length === 0 && !filterStatus" class="onboarding">
-        <mat-card class="onboarding-card">
-          <mat-card-content>
-            <div class="onboarding-hero">
-              <mat-icon class="onboarding-icon">smart_toy</mat-icon>
-              <h2>Automated Incident Response</h2>
-              <p>Report an incident and Devin will automatically spin up a session to investigate the root cause across OtterWorks' 11 microservices.</p>
-            </div>
-            <div class="onboarding-steps">
-              <div class="step">
-                <div class="step-number">1</div>
-                <div><strong>Report an incident</strong><br>Describe the issue, select severity and affected service</div>
-              </div>
-              <div class="step">
-                <div class="step-number">2</div>
-                <div><strong>Devin session launches</strong><br>An AI session is created with full architecture context</div>
-              </div>
-              <div class="step">
-                <div class="step-number">3</div>
-                <div><strong>Track progress</strong><br>Monitor the session status and view Devin's investigation live</div>
-              </div>
-            </div>
-            <button mat-raised-button color="warn" (click)="showCreateForm = true" class="onboarding-cta">
+          }
+        </div>
+      }
+    
+      <!-- Create form -->
+      @if (showCreateForm) {
+        <mat-card class="create-form">
+          <mat-card-header>
+            <mat-card-title>
               <mat-icon>add_alert</mat-icon>
-              Report Your First Incident
+              Report New Incident
+            </mat-card-title>
+            <mat-card-subtitle>A Devin session will automatically be created to investigate this incident</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Incident Title</mat-label>
+              <input matInput [(ngModel)]="newIncident.title" placeholder="Brief description of the issue">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Description</mat-label>
+              <textarea matInput [(ngModel)]="newIncident.description" rows="4"
+              placeholder="Detailed description: what's happening, error messages, affected users..."></textarea>
+            </mat-form-field>
+            <div class="form-row">
+              <mat-form-field appearance="outline">
+                <mat-label>Severity</mat-label>
+                <mat-select [(ngModel)]="newIncident.severity">
+                  <mat-option value="low">Low</mat-option>
+                  <mat-option value="medium">Medium</mat-option>
+                  <mat-option value="high">High</mat-option>
+                  <mat-option value="critical">Critical</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Affected Service</mat-label>
+                <mat-select [(ngModel)]="newIncident.affectedService">
+                  @for (svc of affectedServices; track svc) {
+                    <mat-option [value]="svc.value">
+                      {{ svc.label }}
+                    </mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            </div>
+            <button mat-raised-button color="warn" (click)="createIncident()"
+              [disabled]="!newIncident.title || !newIncident.description || creating">
+              <mat-icon>{{ creating ? 'hourglass_empty' : 'smart_toy' }}</mat-icon>
+              {{ creating ? 'Creating Devin Session...' : 'Create Incident & Launch Devin' }}
             </button>
           </mat-card-content>
         </mat-card>
-      </div>
+      }
+    
+      <!-- Loading -->
+      @if (loading) {
+        <div class="loading-container">
+          <mat-spinner diameter="40"></mat-spinner>
+        </div>
+      }
+    
+      <!-- Incidents list -->
+      @if (!loading) {
+        <div class="incidents-list">
+          @for (incident of filteredIncidents; track incident) {
+            <mat-card class="incident-card"
+              [class]="'severity-border-' + incident.severity">
+              <mat-card-content>
+                <div class="incident-header">
+                  <div class="incident-info">
+                    <div class="incident-title-row">
+                      <h3>{{ incident.title }}</h3>
+                    </div>
+                    <div class="incident-badges">
+                      <span class="severity-chip" [class]="'severity-' + incident.severity">
+                        {{ incident.severity }}
+                      </span>
+                      <span class="status-chip" [class]="'status-' + incident.status">
+                        <mat-icon class="chip-icon">{{ getStatusIcon(incident.status) }}</mat-icon>
+                        {{ incident.status }}
+                      </span>
+                      @if (incident.affectedService) {
+                        <span class="service-chip">
+                          <mat-icon class="chip-icon">dns</mat-icon>
+                          {{ incident.affectedService }}
+                        </span>
+                      }
+                    </div>
+                  </div>
+                </div>
+                <p class="incident-description">{{ incident.description }}</p>
+                <!-- Devin Session Status -->
+                @if (incident.devinSessionId) {
+                  <div class="devin-session">
+                    <div class="devin-header">
+                      <mat-icon class="devin-icon">smart_toy</mat-icon>
+                      <span class="devin-label">Devin Session</span>
+                      <span class="devin-status" [class]="'devin-' + (incident.devinSessionStatus || 'unknown')">
+                        {{ incident.devinSessionStatus || 'pending' }}
+                      </span>
+                    </div>
+                    <div class="devin-details">
+                      <span class="session-id">{{ incident.devinSessionId }}</span>
+                      @if (incident.devinSessionUrl) {
+                        <a [href]="incident.devinSessionUrl"
+                          target="_blank" rel="noopener" class="session-link">
+                          <mat-icon>open_in_new</mat-icon>
+                          View Session
+                        </a>
+                      }
+                    </div>
+                  </div>
+                }
+                @if (!incident.devinSessionId && incident.active) {
+                  <div class="devin-session devin-pending">
+                    <mat-icon class="devin-icon">smart_toy</mat-icon>
+                    <span>No Devin session</span>
+                    <button mat-stroked-button color="primary" (click)="triggerSession(incident)"
+                      [disabled]="incident.devinSessionStatus === 'triggering'" class="trigger-btn">
+                      <mat-icon>play_arrow</mat-icon>
+                      {{ incident.devinSessionStatus === 'triggering' ? 'Launching...' : 'Launch Devin' }}
+                    </button>
+                  </div>
+                }
+                <div class="incident-actions">
+                  @if (incident.status === 'open' || incident.status === 'investigating') {
+                    <button mat-stroked-button color="primary"
+                      (click)="resolveIncident(incident)">
+                      <mat-icon>check_circle</mat-icon> Resolve
+                    </button>
+                  }
+                  @if (incident.status === 'resolved') {
+                    <button mat-stroked-button
+                      (click)="closeIncident(incident)">
+                      <mat-icon>cancel</mat-icon> Close
+                    </button>
+                  }
+                  <button mat-stroked-button color="warn" (click)="deleteIncident(incident)">
+                    <mat-icon>delete</mat-icon> Delete
+                  </button>
+                </div>
+                <div class="incident-meta">
+                  <span>Created {{ incident.createdAt | date:'medium' }}</span>
+                  @if (incident.resolvedAt) {
+                    <span>Resolved {{ incident.resolvedAt | date:'medium' }}</span>
+                  }
+                  @if (incident.closedAt) {
+                    <span>Closed {{ incident.closedAt | date:'medium' }}</span>
+                  }
+                </div>
+              </mat-card-content>
+            </mat-card>
+          }
+        </div>
+      }
+    
+      <!-- Empty state -->
+      @if (!loading && filteredIncidents.length === 0 && filterStatus) {
+        <div class="empty-state">
+          <mat-icon>filter_list_off</mat-icon>
+          <p>No {{ filterStatus }} incidents</p>
+          <button mat-stroked-button (click)="filterStatus = ''">Clear Filter</button>
+        </div>
+      }
+    
+      <!-- First-run onboarding (no incidents at all) -->
+      @if (!loading && incidents.length === 0 && !filterStatus) {
+        <div class="onboarding">
+          <mat-card class="onboarding-card">
+            <mat-card-content>
+              <div class="onboarding-hero">
+                <mat-icon class="onboarding-icon">smart_toy</mat-icon>
+                <h2>Automated Incident Response</h2>
+                <p>Report an incident and Devin will automatically spin up a session to investigate the root cause across OtterWorks' 11 microservices.</p>
+              </div>
+              <div class="onboarding-steps">
+                <div class="step">
+                  <div class="step-number">1</div>
+                  <div><strong>Report an incident</strong><br>Describe the issue, select severity and affected service</div>
+                </div>
+                <div class="step">
+                  <div class="step-number">2</div>
+                  <div><strong>Devin session launches</strong><br>An AI session is created with full architecture context</div>
+                </div>
+                <div class="step">
+                  <div class="step-number">3</div>
+                  <div><strong>Track progress</strong><br>Monitor the session status and view Devin's investigation live</div>
+                </div>
+              </div>
+              <button mat-raised-button color="warn" (click)="showCreateForm = true" class="onboarding-cta">
+                <mat-icon>add_alert</mat-icon>
+                Report Your First Incident
+              </button>
+            </mat-card-content>
+          </mat-card>
+        </div>
+      }
     </div>
-  `,
-  styles: [`
+    `,
+    styles: [`
     .page-container{padding:0}.page-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
     .page-title{font-size:1.5rem;font-weight:600;color:#333;margin:0}.page-subtitle{font-size:.85rem;color:#777;margin:4px 0 0}
     .loading-container{display:flex;justify-content:center;padding:60px}
@@ -414,7 +449,7 @@ const CHAOS_STATE_KEY = 'ow_admin_chaos_state';
     .auto-investigate-toggle{display:flex;align-items:center;justify-content:space-between;padding:16px;background:#e8f0fe;border:1px solid #c2d7f9;border-radius:8px;margin-bottom:16px}
     .toggle-info{flex:1}.toggle-label{display:flex;align-items:center;gap:8px;font-weight:600;font-size:.9rem;color:#1565c0;margin-bottom:4px}
     .toggle-description{font-size:.8rem;color:#555;line-height:1.4}
-  `],
+  `]
 })
 export class IncidentsComponent implements OnInit, OnDestroy {
   incidents: Incident[] = [];

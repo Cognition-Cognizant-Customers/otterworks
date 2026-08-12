@@ -15,14 +15,13 @@ import { User, UserActivity } from '../../core/models/user.model';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.component';
 
 @Component({
-  selector: 'app-user-detail',
-  standalone: true,
-  imports: [
-    CommonModule, RouterModule, MatCardModule, MatIconModule, MatButtonModule,
-    MatProgressSpinnerModule, MatProgressBarModule, MatTableModule, MatChipsModule,
-    MatSnackBarModule, MatDialogModule,
-  ],
-  template: `
+    selector: 'app-user-detail',
+    imports: [
+        CommonModule, RouterModule, MatCardModule, MatIconModule, MatButtonModule,
+        MatProgressSpinnerModule, MatProgressBarModule, MatTableModule, MatChipsModule,
+        MatSnackBarModule, MatDialogModule,
+    ],
+    template: `
     <div class="page-container">
       <div class="page-header">
         <button mat-icon-button (click)="goBack()">
@@ -30,124 +29,129 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.c
         </button>
         <h1 class="page-title">User Details</h1>
       </div>
-
-      <div *ngIf="loading" class="loading-container">
-        <mat-spinner diameter="40"></mat-spinner>
-      </div>
-
-      <div *ngIf="!loading && user" class="user-detail-grid">
-        <mat-card class="profile-card">
-          <mat-card-content>
-            <div class="profile-header">
-              <mat-icon class="profile-avatar">account_circle</mat-icon>
-              <div class="profile-info">
-                <h2>{{ user.displayName }}</h2>
-                <p>{{ user.email }}</p>
-                <div class="profile-badges">
-                  <span class="role-chip" [class]="'role-' + user.role">{{ user.role }}</span>
-                  <span class="status-chip" [class]="'status-' + user.status">{{ user.status }}</span>
+    
+      @if (loading) {
+        <div class="loading-container">
+          <mat-spinner diameter="40"></mat-spinner>
+        </div>
+      }
+    
+      @if (!loading && user) {
+        <div class="user-detail-grid">
+          <mat-card class="profile-card">
+            <mat-card-content>
+              <div class="profile-header">
+                <mat-icon class="profile-avatar">account_circle</mat-icon>
+                <div class="profile-info">
+                  <h2>{{ user.displayName }}</h2>
+                  <p>{{ user.email }}</p>
+                  <div class="profile-badges">
+                    <span class="role-chip" [class]="'role-' + user.role">{{ user.role }}</span>
+                    <span class="status-chip" [class]="'status-' + user.status">{{ user.status }}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-
-            <div class="profile-details">
-              <div class="detail-row">
-                <mat-icon>business</mat-icon>
-                <span>{{ user.department || 'No department' }}</span>
+              <div class="profile-details">
+                <div class="detail-row">
+                  <mat-icon>business</mat-icon>
+                  <span>{{ user.department || 'No department' }}</span>
+                </div>
+                <div class="detail-row">
+                  <mat-icon>calendar_today</mat-icon>
+                  <span>Joined {{ user.createdAt | date:'mediumDate' }}</span>
+                </div>
+                <div class="detail-row">
+                  <mat-icon>login</mat-icon>
+                  <span>Last login: {{ user.lastLogin ? (user.lastLogin | date:'medium') : 'Never' }}</span>
+                </div>
+                <div class="detail-row">
+                  <mat-icon>description</mat-icon>
+                  <span>{{ user.documentsCount }} documents</span>
+                </div>
               </div>
-              <div class="detail-row">
-                <mat-icon>calendar_today</mat-icon>
-                <span>Joined {{ user.createdAt | date:'mediumDate' }}</span>
+              <div class="profile-actions">
+                @if (user.status === 'active') {
+                  <button mat-raised-button color="warn" (click)="suspendUser()">
+                    <mat-icon>block</mat-icon> Suspend User
+                  </button>
+                }
+                @if (user.status === 'suspended') {
+                  <button mat-raised-button color="primary" (click)="restoreUser()">
+                    <mat-icon>restore</mat-icon> Restore User
+                  </button>
+                }
+                <button mat-raised-button color="warn" (click)="deleteUser()">
+                  <mat-icon>delete</mat-icon> Delete User
+                </button>
               </div>
-              <div class="detail-row">
-                <mat-icon>login</mat-icon>
-                <span>Last login: {{ user.lastLogin ? (user.lastLogin | date:'medium') : 'Never' }}</span>
+            </mat-card-content>
+          </mat-card>
+          <mat-card class="storage-card">
+            <mat-card-header>
+              <mat-card-title>Storage Usage</mat-card-title>
+            </mat-card-header>
+            <mat-card-content>
+              <div class="storage-info">
+                <span class="storage-used">{{ formatBytes(user.storageUsed) }}</span>
+                <span class="storage-separator">of</span>
+                <span class="storage-quota">{{ formatBytes(user.storageQuota) }}</span>
               </div>
-              <div class="detail-row">
-                <mat-icon>description</mat-icon>
-                <span>{{ user.documentsCount }} documents</span>
-              </div>
-            </div>
-
-            <div class="profile-actions">
-              <button mat-raised-button color="warn" *ngIf="user.status === 'active'" (click)="suspendUser()">
-                <mat-icon>block</mat-icon> Suspend User
-              </button>
-              <button mat-raised-button color="primary" *ngIf="user.status === 'suspended'" (click)="restoreUser()">
-                <mat-icon>restore</mat-icon> Restore User
-              </button>
-              <button mat-raised-button color="warn" (click)="deleteUser()">
-                <mat-icon>delete</mat-icon> Delete User
-              </button>
-            </div>
-          </mat-card-content>
-        </mat-card>
-
-        <mat-card class="storage-card">
-          <mat-card-header>
-            <mat-card-title>Storage Usage</mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <div class="storage-info">
-              <span class="storage-used">{{ formatBytes(user.storageUsed) }}</span>
-              <span class="storage-separator">of</span>
-              <span class="storage-quota">{{ formatBytes(user.storageQuota) }}</span>
-            </div>
-            <mat-progress-bar
-              mode="determinate"
-              [value]="storagePercentage"
-              [color]="storagePercentage > 90 ? 'warn' : 'primary'">
-            </mat-progress-bar>
-            <span class="storage-percent">{{ storagePercentage | number:'1.0-0' }}% used</span>
-          </mat-card-content>
-        </mat-card>
-
-        <mat-card class="activity-card">
-          <mat-card-header>
-            <mat-card-title>Recent Activity</mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <table mat-table [dataSource]="activities" class="activity-table" *ngIf="activities.length > 0">
-              <ng-container matColumnDef="timestamp">
-                <th mat-header-cell *matHeaderCellDef>Time</th>
-                <td mat-cell *matCellDef="let act">{{ act.timestamp | date:'short' }}</td>
-              </ng-container>
-
-              <ng-container matColumnDef="action">
-                <th mat-header-cell *matHeaderCellDef>Action</th>
-                <td mat-cell *matCellDef="let act">{{ act.action }}</td>
-              </ng-container>
-
-              <ng-container matColumnDef="resource">
-                <th mat-header-cell *matHeaderCellDef>Resource</th>
-                <td mat-cell *matCellDef="let act">{{ act.resource }}</td>
-              </ng-container>
-
-              <ng-container matColumnDef="ipAddress">
-                <th mat-header-cell *matHeaderCellDef>IP Address</th>
-                <td mat-cell *matCellDef="let act">{{ act.ipAddress || '-' }}</td>
-              </ng-container>
-
-              <tr mat-header-row *matHeaderRowDef="activityColumns"></tr>
-              <tr mat-row *matRowDef="let row; columns: activityColumns;"></tr>
-            </table>
-
-            <div *ngIf="activities.length === 0" class="empty-state">
-              <mat-icon>history</mat-icon>
-              <p>No recent activity</p>
-            </div>
-          </mat-card-content>
-        </mat-card>
-      </div>
-
-      <div *ngIf="!loading && !user" class="not-found">
-        <mat-icon>person_off</mat-icon>
-        <h2>User not found</h2>
-        <button mat-raised-button color="primary" routerLink="/users">Back to Users</button>
-      </div>
+              <mat-progress-bar
+                mode="determinate"
+                [value]="storagePercentage"
+                [color]="storagePercentage > 90 ? 'warn' : 'primary'">
+              </mat-progress-bar>
+              <span class="storage-percent">{{ storagePercentage | number:'1.0-0' }}% used</span>
+            </mat-card-content>
+          </mat-card>
+          <mat-card class="activity-card">
+            <mat-card-header>
+              <mat-card-title>Recent Activity</mat-card-title>
+            </mat-card-header>
+            <mat-card-content>
+              @if (activities.length > 0) {
+                <table mat-table [dataSource]="activities" class="activity-table">
+                  <ng-container matColumnDef="timestamp">
+                    <th mat-header-cell *matHeaderCellDef>Time</th>
+                    <td mat-cell *matCellDef="let act">{{ act.timestamp | date:'short' }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="action">
+                    <th mat-header-cell *matHeaderCellDef>Action</th>
+                    <td mat-cell *matCellDef="let act">{{ act.action }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="resource">
+                    <th mat-header-cell *matHeaderCellDef>Resource</th>
+                    <td mat-cell *matCellDef="let act">{{ act.resource }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="ipAddress">
+                    <th mat-header-cell *matHeaderCellDef>IP Address</th>
+                    <td mat-cell *matCellDef="let act">{{ act.ipAddress || '-' }}</td>
+                  </ng-container>
+                  <tr mat-header-row *matHeaderRowDef="activityColumns"></tr>
+                  <tr mat-row *matRowDef="let row; columns: activityColumns;"></tr>
+                </table>
+              }
+              @if (activities.length === 0) {
+                <div class="empty-state">
+                  <mat-icon>history</mat-icon>
+                  <p>No recent activity</p>
+                </div>
+              }
+            </mat-card-content>
+          </mat-card>
+        </div>
+      }
+    
+      @if (!loading && !user) {
+        <div class="not-found">
+          <mat-icon>person_off</mat-icon>
+          <h2>User not found</h2>
+          <button mat-raised-button color="primary" routerLink="/users">Back to Users</button>
+        </div>
+      }
     </div>
-  `,
-  styles: [`
+    `,
+    styles: [`
     .page-container { padding: 0; }
     .page-header { display: flex; align-items: center; gap: 8px; margin-bottom: 24px; }
     .page-title { font-size: 1.5rem; font-weight: 600; color: #333; margin: 0; }
@@ -209,7 +213,7 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.c
 
     .not-found .mat-icon { font-size: 64px; width: 64px; height: 64px; margin-bottom: 16px; }
     .not-found h2 { margin-bottom: 20px; }
-  `],
+  `]
 })
 export class UserDetailComponent implements OnInit {
   user: User | null = null;

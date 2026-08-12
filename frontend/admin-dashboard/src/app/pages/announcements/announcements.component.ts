@@ -16,14 +16,13 @@ import { Announcement } from '../../core/models/announcement.model';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.component';
 
 @Component({
-  selector: 'app-announcements',
-  standalone: true,
-  imports: [
-    CommonModule, FormsModule, MatCardModule, MatIconModule, MatButtonModule,
-    MatProgressSpinnerModule, MatChipsModule, MatInputModule, MatFormFieldModule,
-    MatSelectModule, MatSnackBarModule, MatDialogModule,
-  ],
-  template: `
+    selector: 'app-announcements',
+    imports: [
+        CommonModule, FormsModule, MatCardModule, MatIconModule, MatButtonModule,
+        MatProgressSpinnerModule, MatChipsModule, MatInputModule, MatFormFieldModule,
+        MatSelectModule, MatSnackBarModule, MatDialogModule,
+    ],
+    template: `
     <div class="page-container">
       <div class="page-header">
         <h1 class="page-title">Announcements</h1>
@@ -32,97 +31,107 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.c
           {{ showCreateForm ? 'Cancel' : 'New Announcement' }}
         </button>
       </div>
-
-      <mat-card *ngIf="showCreateForm" class="create-form">
-        <mat-card-header>
-          <mat-card-title>Create Announcement</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Title</mat-label>
-            <input matInput [(ngModel)]="newAnnouncement.title" placeholder="Announcement title">
-          </mat-form-field>
-
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Content</mat-label>
-            <textarea matInput [(ngModel)]="newAnnouncement.content" rows="4" placeholder="Announcement content"></textarea>
-          </mat-form-field>
-
-          <div class="form-row">
-            <mat-form-field appearance="outline">
-              <mat-label>Priority</mat-label>
-              <mat-select [(ngModel)]="newAnnouncement.priority">
-                <mat-option value="low">Low</mat-option>
-                <mat-option value="medium">Medium</mat-option>
-                <mat-option value="high">High</mat-option>
-                <mat-option value="critical">Critical</mat-option>
-              </mat-select>
-            </mat-form-field>
-
-            <mat-form-field appearance="outline">
-              <mat-label>Target Audience</mat-label>
-              <mat-select [(ngModel)]="newAnnouncement.targetAudience">
-                <mat-option value="all">All Users</mat-option>
-                <mat-option value="admins">Admins Only</mat-option>
-                <mat-option value="editors">Editors</mat-option>
-                <mat-option value="viewers">Viewers</mat-option>
-              </mat-select>
-            </mat-form-field>
-          </div>
-
-          <button mat-raised-button color="primary" (click)="createAnnouncement()" [disabled]="!newAnnouncement.title || !newAnnouncement.content">
-            Create
-          </button>
-        </mat-card-content>
-      </mat-card>
-
-      <div *ngIf="loading" class="loading-container">
-        <mat-spinner diameter="40"></mat-spinner>
-      </div>
-
-      <div class="announcements-list" *ngIf="!loading">
-        <mat-card *ngFor="let ann of announcements" class="announcement-card" [class]="'priority-border-' + ann.priority">
+    
+      @if (showCreateForm) {
+        <mat-card class="create-form">
+          <mat-card-header>
+            <mat-card-title>Create Announcement</mat-card-title>
+          </mat-card-header>
           <mat-card-content>
-            <div class="ann-header">
-              <div>
-                <h3>{{ ann.title }}</h3>
-                <div class="ann-badges">
-                  <span class="priority-chip" [class]="'priority-' + ann.priority">{{ ann.priority }}</span>
-                  <span class="status-chip" [class]="'ann-status-' + ann.status">{{ ann.status }}</span>
-                  <span class="audience-chip">
-                    <mat-icon>group</mat-icon>
-                    {{ ann.targetAudience }}
-                  </span>
-                </div>
-              </div>
-              <div class="ann-actions">
-                <button mat-icon-button *ngIf="ann.status === 'draft'" (click)="publishAnnouncement(ann)" color="primary" aria-label="Publish">
-                  <mat-icon>publish</mat-icon>
-                </button>
-                <button mat-icon-button (click)="deleteAnnouncement(ann)" color="warn" aria-label="Delete">
-                  <mat-icon>delete</mat-icon>
-                </button>
-              </div>
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Title</mat-label>
+              <input matInput [(ngModel)]="newAnnouncement.title" placeholder="Announcement title">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Content</mat-label>
+              <textarea matInput [(ngModel)]="newAnnouncement.content" rows="4" placeholder="Announcement content"></textarea>
+            </mat-form-field>
+            <div class="form-row">
+              <mat-form-field appearance="outline">
+                <mat-label>Priority</mat-label>
+                <mat-select [(ngModel)]="newAnnouncement.priority">
+                  <mat-option value="low">Low</mat-option>
+                  <mat-option value="medium">Medium</mat-option>
+                  <mat-option value="high">High</mat-option>
+                  <mat-option value="critical">Critical</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Target Audience</mat-label>
+                <mat-select [(ngModel)]="newAnnouncement.targetAudience">
+                  <mat-option value="all">All Users</mat-option>
+                  <mat-option value="admins">Admins Only</mat-option>
+                  <mat-option value="editors">Editors</mat-option>
+                  <mat-option value="viewers">Viewers</mat-option>
+                </mat-select>
+              </mat-form-field>
             </div>
-
-            <p class="ann-content">{{ ann.content }}</p>
-
-            <div class="ann-meta">
-              <span>By {{ ann.createdBy }} on {{ ann.createdAt | date:'mediumDate' }}</span>
-              <span *ngIf="ann.publishedAt">Published: {{ ann.publishedAt | date:'medium' }}</span>
-              <span *ngIf="ann.expiresAt">Expires: {{ ann.expiresAt | date:'mediumDate' }}</span>
-            </div>
+            <button mat-raised-button color="primary" (click)="createAnnouncement()" [disabled]="!newAnnouncement.title || !newAnnouncement.content">
+              Create
+            </button>
           </mat-card-content>
         </mat-card>
-      </div>
-
-      <div *ngIf="!loading && announcements.length === 0" class="empty-state">
-        <mat-icon>campaign</mat-icon>
-        <p>No announcements yet</p>
-      </div>
+      }
+    
+      @if (loading) {
+        <div class="loading-container">
+          <mat-spinner diameter="40"></mat-spinner>
+        </div>
+      }
+    
+      @if (!loading) {
+        <div class="announcements-list">
+          @for (ann of announcements; track ann) {
+            <mat-card class="announcement-card" [class]="'priority-border-' + ann.priority">
+              <mat-card-content>
+                <div class="ann-header">
+                  <div>
+                    <h3>{{ ann.title }}</h3>
+                    <div class="ann-badges">
+                      <span class="priority-chip" [class]="'priority-' + ann.priority">{{ ann.priority }}</span>
+                      <span class="status-chip" [class]="'ann-status-' + ann.status">{{ ann.status }}</span>
+                      <span class="audience-chip">
+                        <mat-icon>group</mat-icon>
+                        {{ ann.targetAudience }}
+                      </span>
+                    </div>
+                  </div>
+                  <div class="ann-actions">
+                    @if (ann.status === 'draft') {
+                      <button mat-icon-button (click)="publishAnnouncement(ann)" color="primary" aria-label="Publish">
+                        <mat-icon>publish</mat-icon>
+                      </button>
+                    }
+                    <button mat-icon-button (click)="deleteAnnouncement(ann)" color="warn" aria-label="Delete">
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </div>
+                </div>
+                <p class="ann-content">{{ ann.content }}</p>
+                <div class="ann-meta">
+                  <span>By {{ ann.createdBy }} on {{ ann.createdAt | date:'mediumDate' }}</span>
+                  @if (ann.publishedAt) {
+                    <span>Published: {{ ann.publishedAt | date:'medium' }}</span>
+                  }
+                  @if (ann.expiresAt) {
+                    <span>Expires: {{ ann.expiresAt | date:'mediumDate' }}</span>
+                  }
+                </div>
+              </mat-card-content>
+            </mat-card>
+          }
+        </div>
+      }
+    
+      @if (!loading && announcements.length === 0) {
+        <div class="empty-state">
+          <mat-icon>campaign</mat-icon>
+          <p>No announcements yet</p>
+        </div>
+      }
     </div>
-  `,
-  styles: [`
+    `,
+    styles: [`
     .page-container { padding: 0; }
     .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
     .page-title { font-size: 1.5rem; font-weight: 600; color: #333; margin: 0; }
@@ -175,7 +184,7 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.c
     }
 
     .empty-state .mat-icon { font-size: 48px; width: 48px; height: 48px; margin-bottom: 12px; }
-  `],
+  `]
 })
 export class AnnouncementsComponent implements OnInit {
   announcements: Announcement[] = [];

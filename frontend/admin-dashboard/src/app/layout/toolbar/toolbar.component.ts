@@ -1,5 +1,5 @@
 import { Component } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
@@ -7,17 +7,18 @@ import { MatMenuModule } from '@angular/material/menu';
 import { AuthService } from '../../core/services/auth.service';
 
 @Component({
-  selector: 'app-toolbar',
-  standalone: true,
-  imports: [CommonModule, MatToolbarModule, MatIconModule, MatButtonModule, MatMenuModule],
-  template: `
+    selector: 'app-toolbar',
+    imports: [MatToolbarModule, MatIconModule, MatButtonModule, MatMenuModule],
+    template: `
     <mat-toolbar class="app-toolbar">
       <span class="toolbar-title">Admin Dashboard</span>
       <span class="spacer"></span>
-      <span class="user-info" *ngIf="authService.currentUser as user">
-        <mat-icon>account_circle</mat-icon>
-        <span class="user-name">{{ user.displayName }}</span>
-      </span>
+      @if (authService.currentUser; as user) {
+        <span class="user-info">
+          <mat-icon>account_circle</mat-icon>
+          <span class="user-name">{{ user.displayName }}</span>
+        </span>
+      }
       <button mat-icon-button [matMenuTriggerFor]="userMenu" aria-label="User menu">
         <mat-icon>more_vert</mat-icon>
       </button>
@@ -28,8 +29,8 @@ import { AuthService } from '../../core/services/auth.service';
         </button>
       </mat-menu>
     </mat-toolbar>
-  `,
-  styles: [`
+    `,
+    styles: [`
     .app-toolbar {
       background: #ffffff;
       color: #333;
@@ -58,7 +59,7 @@ import { AuthService } from '../../core/services/auth.service';
     .user-name {
       font-size: 0.9rem;
     }
-  `],
+  `]
 })
 export class ToolbarComponent {
   constructor(public authService: AuthService) {}
