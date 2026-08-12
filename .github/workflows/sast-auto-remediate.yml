@@ -3,18 +3,24 @@ name: SAST Auto-Remediation
 # Event-driven security pipeline with two trigger paths:
 #
 #   1. Trivy (pull_request):
-#      PR opened by human → Trivy scan → findings? → Devin webhook → auto-fix → re-scan
+#      PR opened by human → Trivy fs scan → findings? → Devin v3 API session
+#      on the same branch → fix pushed → synchronize event re-scans.
+#      After MAX_FIX_ATTEMPTS unsuccessful cycles, a GitHub Issue is opened
+#      for human review.
 #
-#   2. SonarCloud (pull_request):
-#      PR opened by human → SonarCloud scan → quality gate fails → Devin webhook → auto-fix
+#   2. SonarCloud (check_run):
+#      SonarQube Cloud GitHub app posts a completed check_run → quality gate
+#      failed? → validate PR is open + human-authored → one-time Devin v3 API
+#      remediation session with the SonarCloud dashboard link.
 #
-# Bot-loop prevention: skips PRs authored by devin-ai-integration[bot].
-# Escalation: after MAX_FIX_ATTEMPTS, opens an issue for human review.
+# Bot-loop prevention: both paths skip PRs authored by devin-ai-integration[bot].
 
 on:
   pull_request:
     types: [opened, synchronize]
     branches: [main]
+  check_run:
+    types: [completed]
 
 permissions:
   contents: read
@@ -26,6 +32,10 @@ env:
   TRIVY_VERSION: "0.71.0"
   MAX_FIX_ATTEMPTS: 2
   SEVERITY_THRESHOLD: "CRITICAL,HIGH"
+  DEVIN_API_BASE: "https://api.devin.ai"
+  DEVIN_ORG_ID: "org-9d35f03b68c64253b53de2a8ea69a691"
+  DEVIN_APP_URL: "https://partner-workshops.devinenterprise.com"
+  SONAR_PROJECT_KEY: "Cognition-Partner-Workshops_otterworks"
 
 # ─────────────────────────────────────────────────────────────
 #  Path 1: Trivy dependency scan (pull_request trigger)
@@ -158,54 +168,75 @@ jobs:
       needs.sast-scan.outputs.exceeded_max == 'false'
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Devin remediation via webhook (Trivy findings)
+      - name: Create Devin remediation session (Trivy findings)
         env:
-          DEVIN_WEBHOOK_SECRET: ${{ secrets.DEVIN_WEBHOOK_SECRET }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEVIN_API_KEY: ${{ secrets.DEVIN_API_KEY }}
           BRANCH: ${{ github.head_ref }}
           PR_NUM: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
           FINDINGS_SUMMARY: ${{ needs.sast-scan.outputs.findings_summary }}
+          ATTEMPT_COUNT: ${{ needs.sast-scan.outputs.attempt_count }}
         run: |
-          WEBHOOK_URL="https://partner-workshops.devinenterprise.com/api/webhooks/automations/org-9d35f03b68c64253b53de2a8ea69a691/auto-ea3b9981a9c84d6ba476ec498b40ced5"
+          PROMPT="You are remediating SAST (Trivy) findings on the repository ${REPO}.
+
+          Check out the existing branch \`${BRANCH}\` (the head branch of PR #${PR_NUM}) and push your fixes to that SAME branch. Do NOT open a new PR.
+
+          Trivy found the following HIGH/CRITICAL dependency vulnerabilities:
+
+          ${FINDINGS_SUMMARY}
+
+          Instructions:
+          1. Upgrade each affected dependency to the fixed version (or the nearest safe version) in the relevant service manifest (go.mod, build.gradle, Cargo.toml, pyproject.toml, package.json, Gemfile, *.csproj, build.sbt, requirements.txt).
+          2. Do not touch services/report-service (excluded legacy service) and do not modify .trivyignore.
+          3. Run each affected service's test suite to confirm nothing breaks.
+          4. Commit and push to \`${BRANCH}\`. The pipeline will automatically re-scan on your push.
+
+          This is remediation attempt $((ATTEMPT_COUNT + 1)) of ${MAX_FIX_ATTEMPTS}."
 
           REQUEST_BODY=$(jq -n \
-            --arg branch "$BRANCH" \
-            --arg pr_number "$PR_NUM" \
-            --arg repo "$REPO" \
-            --arg findings "$FINDINGS_SUMMARY" \
-            '{
-              source: "trivy",
-              branch: $branch,
-              pr_number: $pr_number,
-              repository: $repo,
-              findings_summary: $findings
-            }')
+            --arg prompt "$PROMPT" \
+            --arg title "SAST auto-fix (Trivy): ${REPO} PR #${PR_NUM}" \
+            '{prompt: $prompt, title: $title, tags: ["sast-auto-remediate", "trivy"]}')
 
           HTTP_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
-            -H "X-Webhook-Secret: ${DEVIN_WEBHOOK_SECRET}" \
+            -H "Authorization: Bearer ${DEVIN_API_KEY}" \
             -H "Content-Type: application/json" \
             -d "$REQUEST_BODY" \
-            "${WEBHOOK_URL}")
+            "${DEVIN_API_BASE}/v3/organizations/${DEVIN_ORG_ID}/sessions")
 
           HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '/^HTTP_STATUS:/d')
           HTTP_CODE=$(echo "$HTTP_RESPONSE" | grep '^HTTP_STATUS:' | cut -d: -f2)
 
           if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-            echo "Devin automation webhook triggered successfully (HTTP ${HTTP_CODE})"
-
             SESSION_URL=$(echo "$HTTP_BODY" | jq -r '.url // empty')
+            SESSION_ID=$(echo "$HTTP_BODY" | jq -r '.session_id // empty')
+            if [ -z "$SESSION_URL" ] && [ -n "$SESSION_ID" ]; then
+              SESSION_URL="${DEVIN_APP_URL}/sessions/${SESSION_ID#devin-}"
+            fi
+            echo "Devin session created (HTTP ${HTTP_CODE}): ${SESSION_URL}"
 
             {
               echo "## Devin SAST Auto-Fix Triggered (Trivy)"
               echo ""
-              echo "A Devin automation has been triggered to remediate dependency vulnerabilities."
+              echo "A Devin session was created to remediate dependency vulnerabilities on \`${BRANCH}\`."
               if [ -n "$SESSION_URL" ]; then
                 echo ""
                 echo "**Session:** ${SESSION_URL}"
               fi
             } >> "$GITHUB_STEP_SUMMARY"
+
+            COMMENT="## Devin SAST Auto-Fix — Remediation In Progress (Trivy)
+
+          Devin is remediating the HIGH/CRITICAL findings above and will push the fix directly to \`${BRANCH}\`. Trivy will re-scan automatically on the push."
+            if [ -n "$SESSION_URL" ]; then
+              COMMENT="${COMMENT}
+
+          **Session:** ${SESSION_URL}"
+            fi
+            gh api "repos/${REPO}/issues/${PR_NUM}/comments" -f body="$COMMENT"
           else
-            echo "::error::Failed to trigger Devin webhook (HTTP ${HTTP_CODE})"
+            echo "::error::Failed to create Devin session (HTTP ${HTTP_CODE})"
             echo "$HTTP_BODY"
             exit 1
           fi
@@ -261,175 +292,138 @@ jobs:
             -f body=":rotating_light: **Escalation:** Automated remediation has been attempted ${FIX_ATTEMPTS} times without resolving all findings. A GitHub Issue has been opened for manual review."
 
   # ─────────────────────────────────────────────────────────────
-  #  Path 2: SonarCloud quality gate (CI-based analysis)
+  #  Path 2: SonarCloud quality gate (check_run trigger)
   # ─────────────────────────────────────────────────────────────
 
-  sonarcloud-scan:
-    name: SonarCloud Scan
+  sonarcloud-gate:
+    name: SonarCloud Quality Gate Handler
     if: |
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.user.login != 'devin-ai-integration[bot]'
+      github.event_name == 'check_run' &&
+      github.event.check_run.app.slug == 'sonarqubecloud' &&
+      github.event.check_run.conclusion == 'failure'
     runs-on: ubuntu-latest
-    outputs:
-      gate_failed: ${{ steps.gate.outputs.gate_failed }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@v5
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          args: >
-            -Dsonar.host.url=https://sonarcloud.io
-            -Dsonar.projectKey=Cognition-Partner-Workshops_otterworks
-            -Dsonar.organization=cognition-partner-workshops
-            -Dsonar.pullrequest.key=${{ github.event.pull_request.number }}
-            -Dsonar.pullrequest.branch=${{ github.head_ref }}
-            -Dsonar.pullrequest.base=${{ github.base_ref }}
-
-      - name: Check quality gate
-        id: gate
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          PR_NUM: ${{ github.event.pull_request.number }}
-        run: |
-          # Wait for the SonarCloud compute engine task to finish before
-          # checking the quality gate. This avoids the fail-open scenario
-          # where the gate status is polled before analysis completes.
-
-          echo "Waiting for SonarCloud compute engine task to finish..."
-
-          CE_TIMED_OUT=false
-          for i in $(seq 1 30); do
-            CE_STATUS=$(curl -s -u "${SONAR_TOKEN}:" \
-              "https://sonarcloud.io/api/ce/activity?component=Cognition-Partner-Workshops_otterworks&ps=1&status=PENDING,IN_PROGRESS" \
-              | jq -r '.tasks | length')
-
-            if [ "$CE_STATUS" = "0" ]; then
-              echo "No pending/in-progress tasks — analysis complete."
-              break
-            fi
-
-            echo "Attempt ${i}: compute engine still processing (${CE_STATUS} task(s))..."
-            sleep 10
-          done
-
-          if [ "$i" -eq 30 ] && [ "$CE_STATUS" != "0" ]; then
-            echo "::warning::SonarCloud compute engine task did not complete within 5 minutes. Failing closed to avoid missing security findings."
-            echo "gate_failed=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          GATE_STATUS=$(curl -s -u "${SONAR_TOKEN}:" \
-            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=Cognition-Partner-Workshops_otterworks&pullRequest=${PR_NUM}" \
-            | jq -r '.projectStatus.status // "NONE"')
-
-          echo "Quality gate status: ${GATE_STATUS}"
-
-          if [ "$GATE_STATUS" = "ERROR" ]; then
-            echo "gate_failed=true" >> "$GITHUB_OUTPUT"
-            echo "Quality gate FAILED"
-          elif [ "$GATE_STATUS" = "OK" ]; then
-            echo "gate_failed=false" >> "$GITHUB_OUTPUT"
-            echo "Quality gate PASSED"
-          else
-            echo "gate_failed=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Quality gate status is '${GATE_STATUS}' — could not determine result. Defaulting to pass."
-          fi
-
-  sonarcloud-trigger-devin:
-    name: Trigger Devin SAST Auto-Fix (SonarCloud)
-    needs: sonarcloud-scan
-    if: needs.sonarcloud-scan.outputs.gate_failed == 'true'
     concurrency:
-      group: sast-sonar-fix-${{ github.event.pull_request.number }}
+      group: sast-sonar-fix-${{ github.event.check_run.head_sha }}
       cancel-in-progress: true
-    runs-on: ubuntu-latest
     steps:
-      - name: Check for prior remediation attempts
+      - name: Resolve and validate PR
         id: pr_check
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.check_run.head_sha }}
           REPO: ${{ github.repository }}
         run: |
+          # check_run payloads only include pull_requests for same-repo PRs;
+          # resolve via the commit → PRs association API to be robust.
+          PR_JSON=$(gh api "repos/${REPO}/commits/${HEAD_SHA}/pulls" \
+            --jq '[.[] | select(.state == "open")] | first // empty')
+
+          if [ -z "$PR_JSON" ]; then
+            echo "No open PR found for check_run head SHA ${HEAD_SHA}. Skipping."
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PR_NUMBER=$(echo "$PR_JSON" | jq -r '.number')
+          PR_AUTHOR=$(echo "$PR_JSON" | jq -r '.user.login')
+          PR_BRANCH=$(echo "$PR_JSON" | jq -r '.head.ref')
+
+          echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "pr_branch=${PR_BRANCH}" >> "$GITHUB_OUTPUT"
+
+          if [ "$PR_AUTHOR" = "devin-ai-integration[bot]" ]; then
+            echo "PR #${PR_NUMBER} was authored by Devin. Skipping (bot-loop prevention)."
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # One-time remediation: skip if Devin already attempted a fix.
           DEVIN_COMMENTS=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100" \
-            --jq '[.[] | select(.body | contains("Devin SAST Auto-Fix"))] | length')
+            --jq '[.[] | select(.body | contains("Devin SAST Auto-Fix — Remediation In Progress (SonarCloud)"))] | length')
 
           if [ "$DEVIN_COMMENTS" -gt 0 ]; then
-            echo "Devin has already attempted a SonarCloud fix on this PR. Skipping."
+            echo "Devin has already attempted a SonarCloud fix on PR #${PR_NUMBER}. Skipping."
             echo "should_run=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           echo "should_run=true" >> "$GITHUB_OUTPUT"
 
-      - name: Trigger Devin remediation via webhook (SonarCloud findings)
+      - name: Create Devin remediation session (SonarCloud findings)
         if: steps.pr_check.outputs.should_run == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          DEVIN_SONAR_WEBHOOK_SECRET: ${{ secrets.DEVIN_SONAR_WEBHOOK_SECRET }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_BRANCH: ${{ github.head_ref }}
+          DEVIN_API_KEY: ${{ secrets.DEVIN_API_KEY }}
+          PR_NUMBER: ${{ steps.pr_check.outputs.pr_number }}
+          PR_BRANCH: ${{ steps.pr_check.outputs.pr_branch }}
           REPO: ${{ github.repository }}
         run: |
-          WEBHOOK_URL="https://partner-workshops.devinenterprise.com/api/webhooks/automations/org-9d35f03b68c64253b53de2a8ea69a691/auto-0dacfd8d718245e686f2f03d8917ac52"
+          DASHBOARD="https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}&pullRequest=${PR_NUMBER}"
+
+          PROMPT="The SonarCloud quality gate failed on PR #${PR_NUMBER} of the repository ${REPO}.
+
+          Check out the existing branch \`${PR_BRANCH}\` (the head branch of that PR) and push your fixes to that SAME branch. Do NOT open a new PR.
+
+          SonarCloud dashboard for this PR: ${DASHBOARD}
+
+          Instructions:
+          1. Review the failed quality gate conditions on the dashboard (new bugs, vulnerabilities, security hotspots, code smells, coverage, duplication).
+          2. Fix the code issues SonarCloud flagged on the new code in this PR. Prefer minimal, targeted fixes; follow each service's existing conventions in this polyglot monorepo.
+          3. Do not suppress findings with // NOSONAR or rule exclusions; fix the underlying issues.
+          4. Run the affected services' tests and linters to confirm nothing breaks.
+          5. Commit and push to \`${PR_BRANCH}\`. SonarCloud will re-analyze automatically on the push.
+
+          This is a ONE-TIME remediation attempt — if the gate still fails afterwards, humans will take over."
 
           REQUEST_BODY=$(jq -n \
-            --arg branch "$PR_BRANCH" \
-            --arg pr_number "$PR_NUMBER" \
-            --arg repo "$REPO" \
-            --arg dashboard "https://sonarcloud.io/dashboard?id=Cognition-Partner-Workshops_otterworks&pullRequest=${PR_NUMBER}" \
-            '{
-              source: "sonarcloud",
-              branch: $branch,
-              pr_number: $pr_number,
-              repository: $repo,
-              sonarcloud_dashboard: $dashboard
-            }')
+            --arg prompt "$PROMPT" \
+            --arg title "SAST auto-fix (SonarCloud): ${REPO} PR #${PR_NUMBER}" \
+            '{prompt: $prompt, title: $title, tags: ["sast-auto-remediate", "sonarcloud"]}')
 
           HTTP_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
-            -H "X-Webhook-Secret: ${DEVIN_SONAR_WEBHOOK_SECRET}" \
+            -H "Authorization: Bearer ${DEVIN_API_KEY}" \
             -H "Content-Type: application/json" \
             -d "$REQUEST_BODY" \
-            "${WEBHOOK_URL}")
+            "${DEVIN_API_BASE}/v3/organizations/${DEVIN_ORG_ID}/sessions")
 
           HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '/^HTTP_STATUS:/d')
           HTTP_CODE=$(echo "$HTTP_RESPONSE" | grep '^HTTP_STATUS:' | cut -d: -f2)
 
           if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-            echo "Devin automation webhook triggered successfully (HTTP ${HTTP_CODE})"
-
             SESSION_URL=$(echo "$HTTP_BODY" | jq -r '.url // empty')
+            SESSION_ID=$(echo "$HTTP_BODY" | jq -r '.session_id // empty')
+            if [ -z "$SESSION_URL" ] && [ -n "$SESSION_ID" ]; then
+              SESSION_URL="${DEVIN_APP_URL}/sessions/${SESSION_ID#devin-}"
+            fi
+            echo "Devin session created (HTTP ${HTTP_CODE}): ${SESSION_URL}"
 
             {
               echo "## Devin SAST Auto-Fix Triggered (SonarCloud)"
               echo ""
               echo "SonarCloud quality gate failed on PR #${PR_NUMBER}."
-              echo "A Devin automation has been triggered for remediation."
               if [ -n "$SESSION_URL" ]; then
                 echo ""
                 echo "**Session:** ${SESSION_URL}"
               fi
             } >> "$GITHUB_STEP_SUMMARY"
 
-            COMMENT="## Devin SAST Auto-Fix — Remediation In Progress
+            COMMENT="## Devin SAST Auto-Fix — Remediation In Progress (SonarCloud)
 
-          SonarCloud quality gate failed on this branch. A Devin automation
-          has been triggered for a **one-time remediation attempt**.
+          SonarCloud quality gate failed on this PR. A Devin session has been created for a **one-time remediation attempt**.
 
-          **[SonarCloud Dashboard](https://sonarcloud.io/dashboard?id=Cognition-Partner-Workshops_otterworks&pullRequest=${PR_NUMBER})**
+          **[SonarCloud Dashboard](${DASHBOARD})**"
+            if [ -n "$SESSION_URL" ]; then
+              COMMENT="${COMMENT}
 
-          Devin will commit the fix directly to branch \`${PR_BRANCH}\`.
-          SonarCloud will re-analyze once the fix is pushed."
+          **Session:** ${SESSION_URL}"
+            fi
+            COMMENT="${COMMENT}
+
+          Devin will commit the fix directly to branch \`${PR_BRANCH}\`. SonarCloud will re-analyze once the fix is pushed."
 
             gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" -f body="$COMMENT"
           else
-            echo "::error::Failed to trigger Devin webhook (HTTP ${HTTP_CODE})"
+            echo "::error::Failed to create Devin session (HTTP ${HTTP_CODE})"
             echo "$HTTP_BODY"
             exit 1
           fi

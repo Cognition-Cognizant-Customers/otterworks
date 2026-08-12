@@ -21,23 +21,23 @@ Developer opens PR against main
 ├─────────────────────┬─────────────────────────────────┤
 │                     │                                 │
 │  PATH 1: Trivy      │  PATH 2: SonarCloud             │
-│  (pull_request)      │  (pull_request)                  │
+│  (pull_request)      │  (check_run: completed)         │
 │                     │                                 │
-│  ├ Is PR author     │  ├ Is PR author                  │
-│  │ devin-bot?       │  │ devin-bot?                    │
-│  │  YES → skip      │  │  YES → skip                   │
-│  │  NO  → scan      │  │  NO  → CI scan                │
-│  │                  │  │                                │
-│  ├ Trivy fs scan    │  ├ Quality gate FAILED?           │
-│  │ HIGH+CRITICAL    │  │  NO → skip                   │
-│  │                  │  │  YES → continue               │
-│  ├ Findings = 0?    │  │                                │
-│  │  YES → pass      │  ├ Already attempted fix?         │
-│  │                  │  │  YES → skip (one-time)        │
-│  ├ attempts < MAX?  │  │                                │
+│  ├ Is PR author     │  ├ check_run from                │
+│  │ devin-bot?       │  │ sonarqubecloud app?           │
+│  │  YES → skip      │  │  NO → skip                    │
+│  │  NO  → scan      │  │                                │
+│  │                  │  ├ Quality gate FAILED?           │
+│  ├ Trivy fs scan    │  │  NO → skip                   │
+│  │ HIGH+CRITICAL    │  │                                │
+│  │                  │  ├ PR open + human-authored?      │
+│  ├ Findings = 0?    │  │  NO → skip                    │
+│  │  YES → pass      │  │                                │
+│  │                  │  ├ Already attempted fix?         │
+│  ├ attempts < MAX?  │  │  YES → skip (one-time)        │
 │  │  NO → escalate   │  │                                │
 │  │                  │  │                                │
-│  └─── Devin API ────┴──┴─── Devin v3 API ──────────────┤
+│  └── Devin v3 API ──┴──┴─── Devin v3 API ──────────────┤
 │                                                       │
 │       Devin checks out branch,                        │
 │       fixes vulnerabilities,                          │
@@ -47,7 +47,7 @@ Developer opens PR against main
 │              ▼                                        │
 │       Push triggers re-scan                           │
 │       (Trivy: synchronize event)                      │
-│       (SonarCloud: synchronize event)                 │
+│       (SonarCloud: new check_run on re-analysis)      │
 │       → closed-loop verification                      │
 └───────────────────────────────────────────────────────┘
 ```
@@ -68,27 +68,35 @@ in the Devin prompt.
 
 ### Path 2: SonarCloud (Code Quality Gate)
 
-Triggered by `pull_request` events alongside the Trivy path. The workflow runs
-the SonarCloud scanner via `SonarSource/sonarqube-scan-action` in CI, then
-polls the SonarCloud API to check the quality gate status.
+Triggered by `check_run` events (`completed`) posted by the **SonarQube Cloud
+GitHub app** (`sonarqubecloud`). SonarCloud analyzes the PR (Automatic Analysis
+configured via `sonar-project.properties`) and reports the quality gate as a
+check run. When the check run's conclusion is `failure`, the workflow:
 
-If the quality gate **fails** (status `ERROR`), the workflow triggers the Devin
-webhook for a one-time remediation attempt.
+1. Resolves the associated PR from the check run's head SHA
+   (`GET /repos/{repo}/commits/{sha}/pulls`) and validates it is **open** and
+   **not authored by `devin-ai-integration[bot]`**.
+2. Verifies Devin hasn't already attempted a fix on this PR (comment marker).
+3. Calls the **Devin v3 API** with the SonarCloud dashboard link and
+   remediation instructions targeting the PR's head branch.
+4. Posts a PR comment with the Devin session link.
 
 This path is a **one-time remediation attempt** — if Devin has already posted
 a fix comment on the PR, no additional sessions are created.
 
-- **Re-scan loop:** Devin's fix push fires a `synchronize` event → SonarCloud
-  re-scans in CI → if quality gate still fails, no new session (one-time).
+- **Re-scan loop:** Devin's fix push triggers SonarCloud re-analysis → a new
+  `check_run` fires → if the quality gate still fails, the comment-marker check
+  prevents a second session (one-time).
 - **Dashboard link:** The Devin prompt includes the SonarCloud dashboard URL
   for the specific PR.
 
 ## Bot-Loop Prevention
 
-Both paths check `github.event.pull_request.user.login` against
-`devin-ai-integration[bot]`. PRs opened
-by Devin are never scanned by this workflow. For Devin's *commits* on
-human-authored PRs, the `synchronize` event still fires but the author check
+Both paths check the PR author against `devin-ai-integration[bot]`
+(the Trivy path via `github.event.pull_request.user.login`, the SonarCloud
+path via the PR resolved from the check run's head SHA). PRs opened
+by Devin are never remediated by this workflow. For Devin's *commits* on
+human-authored PRs, the re-scan events still fire but the author check
 passes (it is the human's PR), so the re-scan runs — which is the desired
 closed-loop behavior.
 
@@ -96,9 +104,10 @@ closed-loop behavior.
 count reaches `MAX_FIX_ATTEMPTS` (default: 2), the pipeline stops triggering
 Devin and escalates instead.
 
-**SonarCloud path:** Concurrency group `sast-sonar-fix-{pr_number}` ensures
-only one remediation session per PR. A comment-based check prevents
-re-triggering after the first attempt.
+**SonarCloud path:** A comment-based check (the "Devin SAST Auto-Fix —
+Remediation In Progress (SonarCloud)" marker) enforces one-time remediation
+per PR, and a concurrency group keyed on the check run's head SHA prevents
+duplicate sessions from concurrent check_run deliveries.
 
 ## Escalation Policy
 
@@ -108,31 +117,34 @@ When automated remediation is exhausted (Trivy path only):
 2. The issue body contains the full findings summary
 3. A PR comment notifies the developer that manual review is required
 
-## Devin Automation Webhooks
+## Devin v3 API
 
-Both paths trigger Devin sessions via **automation webhook endpoints**:
+Both paths create Devin sessions via the **Devin v3 organizations API**:
 
 ```
-POST https://partner-workshops.devinenterprise.com/api/webhooks/automations/{ORG_ID}/{AUTOMATION_ID}
+POST {DEVIN_API_BASE}/v3/organizations/{DEVIN_ORG_ID}/sessions
+Authorization: Bearer $DEVIN_API_KEY
 ```
 
-Request body includes:
-- `source`: Scanner type (`trivy` or `sonarcloud`)
-- `branch`: PR head branch
-- `pr_number`: Pull request number
-- `repository`: Full repo name (`owner/repo`)
-- `findings_summary` (Trivy) or `sonarcloud_dashboard` (SonarCloud): Context
+Request body:
+- `prompt`: Remediation instructions — branch to check out, findings summary
+  (Trivy) or SonarCloud dashboard link (SonarCloud), constraints (fix on the
+  same branch, no new PR, don't suppress findings), and test expectations.
+- `title`: Human-readable session title including the scanner and PR number.
+- `tags`: `["sast-auto-remediate", "trivy"|"sonarcloud"]` for filtering.
+
+The response's `session_id`/`url` is surfaced in the job summary and PR
+comment so reviewers can follow the remediation live.
 
 Required GitHub Actions secrets:
-- `DEVIN_WEBHOOK_SECRET` — Webhook auth for Trivy automation
-- `DEVIN_SONAR_WEBHOOK_SECRET` — Webhook auth for SonarCloud automation
-- `SONAR_TOKEN` — SonarCloud API token for CI-based analysis
+- `DEVIN_API_KEY` — Devin v3 API key (service user with session-creation
+  permission for the org)
 
 ## Scan Configuration
 
 | Setting | Value | Source |
 |---------|-------|--------|
-| Trivy scanner | Trivy v0.62.2 | `.github/workflows/sast-auto-remediate.yml` |
+| Trivy scanner | Trivy v0.71.0 | `.github/workflows/sast-auto-remediate.yml` |
 | Trivy severity filter | CRITICAL, HIGH | `SEVERITY_THRESHOLD` env var |
 | Trivy excluded dirs | `services/report-service` | Legacy Java 8 service (separate upgrade track) |
 | Trivy suppressions | `.trivyignore` | Acknowledged CVEs with documented justification |
