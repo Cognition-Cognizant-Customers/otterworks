@@ -62,8 +62,8 @@ paths:
       operationId: createDocument
       summary: Create a new document
       description: |
-        Creates a new document. If owner_id is not provided in the body,
-        it is extracted from the JWT token.
+        Creates a new document. Ownership is taken from the authenticated
+        caller; unknown properties (including owner_id) are rejected.
       security:
         - bearerAuth: []
       requestBody:
@@ -85,13 +85,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/DocumentResponse"
         "401":
-          description: Authentication required (no owner_id and no valid JWT)
+          description: Authentication required (no valid JWT)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
               example:
-                detail: "owner_id is required: provide it in the body or authenticate via JWT"
+                detail: "Authentication required"
         "422":
           description: Validation error
           content:
@@ -551,6 +551,11 @@ paths:
     post:
       operationId: createFromTemplate
       summary: Create a document from a template
+      description: |
+        Creates a document from a template. Ownership is taken from the
+        authenticated caller; unknown properties (including owner_id) are rejected.
+      security:
+        - bearerAuth: []
       parameters:
         - name: template_id
           in: path
@@ -566,7 +571,6 @@ paths:
               $ref: "#/components/schemas/DocumentFromTemplate"
             example:
               title: "Sprint Planning"
-              owner_id: "550e8400-e29b-41d4-a716-446655440000"
       responses:
         "201":
           description: Document created from template
@@ -574,6 +578,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DocumentResponse"
+        "401":
+          description: Authentication required (no valid JWT)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                detail: "Authentication required"
         "404":
           description: Template not found
           content:
@@ -717,14 +729,11 @@ components:
         content_type:
           type: string
           default: "text/markdown"
-        owner_id:
-          type: string
-          format: uuid
-          nullable: true
         folder_id:
           type: string
           format: uuid
           nullable: true
+      additionalProperties: false
 
     DocumentUpdate:
       type: object
@@ -745,6 +754,7 @@ components:
           type: string
           format: uuid
           nullable: true
+      additionalProperties: false
 
     DocumentPatch:
       type: object
@@ -764,6 +774,7 @@ components:
           type: string
           format: uuid
           nullable: true
+      additionalProperties: false
 
     DocumentResponse:
       type: object
@@ -909,15 +920,12 @@ components:
       type: object
       required:
         - title
-        - owner_id
+      additionalProperties: false
       properties:
         title:
           type: string
           minLength: 1
           maxLength: 500
-        owner_id:
-          type: string
-          format: uuid
         folder_id:
           type: string
           format: uuid

@@ -162,8 +162,7 @@ class Client:
         return titles
 
     def create_document(self, title, content, content_type="text/markdown"):
-        body = {"title": title, "content": content, "content_type": content_type,
-                "owner_id": self.owner_id}
+        body = {"title": title, "content": content, "content_type": content_type}
         r = self.s.post(f"{self.gw}/api/v1/documents", headers=self.h, json=body, timeout=60)
         r.raise_for_status()
         return r.json().get("id")
