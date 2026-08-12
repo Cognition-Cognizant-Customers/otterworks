@@ -8,7 +8,7 @@
 #   __DOMAIN_FILTER__  tenant subdomain, e.g. demo.otterworks.app
 #   __OPS_HOST__       ops dashboard host, e.g. ops.otterworks.app (a sibling of
 #                      the tenant subdomain, so it needs its own filter entry)
-#   __PERPETUAL_WEB_HOST__ / __PERPETUAL_API_HOST__
+#   __PERPETUAL_WEB_HOST__ / __PERPETUAL_API_HOST__ / __PERPETUAL_PORTAL_HOST__
 #                      the perpetual tenant, e.g. t-main.otterworks.app. It sits
 #                      at the apex rather than under the tenant subdomain, so it
 #                      needs filter entries too.
@@ -98,6 +98,7 @@ spec:
             - --domain-filter=__OPS_HOST__
             - --domain-filter=__PERPETUAL_WEB_HOST__
             - --domain-filter=__PERPETUAL_API_HOST__
+            - --domain-filter=__PERPETUAL_PORTAL_HOST__
             # The tenant/ops filters are subdomains of the Route53 zone apex
             # (otterworks.app). Without this, external-dns filters out the parent
             # hosted zone and skips every record ("no hosted zone matching record
