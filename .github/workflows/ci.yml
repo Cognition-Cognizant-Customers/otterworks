@@ -440,7 +440,7 @@ jobs:
           df -h /
       - name: Start service stack
         run: |
-          $COMPOSE up -d --build \
+          $COMPOSE up -d --build --wait --wait-timeout 900 \
             postgres redis localstack meilisearch \
             api-gateway auth-service document-service file-service search-service \
             collab-service notification-service analytics-service admin-service \
