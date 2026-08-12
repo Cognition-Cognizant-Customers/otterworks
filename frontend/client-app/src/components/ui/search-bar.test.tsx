@@ -25,7 +25,7 @@ describe("SearchBar", () => {
     const input = screen.getByPlaceholderText("Search files, documents...");
     fireEvent.change(input, { target: { value: "   " } });
     fireEvent.submit(input.closest("form")!);
-    expect(screen.queryByText("Search results page")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Search results for/)).not.toBeInTheDocument();
   });
 
   it("trims and encodes a query before navigating", () => {
