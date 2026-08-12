@@ -80,7 +80,15 @@ class ApiClient:
             except httpx.HTTPError as exc:
                 last_error = exc
             time.sleep(0.25)
-        pytest.skip(f"OtterWorks API gateway is not reachable: {last_error}")
+        message = f"OtterWorks API gateway is not reachable: {last_error}"
+        if os.getenv("OTTERWORKS_API_REQUIRE_STACK", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }:
+            pytest.fail(f"API stack was required but unreachable: {message}")
+        pytest.skip(message)
 
     def iso_time(self, days_offset: int = 0) -> str:
         return (datetime.now(UTC) + timedelta(days=days_offset)).isoformat()

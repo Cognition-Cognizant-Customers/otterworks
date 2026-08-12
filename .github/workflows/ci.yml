@@ -463,6 +463,7 @@ jobs:
       - name: Run API flow tests
         env:
           OTTERWORKS_API_READY_TIMEOUT: '60'
+          OTTERWORKS_API_REQUIRE_STACK: '1'
         run: python -m pytest tests/api -q -m "not degradation and not websocket"
       - name: Service logs
         if: always()
