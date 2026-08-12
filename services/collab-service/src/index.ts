@@ -15,8 +15,7 @@ import { AwarenessService } from './services/awareness';
 import { PresenceHandler } from './handlers/presence';
 import { setupCollaborationHandlers } from './handlers/collaboration';
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { setupWSConnection } = require('y-websocket/bin/utils');
+import { setupWSConnection } from '@y/websocket-server/utils';
 
 const config = loadConfig();
 
