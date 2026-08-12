@@ -1,0 +1,132 @@
+module: dunning
+rules:
+  - id: DUN-001
+    statement: >-
+      Overdue accounts list returns overdue invoices issued strictly before the
+      as-of date, with days overdue computed as as-of minus issue date, the
+      current tenant status joined in, ordered by issue date then invoice id.
+    source:
+      file: services/legacy-billing/db/procs/dunning.sql
+      lines: [1, 18]
+    inputs: [as_of]
+    outputs: [tenant_id, invoice_id, total, days_overdue, tenant_status]
+    confidence: high
+    scenarios: [DUNNING-001]
+    question: >-
+      The listing includes overdue invoices for tenants of ANY status
+      (including already-suspended tenants), and an invoice that became
+      overdue on the as-of date itself is excluded (strict '<'). Are both
+      behaviors intentional and to be preserved?
+    decision:
+      status: pending
+  - id: DUN-002
+    statement: >-
+      Dunning scheduling targets every invoice with status 'overdue',
+      regardless of how long it has been overdue and regardless of tenant
+      status, processed in issue-date then invoice-id order.
+    source:
+      file: services/legacy-billing/db/procs/dunning.sql
+      lines: [28, 33]
+    inputs: [as_of]
+    outputs: [dunning_attempts]
+    confidence: medium
+    scenarios: [DUNNING-002]
+    question: >-
+      Unlike fn_overdue_accounts, sp_schedule_dunning has NO issued-before
+      filter: an invoice marked overdue on the as-of date itself is still
+      scheduled. Is this asymmetry intentional?
+    decision:
+      status: pending
+  - id: DUN-003
+    statement: >-
+      Each scheduling run assigns the next attempt number per invoice as
+      one more than the maximum existing attempt number (1 when none exist).
+    source:
+      file: services/legacy-billing/db/procs/dunning.sql
+      lines: [34, 36]
+    inputs: [as_of]
+    outputs: [dunning_attempts]
+    confidence: medium
+    scenarios: [DUNNING-003]
+    question: >-
+      Because attempt_no is always max+1, re-running the scheduler on the SAME
+      day creates an additional attempt for the same invoice — the
+      ON CONFLICT (invoice_id, attempt_no) DO NOTHING guard can never fire in
+      practice (dead code). Should the extraction preserve this
+      non-idempotent behavior exactly, or was the intent one attempt per day?
+    decision:
+      status: pending
+  - id: DUN-004
+    statement: >-
+      Attempts are scheduled for the as-of date, shifted off weekends to the
+      following Monday (Saturday +2 days, Sunday +1 day).
+    source:
+      file: services/legacy-billing/db/procs/dunning.sql
+      lines: [37, 42]
+    inputs: [as_of]
+    outputs: [dunning_attempts]
+    confidence: high
+    scenarios: [DUNNING-002, DUNNING-003]
+    question: >-
+      The weekend shift is applied only to the as-of date (not to any retry
+      offset), and there is no holiday handling. Preserve exactly as-is?
+    decision:
+      status: pending
+  - id: DUN-005
+    statement: >-
+      New dunning attempts are inserted with a deterministic id derived from
+      md5(invoice_id || attempt_no), status 'scheduled', and duplicate
+      (invoice_id, attempt_no) pairs are silently skipped.
+    source:
+      file: services/legacy-billing/db/procs/dunning.sql
+      lines: [43, 48]
+    inputs: [as_of]
+    outputs: [dunning_attempts]
+    confidence: high
+    scenarios: [DUNNING-002, DUNNING-003]
+    question: >-
+      Must the extracted service reproduce the exact md5-derived UUID scheme
+      for attempt ids (parity probes compare invoice_id/attempt_no/date/status
+      but replay resets state), or is any deterministic id acceptable?
+    decision:
+      status: pending
+  - id: DUN-006
+    statement: >-
+      Suspension applies to tenants that have at least one overdue invoice
+      issued 14 or more days before the as-of date AND are currently
+      'active': the tenant is set to 'suspended' and all of the tenant's
+      'active' subscriptions are set to 'suspended' with suspended_on = as-of.
+    source:
+      file: services/legacy-billing/db/procs/dunning.sql
+      lines: [59, 75]
+    inputs: [as_of]
+    outputs: [tenants, subscriptions]
+    confidence: high
+    scenarios: [DUNNING-004]
+    question: >-
+      The 14-day threshold is inclusive (issued_at::date <= as_of - 14, so
+      exactly 14 days overdue qualifies), and non-active tenants are skipped
+      entirely. Confirm both boundaries.
+    decision:
+      status: pending
+  - id: DUN-007
+    statement: >-
+      A 'suspension' notification with a deterministic id
+      (md5(tenant_id || 'suspension' || as_of)) and sent_at = as-of midnight
+      is inserted only when suspending, and is deduplicated so re-running for
+      the same tenant and as-of date never creates a duplicate; re-runs also
+      skip already-suspended tenants, leaving prior state untouched.
+    source:
+      file: services/legacy-billing/db/procs/dunning.sql
+      lines: [76, 85]
+    inputs: [as_of]
+    outputs: [notifications]
+    confidence: high
+    scenarios: [DUNNING-004, DUNNING-005]
+    question: >-
+      Dedup keys on (tenant_id, kind, sent_at): the same tenant suspended
+      again on a DIFFERENT date would get a second notification (only
+      possible if it were reactivated first). Confirm the dedup key is
+      (tenant, date) and not (tenant) alone.
+    decision:
+      status: pending
