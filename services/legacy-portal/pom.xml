@@ -17,9 +17,10 @@
     <version>0.1.0</version>
     <packaging>jar</packaging>
     <name>OtterWorks Legacy Portal</name>
-    <description>Legacy modular monolith bundling three bounded contexts (announcements,
-        user-preferences, feedback) in one deployable. Runs on a VM today — a rehost and
-        monolith-decomposition "before" state.</description>
+    <description>Legacy modular monolith bundling two bounded contexts (announcements,
+        user-preferences) in one deployable. Runs on a VM today — a rehost and
+        monolith-decomposition "before" state. The feedback context has been extracted
+        into services/feedback-service.</description>
 
     <properties>
         <!-- LEGACY: Java 11 source/target. Upgrade target: Java 17+ -->

@@ -1,13 +1,13 @@
 # Legacy Portal — modular monolith (rehost / decomposition "before" state)
 
 `legacy-portal` is a **legacy modular monolith**: a single deployable Spring Boot application
-(Java 11, Spring Boot 2.7.x, built with Maven) that bundles **three bounded contexts** into one
-process. It exists as a realistic **"before" state** for two migration demos:
+(Java 11, Spring Boot 2.7.x, built with Maven) that bundles **two bounded contexts** into one
+process. (A third context, feedback, has been extracted into `services/feedback-service`.) It exists as a realistic **"before" state** for two migration demos:
 
 - **Rehost (lift-and-shift → EC2)** — it **runs on a VM / on-prem host today** (plain Docker
   Compose, a fat JAR under systemd), deliberately *not* on the repo's Helm/EKS path. That makes it
   the natural starting point for a lift-and-shift-to-EC2 demo.
-- **Monolith decomposition (→ microservices / Lambda)** — its three contexts are cleanly separated
+- **Monolith decomposition (→ microservices / Lambda)** — its contexts are cleanly separated
   by package **and by database schema**, so the seams for splitting it into services are obvious.
 
 > This component is part of the OtterWorks **golden app** as a durable before-state. The
@@ -23,7 +23,10 @@ and the datasource. That is exactly what makes this a good decomposition candida
 |---|---|---|---|
 | Announcements | `com.otterworks.legacyportal.announcements` | `announcements` | `GET/POST /api/announcements`, `GET /api/announcements/{id}`, `POST /api/announcements/{id}/publish` |
 | User Preferences | `com.otterworks.legacyportal.userpreferences` | `user_preferences` | `GET /api/preferences/{userId}`, `PUT /api/preferences/{userId}` |
-| Feedback | `com.otterworks.legacyportal.feedback` | `feedback` | `POST /api/feedback`, `GET /api/feedback?userId=`, `GET /api/feedback/average-rating` |
+
+The feedback context (`POST /api/feedback`, `GET /api/feedback?userId=`,
+`GET /api/feedback/average-rating`) now lives in [`services/feedback-service`](../feedback-service),
+which owns the `feedback` schema exclusively.
 
 Shared, non-domain plumbing lives in `com.otterworks.legacyportal.common` (health endpoint,
 exception handling).
@@ -33,8 +36,8 @@ exception handling).
 - **Independent data ownership** — one schema per context; no shared tables or joins across
   contexts, so each context's tables can be lifted into a per-service database.
 - **Independent routes** — each context owns a distinct `/api/*` prefix that maps 1:1 to a future
-  service (e.g. an `announcements-service`, a `preferences-service`, a `feedback-service`, or a
-  Lambda per context).
+  service (e.g. an `announcements-service`, a `preferences-service`, or a Lambda per context).
+  The feedback context has already been extracted this way.
 - **No cross-context object references** — contexts do not call each other's services directly, so
   extracting one does not drag the others along.
 

@@ -55,12 +55,8 @@ class LegacyPortalApplicationTest {
     }
 
     @Test
-    void feedbackModuleValidatesRating() throws Exception {
-        mockMvc.perform(
-                        post("/api/feedback")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(
-                                        "{\"userId\":\"u1\",\"rating\":9,\"message\":\"bad rating\"}"))
-                .andExpect(status().isBadRequest());
+    void feedbackRoutesAreNoLongerServed() throws Exception {
+        mockMvc.perform(get("/api/feedback").param("userId", "u1"))
+                .andExpect(status().isNotFound());
     }
 }

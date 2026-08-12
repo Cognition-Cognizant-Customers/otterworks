@@ -35,6 +35,7 @@ jobs:
         service:
           - { name: api-gateway, context: services/api-gateway }
           - { name: auth-service, context: services/auth-service }
+          - { name: feedback-service, context: services/feedback-service }
           - { name: file-service, context: services/file-service }
           - { name: document-service, context: services/document-service }
           - { name: collab-service, context: services/collab-service }

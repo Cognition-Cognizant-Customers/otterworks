@@ -88,6 +88,36 @@ services:
     read_only: true
     tmpfs:
     - /tmp
+  feedback-service:
+    build:
+      context: ./services/feedback-service
+      dockerfile: Dockerfile
+    container_name: otterworks-feedback-service
+    ports:
+    - 8085:8085
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: feedback-service
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/otterworks?currentSchema=feedback
+      SPRING_DATASOURCE_USERNAME: otterworks
+      SPRING_DATASOURCE_PASSWORD: otterworks_dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -f
+      - http://localhost:8085/health
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    security_opt:
+    - no-new-privileges:true
+    read_only: true
+    tmpfs:
+    - /tmp
   file-service:
     build:
       context: ./services/file-service

@@ -22,6 +22,8 @@ services/api-gateway/vendor/
 # --- Java ---
 services/auth-service/build/
 services/auth-service/.gradle/
+services/feedback-service/build/
+services/feedback-service/.gradle/
 services/auth-service/out/
 *.class
 *.jar

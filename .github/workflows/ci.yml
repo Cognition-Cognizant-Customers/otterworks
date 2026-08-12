@@ -16,6 +16,7 @@ jobs:
     outputs:
       api-gateway: ${{ steps.changes.outputs.api-gateway }}
       auth-service: ${{ steps.changes.outputs.auth-service }}
+      feedback-service: ${{ steps.changes.outputs.feedback-service }}
       file-service: ${{ steps.changes.outputs.file-service }}
       document-service: ${{ steps.changes.outputs.document-service }}
       collab-service: ${{ steps.changes.outputs.collab-service }}
@@ -41,6 +42,8 @@ jobs:
               - 'services/api-gateway/**'
             auth-service:
               - 'services/auth-service/**'
+            feedback-service:
+              - 'services/feedback-service/**'
             file-service:
               - 'services/file-service/**'
             document-service:
@@ -102,6 +105,25 @@ jobs:
     defaults:
       run:
         working-directory: services/auth-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.6'
+      - run: gradle check --no-daemon
+
+  # Java - Feedback Service
+  feedback-service:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.feedback-service == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/feedback-service
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4

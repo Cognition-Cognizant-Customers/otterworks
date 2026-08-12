@@ -112,6 +112,9 @@ build-gateway: ## Build API Gateway
 build-auth: ## Build Auth Service
 	cd services/auth-service && ./gradlew bootJar
 
+build-feedback: ## Build Feedback Service
+	cd services/feedback-service && ./gradlew bootJar
+
 build-file: ## Build File Service
 	cd services/file-service && cargo build --release
 
@@ -147,6 +150,7 @@ build-admin-dash: ## Build Admin Dashboard
 test: ## Run tests for all services
 	@echo "=== API Gateway (Go) ===" && cd services/api-gateway && go test ./...
 	@echo "=== Auth Service (Java) ===" && cd services/auth-service && ./gradlew test
+	@echo "=== Feedback Service (Java) ===" && cd services/feedback-service && ./gradlew test
 	@echo "=== File Service (Rust) ===" && cd services/file-service && cargo test
 	@echo "=== Document Service (Python) ===" && cd services/document-service && pytest
 	@echo "=== Collab Service (Node.js) ===" && cd services/collab-service && npm test
@@ -176,6 +180,7 @@ test-api-flows-collect: ## Collect black-box API flow tests without running them
 lint: ## Lint all services
 	@echo "=== API Gateway ===" && cd services/api-gateway && golangci-lint run
 	@echo "=== Auth Service ===" && cd services/auth-service && ./gradlew spotlessCheck
+	@echo "=== Feedback Service ===" && cd services/feedback-service && ./gradlew spotlessCheck
 	@echo "=== File Service ===" && cd services/file-service && cargo clippy -- -D warnings
 	@echo "=== Document Service ===" && cd services/document-service && ruff check .
 	@echo "=== Collab Service ===" && cd services/collab-service && npm run lint

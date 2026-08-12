@@ -54,7 +54,7 @@ for bin in aws terraform kubectl helm; do
   command -v "$bin" >/dev/null 2>&1 || { err "$bin not found"; exit 1; }
 done
 
-BACKEND_SERVICES=(api-gateway auth-service file-service document-service collab-service \
+BACKEND_SERVICES=(api-gateway auth-service feedback-service file-service document-service collab-service \
   notification-service search-service analytics-service admin-service audit-service report-service)
 FRONTEND_SERVICES=(web-app admin-dashboard)
 ALL_SERVICES=("${BACKEND_SERVICES[@]}" "${FRONTEND_SERVICES[@]}")

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: feedback-service
+description: OtterWorks Feedback Service - Java/Spring Boot user feedback (extracted from legacy-portal)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

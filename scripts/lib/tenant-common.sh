@@ -31,7 +31,7 @@ SYSTEM_NAMESPACE="otterworks-system"   # holds the reaper CronJob + RBAC
 INGRESS_NAMESPACE="ingress-nginx"
 
 BACKEND_SERVICES=(
-  api-gateway auth-service file-service document-service collab-service
+  api-gateway auth-service feedback-service file-service document-service collab-service
   notification-service search-service analytics-service admin-service
   audit-service report-service
 )
@@ -61,10 +61,10 @@ profile_services() {
 # backend Service must be exposed on its container port (mirrors deploy-dev.sh).
 declare -A CONTAINER_PORT=(
   [api-gateway]=8080 [auth-service]=8081 [file-service]=8082 [document-service]=8083
-  [collab-service]=8084 [notification-service]=8086 [search-service]=8087
+  [collab-service]=8084 [feedback-service]=8085 [notification-service]=8086 [search-service]=8087
   [analytics-service]=8088 [admin-service]=8089 [audit-service]=8090 [report-service]=8091
 )
-JVM_SERVICES=" auth-service report-service notification-service analytics-service "
+JVM_SERVICES=" auth-service feedback-service report-service notification-service analytics-service "
 
 # Naming ----------------------------------------------------------------------
 # Namespace must be RFC-1123 (lowercase alnum + '-'); DB name uses '_'.
@@ -312,6 +312,15 @@ build_helm_args() {
       # length of the migration, so it gets its own datasource on the pooler's
       # session port; the application's own queries stay on the transaction one.
       EXTRA_ARGS+=(--set-string "config.SPRING_FLYWAY_URL=jdbc:postgresql://${DB_ENDPOINT_HOST}:${DB_SESSION_PORT}/${T_DB_NAME}")
+      EXTRA_ARGS+=(--set-string "config.SPRING_FLYWAY_USER=${DB_USER}")
+      add_secret SPRING_FLYWAY_PASSWORD "${DB_PASSWORD}"
+      add_secret SPRING_DATASOURCE_PASSWORD "${DB_PASSWORD}" ;;
+    feedback-service)
+      EXTRA_ARGS+=(--set-string "config.SPRING_PROFILES_ACTIVE=prod")
+      EXTRA_ARGS+=(--set-string "config.SPRING_DATASOURCE_URL=jdbc:postgresql://${DB_ENDPOINT_HOST}:${DB_ENDPOINT_PORT}/${T_DB_NAME}?currentSchema=feedback")
+      EXTRA_ARGS+=(--set-string "config.SPRING_DATASOURCE_USERNAME=${DB_USER}")
+      # Same session-port Flyway split as auth-service (advisory lock).
+      EXTRA_ARGS+=(--set-string "config.SPRING_FLYWAY_URL=jdbc:postgresql://${DB_ENDPOINT_HOST}:${DB_SESSION_PORT}/${T_DB_NAME}?currentSchema=feedback")
       EXTRA_ARGS+=(--set-string "config.SPRING_FLYWAY_USER=${DB_USER}")
       add_secret SPRING_FLYWAY_PASSWORD "${DB_PASSWORD}"
       add_secret SPRING_DATASOURCE_PASSWORD "${DB_PASSWORD}" ;;
