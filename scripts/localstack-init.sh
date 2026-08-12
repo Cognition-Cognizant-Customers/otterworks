@@ -19,6 +19,7 @@ make_bucket otterworks-audit-archive
 awslocal sqs create-queue --queue-name otterworks-notifications
 awslocal sqs create-queue --queue-name otterworks-audit-events-queue
 awslocal sqs create-queue --queue-name otterworks-search-events
+awslocal sqs create-queue --queue-name otterworks-analytics-events
 
 # SNS Topic (create-topic returns the existing ARN if it already exists)
 awslocal sns create-topic --name otterworks-events
@@ -49,6 +50,15 @@ awslocal sns subscribe \
   --topic-arn arn:aws:sns:us-east-1:000000000000:otterworks-events \
   --protocol sqs \
   --notification-endpoint "$SEARCH_QUEUE_ARN"
+ANALYTICS_QUEUE_ARN=$(awslocal sqs get-queue-attributes \
+  --queue-url http://localhost:4566/000000000000/otterworks-analytics-events \
+  --attribute-names QueueArn \
+  --query 'Attributes.QueueArn' \
+  --output text)
+awslocal sns subscribe \
+  --topic-arn arn:aws:sns:us-east-1:000000000000:otterworks-events \
+  --protocol sqs \
+  --notification-endpoint "$ANALYTICS_QUEUE_ARN"
 
 # DynamoDB Tables
 table_exists otterworks-file-metadata || awslocal dynamodb create-table \
