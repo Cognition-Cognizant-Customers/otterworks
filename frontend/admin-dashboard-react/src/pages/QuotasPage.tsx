@@ -36,6 +36,9 @@ export function QuotasPage() {
   const usersQuery = useQuery({ queryKey: USERS_QUERY_KEY, queryFn: getUsers });
   const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data]);
   const loading = usersQuery.isPending;
+  // Only treat errors as fatal when there is no data to show; a failed
+  // background refetch keeps the cached table on screen.
+  const loadFailed = usersQuery.isError && users.length === 0;
 
   const quotaMutation = useMutation({
     mutationFn: ({ user, quota }: { user: QuotaUser; quota: number }) =>
@@ -124,7 +127,7 @@ export function QuotasPage() {
 
       {loading && <Spinner />}
 
-      {!loading && usersQuery.isError && (
+      {!loading && loadFailed && (
         <div className="empty-state error-state">
           <span className="material-icons" aria-hidden>
             error_outline
@@ -136,7 +139,7 @@ export function QuotasPage() {
         </div>
       )}
 
-      {!loading && !usersQuery.isError && (
+      {!loading && !loadFailed && (
         <div className="table-container">
           <table className="quotas-table">
             <thead>

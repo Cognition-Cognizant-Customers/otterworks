@@ -164,6 +164,9 @@ export function IncidentsPage() {
   });
   const incidents = useMemo(() => incidentsQuery.data ?? [], [incidentsQuery.data]);
   const loading = incidentsQuery.isPending;
+  // Only treat errors as fatal when there is no data to show; a failed
+  // background refetch keeps the cached list on screen.
+  const loadFailed = incidentsQuery.isError && incidents.length === 0;
 
   useEffect(() => {
     if (incidentsQuery.isError) {
@@ -757,7 +760,7 @@ export function IncidentsPage() {
       )}
 
       {/* First-run onboarding (no incidents at all) */}
-      {!loading && !incidentsQuery.isError && incidents.length === 0 && !filterStatus && (
+      {!loading && !loadFailed && incidents.length === 0 && !filterStatus && (
         <div className="onboarding">
           <div className="card onboarding-card">
             <div className="onboarding-hero">
@@ -811,7 +814,7 @@ export function IncidentsPage() {
       )}
 
       {/* Error state for the initial list load */}
-      {!loading && incidentsQuery.isError && (
+      {!loading && loadFailed && (
         <div className="empty-state error-state">
           <span className="material-icons" aria-hidden>
             error_outline
