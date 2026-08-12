@@ -40,7 +40,7 @@ variable "allow_public_access" {
 }
 
 variable "vpc_endpoint_ids" {
-  description = "OpenSearch Serverless VPC endpoint IDs (used when allow_public_access = false)"
+  description = "OpenSearch Serverless VPC endpoint IDs (required when allow_public_access = false)"
   type        = list(string)
   default     = []
 }

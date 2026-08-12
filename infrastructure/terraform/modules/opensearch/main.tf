@@ -35,6 +35,16 @@ resource "aws_opensearchserverless_security_policy" "encryption" {
 resource "aws_opensearchserverless_security_policy" "network" {
   name = "${local.collection_name}-net"
   type = "network"
+
+  lifecycle {
+    precondition {
+      # AOSS rejects a non-public network rule with an empty SourceVPCEs list,
+      # and the collection would be unreachable anyway.
+      condition     = var.allow_public_access || length(var.vpc_endpoint_ids) > 0
+      error_message = "vpc_endpoint_ids must be non-empty when allow_public_access = false (create an aws_opensearchserverless_vpc_endpoint and pass its ID)."
+    }
+  }
+
   policy = jsonencode([
     merge(
       {

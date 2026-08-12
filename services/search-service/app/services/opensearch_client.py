@@ -335,6 +335,16 @@ class OpenSearchService:
         logger.info("document_removed_from_index", doc_id=doc_id, index=index_name)
         return True
 
+    def _bulk_index(self, index_name: str, docs: list[dict[str, Any]], batch_size: int = 500) -> None:
+        """Index documents via the bulk API in batches (no per-doc refresh)."""
+        for start in range(0, len(docs), batch_size):
+            batch = docs[start : start + batch_size]
+            actions: list[dict[str, Any]] = []
+            for doc in batch:
+                actions.append({"index": {"_index": index_name, "_id": doc["id"]}})
+                actions.append(doc)
+            self.client.bulk(body=actions)
+
     def reindex(
         self,
         documents: list[dict[str, Any]] | None = None,
@@ -351,13 +361,21 @@ class OpenSearchService:
 
         indexed_counts: dict[str, int] = {"documents": 0, "files": 0}
         if documents:
-            for document in documents:
-                self.index_document(document)
+            self._bulk_index(
+                self.documents_index_name,
+                [{**doc, "type": "document"} for doc in documents],
+            )
             indexed_counts["documents"] = len(documents)
         if files:
-            for file_data in files:
-                self.index_file(file_data)
+            self._bulk_index(
+                self.files_index_name,
+                [{**file_data, "type": "file"} for file_data in files],
+            )
             indexed_counts["files"] = len(files)
+        if (documents or files) and self.config.supports_refresh:
+            self.client.indices.refresh(
+                index=f"{self.documents_index_name},{self.files_index_name}"
+            )
 
         return {
             "status": "reindexed",
