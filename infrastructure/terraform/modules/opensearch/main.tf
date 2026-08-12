@@ -103,6 +103,8 @@ resource "aws_opensearchserverless_access_policy" "data_access" {
           Resource     = ["collection/${local.collection_name}"]
           Permission = [
             "aoss:CreateCollectionItems",
+            "aoss:DeleteCollectionItems",
+            "aoss:UpdateCollectionItems",
             "aoss:DescribeCollectionItems",
           ]
         },
