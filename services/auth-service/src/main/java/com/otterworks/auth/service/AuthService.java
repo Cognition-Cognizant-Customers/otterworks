@@ -98,8 +98,8 @@ public class AuthService {
 
   /**
    * Counts a failed attempt against the account and, past the threshold, locks it for an
-   * exponentially growing window. Keyed on the account, so it cannot be evaded by rotating
-   * the source address.
+   * exponentially growing window. Keyed on the account, so it cannot be evaded by rotating the
+   * source address.
    */
   private void registerFailedLogin(User user, Instant now) {
     int attempts = user.getFailedLoginAttempts() + 1;

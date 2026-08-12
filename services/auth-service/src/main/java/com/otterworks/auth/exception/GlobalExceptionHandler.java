@@ -29,7 +29,8 @@ public class GlobalExceptionHandler {
   public ResponseEntity<Map<String, Object>> handleAccountLocked(AccountLockedException ex) {
     ResponseEntity<Map<String, Object>> response =
         buildErrorResponse(HttpStatus.LOCKED, ex.getMessage());
-    long retryAfter = Math.max(1, Duration.between(Instant.now(), ex.getLockedUntil()).getSeconds());
+    long retryAfter =
+        Math.max(1, Duration.between(Instant.now(), ex.getLockedUntil()).getSeconds());
     return ResponseEntity.status(HttpStatus.LOCKED)
         .header("Retry-After", String.valueOf(retryAfter))
         .body(response.getBody());

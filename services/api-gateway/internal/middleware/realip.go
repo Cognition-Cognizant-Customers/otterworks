@@ -6,12 +6,14 @@ import (
 	"strings"
 )
 
-// forwardedHeaders are the client-settable headers that claim an originating address.
-var forwardedHeaders = []string{"X-Forwarded-For", "X-Real-IP", "True-Client-IP"}
+// forwardedHeaders are the client-settable headers that describe the hop in front of
+// the gateway: who the caller is, and how they reached the edge.
+var forwardedHeaders = []string{"X-Forwarded-For", "X-Real-IP", "True-Client-IP", "X-Forwarded-Proto"}
 
 // RealIP returns middleware that rewrites r.RemoteAddr from the forwarding headers
 // only when the immediate peer is a trusted proxy. Anything else keeps the peer
-// address, so a client cannot choose the identity that per-IP controls key on.
+// address and loses its forwarding headers entirely, so a client cannot choose the
+// identity that per-IP controls key on, nor claim a scheme it did not use.
 func RealIP(trustedProxies []string) func(http.Handler) http.Handler {
 	trusted := parseCIDRs(trustedProxies)
 

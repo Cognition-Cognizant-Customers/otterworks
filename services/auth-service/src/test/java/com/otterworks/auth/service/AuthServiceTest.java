@@ -160,8 +160,7 @@ class AuthServiceTest {
     }
 
     assertThat(testUser.getLockedUntil()).isAfter(Instant.now());
-    assertThatThrownBy(() -> authService.login(request))
-        .isInstanceOf(AccountLockedException.class);
+    assertThatThrownBy(() -> authService.login(request)).isInstanceOf(AccountLockedException.class);
   }
 
   @Test
@@ -174,8 +173,7 @@ class AuthServiceTest {
 
     when(userRepository.findByEmail("test@otterworks.dev")).thenReturn(Optional.of(testUser));
 
-    assertThatThrownBy(() -> authService.login(request))
-        .isInstanceOf(AccountLockedException.class);
+    assertThatThrownBy(() -> authService.login(request)).isInstanceOf(AccountLockedException.class);
     verify(passwordEncoder, never()).matches(any(), any());
   }
 

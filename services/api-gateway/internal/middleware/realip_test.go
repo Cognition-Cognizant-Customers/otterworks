@@ -38,6 +38,22 @@ func TestRealIP_UntrustedPeerKeepsPeerAddress(t *testing.T) {
 	assert.Empty(t, headers.Get("X-Real-IP"))
 }
 
+func TestRealIP_UntrustedPeerCannotClaimTLS(t *testing.T) {
+	_, headers := serveRealIP(t, nil, "203.0.113.9:4444", map[string]string{
+		"X-Forwarded-Proto": "https",
+	})
+
+	assert.Empty(t, headers.Get("X-Forwarded-Proto"), "a plaintext client must not claim a TLS hop")
+}
+
+func TestRealIP_TrustedProxyKeepsForwardedProto(t *testing.T) {
+	_, headers := serveRealIP(t, []string{"10.0.0.0/8"}, "10.0.1.5:4444", map[string]string{
+		"X-Forwarded-Proto": "https",
+	})
+
+	assert.Equal(t, "https", headers.Get("X-Forwarded-Proto"))
+}
+
 func TestRealIP_TrustedProxyForwardsClient(t *testing.T) {
 	ip, _ := serveRealIP(t, []string{"10.0.0.0/8"}, "10.0.1.5:4444", map[string]string{
 		"X-Forwarded-For": "198.51.100.7",

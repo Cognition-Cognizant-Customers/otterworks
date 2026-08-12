@@ -49,3 +49,13 @@ func TestSecurityHeaders_PreservesBackendValue(t *testing.T) {
 
 	assert.Equal(t, "default-src 'self'", headers.Get("Content-Security-Policy"))
 }
+
+func TestSecurityHeaders_NoDuplicateWhenBackendAddsHeader(t *testing.T) {
+	// httputil.ReverseProxy copies upstream headers with Add, not Set.
+	headers := serveSecurityHeaders(t, nil, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("X-Frame-Options", "SAMEORIGIN")
+		w.WriteHeader(http.StatusOK)
+	})
+
+	assert.Equal(t, []string{"SAMEORIGIN"}, headers.Values("X-Frame-Options"))
+}
