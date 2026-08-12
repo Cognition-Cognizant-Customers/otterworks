@@ -25,7 +25,7 @@ def _get_indexer() -> Indexer:
 @index_bp.route("/index/document", methods=["POST"])
 def index_document() -> tuple:
     """Index a document (called by document-service or SQS)."""
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Request body is required"}), 400
 
@@ -45,7 +45,7 @@ def index_document() -> tuple:
 @index_bp.route("/index/file", methods=["POST"])
 def index_file() -> tuple:
     """Index a file (called by file-service or SQS)."""
-    data = request.get_json()
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Request body is required"}), 400
 

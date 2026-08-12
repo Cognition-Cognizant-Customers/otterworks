@@ -102,6 +102,18 @@ output "cloudwatch_log_groups" {
   value       = module.monitoring.log_group_names
 }
 
+# --- OpenSearch (migration, enable_opensearch = true) ---
+
+output "opensearch_collection_endpoint" {
+  description = "OpenSearch Serverless collection endpoint (empty unless enable_opensearch)"
+  value       = var.enable_opensearch ? module.opensearch[0].collection_endpoint : ""
+}
+
+output "opensearch_dashboard_endpoint" {
+  description = "OpenSearch Dashboards endpoint (empty unless enable_opensearch)"
+  value       = var.enable_opensearch ? module.opensearch[0].dashboard_endpoint : ""
+}
+
 # --- IRSA ---
 
 output "irsa_role_arns" {

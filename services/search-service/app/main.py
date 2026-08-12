@@ -61,16 +61,23 @@ def create_app(config: AppConfig | None = None) -> Flask:
     # Store config on the app
     app.config["APP_CONFIG"] = config
 
-    # Initialize MeiliSearch service
-    search_service = MeiliSearchService(config.meilisearch)
+    # Initialize the search backend (SEARCH_BACKEND: meilisearch | opensearch)
+    if config.search_backend == "opensearch":
+        from app.services.opensearch_client import OpenSearchService
+
+        search_service: MeiliSearchService | OpenSearchService = OpenSearchService(
+            config.opensearch
+        )
+    else:
+        search_service = MeiliSearchService(config.meilisearch)
     app.config["SEARCH_SERVICE"] = search_service
 
-    # Try to create indices on startup (non-fatal if MeiliSearch is not available)
+    # Try to create indices on startup (non-fatal if the backend is not available)
     try:
         search_service.ensure_indices()
-        logger.info("meilisearch_indices_ensured")
+        logger.info("search_indices_ensured", backend=config.search_backend)
     except Exception:
-        logger.warning("meilisearch_indices_creation_deferred", reason="MeiliSearch not available")
+        logger.warning("search_indices_creation_deferred", backend=config.search_backend)
 
     # Register blueprints
     app.register_blueprint(health_bp)
@@ -116,6 +123,7 @@ def create_app(config: AppConfig | None = None) -> Flask:
     logger.info(
         "search_service_created",
         port=config.port,
+        search_backend=config.search_backend,
         meilisearch_url=config.meilisearch.url,
         sqs_enabled=config.sqs.enabled,
     )

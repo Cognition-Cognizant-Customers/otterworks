@@ -219,6 +219,11 @@ load_infra_outputs() {
   DB_NAME="${DB_NAME:-otterworks}"; DB_USER="${DB_USER:-otterworks_admin}"
   # MeiliSearch runs in-cluster (see deploy_meilisearch); search-service reaches it by Service DNS.
   MEILISEARCH_URL="${MEILISEARCH_URL:-http://meilisearch:7700}"
+  # SEARCH_BACKEND=opensearch flips the search-service to the managed OpenSearch
+  # Serverless collection (OPENSEARCH_URL from `terraform output
+  # opensearch_collection_endpoint`). Default stays meilisearch.
+  SEARCH_BACKEND="${SEARCH_BACKEND:-meilisearch}"
+  OPENSEARCH_URL="${OPENSEARCH_URL:-$(terraform -chdir="$d" output -raw opensearch_collection_endpoint 2>/dev/null || echo "")}"
   if [ -z "${RDS_HOST}" ]; then
     warn "Terraform outputs unavailable; services will deploy without wired config."
   fi
@@ -378,6 +383,12 @@ build_helm_args() {
       EXTRA_ARGS+=(--set-string "config.REDIS_HOST=${REDIS_HOST}" --set-string "config.REDIS_PORT=6379")
       EXTRA_ARGS+=(--set-string "config.HOST=0.0.0.0" --set-string "config.PORT=8087")
       EXTRA_ARGS+=(--set-string "config.MEILISEARCH_URL=${MEILISEARCH_URL}")
+      EXTRA_ARGS+=(--set-string "config.SEARCH_BACKEND=${SEARCH_BACKEND}")
+      if [ "${SEARCH_BACKEND}" = "opensearch" ]; then
+        EXTRA_ARGS+=(--set-string "config.OPENSEARCH_URL=${OPENSEARCH_URL}")
+        EXTRA_ARGS+=(--set-string "config.OPENSEARCH_AWS_AUTH=true")
+        EXTRA_ARGS+=(--set-string "config.OPENSEARCH_SERVICE=aoss")
+      fi
       EXTRA_ARGS+=(--set-string "config.REQUIRE_AUTH=false" --set-string "config.SQS_ENABLED=false") ;;
     analytics-service)
       EXTRA_ARGS+=(--set-string "config.AWS_REGION=${AWS_REGION}")

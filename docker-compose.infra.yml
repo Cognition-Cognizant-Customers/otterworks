@@ -94,6 +94,33 @@ services:
       retries: 5
     security_opt:
     - no-new-privileges:true
+  # Local OpenSearch-compatible backend for the search-service opensearch
+  # adapter (SEARCH_BACKEND=opensearch). Opt-in via the "opensearch" profile;
+  # not started by default.
+  opensearch:
+    image: opensearchproject/opensearch:2.13.0
+    container_name: otterworks-opensearch
+    profiles:
+    - opensearch
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: 'true'
+      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+    - 9200:9200
+    volumes:
+    - opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -f
+      - http://localhost:9200/_cluster/health
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    security_opt:
+    - no-new-privileges:true
   prometheus:
     image: prom/prometheus:v2.51.0
     container_name: otterworks-prometheus
@@ -261,5 +288,6 @@ volumes:
   postgres_data: null
   localstack_data: null
   meilisearch_data: null
+  opensearch_data: null
   prometheus_data: null
   grafana_data: null

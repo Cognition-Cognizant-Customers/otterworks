@@ -19,6 +19,29 @@ class MeiliSearchConfig:
 
 
 @dataclass(frozen=True)
+class OpenSearchConfig:
+    """Amazon OpenSearch (Service or Serverless) connection configuration."""
+
+    url: str = field(default_factory=lambda: os.getenv("OPENSEARCH_URL", "http://localhost:9200"))
+    region: str = field(default_factory=lambda: os.getenv("AWS_REGION", "us-east-1"))
+    aws_auth: bool = field(
+        default_factory=lambda: os.getenv("OPENSEARCH_AWS_AUTH", "false").lower() == "true"
+    )
+    service: str = field(default_factory=lambda: os.getenv("OPENSEARCH_SERVICE", "aoss"))
+    documents_index: str = field(
+        default_factory=lambda: os.getenv("OPENSEARCH_DOCUMENTS_INDEX", "documents")
+    )
+    files_index: str = field(
+        default_factory=lambda: os.getenv("OPENSEARCH_FILES_INDEX", "files")
+    )
+
+    @property
+    def supports_refresh(self) -> bool:
+        """OpenSearch Serverless (aoss) does not support the refresh parameter."""
+        return not (self.aws_auth and self.service == "aoss")
+
+
+@dataclass(frozen=True)
 class SQSConfig:
     """SQS consumer configuration."""
 
@@ -56,6 +79,10 @@ class AppConfig:
         default_factory=lambda: os.getenv("FLASK_DEBUG", "false").lower() == "true"
     )
     log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))
+    search_backend: str = field(
+        default_factory=lambda: os.getenv("SEARCH_BACKEND", "meilisearch").lower()
+    )
     meilisearch: MeiliSearchConfig = field(default_factory=MeiliSearchConfig)
+    opensearch: OpenSearchConfig = field(default_factory=OpenSearchConfig)
     sqs: SQSConfig = field(default_factory=SQSConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
