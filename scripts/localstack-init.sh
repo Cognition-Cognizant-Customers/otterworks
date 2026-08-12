@@ -58,7 +58,8 @@ ANALYTICS_QUEUE_ARN=$(awslocal sqs get-queue-attributes \
 awslocal sns subscribe \
   --topic-arn arn:aws:sns:us-east-1:000000000000:otterworks-events \
   --protocol sqs \
-  --notification-endpoint "$ANALYTICS_QUEUE_ARN"
+  --notification-endpoint "$ANALYTICS_QUEUE_ARN" \
+  --attributes RawMessageDelivery=true
 
 # DynamoDB Tables
 table_exists otterworks-file-metadata || awslocal dynamodb create-table \
