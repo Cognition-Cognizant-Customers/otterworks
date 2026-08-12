@@ -396,6 +396,9 @@ class OpenSearchService:
         files: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Delete indices, recreate them, and optionally repopulate."""
+        # Deleting invalidates the bootstrap: if the recreate below fails, later
+        # writes must not proceed against auto-created, dynamically mapped indices.
+        self._indices_ready = False
         for index_name in [self.documents_index_name, self.files_index_name]:
             try:
                 self.client.indices.delete(index=index_name)
