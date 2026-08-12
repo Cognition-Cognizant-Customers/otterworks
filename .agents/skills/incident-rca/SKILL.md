@@ -49,6 +49,12 @@ measured value in the report.
 | `document-service:slow_queries` | document-service | `GET /api/v1/documents/` → 3-5s injected latency | `docs/runbooks/document-service-slow.md` |
 | `notification-service:consumer_strict_schema` | notification-service | `POST /api/v1/files/{id}/share` → no notification in `GET /api/v1/notifications` | `docs/runbooks/notification-processing-failure.md` |
 
+The notification scenario is **local-stack only**: tenant deployments wire
+SNS/SQS eventing off by design (`scripts/deploy-tenant.sh` sets
+`T_WIRE_EVENTING=false`), so on a tenant a share never emits an event and the
+missing notification is a false FAIL, not this incident. The other three
+scenarios work on any target you may inject.
+
 ## Where each control lives
 
 | Control | Where |

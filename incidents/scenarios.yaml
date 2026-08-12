@@ -58,3 +58,8 @@ scenarios:
       messages, so a file share never produces the recipient's notification;
       queue depth climbs while the consumer appears healthy.
     runbook: docs/runbooks/notification-processing-failure.md
+    notes: >
+      Local stack only: tenant deployments wire SNS/SQS eventing off by design
+      (scripts/deploy-tenant.sh sets T_WIRE_EVENTING=false), so a share never
+      emits an event there and the missing notification would be a false FAIL,
+      not this incident.

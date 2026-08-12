@@ -57,9 +57,20 @@ jobs:
           for scenario in $scenarios; do
             echo "::group::$scenario"
             make incident-inject SCENARIO="$scenario"
-            # While the incident is live the probe must reproduce it: FAIL, exit 1.
-            if make incident-probe SCENARIO="$scenario"; then
-              echo "::error::$scenario: probe reported no symptom while the flag was set"
+            # While the incident is live the probe must reproduce it: a FAIL
+            # verdict in the report. Anything else — PASS, or an INCONCLUSIVE
+            # run that proved nothing — fails the gate. The report is checked
+            # rather than the exit status because make collapses every recipe
+            # failure to exit 2, erasing the FAIL (1) vs INCONCLUSIVE (3)
+            # distinction.
+            make incident-probe SCENARIO="$scenario" || true
+            verdict="$(uv run python -c "
+          import json
+          r = json.load(open('incidents/reports/incident-report.json'))
+          print(r['results'][0]['status'] if r['results'] else 'MISSING')
+          ")"
+            if [[ "$verdict" != "FAIL" ]]; then
+              echo "::error::$scenario: probe reported $verdict instead of FAIL while the flag was set"
               rc=1
             fi
             make incident-reset
