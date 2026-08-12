@@ -336,14 +336,33 @@ class OpenSearchService:
         return True
 
     def _bulk_index(self, index_name: str, docs: list[dict[str, Any]], batch_size: int = 500) -> None:
-        """Index documents via the bulk API in batches (no per-doc refresh)."""
+        """Index documents via the bulk API in batches (no per-doc refresh).
+
+        Raises ``RuntimeError`` if any item in a batch fails, matching the
+        MeiliSearch adapter's task-wait failure behavior.
+        """
         for start in range(0, len(docs), batch_size):
             batch = docs[start : start + batch_size]
             actions: list[dict[str, Any]] = []
             for doc in batch:
                 actions.append({"index": {"_index": index_name, "_id": doc["id"]}})
                 actions.append(doc)
-            self.client.bulk(body=actions)
+            result = self.client.bulk(body=actions)
+            if result.get("errors"):
+                failed = [
+                    item["index"].get("error")
+                    for item in result.get("items", [])
+                    if item.get("index", {}).get("error")
+                ]
+                logger.error(
+                    "bulk_index_failed",
+                    index=index_name,
+                    failed_count=len(failed),
+                    first_error=failed[0] if failed else None,
+                )
+                raise RuntimeError(
+                    f"Bulk indexing into '{index_name}' failed for {len(failed)} item(s)"
+                )
 
     def reindex(
         self,
