@@ -82,10 +82,10 @@ resource "aws_ecr_lifecycle_policy" "services" {
       },
       {
         rulePriority = 4
-        description  = "Keep last 30 per-commit golden builds"
+        description  = "Keep last 30 per-commit golden builds (incl. TENANT_PREFIX-ed fork tags)"
         selection = {
           tagStatus      = "tagged"
-          tagPatternList = ["main-*"]
+          tagPatternList = ["*main-*"]
           countType      = "imageCountMoreThan"
           countNumber    = 30
         }
