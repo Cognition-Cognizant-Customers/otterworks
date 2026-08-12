@@ -54,14 +54,19 @@ resource "aws_ecr_lifecycle_policy" "services" {
       },
       # Multiple entries in a tagPatternList are ANDed by ECR (an image must
       # carry tags matching every pattern), so each pattern gets its own rule.
+      # Age-based, not count-based: imageCountMoreThan counts matches across
+      # the whole repository, so a busy workshop's pushes would evict another
+      # live attendee's current build. 14 days comfortably exceeds the 72h
+      # tenant TTL, so an image can only expire after its tenant is gone.
       {
         rulePriority = 2
-        description  = "Keep last 20 demo branch builds (incl. TENANT_PREFIX-ed fork tags)"
+        description  = "Expire demo branch builds after 14 days (incl. TENANT_PREFIX-ed fork tags)"
         selection = {
           tagStatus      = "tagged"
           tagPatternList = ["*demo-*"]
-          countType      = "imageCountMoreThan"
-          countNumber    = 20
+          countType      = "sinceImagePushed"
+          countUnit      = "days"
+          countNumber    = 14
         }
         action = {
           type = "expire"
@@ -69,12 +74,13 @@ resource "aws_ecr_lifecycle_policy" "services" {
       },
       {
         rulePriority = 3
-        description  = "Keep last 20 workshop branch builds (incl. TENANT_PREFIX-ed fork tags)"
+        description  = "Expire workshop branch builds after 14 days (incl. TENANT_PREFIX-ed fork tags)"
         selection = {
           tagStatus      = "tagged"
           tagPatternList = ["*workshop-*"]
-          countType      = "imageCountMoreThan"
-          countNumber    = 20
+          countType      = "sinceImagePushed"
+          countUnit      = "days"
+          countNumber    = 14
         }
         action = {
           type = "expire"
