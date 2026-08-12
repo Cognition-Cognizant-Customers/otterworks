@@ -431,8 +431,8 @@ deploy_service() {
   [ -n "${!var:-}" ] && tag="${!var}"
   [ -z "${tag}" ] && { tag="$(resolve_tag "${service}")" || tag=""; }
   if [ -z "${tag}" ] || [ "${tag}" = "None" ]; then
-    warn "No image in ECR for ${service}; skipping."
-    return 0
+    warn "No deployable image in ECR for ${service}; not deployed."
+    return 1
   fi
 
   build_helm_args "${service}"
