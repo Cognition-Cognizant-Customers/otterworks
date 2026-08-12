@@ -1,11 +1,11 @@
-FROM ruby:3.3-slim AS builder
+FROM ruby:3.4-slim AS builder
 
 RUN apt-get update && apt-get install -y build-essential libpq-dev libyaml-dev && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY Gemfile Gemfile.lock ./
 RUN bundle config set --local without 'test development' && bundle install
 
-FROM ruby:3.3-slim
+FROM ruby:3.4-slim
 RUN apt-get update && apt-get install -y libpq5 curl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /usr/local/bundle /usr/local/bundle
