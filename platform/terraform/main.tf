@@ -85,6 +85,7 @@ module "ecr" {
   service_names = [
     "api-gateway",
     "auth-service",
+    "feedback-service",
     "file-service",
     "document-service",
     "collab-service",

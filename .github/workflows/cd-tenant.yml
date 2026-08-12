@@ -67,6 +67,7 @@ jobs:
           filters: |
             api-gateway: ['services/api-gateway/**']
             auth-service: ['services/auth-service/**']
+            feedback-service: ['services/feedback-service/**']
             file-service: ['services/file-service/**']
             document-service: ['services/document-service/**']
             collab-service: ['services/collab-service/**']
