@@ -1,3 +1,4 @@
+require 'jwt'
 require 'net/http'
 require 'securerandom'
 
@@ -9,6 +10,7 @@ require 'securerandom'
 class ChaosProbeService
   PROBE_INTERVAL = 5 # seconds between probe requests
   PROBE_BATCH    = 3 # requests per interval (enough for rate() to register)
+  SERVICE_TOKEN_TTL = 300 # seconds a minted probe token stays valid
 
   SERVICE_PROBES = {
     'search-service' => {
@@ -35,9 +37,12 @@ class ChaosProbeService
     # document-service chaos injects 3-5s latency before every DB query.
     # The probe hits GET /api/v1/documents so the slow response times show
     # up in Prometheus histograms and trigger the P95 latency alert.
+    # Listing is scoped to the authenticated caller, so the probe presents a
+    # service-scoped token rather than an identity header.
     'document-service' => {
       url: 'http://document-service:8083/api/v1/documents/',
-      headers: { 'X-User-ID' => '00000000-0000-0000-0000-000000000001' },
+      headers: {},
+      service_token: true,
       read_timeout: 8,
     },
   }.freeze
@@ -93,9 +98,27 @@ class ChaosProbeService
               end
 
     config[:headers]&.each { |k, v| request[k] = v }
+    if config[:service_token]
+      token = service_token
+      request['Authorization'] = "Bearer #{token}" if token
+    end
     http.request(request)
   rescue StandardError
     nil
+  end
+
+  # Mints a short-lived service-scoped token for probes against endpoints that
+  # require authentication. Returns nil when no signing secret is configured.
+  def self.service_token
+    secret = Rails.application.credentials.jwt_secret || ENV['JWT_SECRET']
+    return nil if secret.blank?
+
+    JWT.encode(
+      { 'scope' => 'service', 'sub' => 'admin-service-chaos-probe',
+        'exp' => (Time.now + SERVICE_TOKEN_TTL).to_i },
+      secret,
+      'HS256'
+    )
   end
 
   # Builds a multipart/form-data POST with a small dummy file.

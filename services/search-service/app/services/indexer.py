@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import os
 from typing import Any
 
@@ -16,6 +17,7 @@ logger = structlog.get_logger()
 DOCUMENT_SERVICE_URL = "http://document-service:8083"
 FILE_SERVICE_URL = "http://file-service:8082"
 FETCH_TIMEOUT = 30
+SERVICE_TOKEN_TTL = datetime.timedelta(minutes=5)
 
 
 def _service_auth_headers() -> dict[str, str]:
@@ -29,7 +31,13 @@ def _service_auth_headers() -> dict[str, str]:
         logger.warning("reindex_service_token_unavailable")
         return {}
     token = jwt.encode(
-        {"scope": "service", "sub": "search-service-indexer"}, secret, algorithm="HS256"
+        {
+            "scope": "service",
+            "sub": "search-service-indexer",
+            "exp": datetime.datetime.now(datetime.timezone.utc) + SERVICE_TOKEN_TTL,
+        },
+        secret,
+        algorithm="HS256",
     )
     return {"Authorization": f"Bearer {token}"}
 

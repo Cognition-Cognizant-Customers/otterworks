@@ -14,7 +14,7 @@ import json
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import jwt
 import requests
@@ -28,7 +28,12 @@ def service_auth_headers():
         print("[%s] WARNING: JWT_SECRET unset, service listing calls will be rejected"
               % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         return {}
-    token = jwt.encode({"scope": "service", "sub": "etl-search-reindex"}, secret, algorithm="HS256")
+    claims = {
+        "scope": "service",
+        "sub": "etl-search-reindex",
+        "exp": datetime.now(timezone.utc) + timedelta(hours=2),
+    }
+    token = jwt.encode(claims, secret, algorithm="HS256")
     return {"Authorization": "Bearer %s" % token}
 
 
