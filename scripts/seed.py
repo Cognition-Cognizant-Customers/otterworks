@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import psycopg2
-from psycopg2.extras import execute_values, Json
+from psycopg2.extras import Json, execute_values
 
 # ── Connection ────────────────────────────────────────────────────────────────
 

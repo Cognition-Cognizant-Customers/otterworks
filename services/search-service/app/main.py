@@ -7,8 +7,10 @@ import sys
 import time
 
 import structlog
-from flask import Flask, g, request as flask_request
+from flask import Flask, g
+from flask import request as flask_request
 from flask_cors import CORS
+from meilisearch.errors import MeilisearchError
 
 from app.api.health import REQUEST_COUNT, REQUEST_LATENCY, health_bp
 from app.api.index import index_bp
@@ -69,7 +71,7 @@ def create_app(config: AppConfig | None = None) -> Flask:
     try:
         search_service.ensure_indices()
         logger.info("meilisearch_indices_ensured")
-    except Exception:
+    except MeilisearchError:
         logger.warning("meilisearch_indices_creation_deferred", reason="MeiliSearch not available")
 
     # Register blueprints

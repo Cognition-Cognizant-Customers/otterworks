@@ -117,7 +117,7 @@ class MeiliSearchService:
         try:
             self.client.health()
             return True
-        except Exception:
+        except Exception:  # noqa: BLE001 - readiness must never raise
             return False
 
     def _build_search_params(

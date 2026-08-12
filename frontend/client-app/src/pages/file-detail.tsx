@@ -81,7 +81,7 @@ function FileDetailContent() {
         setResolvedUsers((prev) => ({ ...prev, ...newUsers }));
       }
     });
-  }, [file?.sharedWith]);
+  }, [file?.sharedWith, resolvedUsers]);
 
   const deleteMutation = useMutation({
     mutationFn: () => filesApi.delete(fileId),
