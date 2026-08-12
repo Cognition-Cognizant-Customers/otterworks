@@ -1,5 +1,5 @@
-import { Component, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnInit, inject } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
@@ -16,62 +16,68 @@ import { FeatureFlag } from '../../core/models/feature-flag.model';
   selector: 'app-features',
   standalone: true,
   imports: [
-    CommonModule, FormsModule, MatCardModule, MatIconModule, MatSlideToggleModule,
+    DatePipe, FormsModule, MatCardModule, MatIconModule, MatSlideToggleModule,
     MatProgressSpinnerModule, MatChipsModule, MatInputModule, MatFormFieldModule,
     MatSnackBarModule,
   ],
   template: `
     <div class="page-container">
       <h1 class="page-title">Feature Flags</h1>
-
+    
       <mat-form-field appearance="outline" class="search-field">
         <mat-label>Search features</mat-label>
         <input matInput [(ngModel)]="searchTerm" placeholder="Search by name or description">
         <mat-icon matSuffix>search</mat-icon>
       </mat-form-field>
-
-      <div *ngIf="loading" class="loading-container">
-        <mat-spinner diameter="40"></mat-spinner>
-      </div>
-
-      <div class="flags-grid" *ngIf="!loading">
-        <mat-card *ngFor="let flag of filteredFlags" class="flag-card">
-          <mat-card-content>
-            <div class="flag-header">
-              <div class="flag-info">
-                <h3>{{ flag.name }}</h3>
-                <span class="flag-key">{{ flag.key }}</span>
-              </div>
-              <mat-slide-toggle
-                [checked]="flag.enabled"
-                (change)="toggleFlag(flag)"
-                [color]="'primary'">
-              </mat-slide-toggle>
-            </div>
-            <p class="flag-description">{{ flag.description }}</p>
-            <div class="flag-meta">
-              <span class="flag-category">
-                <mat-icon>label</mat-icon>
-                {{ flag.category }}
-              </span>
-              <span class="flag-updated">
-                Updated {{ flag.updatedAt | date:'shortDate' }} by {{ flag.updatedBy }}
-              </span>
-            </div>
-          </mat-card-content>
-        </mat-card>
-      </div>
-
-      <div *ngIf="!loading && filteredFlags.length === 0" class="empty-state">
-        <mat-icon>toggle_off</mat-icon>
-        <p>No feature flags match your search</p>
-      </div>
+    
+      @if (loading) {
+        <div class="loading-container">
+          <mat-spinner diameter="40"></mat-spinner>
+        </div>
+      }
+    
+      @if (!loading) {
+        <div class="flags-grid">
+          @for (flag of filteredFlags; track flag.id) {
+            <mat-card class="flag-card">
+              <mat-card-content>
+                <div class="flag-header">
+                  <div class="flag-info">
+                    <h3>{{ flag.name }}</h3>
+                    <span class="flag-key">{{ flag.key }}</span>
+                  </div>
+                  <mat-slide-toggle
+                    [checked]="flag.enabled"
+                    (change)="toggleFlag(flag)"
+                    [color]="'primary'">
+                  </mat-slide-toggle>
+                </div>
+                <p class="flag-description">{{ flag.description }}</p>
+                <div class="flag-meta">
+                  <span class="flag-category">
+                    <mat-icon>label</mat-icon>
+                    {{ flag.category }}
+                  </span>
+                  <span class="flag-updated">
+                    Updated {{ flag.updatedAt | date:'shortDate' }} by {{ flag.updatedBy }}
+                  </span>
+                </div>
+              </mat-card-content>
+            </mat-card>
+          }
+        </div>
+      }
+    
+      @if (!loading && filteredFlags.length === 0) {
+        <div class="empty-state">
+          <mat-icon>toggle_off</mat-icon>
+          <p>No feature flags match your search</p>
+        </div>
+      }
     </div>
-  `,
+    `,
   styles: [`
-    .page-container { padding: 0; }
-    .page-title { font-size: 1.5rem; font-weight: 600; color: #333; margin-bottom: 24px; }
-    .loading-container { display: flex; justify-content: center; padding: 60px; }
+    .page-title { margin-bottom: 24px; }
     .search-field { width: 100%; max-width: 400px; margin-bottom: 16px; }
 
     .flags-grid {
@@ -99,11 +105,7 @@ import { FeatureFlag } from '../../core/models/feature-flag.model';
     .flag-category .mat-icon { font-size: 16px; width: 16px; height: 16px; }
     .flag-updated { font-size: 0.75rem; color: #999; }
 
-    .empty-state {
-      display: flex; flex-direction: column; align-items: center; padding: 60px; color: #999;
-    }
 
-    .empty-state .mat-icon { font-size: 48px; width: 48px; height: 48px; margin-bottom: 12px; }
   `],
 })
 export class FeaturesComponent implements OnInit {
@@ -111,7 +113,8 @@ export class FeaturesComponent implements OnInit {
   loading = true;
   searchTerm = '';
 
-  constructor(private api: AdminApiService, private snackBar: MatSnackBar) {}
+  private api = inject(AdminApiService);
+  private snackBar = inject(MatSnackBar);
 
   ngOnInit(): void {
     this.api.getFeatureFlags().subscribe(flags => {

@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
 import { tap, delay, map } from 'rxjs/operators';
@@ -21,10 +21,10 @@ interface LoginResponse {
 export class AuthService {
   private readonly TOKEN_KEY = 'ow_admin_token';
   private readonly USER_KEY = 'ow_admin_user';
+  private http = inject(HttpClient);
+  private router = inject(Router);
   private currentUserSubject = new BehaviorSubject<AuthUser | null>(this.getStoredUser());
   currentUser$ = this.currentUserSubject.asObservable();
-
-  constructor(private http: HttpClient, private router: Router) {}
 
   get isAuthenticated(): boolean {
     return !!this.getToken();

@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { RouterModule } from '@angular/router';
 import { MatListModule } from '@angular/material/list';
 import { MatIconModule } from '@angular/material/icon';
@@ -14,36 +14,43 @@ interface NavItem {
 @Component({
   selector: 'app-sidebar',
   standalone: true,
-  imports: [CommonModule, RouterModule, MatListModule, MatIconModule, MatTooltipModule],
+  imports: [RouterModule, MatListModule, MatIconModule, MatTooltipModule],
   template: `
     <div class="sidebar" [class.collapsed]="collapsed">
       <div class="sidebar-header">
-        <div class="logo" *ngIf="!collapsed">
-          <img class="logo-icon" src="assets/otter-logo.png" alt="OtterWorks logo" width="28" height="28" />
-          <span class="logo-text">OtterWorks</span>
-        </div>
-        <div class="logo logo-collapsed" *ngIf="collapsed">
-          <img class="logo-icon" src="assets/otter-logo.png" alt="OtterWorks logo" width="28" height="28" />
-        </div>
+        @if (!collapsed) {
+          <div class="logo">
+            <img class="logo-icon" src="assets/otter-logo.png" alt="OtterWorks logo" width="28" height="28" />
+            <span class="logo-text">OtterWorks</span>
+          </div>
+        }
+        @if (collapsed) {
+          <div class="logo logo-collapsed">
+            <img class="logo-icon" src="assets/otter-logo.png" alt="OtterWorks logo" width="28" height="28" />
+          </div>
+        }
         <button class="toggle-btn" (click)="toggleCollapsed()" [matTooltip]="collapsed ? 'Expand' : 'Collapse'">
           <mat-icon>{{ collapsed ? 'chevron_right' : 'chevron_left' }}</mat-icon>
         </button>
       </div>
-
+    
       <mat-nav-list>
-        <a mat-list-item
-           *ngFor="let item of navItems"
-           [routerLink]="item.route"
-           routerLinkActive="active-link"
-           [routerLinkActiveOptions]="{ exact: item.route === '/' }"
-           [matTooltip]="collapsed ? item.label : ''"
-           matTooltipPosition="right">
-          <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
-          <span matListItemTitle *ngIf="!collapsed">{{ item.label }}</span>
-        </a>
+        @for (item of navItems; track item.route) {
+          <a mat-list-item
+            [routerLink]="item.route"
+            routerLinkActive="active-link"
+            [routerLinkActiveOptions]="{ exact: item.route === '/' }"
+            [matTooltip]="collapsed ? item.label : ''"
+            matTooltipPosition="right">
+            <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
+            @if (!collapsed) {
+              <span matListItemTitle>{{ item.label }}</span>
+            }
+          </a>
+        }
       </mat-nav-list>
     </div>
-  `,
+    `,
   styles: [`
     .sidebar {
       width: 260px;

@@ -1,5 +1,5 @@
-import { Component } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, inject } from '@angular/core';
+
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
@@ -14,9 +14,14 @@ import { AuthService } from '../../core/services/auth.service';
   selector: 'app-login',
   standalone: true,
   imports: [
-    CommonModule, FormsModule, MatCardModule, MatInputModule,
-    MatButtonModule, MatIconModule, MatProgressSpinnerModule, MatFormFieldModule,
-  ],
+    FormsModule,
+    MatCardModule,
+    MatInputModule,
+    MatButtonModule,
+    MatIconModule,
+    MatProgressSpinnerModule,
+    MatFormFieldModule
+],
   template: `
     <div class="login-container">
       <mat-card class="login-card">
@@ -34,7 +39,7 @@ import { AuthService } from '../../core/services/auth.service';
               <input matInput type="email" [(ngModel)]="email" name="email" required placeholder="admin@otterworks.io" (input)="clearError()">
               <mat-icon matSuffix>email</mat-icon>
             </mat-form-field>
-
+    
             <mat-form-field appearance="outline" class="full-width">
               <mat-label>Password</mat-label>
               <input matInput [type]="hidePassword ? 'password' : 'text'" [(ngModel)]="password" name="password" required (input)="clearError()">
@@ -42,21 +47,27 @@ import { AuthService } from '../../core/services/auth.service';
                 <mat-icon>{{ hidePassword ? 'visibility_off' : 'visibility' }}</mat-icon>
               </button>
             </mat-form-field>
-
-            <div class="error-message" *ngIf="errorMessage">
-              <mat-icon>error</mat-icon>
-              {{ errorMessage }}
-            </div>
-
+    
+            @if (errorMessage) {
+              <div class="error-message">
+                <mat-icon>error</mat-icon>
+                {{ errorMessage }}
+              </div>
+            }
+    
             <button mat-raised-button color="primary" type="submit" class="login-btn" [disabled]="loading">
-              <mat-spinner *ngIf="loading" diameter="20"></mat-spinner>
-              <span *ngIf="!loading">Sign In</span>
+              @if (loading) {
+                <mat-spinner diameter="20"></mat-spinner>
+              }
+              @if (!loading) {
+                <span>Sign In</span>
+              }
             </button>
           </form>
         </mat-card-content>
       </mat-card>
     </div>
-  `,
+    `,
   styles: [`
     .login-container {
       display: flex;
@@ -133,7 +144,10 @@ export class LoginComponent {
   loading = false;
   errorMessage = '';
 
-  constructor(private authService: AuthService, private router: Router) {
+  private authService = inject(AuthService);
+  private router = inject(Router);
+
+  constructor() {
     if (this.authService.isAuthenticated) {
       this.router.navigate(['/']);
     }
