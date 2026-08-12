@@ -56,7 +56,7 @@ public class SnsConsumer : BackgroundService
 
                 var response = await _sqsClient.ReceiveMessageAsync(receiveRequest, stoppingToken);
 
-                foreach (var message in response.Messages)
+                foreach (var message in response.Messages ?? [])
                 {
                     await ProcessMessageAsync(message, stoppingToken);
                 }
