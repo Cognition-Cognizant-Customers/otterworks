@@ -137,7 +137,7 @@ gc_route53() {
     | jq -r --arg d "${domain}." '.HostedZones[]? | select(($d|endswith(.Name))) | .Id' \
     | head -1 | sed 's#/hostedzone/##')"
   [ -n "${zone_id}" ] || return 0
-  for host in "t-${sid}.${domain}" "api-t-${sid}.${domain}"; do
+  for host in "t-${sid}.${domain}" "api-t-${sid}.${domain}" "portal-t-${sid}.${domain}"; do
     delete_r53_record "${zone_id}" "${host}"
   done
 }

@@ -266,8 +266,9 @@ sweep_route53() {
       *) continue ;;
     esac
     label="${name%%".${HOST_SUFFIX}"}"
-    # Only the shapes a tenant deploy actually produces: t-<id> / api-t-<id>,
-    # plus the cname-/txt- ownership records external-dns writes alongside them.
+    # Only the shapes a tenant deploy actually produces: t-<id> / api-t-<id> /
+    # portal-t-<id>, plus the cname-/txt- ownership records external-dns writes
+    # alongside them.
     #
     # Matching "anything under the suffix" and inferring a tenant id from what
     # is left would make every platform record look like a tenant that does not
@@ -275,10 +276,10 @@ sweep_route53() {
     # renewal, and deleting it mid-challenge fails the renewal -- losing TLS for
     # every tenant at once, to reclaim nothing.
     case "${label}" in
-      t-*|api-t-*|cname-t-*|cname-api-t-*|txt-t-*|txt-api-t-*) ;;
+      t-*|api-t-*|portal-t-*|cname-t-*|cname-api-t-*|cname-portal-t-*|txt-t-*|txt-api-t-*|txt-portal-t-*) ;;
       *) sweep_log "skipping ${name}: not a tenant record"; continue ;;
     esac
-    id="${label#cname-}"; id="${id#txt-}"; id="${id#api-}"; id="${id#t-}"
+    id="${label#cname-}"; id="${id#txt-}"; id="${id#api-}"; id="${id#portal-}"; id="${id#t-}"
     [ -n "${id}" ] || continue
     if ! ctl_tenant_exists "${id}"; then
       sweep_warn "orphan Route53 record ${name} (no TENANT# item for '${id}')"
