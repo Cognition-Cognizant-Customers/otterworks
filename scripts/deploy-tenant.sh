@@ -390,11 +390,6 @@ kubectl -n "${NS}" rollout status deployment/meilisearch --timeout=180s || warn 
 log "Logging into ECR to resolve image tags..."
 aws ecr get-login-password --region "${AWS_REGION}" | \
   docker login --username AWS --password-stdin "${ECR_REGISTRY}" >/dev/null 2>&1 || true
-latest_tag() {
-  aws ecr describe-images --repository-name "${ECR_PREFIX}$1" --region "${AWS_REGION}" \
-    --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags[0]' --output text 2>/dev/null
-}
-
 tag_exists() {
   aws ecr describe-images --repository-name "${ECR_PREFIX}$1" --image-ids "imageTag=$2" \
     --region "${AWS_REGION}" >/dev/null 2>&1
@@ -417,7 +412,11 @@ resolve_tag() {
   if tag_exists "${service}" main; then
     echo "main"; return 0
   fi
-  latest_tag "${service}"
+  # No known-good tag. Deploying whatever image happened to be pushed last
+  # would ship another tenant's build into this environment, so refuse and let
+  # the caller skip the service instead.
+  err "no '${TENANT_TAG:-tenant}' or 'main' image for ${service}; refusing to fall back to another tenant's build"
+  return 1
 }
 
 # ---------- Deploy services via Helm ----------
@@ -430,7 +429,7 @@ deploy_service() {
   # Per-service image tag override: BUG_IMAGE_TAG_<service_with_underscores>
   local var="BUG_IMAGE_TAG_${service//-/_}"
   [ -n "${!var:-}" ] && tag="${!var}"
-  [ -z "${tag}" ] && tag="$(resolve_tag "${service}")"
+  [ -z "${tag}" ] && { tag="$(resolve_tag "${service}")" || tag=""; }
   if [ -z "${tag}" ] || [ "${tag}" = "None" ]; then
     warn "No image in ECR for ${service}; skipping."
     return 0

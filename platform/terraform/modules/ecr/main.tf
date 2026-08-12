@@ -31,15 +31,34 @@ resource "aws_ecr_lifecycle_policy" "services" {
 
   repository = each.value.name
 
+  # Never expire golden images (main / main-<sha> / tenant-main): every tenant
+  # without its own build of a service falls back to `main`, and losing it made
+  # deploy-tenant.sh ship another tenant's demo build into the perpetual t-main
+  # environment. Only branch/demo builds and untagged manifests are pruned;
+  # images matching no rule are retained.
   policy = jsonencode({
     rules = [
       {
         rulePriority = 1
-        description  = "Keep last 10 images"
+        description  = "Expire untagged manifests after 7 days"
         selection = {
-          tagStatus   = "any"
-          countType   = "imageCountMoreThan"
-          countNumber = 10
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 7
+        }
+        action = {
+          type = "expire"
+        }
+      },
+      {
+        rulePriority = 2
+        description  = "Keep last 20 demo/workshop branch builds"
+        selection = {
+          tagStatus      = "tagged"
+          tagPatternList = ["demo-*", "workshop-*"]
+          countType      = "imageCountMoreThan"
+          countNumber    = 20
         }
         action = {
           type = "expire"
