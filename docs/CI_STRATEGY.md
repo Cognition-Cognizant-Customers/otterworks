@@ -26,6 +26,8 @@ Uses `dorny/paths-filter` for **change detection** — only services with modifi
 | web-app | Node.js 20 (Next.js) | `npm ci`, `npm run lint`, `npm test`, `npm run build` | Passing |
 | admin-dashboard | Node.js 20 (Angular) | `npm ci`, `npm run lint \|\| true`, `npm test \|\| true`, `npm run build` | Passing |
 | infrastructure | Terraform 1.7 | `terraform fmt -check`, `terraform init`, `terraform validate` | Passing |
+| billing-service | Python 3.12 (uv) | `uv sync --locked`, `ruff check`, `pytest` | Passing |
+| legacy-billing | Python 3.12 | `pip install`, hermetic Flask smoke test | Passing |
 
 ### 2. `security-scan.yml` — Security Scanning
 
@@ -109,6 +111,12 @@ cd services/file-service && cargo test
 
 # Python — Document Service
 cd services/document-service && poetry run pytest
+
+# Python — Billing Service
+cd services/billing-service && uv sync --locked && uv run ruff check app scripts tests && uv run pytest
+
+# Python — Legacy Billing
+cd services/legacy-billing && python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt && .venv/bin/python -m pytest
 
 # Node.js — Collab Service
 cd services/collab-service && npm test

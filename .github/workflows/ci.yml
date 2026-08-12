@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       api-gateway: ${{ steps.changes.outputs.api-gateway }}
+      billing-service: ${{ steps.changes.outputs.billing-service }}
       auth-service: ${{ steps.changes.outputs.auth-service }}
       file-service: ${{ steps.changes.outputs.file-service }}
       document-service: ${{ steps.changes.outputs.document-service }}
@@ -30,6 +31,7 @@ jobs:
       infrastructure: ${{ steps.changes.outputs.infrastructure }}
       report-service: ${{ steps.changes.outputs.report-service }}
       legacy-portal: ${{ steps.changes.outputs.legacy-portal }}
+      legacy-billing: ${{ steps.changes.outputs.legacy-billing }}
       api-tests: ${{ steps.changes.outputs.api-tests }}
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +41,8 @@ jobs:
           filters: |
             api-gateway:
               - 'services/api-gateway/**'
+            billing-service:
+              - 'services/billing-service/**'
             auth-service:
               - 'services/auth-service/**'
             file-service:
@@ -70,12 +74,50 @@ jobs:
               - 'services/report-service/**'
             legacy-portal:
               - 'services/legacy-portal/**'
+            legacy-billing:
+              - 'services/legacy-billing/**'
             api-tests:
               - 'tests/api/**'
               - 'docs/api-route-matrix.md'
               - 'services/api-gateway/internal/config/**'
               - 'docker-compose*.yml'
               - 'Makefile'
+
+  # Python - Billing Service
+  billing-service:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.billing-service == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/billing-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          version: latest
+      - run: uv sync --locked
+      - run: uv run ruff check app scripts tests
+      - run: uv run pytest
+
+  # Python - Legacy Billing
+  legacy-billing:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.legacy-billing == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/legacy-billing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest
 
   # Go - API Gateway
   api-gateway:
