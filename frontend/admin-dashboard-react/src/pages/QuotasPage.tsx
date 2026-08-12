@@ -32,6 +32,7 @@ export function QuotasPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("");
   const [pageSize, setPageSize] = useState(5);
   const [pageIndex, setPageIndex] = useState(0);
+  const [updatingIds, setUpdatingIds] = useState<Set<string>>(new Set());
 
   const usersQuery = useQuery({ queryKey: USERS_QUERY_KEY, queryFn: getUsers });
   const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data]);
@@ -54,7 +55,19 @@ export function QuotasPage() {
       toast.success(`Quota updated for ${user.displayName}`);
     },
     onError: (_err, { user }) => toast.error(`Failed to update quota for ${user.displayName}`),
+    onSettled: (_data, _err, { user }) => {
+      setUpdatingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(user.id);
+        return next;
+      });
+    },
   });
+
+  const onUpdateQuota = (user: QuotaUser, quota: number) => {
+    setUpdatingIds((prev) => new Set(prev).add(user.id));
+    quotaMutation.mutate({ user, quota });
+  };
 
   const filtered = useMemo(() => {
     const term = filter.trim().toLowerCase();
@@ -209,10 +222,8 @@ export function QuotasPage() {
                           value={
                             QUOTA_OPTIONS.includes(user.storageQuota) ? user.storageQuota : ""
                           }
-                          disabled={quotaMutation.isPending}
-                          onChange={(e) =>
-                            quotaMutation.mutate({ user, quota: Number(e.target.value) })
-                          }
+                          disabled={updatingIds.has(user.id)}
+                          onChange={(e) => onUpdateQuota(user, Number(e.target.value))}
                         >
                           {!QUOTA_OPTIONS.includes(user.storageQuota) && (
                             <option value="" disabled>
