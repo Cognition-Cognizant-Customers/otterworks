@@ -22,7 +22,6 @@ async def test_create_document(client: AsyncClient, owner_id: uuid.UUID):
         json={
             "title": "Test Document",
             "content": "Hello world",
-            "owner_id": str(owner_id),
         },
     )
     assert resp.status_code == 201
@@ -38,7 +37,7 @@ async def test_create_document(client: AsyncClient, owner_id: uuid.UUID):
 async def test_get_document(client: AsyncClient, owner_id: uuid.UUID):
     create_resp = await client.post(
         "/api/v1/documents/",
-        json={"title": "Doc", "content": "Body", "owner_id": str(owner_id)},
+        json={"title": "Doc", "content": "Body"},
     )
     doc_id = create_resp.json()["id"]
 
@@ -58,7 +57,7 @@ async def test_list_documents(client: AsyncClient, owner_id: uuid.UUID):
     for i in range(3):
         await client.post(
             "/api/v1/documents/",
-            json={"title": f"Doc {i}", "content": "", "owner_id": str(owner_id)},
+            json={"title": f"Doc {i}", "content": ""},
         )
     resp = await client.get("/api/v1/documents/", params={"owner_id": str(owner_id)})
     assert resp.status_code == 200
@@ -72,10 +71,10 @@ async def test_list_documents_pagination(client: AsyncClient, owner_id: uuid.UUI
     for i in range(5):
         await client.post(
             "/api/v1/documents/",
-            json={"title": f"Doc {i}", "content": "", "owner_id": str(owner_id)},
+            json={"title": f"Doc {i}", "content": ""},
         )
     resp = await client.get(
-        "/api/v1/documents/", params={"owner_id": str(owner_id), "page": 1, "size": 2}
+        "/api/v1/documents/", params={"page": 1, "size": 2}
     )
     data = resp.json()
     assert data["total"] == 5
@@ -87,7 +86,7 @@ async def test_list_documents_pagination(client: AsyncClient, owner_id: uuid.UUI
 async def test_update_document(client: AsyncClient, owner_id: uuid.UUID):
     create_resp = await client.post(
         "/api/v1/documents/",
-        json={"title": "Original", "content": "Old body", "owner_id": str(owner_id)},
+        json={"title": "Original", "content": "Old body"},
     )
     doc_id = create_resp.json()["id"]
 
@@ -106,7 +105,7 @@ async def test_update_document(client: AsyncClient, owner_id: uuid.UUID):
 async def test_patch_document(client: AsyncClient, owner_id: uuid.UUID):
     create_resp = await client.post(
         "/api/v1/documents/",
-        json={"title": "Original", "content": "Body", "owner_id": str(owner_id)},
+        json={"title": "Original", "content": "Body"},
     )
     doc_id = create_resp.json()["id"]
 
@@ -125,7 +124,7 @@ async def test_patch_document(client: AsyncClient, owner_id: uuid.UUID):
 async def test_delete_document(client: AsyncClient, owner_id: uuid.UUID):
     create_resp = await client.post(
         "/api/v1/documents/",
-        json={"title": "To Delete", "content": "", "owner_id": str(owner_id)},
+        json={"title": "To Delete", "content": ""},
     )
     doc_id = create_resp.json()["id"]
 
@@ -140,7 +139,7 @@ async def test_delete_document(client: AsyncClient, owner_id: uuid.UUID):
 async def test_document_versions(client: AsyncClient, owner_id: uuid.UUID):
     create_resp = await client.post(
         "/api/v1/documents/",
-        json={"title": "Versioned", "content": "v1", "owner_id": str(owner_id)},
+        json={"title": "Versioned", "content": "v1"},
     )
     doc_id = create_resp.json()["id"]
 
@@ -153,15 +152,14 @@ async def test_document_versions(client: AsyncClient, owner_id: uuid.UUID):
     assert resp.status_code == 200
     versions = resp.json()
     assert len(versions) == 2
-    assert versions[0]["version_number"] == 2
-    assert versions[1]["version_number"] == 1
+    assert [v["version_number"] for v in versions] == [1, 2]
 
 
 @pytest.mark.asyncio
 async def test_restore_version(client: AsyncClient, owner_id: uuid.UUID):
     create_resp = await client.post(
         "/api/v1/documents/",
-        json={"title": "Restore Me", "content": "Original", "owner_id": str(owner_id)},
+        json={"title": "Restore Me", "content": "Original"},
     )
     doc_id = create_resp.json()["id"]
 
@@ -171,7 +169,7 @@ async def test_restore_version(client: AsyncClient, owner_id: uuid.UUID):
     )
 
     versions_resp = await client.get(f"/api/v1/documents/{doc_id}/versions")
-    v1_id = versions_resp.json()[-1]["id"]  # first version
+    v1_id = versions_resp.json()[0]["id"]  # first version
 
     resp = await client.post(f"/api/v1/documents/{doc_id}/versions/{v1_id}/restore")
     assert resp.status_code == 200
@@ -185,11 +183,11 @@ async def test_restore_version(client: AsyncClient, owner_id: uuid.UUID):
 async def test_search_documents(client: AsyncClient, owner_id: uuid.UUID):
     await client.post(
         "/api/v1/documents/",
-        json={"title": "Python Guide", "content": "Learn Python", "owner_id": str(owner_id)},
+        json={"title": "Python Guide", "content": "Learn Python"},
     )
     await client.post(
         "/api/v1/documents/",
-        json={"title": "Rust Guide", "content": "Learn Rust", "owner_id": str(owner_id)},
+        json={"title": "Rust Guide", "content": "Learn Rust"},
     )
 
     resp = await client.get("/api/v1/documents/search", params={"q": "Python"})
@@ -203,7 +201,7 @@ async def test_search_documents(client: AsyncClient, owner_id: uuid.UUID):
 async def test_export_document_html(client: AsyncClient, owner_id: uuid.UUID):
     create_resp = await client.post(
         "/api/v1/documents/",
-        json={"title": "Export", "content": "Content here", "owner_id": str(owner_id)},
+        json={"title": "Export", "content": "Content here"},
     )
     doc_id = create_resp.json()["id"]
 
@@ -218,7 +216,7 @@ async def test_export_document_html(client: AsyncClient, owner_id: uuid.UUID):
 async def test_export_document_markdown(client: AsyncClient, owner_id: uuid.UUID):
     create_resp = await client.post(
         "/api/v1/documents/",
-        json={"title": "Export MD", "content": "MD content", "owner_id": str(owner_id)},
+        json={"title": "Export MD", "content": "MD content"},
     )
     doc_id = create_resp.json()["id"]
 
@@ -260,10 +258,10 @@ async def test_create_document_via_jwt_hs384(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_create_document_x_user_id_header_ignored(client: AsyncClient):
+async def test_create_document_x_user_id_header_ignored(anon_client: AsyncClient):
     """X-User-Id header alone is not trusted (prevents identity spoofing)."""
     user_id = uuid.uuid4()
-    resp = await client.post(
+    resp = await anon_client.post(
         "/api/v1/documents/",
         json={"title": "Header Doc"},
         headers={"X-User-Id": str(user_id)},
@@ -272,10 +270,51 @@ async def test_create_document_x_user_id_header_ignored(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_create_document_no_auth_returns_401(client: AsyncClient):
-    """Creating a document without owner_id and without auth returns 401."""
-    resp = await client.post(
+async def test_create_document_no_auth_returns_401(anon_client: AsyncClient):
+    """Creating a document without auth returns 401."""
+    resp = await anon_client.post(
         "/api/v1/documents/",
         json={"title": "No Auth Doc"},
     )
     assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_create_document_rejects_body_owner_id(
+    client: AsyncClient, owner_id: uuid.UUID
+):
+    """owner_id in the body is refused, so a caller cannot plant into another account."""
+    victim_id = uuid.uuid4()
+    resp = await client.post(
+        "/api/v1/documents/",
+        json={"title": "planted", "content": "x", "owner_id": str(victim_id)},
+    )
+    assert resp.status_code == 422
+
+    listed = await client.get("/api/v1/documents/", params={"owner_id": str(victim_id)})
+    assert listed.json()["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_create_from_template_owns_result(
+    client: AsyncClient, owner_id: uuid.UUID
+):
+    """A document made from a template belongs to the caller, not a body-supplied id."""
+    template_resp = await client.post(
+        "/api/v1/templates/",
+        json={"name": "T", "content": "body", "created_by": str(uuid.uuid4())},
+    )
+    template_id = template_resp.json()["id"]
+
+    spoofed = await client.post(
+        f"/api/v1/documents/from-template/{template_id}",
+        json={"title": "Doc", "owner_id": str(uuid.uuid4())},
+    )
+    assert spoofed.status_code == 422
+
+    resp = await client.post(
+        f"/api/v1/documents/from-template/{template_id}",
+        json={"title": "Doc"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["owner_id"] == str(owner_id)

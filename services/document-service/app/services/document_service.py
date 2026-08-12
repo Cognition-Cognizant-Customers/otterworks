@@ -44,12 +44,12 @@ class DocumentService:
 
     # ---- Document CRUD ----
 
-    async def create(self, data: DocumentCreate) -> Document:
+    async def create(self, data: DocumentCreate, owner_id: UUID) -> Document:
         document = Document(
             title=data.title,
             content=data.content,
             content_type=data.content_type,
-            owner_id=data.owner_id,
+            owner_id=owner_id,
             folder_id=data.folder_id,
             word_count=_word_count(data.content),
             version=1,
@@ -62,7 +62,7 @@ class DocumentService:
             version_number=1,
             title=data.title,
             content=data.content,
-            created_by=data.owner_id,
+            created_by=owner_id,
         )
         self.db.add(version)
         await self.db.commit()
@@ -372,7 +372,7 @@ class DocumentService:
         return result.scalar_one_or_none()
 
     async def create_from_template(
-        self, template_id: UUID, data: DocumentFromTemplate
+        self, template_id: UUID, data: DocumentFromTemplate, owner_id: UUID
     ) -> Document | None:
         template = await self.get_template(template_id)
         if not template:
@@ -382,10 +382,9 @@ class DocumentService:
             title=data.title,
             content=template.content,
             content_type=template.content_type,
-            owner_id=data.owner_id,
             folder_id=data.folder_id,
         )
-        return await self.create(create_data)
+        return await self.create(create_data, owner_id)
 
     # ---- Helpers ----
 

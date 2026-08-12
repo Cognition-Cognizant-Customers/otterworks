@@ -18,10 +18,8 @@ from app.services.document_service import DocumentService
 @pytest.mark.asyncio
 async def test_create_and_get(db_session: AsyncSession, owner_id: uuid.UUID):
     service = DocumentService(db_session)
-    data = DocumentCreate(
-        title="Service Test", content="Body text", owner_id=owner_id
-    )
-    doc = await service.create(data)
+    data = DocumentCreate(title="Service Test", content="Body text")
+    doc = await service.create(data, owner_id)
     assert doc.title == "Service Test"
     assert doc.word_count == 2
     assert doc.version == 1
@@ -39,13 +37,13 @@ async def test_list_documents_with_filters(
     other_owner = uuid.uuid4()
 
     await service.create(
-        DocumentCreate(title="A", content="", owner_id=owner_id, folder_id=folder_id)
+        DocumentCreate(title="A", content="", folder_id=folder_id), owner_id
     )
     await service.create(
-        DocumentCreate(title="B", content="", owner_id=owner_id)
+        DocumentCreate(title="B", content=""), owner_id
     )
     await service.create(
-        DocumentCreate(title="C", content="", owner_id=other_owner)
+        DocumentCreate(title="C", content=""), other_owner
     )
 
     items, total = await service.list_documents(owner_id=owner_id)
@@ -59,7 +57,7 @@ async def test_list_documents_with_filters(
 async def test_update_creates_version(db_session: AsyncSession, owner_id: uuid.UUID):
     service = DocumentService(db_session)
     doc = await service.create(
-        DocumentCreate(title="V1", content="First", owner_id=owner_id)
+        DocumentCreate(title="V1", content="First"), owner_id
     )
 
     updated = await service.update(
@@ -77,9 +75,8 @@ async def test_update_creates_version(db_session: AsyncSession, owner_id: uuid.U
 async def test_patch_partial_update(db_session: AsyncSession, owner_id: uuid.UUID):
     service = DocumentService(db_session)
     doc = await service.create(
-        DocumentCreate(
-            title="Original", content="Body", content_type="text/plain", owner_id=owner_id
-        )
+        DocumentCreate(title="Original", content="Body", content_type="text/plain"),
+        owner_id,
     )
 
     patched = await service.patch(doc.id, DocumentPatch(title="New Title"))
@@ -93,7 +90,7 @@ async def test_patch_partial_update(db_session: AsyncSession, owner_id: uuid.UUI
 async def test_soft_delete(db_session: AsyncSession, owner_id: uuid.UUID):
     service = DocumentService(db_session)
     doc = await service.create(
-        DocumentCreate(title="Delete Me", content="", owner_id=owner_id)
+        DocumentCreate(title="Delete Me", content=""), owner_id
     )
 
     assert await service.delete(doc.id) is True
@@ -110,7 +107,7 @@ async def test_delete_nonexistent(db_session: AsyncSession):
 async def test_restore_version(db_session: AsyncSession, owner_id: uuid.UUID):
     service = DocumentService(db_session)
     doc = await service.create(
-        DocumentCreate(title="Orig Title", content="Orig Content", owner_id=owner_id)
+        DocumentCreate(title="Orig Title", content="Orig Content"), owner_id
     )
     versions = await service.list_versions(doc.id)
     v1_id = versions[0].id
@@ -127,10 +124,10 @@ async def test_restore_version(db_session: AsyncSession, owner_id: uuid.UUID):
 async def test_search(db_session: AsyncSession, owner_id: uuid.UUID):
     service = DocumentService(db_session)
     await service.create(
-        DocumentCreate(title="Python Guide", content="Learn Python", owner_id=owner_id)
+        DocumentCreate(title="Python Guide", content="Learn Python"), owner_id
     )
     await service.create(
-        DocumentCreate(title="Rust Guide", content="Learn Rust", owner_id=owner_id)
+        DocumentCreate(title="Rust Guide", content="Learn Rust"), owner_id
     )
 
     items, total = await service.search("Python")
@@ -142,7 +139,7 @@ async def test_search(db_session: AsyncSession, owner_id: uuid.UUID):
 async def test_export_formats(db_session: AsyncSession, owner_id: uuid.UUID):
     service = DocumentService(db_session)
     doc = await service.create(
-        DocumentCreate(title="Export Test", content="Some text", owner_id=owner_id)
+        DocumentCreate(title="Export Test", content="Some text"), owner_id
     )
 
     html_body, html_ct = service.export_document(doc, "html")
@@ -162,7 +159,7 @@ async def test_export_formats(db_session: AsyncSession, owner_id: uuid.UUID):
 async def test_comments_crud(db_session: AsyncSession, owner_id: uuid.UUID):
     service = DocumentService(db_session)
     doc = await service.create(
-        DocumentCreate(title="Commented", content="", owner_id=owner_id)
+        DocumentCreate(title="Commented", content=""), owner_id
     )
     author = uuid.uuid4()
 
@@ -210,7 +207,8 @@ async def test_template_crud_and_create_from(
 
     doc = await service.create_from_template(
         template.id,
-        DocumentFromTemplate(title="Jan Report", owner_id=owner_id),
+        DocumentFromTemplate(title="Jan Report"),
+        owner_id,
     )
     assert doc is not None
     assert doc.title == "Jan Report"
@@ -226,7 +224,8 @@ async def test_create_from_nonexistent_template(
 
     result = await service.create_from_template(
         uuid.uuid4(),
-        DocumentFromTemplate(title="Orphan", owner_id=owner_id),
+        DocumentFromTemplate(title="Orphan"),
+        owner_id,
     )
     assert result is None
 

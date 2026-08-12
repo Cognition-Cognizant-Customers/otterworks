@@ -10,7 +10,7 @@ from httpx import AsyncClient
 async def test_add_comment(client: AsyncClient, owner_id: uuid.UUID):
     create_resp = await client.post(
         "/api/v1/documents/",
-        json={"title": "Commented Doc", "content": "", "owner_id": str(owner_id)},
+        json={"title": "Commented Doc", "content": ""},
     )
     doc_id = create_resp.json()["id"]
     author_id = str(uuid.uuid4())
@@ -39,7 +39,7 @@ async def test_add_comment_document_not_found(client: AsyncClient):
 async def test_list_comments(client: AsyncClient, owner_id: uuid.UUID):
     create_resp = await client.post(
         "/api/v1/documents/",
-        json={"title": "Doc", "content": "", "owner_id": str(owner_id)},
+        json={"title": "Doc", "content": ""},
     )
     doc_id = create_resp.json()["id"]
 
@@ -58,7 +58,7 @@ async def test_list_comments(client: AsyncClient, owner_id: uuid.UUID):
 async def test_delete_comment(client: AsyncClient, owner_id: uuid.UUID):
     create_resp = await client.post(
         "/api/v1/documents/",
-        json={"title": "Doc", "content": "", "owner_id": str(owner_id)},
+        json={"title": "Doc", "content": ""},
     )
     doc_id = create_resp.json()["id"]
 
@@ -79,7 +79,7 @@ async def test_delete_comment(client: AsyncClient, owner_id: uuid.UUID):
 async def test_delete_comment_not_found(client: AsyncClient, owner_id: uuid.UUID):
     create_resp = await client.post(
         "/api/v1/documents/",
-        json={"title": "Doc", "content": "", "owner_id": str(owner_id)},
+        json={"title": "Doc", "content": ""},
     )
     doc_id = create_resp.json()["id"]
 

@@ -120,7 +120,7 @@ def test_document_crud_versions_export_comments_and_template_flow(api_client):
     from_template_response = api_client.client.post(
         f"/api/v1/documents/from-template/{template['id']}",
         headers=headers,
-        json={"title": "From Template", "owner_id": user.id},
+        json={"title": "From Template"},
     )
     assert from_template_response.status_code == 201, from_template_response.text
     assert from_template_response.json()["content"] == "template body"

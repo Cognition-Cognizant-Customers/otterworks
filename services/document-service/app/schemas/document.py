@@ -9,15 +9,20 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class DocumentCreate(BaseModel):
+    """Create payload. Ownership is derived from the caller, never the body."""
+
+    model_config = {"extra": "forbid"}
+
     title: str = Field(..., min_length=1, max_length=500)
     content: str = Field(default="")
     content_type: str = Field(default="text/markdown")
-    owner_id: UUID | None = None
     folder_id: UUID | None = None
 
 
 class DocumentUpdate(BaseModel):
     """Full replace (PUT)."""
+
+    model_config = {"extra": "forbid"}
 
     title: str = Field(..., min_length=1, max_length=500)
     content: str = Field(default="")
@@ -27,6 +32,8 @@ class DocumentUpdate(BaseModel):
 
 class DocumentPatch(BaseModel):
     """Partial update (PATCH)."""
+
+    model_config = {"extra": "forbid"}
 
     title: str | None = Field(None, min_length=1, max_length=500)
     content: str | None = None
@@ -125,6 +132,7 @@ class TemplateResponse(BaseModel):
 
 
 class DocumentFromTemplate(BaseModel):
+    model_config = {"extra": "forbid"}
+
     title: str = Field(..., min_length=1, max_length=500)
-    owner_id: UUID
     folder_id: UUID | None = None
