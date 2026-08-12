@@ -105,3 +105,4 @@ __pycache__/
 .terraform.lock.hcl
 *.tfstate
 *.tfstate.backup
+incidents/reports/

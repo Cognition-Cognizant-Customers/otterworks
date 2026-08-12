@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap incident-list incident-inject incident-probe incident-verify incident-reset procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate
 
 SHELL := /bin/bash
 
@@ -317,6 +317,40 @@ dast-zap: ## Run the OWASP ZAP baseline sweep and merge it into the DAST report
 		     "missing from this run. Running the probe suite on its own."; \
 		$(DAST) --target $(DAST_TARGET); \
 	fi
+
+# --- Incident Reproduction & Verification ---
+#
+# The incident harness reproduces the seeded chaos scenarios as the user
+# experiences them: every probe drives the symptom endpoint through the API
+# gateway of a *running* app — never by reading the chaos flag. Reports land
+# in incidents/reports/incident-report.{json,md} on every exit path.
+
+INCIDENT_TARGET ?= http://localhost:8080
+INCIDENT := uv run --with httpx --with tabulate --with pyyaml incidents/harness/incident_check.py
+
+incident-list: ## List the seeded incident scenarios
+	$(INCIDENT) list
+
+incident-inject: ## Inject one scenario's chaos flag (SCENARIO=<id> INCIDENT_TARGET=<url>)
+ifndef SCENARIO
+	$(error SCENARIO is required, e.g. make incident-inject SCENARIO=search-service:suggest_500)
+endif
+	$(INCIDENT) inject --target $(INCIDENT_TARGET) --scenario $(SCENARIO)
+
+incident-probe: ## Reproduce one scenario's symptom (SCENARIO=<id>); exits 1 while the incident is live
+ifndef SCENARIO
+	$(error SCENARIO is required, e.g. make incident-probe SCENARIO=search-service:suggest_500)
+endif
+	$(INCIDENT) probe --target $(INCIDENT_TARGET) --scenario $(SCENARIO)
+
+incident-verify: ## Prove one scenario is resolved (SCENARIO=<id>): symptom gone AND a legitimate request succeeds
+ifndef SCENARIO
+	$(error SCENARIO is required, e.g. make incident-verify SCENARIO=search-service:suggest_500)
+endif
+	$(INCIDENT) verify --target $(INCIDENT_TARGET) --scenario $(SCENARIO)
+
+incident-reset: ## Clear every chaos flag (INCIDENT_TARGET=<url>)
+	$(INCIDENT) reset --target $(INCIDENT_TARGET)
 
 test-report: ## Run report-service tests only
 	cd services/report-service && mvn test

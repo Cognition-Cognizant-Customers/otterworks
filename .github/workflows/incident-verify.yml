@@ -1,0 +1,90 @@
+name: Incident Harness
+
+# Incident reproduction and verification: stand the app up, inject each seeded
+# chaos scenario, prove the probe reproduces the symptom (FAIL), clear the
+# flags, and prove verification passes (PASS). This gates the harness itself —
+# a probe that cannot tell an injected incident from a healthy stack is broken.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/**'
+      - 'incidents/**'
+      - '.github/workflows/incident-verify.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  incident-harness:
+    name: Inject, probe, verify each scenario
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+
+      - name: Start the application stack
+        run: |
+          docker compose -f docker-compose.infra.yml -f docker-compose.yml up -d --build \
+            postgres redis localstack meilisearch \
+            auth-service api-gateway admin-service \
+            search-service file-service document-service notification-service
+
+      - name: Wait for the API gateway
+        run: |
+          for _ in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/health >/dev/null; then exit 0; fi
+            sleep 5
+          done
+          echo "API gateway never became healthy"
+          docker compose -f docker-compose.infra.yml -f docker-compose.yml logs --tail=50
+          exit 1
+
+      - name: Probe then verify every scenario
+        run: |
+          set -u
+          scenarios="$(uv run --with pyyaml python -c "
+          import yaml
+          for s in yaml.safe_load(open('incidents/scenarios.yaml'))['scenarios']:
+              print(s['id'])
+          ")"
+          rc=0
+          for scenario in $scenarios; do
+            echo "::group::$scenario"
+            make incident-inject SCENARIO="$scenario"
+            # While the incident is live the probe must reproduce it: FAIL, exit 1.
+            if make incident-probe SCENARIO="$scenario"; then
+              echo "::error::$scenario: probe reported no symptom while the flag was set"
+              rc=1
+            fi
+            make incident-reset
+            # With the flag cleared verification must pass: PASS, exit 0.
+            if ! make incident-verify SCENARIO="$scenario"; then
+              echo "::error::$scenario: verify did not pass after the flag was cleared"
+              rc=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $rc
+
+      - name: Publish the report
+        if: always()
+        run: |
+          if [[ -f incidents/reports/incident-report.md ]]; then
+            cat incidents/reports/incident-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: incident-report
+          path: incidents/reports/
+
+      - name: Collect service logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.infra.yml -f docker-compose.yml logs --tail=200

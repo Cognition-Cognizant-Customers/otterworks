@@ -1,0 +1,60 @@
+# OtterWorks seeded incident scenarios.
+#
+# This file is the scenario spec the incident harness asserts against the
+# *running* application: which service owns each scenario, the user-visible
+# symptom, the runbook that resolves it, and the gateway endpoint the probe
+# drives. Probes in incidents/harness/probes assert the symptom through the
+# API gateway — never by reading the chaos flag itself.
+
+target:
+  # Overridden with --target / INCIDENT_TARGET (a tenant URL or the local
+  # docker-compose stack).
+  default_base_url: http://localhost:8080
+  entrypoint: api-gateway
+  notes: >
+    Every symptom is asserted through the gateway on port 8080; hitting a
+    backend port directly bypasses the edge the user actually experiences.
+
+controls:
+  inject: POST /api/v1/admin/chaos   # body {service, scenario}; X-Chaos-Secret when configured
+  reset: DELETE /api/v1/admin/chaos  # clears every chaos flag
+  flag_store: per-tenant Redis, keys chaos:<service>:<scenario>, 10-minute TTL
+
+scenarios:
+  - id: search-service:suggest_500
+    service: search-service
+    chaos_flag: chaos:search-service:suggest_500
+    endpoint: GET /api/v1/search/suggest?q=<prefix>
+    symptom: >
+      Autocomplete suggestions return HTTP 500 (KeyError: '_rankingScore' in
+      the suggest handler) instead of a suggestion list.
+    runbook: docs/runbooks/search-suggest-500.md
+
+  - id: file-service:upload_s3_error
+    service: file-service
+    chaos_flag: chaos:file-service:upload_s3_error
+    endpoint: POST /api/v1/files/upload
+    symptom: >
+      File uploads return HTTP 500: the S3 client targets a nonexistent bucket
+      (NoSuchBucket), so every upload fails after the object write.
+    runbook: docs/runbooks/file-upload-failure.md
+
+  - id: document-service:slow_queries
+    service: document-service
+    chaos_flag: chaos:document-service:slow_queries
+    endpoint: GET /api/v1/documents/
+    symptom: >
+      Document reads take 3-5 seconds (injected latency before every DB
+      query); the probe asserts a latency threshold and records the measured
+      value.
+    runbook: docs/runbooks/document-service-slow.md
+
+  - id: notification-service:consumer_strict_schema
+    service: notification-service
+    chaos_flag: chaos:notification-service:consumer_strict_schema
+    endpoint: POST /api/v1/files/{id}/share -> GET /api/v1/notifications
+    symptom: >
+      The SQS consumer switches to a strict JSON parser that rejects event
+      messages, so a file share never produces the recipient's notification;
+      queue depth climbs while the consumer appears healthy.
+    runbook: docs/runbooks/notification-processing-failure.md
