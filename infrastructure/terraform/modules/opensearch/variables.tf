@@ -13,8 +13,8 @@ variable "project" {
   type        = string
 
   validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{1,20}$", var.project))
-    error_message = "Project name must be lowercase alphanumeric with hyphens, 2-21 characters."
+    condition     = can(regex("^[a-z][a-z0-9-]{0,19}[a-z0-9]$", var.project))
+    error_message = "Project name must be lowercase alphanumeric with hyphens (no trailing hyphen), 2-21 characters."
   }
 }
 
@@ -23,8 +23,8 @@ variable "namespace" {
   type        = string
 
   validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{1,12}$", var.namespace))
-    error_message = "Namespace must be lowercase alphanumeric with hyphens, 2-13 characters."
+    condition     = can(regex("^[a-z][a-z0-9-]{0,7}[a-z0-9]$", var.namespace))
+    error_message = "Namespace must be lowercase alphanumeric with hyphens (no trailing hyphen), 2-9 characters, so derived AOSS policy names stay within the 32-character limit."
   }
 }
 
@@ -34,9 +34,9 @@ variable "access_principal_arns" {
 }
 
 variable "allow_public_access" {
-  description = "Allow public network access to the collection endpoint (dev/demo only)"
+  description = "Allow public network access to the collection endpoint (dev/demo only; keep false to restrict access to the given VPC endpoints)"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "vpc_endpoint_ids" {

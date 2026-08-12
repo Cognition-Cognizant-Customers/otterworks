@@ -155,6 +155,9 @@ module "opensearch" {
   namespace   = var.opensearch_namespace
 
   access_principal_arns = [module.irsa.role_arns["search-service"]]
+
+  # Public endpoint only for dev/demo; staging/prod stay VPC-only.
+  allow_public_access = var.environment == "dev"
 }
 
 module "irsa" {

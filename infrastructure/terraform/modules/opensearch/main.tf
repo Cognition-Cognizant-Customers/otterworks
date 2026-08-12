@@ -64,6 +64,15 @@ resource "aws_opensearchserverless_collection" "search" {
 
   standby_replicas = var.standby_replicas
 
+  lifecycle {
+    precondition {
+      # AOSS collection/policy names are limited to 32 chars; the longest
+      # derived name appends "-data" to the collection name.
+      condition     = length(local.collection_name) + 5 <= 32
+      error_message = "Derived AOSS names exceed 32 characters; shorten var.project or var.namespace."
+    }
+  }
+
   tags = merge(local.common_tags, {
     Service = "search-service"
   })

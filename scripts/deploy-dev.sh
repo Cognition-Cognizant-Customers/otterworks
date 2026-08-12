@@ -385,6 +385,9 @@ build_helm_args() {
       EXTRA_ARGS+=(--set-string "config.MEILISEARCH_URL=${MEILISEARCH_URL}")
       EXTRA_ARGS+=(--set-string "config.SEARCH_BACKEND=${SEARCH_BACKEND}")
       if [ "${SEARCH_BACKEND}" = "opensearch" ]; then
+        if [ -z "${OPENSEARCH_URL}" ]; then
+          warn "SEARCH_BACKEND=opensearch but no OpenSearch endpoint is available (apply with -var enable_opensearch=true or export OPENSEARCH_URL); search-service will have no backend."
+        fi
         EXTRA_ARGS+=(--set-string "config.OPENSEARCH_URL=${OPENSEARCH_URL}")
         EXTRA_ARGS+=(--set-string "config.OPENSEARCH_AWS_AUTH=true")
         EXTRA_ARGS+=(--set-string "config.OPENSEARCH_SERVICE=aoss")
