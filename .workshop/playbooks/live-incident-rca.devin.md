@@ -1,5 +1,10 @@
 # Playbook: Diagnose a live OtterWorks incident and prove the fix
 
+> **Facilitator / author:** this file is the source for a **Devin Playbook**.
+> Copy its contents into your Devin organization (Settings → Playbooks → *Create
+> a new Playbook*) so sessions can invoke it as `!live-incident-rca`. See
+> [Creating Playbooks](https://docs.devin.ai/product-guides/creating-playbooks).
+
 ## Overview
 
 Use this when a **running** OtterWorks environment is misbehaving and the job is
@@ -30,16 +35,21 @@ convincing explanation are all necessary and none of them are sufficient.
    before-state, and without it "fixed" is an opinion. If the symptom does not
    reproduce, say so and stop: the next step is narrowing the environment, not
    changing code.
-2. **Separate environment from code.** OtterWorks can fail for three different
+2. **Separate environment from code.** OtterWorks can fail for four different
    reasons and they need different fixes:
    - a **chaos flag** in Redis (`chaos:<service>:<scenario>`, set through
      `POST /api/v1/admin/chaos` or `scripts/inject-bug.sh`, TTL-expiring) —
      injected failure, not a defect;
    - a **config override** (e.g. a bucket or endpoint pointing at nothing);
+   - a **planted lab bug on `main`** — deliberate, documented in `AGENTS.md`, and
+     the substance of a bug-hunt lab. Leave it in place and confirm with the
+     facilitator; "fixing" it erases the exercise for everyone else;
    - a **real defect on `main`**, which is the only one that deserves a PR.
    Check the flag and the config before you touch a service. `GET` the same path
-   on the golden app to see whether `main` behaves the same way — a symptom that
-   reproduces there is a code defect; one that does not is environmental.
+   on the golden app to see whether `main` behaves the same way: a symptom that
+   does *not* reproduce there is environmental. One that does is either a planted
+   lab bug or a genuine defect — read the golden app policy in `AGENTS.md` and
+   ask before assuming the second.
 3. **Follow the runbook if there is one.** `docs/runbooks/` holds a runbook per
    known failure mode with the alert, the symptoms, and the investigation steps.
    Several are unfinished (`<!-- TODO -->`). If yours is, complete it from what
@@ -63,8 +73,9 @@ convincing explanation are all necessary and none of them are sufficient.
 ## Specifications (postconditions)
 
 - The before-state (request, response, status, timing) is recorded in the PR.
-- The cause is named as a file and line, and classified as chaos flag, config, or
-  code defect.
+- The cause is named as a file and line, and classified as chaos flag, config,
+  planted lab bug, or code defect. A symptom reproducing on `main` is confirmed
+  not to be a planted bug before any fix is written.
 - The same check that failed now passes against a restarted service, and the
   service's tests plus the API flow suite are green.
 - Any runbook covering the symptom is complete: investigation, resolution, and
