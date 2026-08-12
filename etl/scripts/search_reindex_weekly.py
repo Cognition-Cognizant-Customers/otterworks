@@ -57,7 +57,9 @@ def main():
     bulk_batch_size = 500
     api_page_size = 100
 
-    service_headers = service_auth_headers()
+    # Pre-flight: a missing secret aborts here, before the indices are cleared. Every
+    # request then mints its own token so a long crawl cannot outlive its credential.
+    service_auth_headers()
 
     meili_headers = {"Content-Type": "application/json"}
     if meilisearch_api_key:
@@ -182,7 +184,7 @@ def main():
         resp = requests.get(
             "%s/api/v1/documents" % document_service_url,
             params={"page": page, "size": api_page_size},
-            headers=service_headers,
+            headers=service_auth_headers(),
         )
         resp.raise_for_status()
         data = resp.json()
@@ -245,7 +247,7 @@ def main():
         resp = requests.get(
             "%s/api/v1/files" % file_service_url,
             params={"page": page, "page_size": api_page_size},
-            headers=service_headers,
+            headers=service_auth_headers(),
         )
         resp.raise_for_status()
         data = resp.json()
