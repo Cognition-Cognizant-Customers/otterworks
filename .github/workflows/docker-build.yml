@@ -44,6 +44,7 @@ jobs:
           - { name: admin-service, context: services/admin-service }
           - { name: audit-service, context: services/audit-service }
           - { name: report-service, context: services/report-service }
+          - { name: legacy-portal, context: services/legacy-portal }
           - { name: web-app, context: frontend/client-app }
           - { name: admin-dashboard, context: frontend/admin-dashboard }
 
