@@ -74,8 +74,9 @@ configured via `sonar-project.properties`) and reports the quality gate as a
 check run. When the check run's conclusion is `failure`, the workflow:
 
 1. Resolves the associated PR from the check run's head SHA
-   (`GET /repos/{repo}/commits/{sha}/pulls`) and validates it is **open** and
-   **not authored by `devin-ai-integration[bot]`**.
+   (`GET /repos/{repo}/commits/{sha}/pulls`) and validates it is **open**,
+   **targets `main`**, comes from a **same-repo branch** (fork PRs are never
+   auto-remediated), and is **not authored by `devin-ai-integration[bot]`**.
 2. Verifies Devin hasn't already attempted a fix on this PR (comment marker).
 3. Calls the **Devin v3 API** with the SonarCloud dashboard link and
    remediation instructions targeting the PR's head branch.
