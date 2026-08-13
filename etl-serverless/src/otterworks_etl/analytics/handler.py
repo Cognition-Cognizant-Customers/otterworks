@@ -90,7 +90,12 @@ def extract_from_sqs(event: dict) -> dict:
         entries_to_delete = []
         for msg in messages:
             try:
-                batch_events.append(json.loads(msg["Body"]))
+                # keep the message id with the event so a batch that was
+                # staged but not deleted before a crash (and therefore staged
+                # again by the retry) is deduplicated in transform_events
+                batch_events.append(
+                    {"message_id": msg["MessageId"], "event": json.loads(msg["Body"])}
+                )
             except (json.JSONDecodeError, KeyError):
                 # route malformed payloads to the DLQ instead of dropping them
                 sqs.send_message(QueueUrl=dlq_url, MessageBody=msg.get("Body", ""))
@@ -146,10 +151,20 @@ def extract_from_dynamodb(event: dict) -> dict:
 def transform_events(event: dict) -> dict:
     execution_id = event["execution_id"]
     all_events: list[dict] = []
+    seen_message_ids: set[str] = set()
     for extract in event["extracts"]:
         keys = extract["staged_keys"] if "staged_keys" in extract else [extract["staged_key"]]
         for key in keys:
-            all_events.extend(read_staged(key))
+            for record in read_staged(key):
+                # SQS records carry their message id so events staged twice by
+                # a retried extract attempt are only counted once
+                if isinstance(record, dict) and "message_id" in record and "event" in record:
+                    if record["message_id"] in seen_message_ids:
+                        continue
+                    seen_message_ids.add(record["message_id"])
+                    all_events.append(record["event"])
+                else:
+                    all_events.append(record)
 
     aggregated = aggregate_events(all_events)
     key = write_staged(PIPELINE, execution_id, "aggregated", aggregated)

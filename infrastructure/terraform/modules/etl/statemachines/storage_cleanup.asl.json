@@ -1,44 +1,30 @@
 {
   "Comment": "OtterWorks daily storage cleanup (replaces storage_cleanup_daily.py cron)",
-  "StartAt": "ScanInventory",
+  "StartAt": "ListS3Objects",
   "States": {
-    "ScanInventory": {
-      "Type": "Parallel",
-      "ResultPath": "$.scans",
-      "Branches": [
-        {
-          "StartAt": "ListS3Objects",
-          "States": {
-            "ListS3Objects": {
-              "Type": "Task",
-              "Resource": "${lambda_arn}",
-              "Parameters": {
-                "task": "list_s3_objects",
-                "ds.$": "$.ds",
-                "execution_id.$": "$$.Execution.Name"
-              },
-              "Retry": [${common_retry}],
-              "End": true
-            }
-          }
-        },
-        {
-          "StartAt": "ListMetadataReferences",
-          "States": {
-            "ListMetadataReferences": {
-              "Type": "Task",
-              "Resource": "${lambda_arn}",
-              "Parameters": {
-                "task": "list_metadata_references",
-                "ds.$": "$.ds",
-                "execution_id.$": "$$.Execution.Name"
-              },
-              "Retry": [${common_retry}],
-              "End": true
-            }
-          }
-        }
-      ],
+    "ListS3Objects": {
+      "Type": "Task",
+      "Resource": "${lambda_arn}",
+      "Parameters": {
+        "task": "list_s3_objects",
+        "ds.$": "$.ds",
+        "execution_id.$": "$$.Execution.Name"
+      },
+      "ResultPath": "$.inventory",
+      "Retry": [${common_retry}],
+      "Next": "ListMetadataReferences",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "ListMetadataReferences": {
+      "Type": "Task",
+      "Resource": "${lambda_arn}",
+      "Parameters": {
+        "task": "list_metadata_references",
+        "ds.$": "$.ds",
+        "execution_id.$": "$$.Execution.Name"
+      },
+      "ResultPath": "$.references",
+      "Retry": [${common_retry}],
       "Next": "FindOrphanedObjects",
       "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
     },
@@ -49,7 +35,8 @@
         "task": "find_orphaned_objects",
         "ds.$": "$.ds",
         "execution_id.$": "$$.Execution.Name",
-        "scans.$": "$.scans"
+        "inventory.$": "$.inventory",
+        "references.$": "$.references"
       },
       "ResultPath": "$.orphans",
       "Retry": [${common_retry}],

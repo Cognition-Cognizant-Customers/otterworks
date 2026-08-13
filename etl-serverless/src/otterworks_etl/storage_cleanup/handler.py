@@ -1,8 +1,13 @@
 """Lambda tasks for the otterworks-storage-cleanup state machine.
 
 State machine flow:
-  list_s3_objects + list_metadata_references (parallel)
+  list_s3_objects -> list_metadata_references
     -> find_orphaned_objects -> move_to_quarantine -> generate_storage_report
+
+The two scans are deliberately sequential, with the S3 listing first: any
+object created after the S3 snapshot cannot appear in it, and any object in
+the snapshot will have its metadata row captured by the later metadata scan,
+so an in-flight upload is never misclassified as an orphan.
 """
 
 import json
@@ -73,7 +78,8 @@ def list_metadata_references(event: dict) -> dict:
 
 
 def find_orphaned_objects(event: dict) -> dict:
-    inventory, references = event["scans"]
+    inventory = event["inventory"]
+    references = event["references"]
     objects = read_staged(inventory["staged_key"])
     referenced_keys = set(read_staged(references["staged_key"]))
 
