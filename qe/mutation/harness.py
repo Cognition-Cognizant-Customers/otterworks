@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import argparse
 import ast
-import copy
 import hashlib
 import json
 import random
@@ -63,101 +62,105 @@ class Candidate:
     lineno: int
     col: int
     op: str
+    occ: int
     description: str
 
     @property
     def mutant_id(self) -> str:
-        return f"{self.rel_path}:{self.lineno}:{self.col}:{self.op}"
+        return f"{self.rel_path}:{self.lineno}:{self.col}:{self.op}:{self.occ}"
+
+
+def _node_mutation(node: ast.AST) -> tuple[str, str] | None:
+    """Return (op, description) if this node has a supported mutation."""
+    if isinstance(node, ast.Compare) and len(node.ops) == 1:
+        op_cls = type(node.ops[0])
+        if op_cls in CMP_SWAPS:
+            return (
+                f"cmp-{op_cls.__name__}",
+                f"{op_cls.__name__} -> {CMP_SWAPS[op_cls].__name__}",
+            )
+    elif isinstance(node, ast.BoolOp):
+        op_name = type(node.op).__name__
+        return (
+            f"bool-{op_name}",
+            f"{op_name} -> {'Or' if isinstance(node.op, ast.And) else 'And'}",
+        )
+    elif isinstance(node, ast.BinOp) and type(node.op) in BIN_SWAPS:
+        op_cls = type(node.op)
+        return (
+            f"bin-{op_cls.__name__}",
+            f"{op_cls.__name__} -> {BIN_SWAPS[op_cls].__name__}",
+        )
+    elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        return ("unary-Not", "remove `not`")
+    elif isinstance(node, ast.Constant) and node.value is True:
+        return ("const-True", "True -> False")
+    elif isinstance(node, ast.Constant) and node.value is False:
+        return ("const-False", "False -> True")
+    return None
 
 
 def _iter_candidates_in_tree(tree: ast.AST, rel_path: str):
+    """Yield (Candidate, node) pairs. Nodes sharing (line, col, op) — e.g.
+    chained same-operator BinOps — are disambiguated by an occurrence index
+    assigned in ast.walk order, so every enumerated mutant is reachable."""
+    counter: dict[tuple[int, int, str], int] = {}
     for node in ast.walk(tree):
-        if isinstance(node, ast.Compare) and len(node.ops) == 1:
-            op_cls = type(node.ops[0])
-            if op_cls in CMP_SWAPS:
-                yield Candidate(
-                    rel_path, node.lineno, node.col_offset,
-                    f"cmp-{op_cls.__name__}",
-                    f"{op_cls.__name__} -> {CMP_SWAPS[op_cls].__name__}",
-                )
-        elif isinstance(node, ast.BoolOp):
-            op_name = type(node.op).__name__
-            yield Candidate(
-                rel_path, node.lineno, node.col_offset,
-                f"bool-{op_name}",
-                f"{op_name} -> {'Or' if isinstance(node.op, ast.And) else 'And'}",
-            )
-        elif isinstance(node, ast.BinOp) and type(node.op) in BIN_SWAPS:
-            op_cls = type(node.op)
-            yield Candidate(
-                rel_path, node.lineno, node.col_offset,
-                f"bin-{op_cls.__name__}",
-                f"{op_cls.__name__} -> {BIN_SWAPS[op_cls].__name__}",
-            )
-        elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
-            yield Candidate(
-                rel_path, node.lineno, node.col_offset,
-                "unary-Not", "remove `not`",
-            )
-        elif isinstance(node, ast.Constant) and node.value is True:
-            yield Candidate(rel_path, node.lineno, node.col_offset, "const-True", "True -> False")
-        elif isinstance(node, ast.Constant) and node.value is False:
-            yield Candidate(rel_path, node.lineno, node.col_offset, "const-False", "False -> True")
+        mutation = _node_mutation(node)
+        if mutation is None:
+            continue
+        op, description = mutation
+        key = (node.lineno, node.col_offset, op)
+        occ = counter.get(key, 0)
+        counter[key] = occ + 1
+        yield Candidate(
+            rel_path, node.lineno, node.col_offset, op, occ, description
+        ), node
 
 
 class _Mutator(ast.NodeTransformer):
-    """Applies exactly the mutation identified by (lineno, col, op)."""
+    """Applies exactly one mutation, to the exact node instance targeted."""
 
-    def __init__(self, target: Candidate):
-        self.target = target
+    def __init__(self, op: str, target_node: ast.AST):
+        self.op = op
+        self.target_node = target_node
         self.applied = False
 
-    def _matches(self, node: ast.AST, op: str) -> bool:
-        return (
-            not self.applied
-            and getattr(node, "lineno", None) == self.target.lineno
-            and getattr(node, "col_offset", None) == self.target.col
-            and self.target.op == op
-        )
+    def _matches(self, node: ast.AST) -> bool:
+        return not self.applied and node is self.target_node
 
     def visit_Compare(self, node: ast.Compare):
         self.generic_visit(node)
-        if len(node.ops) == 1:
-            op_cls = type(node.ops[0])
-            if op_cls in CMP_SWAPS and self._matches(node, f"cmp-{op_cls.__name__}"):
-                node.ops = [CMP_SWAPS[op_cls]()]
-                self.applied = True
+        if self._matches(node):
+            node.ops = [CMP_SWAPS[type(node.ops[0])]()]
+            self.applied = True
         return node
 
     def visit_BoolOp(self, node: ast.BoolOp):
         self.generic_visit(node)
-        if self._matches(node, f"bool-{type(node.op).__name__}"):
+        if self._matches(node):
             node.op = ast.Or() if isinstance(node.op, ast.And) else ast.And()
             self.applied = True
         return node
 
     def visit_BinOp(self, node: ast.BinOp):
         self.generic_visit(node)
-        op_cls = type(node.op)
-        if op_cls in BIN_SWAPS and self._matches(node, f"bin-{op_cls.__name__}"):
-            node.op = BIN_SWAPS[op_cls]()
+        if self._matches(node):
+            node.op = BIN_SWAPS[type(node.op)]()
             self.applied = True
         return node
 
     def visit_UnaryOp(self, node: ast.UnaryOp):
         self.generic_visit(node)
-        if isinstance(node.op, ast.Not) and self._matches(node, "unary-Not"):
+        if self._matches(node):
             self.applied = True
             return node.operand
         return node
 
     def visit_Constant(self, node: ast.Constant):
-        if node.value is True and self._matches(node, "const-True"):
+        if self._matches(node):
             self.applied = True
-            return ast.copy_location(ast.Constant(value=False), node)
-        if node.value is False and self._matches(node, "const-False"):
-            self.applied = True
-            return ast.copy_location(ast.Constant(value=True), node)
+            return ast.copy_location(ast.Constant(value=not node.value), node)
         return node
 
 
@@ -204,7 +207,7 @@ def enumerate_candidates(files: list[Path]) -> list[Candidate]:
             tree = ast.parse(path.read_text())
         except SyntaxError as exc:
             sys.exit(f"error: cannot parse {rel}: {exc}")
-        candidates.extend(_iter_candidates_in_tree(tree, rel))
+        candidates.extend(cand for cand, _ in _iter_candidates_in_tree(tree, rel))
     candidates.sort(key=lambda c: c.mutant_id)
     return candidates
 
@@ -240,8 +243,15 @@ def run_mutant(svc_cfg: dict, candidate: Candidate) -> str:
     path = REPO_ROOT / candidate.rel_path
     original = path.read_bytes()
     tree = ast.parse(original.decode())
-    mutator = _Mutator(candidate)
-    mutated = mutator.visit(copy.deepcopy(tree))
+    target_node = next(
+        (node for cand, node in _iter_candidates_in_tree(tree, candidate.rel_path)
+         if cand.mutant_id == candidate.mutant_id),
+        None,
+    )
+    if target_node is None:
+        return "not-applied"
+    mutator = _Mutator(candidate.op, target_node)
+    mutated = mutator.visit(tree)
     if not mutator.applied:
         return "not-applied"
     try:

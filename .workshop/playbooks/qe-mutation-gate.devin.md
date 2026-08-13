@@ -42,7 +42,7 @@ never to relax the gate.
    currently-known survivors.
 
 2. **Pick the survivors to kill.** Read the report's surviving-mutant list. Each
-   entry is `file:line:col:operator`. Prioritize survivors in
+   entry is `file:line:col:operator:occurrence`. Prioritize survivors in
    security-sensitive or business-critical code (auth checks, money math,
    pagination, state machines) over logging/formatting code.
 
@@ -92,8 +92,8 @@ A run is complete when:
 A real run against a search service reported this survivor:
 
 ```
-SURVIVED  app/middleware/auth.py:51:15:bool-And (And -> Or)
-SURVIVED  app/middleware/auth.py:51:25:cmp-Eq (Eq -> NotEq)
+SURVIVED  app/middleware/auth.py:51:15:bool-And:0 (And -> Or)
+SURVIVED  app/middleware/auth.py:51:25:cmp-Eq:0 (Eq -> NotEq)
 ```
 
 Line 51 guards service-to-service authentication:
