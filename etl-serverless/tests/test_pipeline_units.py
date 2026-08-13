@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from otterworks_etl.audit_archive.handler import cutoff_for
 from otterworks_etl.common.dispatch import make_handler
@@ -32,6 +34,18 @@ class TestFindOrphans:
 
     def test_empty_objects(self):
         assert find_orphans([], set()) == ([], 0)
+
+    def test_recent_objects_skipped(self):
+        now = datetime(2026, 8, 13, 12, 0, tzinfo=UTC)
+        objects = [
+            {"key": "files/new", "size": 10,
+             "last_modified": (now - timedelta(hours=1)).isoformat()},
+            {"key": "files/old", "size": 25,
+             "last_modified": (now - timedelta(days=2)).isoformat()},
+        ]
+        orphaned, size = find_orphans(objects, set(), now=now)
+        assert [o["key"] for o in orphaned] == ["files/old"]
+        assert size == 25
 
 
 class TestMergeUserDay:

@@ -33,7 +33,7 @@ SUMMARY_COLUMNS = [
 SUMMARY_SQL = f"""
     SELECT {", ".join(SUMMARY_COLUMNS)}
     FROM analytics_daily_summary
-    WHERE report_date BETWEEN %s::date - interval '%s days' AND %s::date
+    WHERE report_date BETWEEN %s::date - make_interval(days => %s) AND %s::date
     ORDER BY report_date;
 """
 

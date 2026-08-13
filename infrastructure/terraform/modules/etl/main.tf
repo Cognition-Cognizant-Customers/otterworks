@@ -110,6 +110,38 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "quarantine" {
   }
 }
 
+resource "aws_s3_bucket_versioning" "quarantine" {
+  bucket = aws_s3_bucket.quarantine.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_policy" "quarantine" {
+  bucket = aws_s3_bucket.quarantine.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "DenyInsecureTransport"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          aws_s3_bucket.quarantine.arn,
+          "${aws_s3_bucket.quarantine.arn}/*",
+        ]
+        Condition = {
+          Bool = { "aws:SecureTransport" = "false" }
+        }
+      }
+    ]
+  })
+
+  depends_on = [aws_s3_bucket_public_access_block.quarantine]
+}
+
 resource "aws_s3_bucket_lifecycle_configuration" "quarantine" {
   bucket = aws_s3_bucket.quarantine.id
 

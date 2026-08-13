@@ -4,14 +4,14 @@ State machine flow:
   list_s3_objects -> list_metadata_references
     -> find_orphaned_objects -> move_to_quarantine -> generate_storage_report
 
-The two scans are deliberately sequential, with the S3 listing first: any
-object created after the S3 snapshot cannot appear in it, and any object in
-the snapshot will have its metadata row captured by the later metadata scan,
-so an in-flight upload is never misclassified as an orphan.
+The two scans are deliberately sequential, with the S3 listing first, and
+find_orphans additionally skips objects newer than MIN_ORPHAN_AGE_HOURS, so
+an in-flight upload is never misclassified as an orphan (a DynamoDB scan is
+not a point-in-time snapshot, so scan ordering alone is not sufficient).
 """
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from otterworks_etl.common.config import client, env, resource
 from otterworks_etl.common.dispatch import make_handler
@@ -24,14 +24,31 @@ PIPELINE = "storage-cleanup"
 FILES_PREFIX = "files/"
 QUARANTINE_PREFIX = "quarantined"
 S3_STANDARD_PRICE_PER_GB = 0.023
+# objects newer than this are never quarantined: a DynamoDB scan is not a
+# point-in-time snapshot, so a just-uploaded object's metadata row can be
+# missed even with the S3-listing-first ordering
+MIN_ORPHAN_AGE_HOURS = 24
 
 
 def _ds(event: dict) -> str:
     return (event.get("ds") or datetime.now(tz=UTC).isoformat())[:10]
 
 
-def find_orphans(objects: list[dict], referenced_keys: set[str]) -> tuple[list[dict], int]:
-    orphaned = [obj for obj in objects if obj["key"] not in referenced_keys]
+def find_orphans(
+    objects: list[dict],
+    referenced_keys: set[str],
+    now: datetime | None = None,
+) -> tuple[list[dict], int]:
+    now = now or datetime.now(tz=UTC)
+    age_cutoff = now - timedelta(hours=MIN_ORPHAN_AGE_HOURS)
+    orphaned = []
+    for obj in objects:
+        if obj["key"] in referenced_keys:
+            continue
+        last_modified = obj.get("last_modified")
+        if last_modified and datetime.fromisoformat(last_modified) > age_cutoff:
+            continue
+        orphaned.append(obj)
     return orphaned, sum(obj["size"] for obj in orphaned)
 
 

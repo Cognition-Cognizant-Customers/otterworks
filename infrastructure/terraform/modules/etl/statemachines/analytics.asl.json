@@ -53,8 +53,22 @@
       },
       "ResultPath": "$.transform",
       "Retry": [${common_retry}],
-      "Next": "LoadResults",
+      "Next": "AnyEventsToLoad",
       "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "AnyEventsToLoad": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.transform.total_events",
+          "NumericGreaterThan": 0,
+          "Next": "LoadResults"
+        }
+      ],
+      "Default": "NoEvents"
+    },
+    "NoEvents": {
+      "Type": "Succeed"
     },
     "LoadResults": {
       "Type": "Parallel",

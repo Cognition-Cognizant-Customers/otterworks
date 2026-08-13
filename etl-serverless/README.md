@@ -26,7 +26,10 @@ pipelines runs as a Step Functions state machine invoking a per-pipeline Lambda
   publish to an SNS alerts topic. Malformed analytics SQS messages go to a DLQ.
 - **Structured logging**: single-line JSON to stdout for CloudWatch Logs Insights.
 - **Idempotent loads**: PostgreSQL upserts (`ON CONFLICT ... DO UPDATE`) keyed on
-  report date; re-running a day is safe.
+  report date, and the analytics state machine skips the load/report states when
+  a run finds no events (the SQS extract is destructive, so a re-run after a
+  successful load sees an empty queue and must not overwrite the day's numbers
+  with zeros).
 
 ## Layout
 
