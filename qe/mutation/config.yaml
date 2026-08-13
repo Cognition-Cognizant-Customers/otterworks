@@ -1,0 +1,40 @@
+# Mutation-gate configuration. One entry per onboarded service.
+#
+# status: active            -> the gate runs for this service
+# status: onboarding-blocked -> enumerated but refused, with the reason recorded
+#
+# Determinism: mutant selection is seeded; the same source + config + harness
+# always yields the same mutant set. The seed and cap are part of the source
+# fingerprint recorded in the baseline ledger.
+
+services:
+  search-service:
+    status: active
+    dir: services/search-service
+    source_globs:
+      - "app/**/*.py"
+    exclude_globs:
+      - "app/__init__.py"
+    setup_cmd: >-
+      uv venv .venv -q &&
+      uv pip install -q -r requirements-dev.txt -p .venv/bin/python
+    test_cmd: ".venv/bin/python -m pytest -q -x"
+    timeout_seconds: 90
+    mutant_cap: 60
+    seed: 20260813
+
+  document-service:
+    status: onboarding-blocked
+    status_reason: >-
+      The clean suite is red on main: tests/test_documents_api.py still calls
+      authenticated document endpoints without Authorization headers after the
+      JWT identity-hardening changes. The mutation gate requires a green clean
+      suite; repairing the stale suite is the onboarding work.
+    dir: services/document-service
+    source_globs:
+      - "app/**/*.py"
+    setup_cmd: "poetry install --with dev -q"
+    test_cmd: "poetry run pytest -q -x"
+    timeout_seconds: 120
+    mutant_cap: 60
+    seed: 20260813

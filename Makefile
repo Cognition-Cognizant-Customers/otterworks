@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate qe-mutation qe-mutation-setup qe-mutation-baseline
 
 SHELL := /bin/bash
 
@@ -323,6 +323,34 @@ test-report: ## Run report-service tests only
 
 build-report: ## Build report-service
 	cd services/report-service && mvn package -DskipTests
+
+# --- Quality engineering: mutation gate ---
+#
+# Proves the test suites can catch bugs: deterministic AST mutants are run
+# against each service's own suite and compared to a committed baseline ledger.
+
+QE_MUTATION := uv run --with pyyaml==6.0.2 qe/mutation/harness.py
+
+qe-mutation-setup: ## Install the target service's test dependencies (SERVICE=<service>)
+ifndef SERVICE
+	$(error SERVICE is required, e.g. make qe-mutation-setup SERVICE=search-service)
+endif
+	cd services/$(SERVICE) && uv venv .venv -q && uv pip install -q -r requirements-dev.txt -p .venv/bin/python
+
+qe-mutation: ## Run the mutation gate for a service (SERVICE=<service>)
+ifndef SERVICE
+	$(error SERVICE is required, e.g. make qe-mutation SERVICE=search-service)
+endif
+	$(QE_MUTATION) --service $(SERVICE)
+
+qe-mutation-baseline: ## Rewrite a service's baseline ledger (SERVICE=<service> REBASELINE_REASON="...")
+ifndef SERVICE
+	$(error SERVICE is required)
+endif
+ifndef REBASELINE_REASON
+	$(error REBASELINE_REASON is required — baseline changes are audited)
+endif
+	$(QE_MUTATION) --service $(SERVICE) --rebaseline --reason "$(REBASELINE_REASON)"
 
 # --- Batch jobs (legacy scheduled processing) ---
 
