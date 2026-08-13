@@ -307,7 +307,7 @@ locals {
     audit-archive = [
       {
         Effect   = "Allow"
-        Action   = ["dynamodb:Scan", "dynamodb:BatchWriteItem", "dynamodb:DeleteItem"]
+        Action   = ["dynamodb:DescribeTable", "dynamodb:Scan", "dynamodb:BatchWriteItem", "dynamodb:DeleteItem"]
         Resource = [var.audit_events_table_arn]
       },
       {

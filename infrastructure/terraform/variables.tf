@@ -47,21 +47,36 @@ variable "etl_image_uri" {
 }
 
 variable "etl_document_service_url" {
-  description = "URL of the document service reachable from the ETL Lambda ENIs (internal load balancer / internal ingress hostname, not a cluster-local DNS name). Required for the search-reindex pipeline."
+  description = "URL of the document service reachable from the ETL Lambda ENIs (internal load balancer / internal ingress hostname, not a cluster-local DNS name). Required for the search-reindex pipeline. Prefer https:// where the endpoint supports TLS."
   type        = string
   default     = ""
+
+  validation {
+    condition     = var.etl_document_service_url == "" || can(regex("^https?://", var.etl_document_service_url))
+    error_message = "etl_document_service_url must be a full URL including the http:// or https:// scheme."
+  }
 }
 
 variable "etl_file_service_url" {
-  description = "URL of the file service reachable from the ETL Lambda ENIs (internal load balancer / internal ingress hostname, not a cluster-local DNS name). Required for the search-reindex pipeline."
+  description = "URL of the file service reachable from the ETL Lambda ENIs (internal load balancer / internal ingress hostname, not a cluster-local DNS name). Required for the search-reindex pipeline. Prefer https:// where the endpoint supports TLS."
   type        = string
   default     = ""
+
+  validation {
+    condition     = var.etl_file_service_url == "" || can(regex("^https?://", var.etl_file_service_url))
+    error_message = "etl_file_service_url must be a full URL including the http:// or https:// scheme."
+  }
 }
 
 variable "etl_meilisearch_url" {
-  description = "URL of MeiliSearch reachable from the ETL Lambda ENIs (MeiliSearch runs on ECS; use its internal load balancer or service-discovery endpoint). Required for the search-reindex pipeline."
+  description = "URL of MeiliSearch reachable from the ETL Lambda ENIs (MeiliSearch runs on ECS; use its internal load balancer or service-discovery endpoint). Required for the search-reindex pipeline. Prefer https:// where the endpoint supports TLS."
   type        = string
   default     = ""
+
+  validation {
+    condition     = var.etl_meilisearch_url == "" || can(regex("^https?://", var.etl_meilisearch_url))
+    error_message = "etl_meilisearch_url must be a full URL including the http:// or https:// scheme."
+  }
 }
 
 variable "etl_alert_email" {
