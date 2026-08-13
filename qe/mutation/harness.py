@@ -24,6 +24,7 @@ import copy
 import hashlib
 import json
 import random
+import shlex
 import subprocess
 import sys
 import time
@@ -218,8 +219,7 @@ def select(candidates: list[Candidate], cap: int, seed: int) -> list[Candidate]:
 
 def run_suite(svc_cfg: dict) -> subprocess.CompletedProcess:
     return subprocess.run(
-        svc_cfg["test_cmd"],
-        shell=True,
+        shlex.split(svc_cfg["test_cmd"]),
         cwd=REPO_ROOT / svc_cfg["dir"],
         capture_output=True,
         text=True,
