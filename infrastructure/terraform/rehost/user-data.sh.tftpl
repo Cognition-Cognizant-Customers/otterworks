@@ -9,14 +9,13 @@ dnf install -y java-11-amazon-corretto-headless postgresql15 awscli
 useradd -r -s /usr/sbin/nologin legacyportal || true
 mkdir -p /opt/legacy-portal
 
-# --- Fetch the application JAR (uploaded by scripts/rehost-deploy.sh) ---
+# --- Fetch script for the application JAR (uploaded by scripts/rehost-deploy.sh) ---
 cat > /opt/legacy-portal/fetch-jar.sh <<'FETCH'
 #!/usr/bin/env bash
 set -euo pipefail
 aws s3 cp "s3://${artifact_bucket}/${artifact_key}" /opt/legacy-portal/legacy-portal.jar
 FETCH
 chmod +x /opt/legacy-portal/fetch-jar.sh
-/opt/legacy-portal/fetch-jar.sh
 
 # --- Datasource config (same env contract as /etc/legacy-portal.env on-prem) ---
 install -m 600 /dev/null /etc/legacy-portal.env
@@ -59,4 +58,12 @@ UNIT
 
 chown -R legacyportal:legacyportal /opt/legacy-portal
 systemctl daemon-reload
-systemctl enable --now legacy-portal
+systemctl enable legacy-portal
+
+# The JAR may not exist yet on the very first boot (the artifact bucket is created
+# in the same apply); the unit and config above must still land so a later
+# scripts/rehost-deploy.sh upload + restart brings the app up.
+if /opt/legacy-portal/fetch-jar.sh; then
+  chown legacyportal:legacyportal /opt/legacy-portal/legacy-portal.jar
+  systemctl start legacy-portal
+fi
