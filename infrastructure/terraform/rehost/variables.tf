@@ -39,6 +39,12 @@ variable "artifact_key" {
   default     = "legacy-portal.jar"
 }
 
+variable "ami_id" {
+  description = "Pin the EC2 AMI to a specific ID. Defaults to the latest AL2023 image at first apply; later AL2023 releases never replace the instance (ami changes are ignored)."
+  type        = string
+  default     = null
+}
+
 variable "app_ingress_cidr_blocks" {
   description = "CIDR blocks allowed to reach legacy-portal on port 8095. Empty by default (no ingress): the app serves unauthenticated plain-HTTP endpoints, so explicitly set a trusted CIDR to open access."
   type        = list(string)

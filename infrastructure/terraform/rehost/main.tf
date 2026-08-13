@@ -285,7 +285,7 @@ data "aws_ami" "al2023" {
 # The rehosted VM is intentionally internet-facing on 8095 only (public subnet,
 # no SSH; ops via SSM), mirroring the exposed on-prem host it lifts.
 resource "aws_instance" "app" { # nosemgrep: terraform.aws.security.aws-ec2-has-public-ip.aws-ec2-has-public-ip
-  ami           = data.aws_ami.al2023.id
+  ami           = coalesce(var.ami_id, data.aws_ami.al2023.id)
   instance_type = var.instance_type
 
   subnet_id                   = local.public_subnets[0]
@@ -316,6 +316,13 @@ resource "aws_instance" "app" { # nosemgrep: terraform.aws.security.aws-ec2-has-
 
   tags = {
     Name = local.name
+  }
+
+  # The AMI lookup uses most_recent, which re-resolves on every plan; ignore
+  # drift so a monthly AL2023 release can't replace the instance during an
+  # unrelated apply. Pin var.ami_id (or taint) to move to a newer image.
+  lifecycle {
+    ignore_changes = [ami]
   }
 
   # User-data reads the DB secret and the artifact bucket on first boot, so the
