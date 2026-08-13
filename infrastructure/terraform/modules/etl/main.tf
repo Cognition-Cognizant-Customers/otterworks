@@ -368,15 +368,19 @@ locals {
         Resource = [var.analytics_events_table_arn]
       },
       {
-        Effect   = "Allow"
-        Action   = ["s3:PutObject", "s3:GetObject"]
-        Resource = ["${var.data_lake_bucket_arn}/*"]
+        Effect = "Allow"
+        Action = ["s3:PutObject", "s3:GetObject"]
+        Resource = [
+          "${var.data_lake_bucket_arn}/etl-staging/analytics/*",
+          "${var.data_lake_bucket_arn}/${var.analytics_prefix}/*",
+          "${var.data_lake_bucket_arn}/reports/analytics/*",
+        ]
       },
       {
         Effect    = "Allow"
         Action    = ["s3:ListBucket"]
         Resource  = [var.data_lake_bucket_arn]
-        Condition = { StringLike = { "s3:prefix" = ["etl-staging/*"] } }
+        Condition = { StringLike = { "s3:prefix" = ["etl-staging/analytics/*"] } }
       },
       {
         Effect   = "Allow"
@@ -430,23 +434,35 @@ locals {
         Resource = [var.file_metadata_table_arn]
       },
       {
-        Effect   = "Allow"
-        Action   = ["s3:PutObject", "s3:GetObject"]
-        Resource = ["${var.data_lake_bucket_arn}/*"]
+        Effect = "Allow"
+        Action = ["s3:PutObject", "s3:GetObject"]
+        Resource = [
+          "${var.data_lake_bucket_arn}/etl-staging/storage-cleanup/*",
+          "${var.data_lake_bucket_arn}/reports/storage-cleanup/*",
+        ]
       },
     ]
     user-activity = [
       {
+        Effect = "Allow"
+        Action = ["s3:PutObject", "s3:GetObject"]
+        Resource = [
+          "${var.data_lake_bucket_arn}/etl-staging/user-activity/*",
+          "${var.data_lake_bucket_arn}/reports/user-activity/*",
+        ]
+      },
+      {
         Effect   = "Allow"
-        Action   = ["s3:PutObject", "s3:GetObject"]
-        Resource = ["${var.data_lake_bucket_arn}/*"]
+        Action   = ["s3:GetObject"]
+        Resource = ["${var.data_lake_bucket_arn}/${var.analytics_prefix}/*"]
       },
       {
         # lets GetObject on a missing daily key return NoSuchKey (404)
         # instead of AccessDenied
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket"]
-        Resource = [var.data_lake_bucket_arn]
+        Effect    = "Allow"
+        Action    = ["s3:ListBucket"]
+        Resource  = [var.data_lake_bucket_arn]
+        Condition = { StringLike = { "s3:prefix" = ["${var.analytics_prefix}/*"] } }
       },
       {
         Effect   = "Allow"

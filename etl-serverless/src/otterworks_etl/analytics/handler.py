@@ -95,6 +95,11 @@ def extract_from_sqs(event: dict) -> dict:
                 # staged but not deleted before a crash (and therefore staged
                 # again by the retry) is deduplicated in transform_events
                 parsed = json.loads(msg["Body"])
+                # the analytics queue is subscribed to SNS without raw message
+                # delivery, so the actual event is a JSON string inside the
+                # notification envelope's Message field
+                if isinstance(parsed, dict) and parsed.get("Type") == "Notification":
+                    parsed = json.loads(parsed["Message"])
                 if not isinstance(parsed, dict):
                     raise ValueError("analytics event payload is not a JSON object")
                 batch_events.append({"message_id": msg["MessageId"], "event": parsed})
