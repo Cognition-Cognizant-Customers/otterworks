@@ -40,7 +40,7 @@ variable "artifact_key" {
 }
 
 variable "ami_id" {
-  description = "Pin the EC2 AMI to a specific ID. Defaults to the latest AL2023 image at first apply; later AL2023 releases never replace the instance (ami changes are ignored)."
+  description = "Pin the EC2 AMI to a specific ID. Defaults to the latest AL2023 image at first apply. AMI changes are ignored after creation, so to upgrade an existing instance set this and run `terraform apply -replace=aws_instance.app`."
   type        = string
   default     = null
 }

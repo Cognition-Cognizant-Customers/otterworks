@@ -68,6 +68,10 @@ locals {
 
 resource "aws_s3_bucket" "artifacts" {
   bucket = "${local.name}-artifacts"
+
+  # Teardown of the demo stack is `terraform destroy`; the bucket is versioned
+  # and holds uploaded JARs, so it can never be empty at destroy time.
+  force_destroy = var.environment == "dev"
 }
 
 resource "aws_s3_bucket_versioning" "artifacts" {
@@ -319,8 +323,9 @@ resource "aws_instance" "app" { # nosemgrep: terraform.aws.security.aws-ec2-has-
   }
 
   # The AMI lookup uses most_recent, which re-resolves on every plan; ignore
-  # drift so a monthly AL2023 release can't replace the instance during an
-  # unrelated apply. Pin var.ami_id (or taint) to move to a newer image.
+  # all ami diffs so a monthly AL2023 release can't replace the instance during
+  # an unrelated apply. To move to a newer image, set var.ami_id and run
+  # `terraform apply -replace=aws_instance.app` (a plain apply is a no-op).
   lifecycle {
     ignore_changes = [ami]
   }
