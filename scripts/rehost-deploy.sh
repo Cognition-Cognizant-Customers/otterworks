@@ -44,14 +44,22 @@ COMMAND_ID="$(aws ssm send-command \
 
 aws ssm wait command-executed --command-id "${COMMAND_ID}" --instance-id "${INSTANCE_ID}"
 
-echo "[rehost-deploy] Waiting for health check at ${APP_URL}/health..."
-for _ in $(seq 1 30); do
-  if curl -fsS "${APP_URL}/health" >/dev/null 2>&1; then
-    echo "[rehost-deploy] legacy-portal is UP: ${APP_URL}/health"
-    exit 0
-  fi
-  sleep 5
-done
+# Health-check on the instance itself via SSM: ingress on 8095 is opt-in
+# (app_ingress_cidr_blocks defaults to []), so the public URL may be unreachable
+# even when the deploy succeeded.
+echo "[rehost-deploy] Health-checking on-instance via SSM..."
+HEALTH_COMMAND_ID="$(aws ssm send-command \
+  --instance-ids "${INSTANCE_ID}" \
+  --document-name "AWS-RunShellScript" \
+  --comment "rehost-deploy: on-instance health check" \
+  --parameters 'commands=["for i in $(seq 1 30); do curl -fsS http://localhost:8095/health >/dev/null 2>&1 && exit 0; sleep 5; done; exit 1"]' \
+  --query 'Command.CommandId' --output text)"
 
-echo "[rehost-deploy] ERROR: health check did not pass at ${APP_URL}/health" >&2
+if aws ssm wait command-executed --command-id "${HEALTH_COMMAND_ID}" --instance-id "${INSTANCE_ID}"; then
+  echo "[rehost-deploy] legacy-portal is UP (localhost:8095/health on ${INSTANCE_ID})"
+  echo "[rehost-deploy] External URL (requires app_ingress_cidr_blocks): ${APP_URL}"
+  exit 0
+fi
+
+echo "[rehost-deploy] ERROR: on-instance health check did not pass" >&2
 exit 1
