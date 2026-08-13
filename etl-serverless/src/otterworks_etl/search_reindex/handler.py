@@ -61,9 +61,16 @@ def _meili_headers() -> dict:
     return headers
 
 
-def _wait_for_task(session: requests.Session, task_uid: int, timeout: int = 120) -> str:
+def _wait_for_task(
+    session: requests.Session,
+    task_uid: int,
+    timeout: int = 120,
+    raise_on_failure: bool = True,
+) -> str:
     meili_url = env("MEILISEARCH_URL")
     deadline = time.monotonic() + timeout
+    status = "timed_out"
+    error = None
     while time.monotonic() < deadline:
         resp = session.get(
             f"{meili_url}/tasks/{task_uid}",
@@ -72,13 +79,20 @@ def _wait_for_task(session: requests.Session, task_uid: int, timeout: int = 120)
         )
         resp.raise_for_status()
         status = resp.json().get("status")
-        if status in ("succeeded", "failed"):
-            if status == "failed":
-                logger.warning("meilisearch task failed", extra={"context": {
-                    "task_uid": task_uid, "error": resp.json().get("error")}})
+        if status == "succeeded":
             return status
+        if status == "failed":
+            error = resp.json().get("error")
+            break
         time.sleep(1)
-    return "timed_out"
+
+    logger.warning("meilisearch task did not succeed", extra={"context": {
+        "task_uid": task_uid, "status": status, "error": error}})
+    if raise_on_failure:
+        raise RuntimeError(
+            f"MeiliSearch task {task_uid} {status}: {error}"
+        )
+    return status
 
 
 def clear_indices(event: dict) -> dict:
@@ -93,7 +107,9 @@ def clear_indices(event: dict) -> dict:
         if resp.ok:
             task_uid = resp.json().get("taskUid")
             if task_uid is not None:
-                _wait_for_task(session, task_uid, timeout=60)
+                # a failed delete (e.g. index_not_found) is fine: the index is
+                # recreated from scratch immediately below
+                _wait_for_task(session, task_uid, timeout=60, raise_on_failure=False)
 
     for index_name in (DOCUMENTS_INDEX, FILES_INDEX):
         resp = session.post(

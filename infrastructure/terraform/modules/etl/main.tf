@@ -156,6 +156,51 @@ resource "aws_s3_bucket_lifecycle_configuration" "quarantine" {
     expiration {
       days = 90
     }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 90
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
+
+  rule {
+    id     = "remove-expired-delete-markers"
+    status = "Enabled"
+
+    filter {
+      prefix = ""
+    }
+
+    expiration {
+      expired_object_delete_marker = true
+    }
+  }
+}
+
+# Intermediate hand-off datasets written by the Lambda tasks; without an
+# expiry they accumulate for every run of every pipeline forever. Kept for
+# 14 days so analytics re-runs can still reuse staged SQS events.
+resource "aws_s3_bucket_lifecycle_configuration" "etl_staging" {
+  bucket = var.data_lake_bucket_name
+
+  rule {
+    id     = "expire-etl-staging"
+    status = "Enabled"
+
+    filter {
+      prefix = "etl-staging/"
+    }
+
+    expiration {
+      days = 14
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
   }
 }
 

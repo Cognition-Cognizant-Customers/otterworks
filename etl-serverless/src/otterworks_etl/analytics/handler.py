@@ -62,6 +62,7 @@ def _normalize_decimals(item: dict) -> dict:
 
 
 def extract_from_sqs(event: dict) -> dict:
+    ds = _ds(event)
     queue_url = env("ANALYTICS_QUEUE_URL")
     dlq_url = env("ANALYTICS_DLQ_URL")
     sqs = client("sqs")
@@ -107,9 +108,12 @@ def extract_from_sqs(event: dict) -> dict:
         # stage this batch durably before deleting it from the queue, so a
         # retry after a mid-run failure never loses already-consumed events
         if batch_events:
+            # staged under the report date rather than the execution id: the
+            # queue drain is destructive, so a re-execution for the same ds
+            # must be able to reuse events consumed by earlier executions
             write_staged(
                 PIPELINE,
-                event["execution_id"],
+                f"ds={ds}",
                 f"sqs_events/{attempt}_{chunk:05d}",
                 batch_events,
             )
@@ -118,9 +122,9 @@ def extract_from_sqs(event: dict) -> dict:
         sqs.delete_message_batch(QueueUrl=queue_url, Entries=entries_to_delete)
         processed += len(messages)
 
-    # list the whole prefix so chunks staged by earlier (failed) attempts of
-    # this execution are still included downstream
-    staged_keys = list_staged(PIPELINE, event["execution_id"], "sqs_events/")
+    # list the whole prefix so chunks staged by earlier attempts and earlier
+    # executions for this ds are still included downstream
+    staged_keys = list_staged(PIPELINE, f"ds={ds}", "sqs_events/")
     logger.info("sqs extract complete", extra={"context": {
         "events": event_count, "malformed": malformed, "staged_chunks": len(staged_keys)}})
     return {"staged_keys": staged_keys, "event_count": event_count, "malformed_count": malformed}
