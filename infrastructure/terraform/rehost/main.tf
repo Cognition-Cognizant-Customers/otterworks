@@ -159,6 +159,8 @@ resource "aws_db_instance" "legacy_portal" {
 
   backup_retention_period = var.environment == "dev" ? 1 : 7
 
+  enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
+
   tags = {
     Name = local.name
   }
@@ -225,7 +227,9 @@ data "aws_ami" "al2023" {
   }
 }
 
-resource "aws_instance" "app" {
+# The rehosted VM is intentionally internet-facing on 8095 only (public subnet,
+# no SSH; ops via SSM), mirroring the exposed on-prem host it lifts.
+resource "aws_instance" "app" { # nosemgrep: terraform.aws.security.aws-ec2-has-public-ip.aws-ec2-has-public-ip
   ami           = data.aws_ami.al2023.id
   instance_type = var.instance_type
 
@@ -243,6 +247,11 @@ resource "aws_instance" "app" {
     db_password     = var.db_password
   })
   user_data_replace_on_change = true
+
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
 
   root_block_device {
     volume_size = 16
