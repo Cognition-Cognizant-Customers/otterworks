@@ -292,11 +292,13 @@ resource "aws_security_group" "vpc_endpoints" {
   description = "HTTPS from ETL Lambdas to AWS service interface endpoints"
   vpc_id      = var.vpc_id
 
+  # private DNS makes these endpoints authoritative for the whole VPC, so
+  # every in-VPC consumer of SQS/Secrets Manager must be able to reach them
   ingress {
-    from_port       = 443
-    to_port         = 443
-    protocol        = "tcp"
-    security_groups = [aws_security_group.etl_lambda.id]
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
   }
 
   tags = local.common_tags

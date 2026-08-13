@@ -80,10 +80,11 @@ def query_per_user_activity(event: dict) -> dict:
         try:
             response = s3.get_object(Bucket=bucket, Key=key)
         except ClientError as exc:
-            # without s3:ListBucket a missing key surfaces as AccessDenied
-            # instead of NoSuchKey; treat both as a day with no data
+            # the role has s3:ListBucket on the data lake, so a missing key
+            # surfaces as NoSuchKey/404; anything else (e.g. AccessDenied)
+            # is a real problem that must fail the run
             code = exc.response.get("Error", {}).get("Code", "")
-            if code in ("NoSuchKey", "404", "AccessDenied"):
+            if code in ("NoSuchKey", "404"):
                 missing_days.append(check_date.strftime("%Y-%m-%d"))
                 continue
             raise
