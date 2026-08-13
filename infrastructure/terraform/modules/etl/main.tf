@@ -231,6 +231,12 @@ locals {
         Resource = ["${var.data_lake_bucket_arn}/*"]
       },
       {
+        Effect    = "Allow"
+        Action    = ["s3:ListBucket"]
+        Resource  = [var.data_lake_bucket_arn]
+        Condition = { StringLike = { "s3:prefix" = ["etl-staging/*"] } }
+      },
+      {
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
         Resource = [aws_secretsmanager_secret.etl_db.arn]
@@ -292,6 +298,13 @@ locals {
         Effect   = "Allow"
         Action   = ["s3:PutObject", "s3:GetObject"]
         Resource = ["${var.data_lake_bucket_arn}/*"]
+      },
+      {
+        # lets GetObject on a missing daily key return NoSuchKey (404)
+        # instead of AccessDenied
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = [var.data_lake_bucket_arn]
       },
       {
         Effect   = "Allow"

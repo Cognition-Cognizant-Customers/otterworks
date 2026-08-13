@@ -22,6 +22,15 @@ def write_staged(pipeline: str, execution_id: str, name: str, data: Any) -> str:
     return key
 
 
+def list_staged(pipeline: str, execution_id: str, prefix: str) -> list[str]:
+    full_prefix = f"etl-staging/{pipeline}/{execution_id}/{prefix}"
+    paginator = client("s3").get_paginator("list_objects_v2")
+    keys: list[str] = []
+    for page in paginator.paginate(Bucket=env("DATA_LAKE_BUCKET"), Prefix=full_prefix):
+        keys.extend(obj["Key"] for obj in page.get("Contents", []))
+    return sorted(keys)
+
+
 def read_staged(key: str) -> Any:
     response = client("s3").get_object(Bucket=env("DATA_LAKE_BUCKET"), Key=key)
     return json.loads(gzip.decompress(response["Body"].read()).decode("utf-8"))

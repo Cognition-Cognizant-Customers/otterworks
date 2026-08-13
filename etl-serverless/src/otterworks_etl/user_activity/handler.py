@@ -9,6 +9,8 @@ import gzip
 import json
 from datetime import UTC, datetime, timedelta
 
+from botocore.exceptions import ClientError
+
 from otterworks_etl.common.config import client, env
 from otterworks_etl.common.db import pg_connection
 from otterworks_etl.common.dispatch import make_handler
@@ -72,9 +74,14 @@ def query_per_user_activity(event: dict) -> dict:
         key = check_date.strftime("analytics/daily/year=%Y/month=%m/day=%d/top_users.jsonl.gz")
         try:
             response = s3.get_object(Bucket=bucket, Key=key)
-        except s3.exceptions.NoSuchKey:
-            missing_days.append(check_date.strftime("%Y-%m-%d"))
-            continue
+        except ClientError as exc:
+            # without s3:ListBucket a missing key surfaces as AccessDenied
+            # instead of NoSuchKey; treat both as a day with no data
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code in ("NoSuchKey", "404", "AccessDenied"):
+                missing_days.append(check_date.strftime("%Y-%m-%d"))
+                continue
+            raise
 
         decompressed = gzip.decompress(response["Body"].read()).decode("utf-8")
         for line in decompressed.strip().split("\n"):

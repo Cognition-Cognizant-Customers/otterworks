@@ -10,6 +10,7 @@ State machine flow:
 import gzip
 import io
 import json
+import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -18,7 +19,7 @@ from otterworks_etl.common.config import client, env, resource
 from otterworks_etl.common.db import pg_connection
 from otterworks_etl.common.dispatch import make_handler
 from otterworks_etl.common.logging import get_logger
-from otterworks_etl.common.staging import read_staged, write_staged
+from otterworks_etl.common.staging import list_staged, read_staged, write_staged
 
 logger = get_logger(__name__)
 
@@ -65,7 +66,9 @@ def extract_from_sqs(event: dict) -> dict:
     dlq_url = env("ANALYTICS_DLQ_URL")
     sqs = client("sqs")
 
-    staged_keys: list[str] = []
+    # unique per invocation so a retried attempt never overwrites chunks
+    # staged (and already deleted from the queue) by a previous attempt
+    attempt = uuid.uuid4().hex
     event_count = 0
     malformed = 0
     processed = 0
@@ -99,18 +102,22 @@ def extract_from_sqs(event: dict) -> dict:
         # stage this batch durably before deleting it from the queue, so a
         # retry after a mid-run failure never loses already-consumed events
         if batch_events:
-            staged_keys.append(
-                write_staged(
-                    PIPELINE, event["execution_id"], f"sqs_events_{chunk:05d}", batch_events
-                )
+            write_staged(
+                PIPELINE,
+                event["execution_id"],
+                f"sqs_events/{attempt}_{chunk:05d}",
+                batch_events,
             )
             chunk += 1
             event_count += len(batch_events)
         sqs.delete_message_batch(QueueUrl=queue_url, Entries=entries_to_delete)
         processed += len(messages)
 
+    # list the whole prefix so chunks staged by earlier (failed) attempts of
+    # this execution are still included downstream
+    staged_keys = list_staged(PIPELINE, event["execution_id"], "sqs_events/")
     logger.info("sqs extract complete", extra={"context": {
-        "events": event_count, "malformed": malformed}})
+        "events": event_count, "malformed": malformed, "staged_chunks": len(staged_keys)}})
     return {"staged_keys": staged_keys, "event_count": event_count, "malformed_count": malformed}
 
 
