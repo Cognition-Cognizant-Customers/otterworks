@@ -91,7 +91,7 @@
       "Parameters": {
         "TopicArn": "${alert_topic_arn}",
         "Subject": "OtterWorks ETL failure: storage-cleanup",
-        "Message.$": "States.JsonToString($.error)"
+        "Message.$": "States.Format('ETL pipeline failure. Error: {}. Execution: {}. See the state machine execution and CloudWatch logs for details.', $.error.Error, $$.Execution.Name)"
       },
       "Next": "Fail"
     },

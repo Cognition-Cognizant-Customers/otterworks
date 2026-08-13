@@ -14,8 +14,10 @@ import boto3
 
 
 def env(name: str, default: str | None = None) -> str:
-    value = os.environ.get(name, default)
-    if value is None:
+    # empty strings count as missing: Terraform always sets the variable,
+    # so an unconfigured value arrives as "" rather than being absent
+    value = os.environ.get(name) or default
+    if not value:
         raise RuntimeError(f"Missing required environment variable: {name}")
     return value
 

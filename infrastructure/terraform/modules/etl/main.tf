@@ -44,32 +44,40 @@ locals {
     MEILISEARCH_URL        = var.meilisearch_url
   }
 
-  # schedule expressions mirror the legacy crontab (UTC)
+  # schedule expressions mirror the legacy crontab (UTC).
+  # in_vpc: only pipelines that reach in-VPC resources (RDS, MeiliSearch,
+  # internal service APIs) are VPC-attached; the rest use AWS APIs only and
+  # keep the Lambda service's default network path.
   pipelines = {
     analytics = {
       handler  = "otterworks_etl.analytics.handler.handler"
       schedule = "cron(0 2 * * ? *)"
       asl_file = "analytics.asl.json"
+      in_vpc   = true
     }
     audit-archive = {
       handler  = "otterworks_etl.audit_archive.handler.handler"
       schedule = "cron(0 3 ? * SUN *)"
       asl_file = "audit_archive.asl.json"
+      in_vpc   = false
     }
     search-reindex = {
       handler  = "otterworks_etl.search_reindex.handler.handler"
       schedule = "cron(0 4 ? * SUN *)"
       asl_file = "search_reindex.asl.json"
+      in_vpc   = true
     }
     storage-cleanup = {
       handler  = "otterworks_etl.storage_cleanup.handler.handler"
       schedule = "cron(30 2 * * ? *)"
       asl_file = "storage_cleanup.asl.json"
+      in_vpc   = false
     }
     user-activity = {
       handler  = "otterworks_etl.user_activity.handler.handler"
       schedule = "cron(0 5 * * ? *)"
       asl_file = "user_activity.asl.json"
+      in_vpc   = true
     }
   }
 }
@@ -175,6 +183,60 @@ resource "aws_security_group" "etl_lambda" {
   }
 
   tags = local.common_tags
+}
+
+# VPC endpoints so VPC-attached pipelines can reach AWS APIs without a NAT
+# gateway (the platform's private subnets have no NAT route by default).
+
+data "aws_region" "current" {}
+
+data "aws_route_table" "lambda_subnets" {
+  for_each = toset(var.subnet_ids)
+
+  subnet_id = each.value
+}
+
+resource "aws_vpc_endpoint" "gateway" {
+  for_each = toset(["s3", "dynamodb"])
+
+  vpc_id            = var.vpc_id
+  service_name      = "com.amazonaws.${data.aws_region.current.name}.${each.value}"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = distinct([for rt in data.aws_route_table.lambda_subnets : rt.id])
+
+  tags = merge(local.common_tags, {
+    Name = "${local.name_prefix}-${each.value}-${var.environment}"
+  })
+}
+
+resource "aws_security_group" "vpc_endpoints" {
+  name        = "${local.name_prefix}-vpce-${var.environment}"
+  description = "HTTPS from ETL Lambdas to AWS service interface endpoints"
+  vpc_id      = var.vpc_id
+
+  ingress {
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.etl_lambda.id]
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_vpc_endpoint" "interface" {
+  for_each = toset(["sqs", "secretsmanager"])
+
+  vpc_id              = var.vpc_id
+  service_name        = "com.amazonaws.${data.aws_region.current.name}.${each.value}"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = var.subnet_ids
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
+  private_dns_enabled = true
+
+  tags = merge(local.common_tags, {
+    Name = "${local.name_prefix}-${each.value}-${var.environment}"
+  })
 }
 
 # --- Lambda execution roles (one per pipeline, least-privilege) ---
@@ -356,9 +418,12 @@ resource "aws_lambda_function" "pipeline" {
     variables = local.common_env
   }
 
-  vpc_config {
-    subnet_ids         = var.subnet_ids
-    security_group_ids = [aws_security_group.etl_lambda.id]
+  dynamic "vpc_config" {
+    for_each = each.value.in_vpc ? [1] : []
+    content {
+      subnet_ids         = var.subnet_ids
+      security_group_ids = [aws_security_group.etl_lambda.id]
+    }
   }
 
   depends_on = [aws_cloudwatch_log_group.lambda]

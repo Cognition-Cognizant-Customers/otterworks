@@ -71,7 +71,9 @@ def query_per_user_activity(event: dict) -> dict:
 
     for day_offset in range(LOOKBACK_DAYS):
         check_date = execution_date - timedelta(days=day_offset)
-        key = check_date.strftime("analytics/daily/year=%Y/month=%m/day=%d/top_users.jsonl.gz")
+        key = check_date.strftime(
+            f"{env('ANALYTICS_PREFIX')}/year=%Y/month=%m/day=%d/top_users.jsonl.gz"
+        )
         try:
             response = s3.get_object(Bucket=bucket, Key=key)
         except ClientError as exc:
