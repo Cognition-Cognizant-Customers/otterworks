@@ -27,11 +27,12 @@ fi
 
 echo "[rehost-deploy] Reading Terraform outputs..."
 ARTIFACT_BUCKET="$(terraform -chdir="${TF_DIR}" output -raw artifact_bucket)"
+ARTIFACT_KEY="$(terraform -chdir="${TF_DIR}" output -raw artifact_key)"
 INSTANCE_ID="$(terraform -chdir="${TF_DIR}" output -raw instance_id)"
 APP_URL="$(terraform -chdir="${TF_DIR}" output -raw app_url)"
 
-echo "[rehost-deploy] Uploading JAR to s3://${ARTIFACT_BUCKET}/legacy-portal.jar..."
-aws s3 cp "${JAR}" "s3://${ARTIFACT_BUCKET}/legacy-portal.jar"
+echo "[rehost-deploy] Uploading JAR to s3://${ARTIFACT_BUCKET}/${ARTIFACT_KEY}..."
+aws s3 cp "${JAR}" "s3://${ARTIFACT_BUCKET}/${ARTIFACT_KEY}"
 
 echo "[rehost-deploy] Restarting legacy-portal on ${INSTANCE_ID} via SSM..."
 COMMAND_ID="$(aws ssm send-command \

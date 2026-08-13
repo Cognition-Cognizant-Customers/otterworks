@@ -4,7 +4,7 @@
 # RDS PostgreSQL instead of a co-located database.
 set -euo pipefail
 
-dnf install -y java-11-amazon-corretto-headless postgresql15 awscli
+dnf install -y java-11-amazon-corretto-headless postgresql15 awscli jq
 
 useradd -r -s /usr/sbin/nologin legacyportal || true
 mkdir -p /opt/legacy-portal
@@ -18,18 +18,24 @@ FETCH
 chmod +x /opt/legacy-portal/fetch-jar.sh
 
 # --- Datasource config (same env contract as /etc/legacy-portal.env on-prem) ---
+# The master password lives only in the RDS-managed Secrets Manager secret; it
+# is fetched at boot and written verbatim (printf %s, no shell re-expansion).
+DB_PASSWORD="$(aws secretsmanager get-secret-value \
+  --secret-id '${db_secret_arn}' \
+  --query SecretString --output text | jq -r .password)"
+
 install -m 600 /dev/null /etc/legacy-portal.env
-cat > /etc/legacy-portal.env <<ENV
-SPRING_PROFILES_ACTIVE=postgres
-SPRING_DATASOURCE_URL=jdbc:postgresql://${db_endpoint}/${db_name}
-SPRING_DATASOURCE_USERNAME=${db_username}
-SPRING_DATASOURCE_PASSWORD=${db_password}
-ENV
+{
+  printf '%s\n' 'SPRING_PROFILES_ACTIVE=postgres'
+  printf '%s\n' 'SPRING_DATASOURCE_URL=jdbc:postgresql://${db_endpoint}/${db_name}'
+  printf '%s\n' 'SPRING_DATASOURCE_USERNAME=${db_username}'
+  printf 'SPRING_DATASOURCE_PASSWORD=%s\n' "$${DB_PASSWORD}"
+} > /etc/legacy-portal.env
 
 # --- One schema per bounded context (mirrors scripts/initdb.sql) ---
 DB_HOST="$(cut -d: -f1 <<< '${db_endpoint}')"
 DB_PORT="$(cut -d: -f2 <<< '${db_endpoint}')"
-export PGPASSWORD='${db_password}'
+export PGPASSWORD="$${DB_PASSWORD}"
 psql "host=$${DB_HOST} port=$${DB_PORT} dbname=${db_name} user=${db_username}" <<'SQL'
 CREATE SCHEMA IF NOT EXISTS announcements;
 CREATE SCHEMA IF NOT EXISTS user_preferences;

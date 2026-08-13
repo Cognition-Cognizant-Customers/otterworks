@@ -19,7 +19,6 @@ The VPC is reused from `/platform/terraform` via remote state; everything else
 ```bash
 cd infrastructure/terraform/rehost
 terraform init
-export TF_VAR_db_password='...'    # do not commit real secrets
 terraform apply
 ```
 
@@ -35,9 +34,12 @@ upload comes up running without a separate deploy step.
 
 ## Notes
 
-- The instance is reachable only on port 8095 (`app_ingress_cidr_blocks`, default open for
-  demo purposes — restrict it for anything longer-lived). No SSH: ops access is via SSM
-  Session Manager (`aws ssm start-session --target <instance_id>`).
+- Ingress is opt-in: `app_ingress_cidr_blocks` defaults to `[]` (no inbound access on 8095).
+  Set it to a trusted CIDR to reach the app — the endpoints are unauthenticated plain HTTP.
+  No SSH: ops access is via SSM Session Manager (`aws ssm start-session --target <instance_id>`).
+- The RDS master password is generated and rotated by RDS itself
+  (`manage_master_user_password`) and stored in Secrets Manager; the instance fetches it at
+  boot via its IAM role. It never appears in Terraform variables, state, or EC2 user-data.
 - RDS sits in the private subnets and only accepts connections from the instance's
   security group.
 - Teardown: `terraform destroy` (dev skips the final DB snapshot).

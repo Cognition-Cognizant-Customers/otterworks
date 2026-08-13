@@ -22,3 +22,13 @@ output "artifact_bucket" {
   description = "S3 bucket the deploy script uploads the fat JAR to"
   value       = aws_s3_bucket.artifacts.bucket
 }
+
+output "artifact_key" {
+  description = "S3 key of the legacy-portal fat JAR the instance fetches"
+  value       = var.artifact_key
+}
+
+output "db_secret_arn" {
+  description = "ARN of the RDS-managed Secrets Manager secret holding the master password"
+  value       = aws_db_instance.legacy_portal.master_user_secret[0].secret_arn
+}

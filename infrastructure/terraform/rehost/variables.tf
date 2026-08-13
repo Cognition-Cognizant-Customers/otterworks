@@ -33,12 +33,6 @@ variable "db_allocated_storage" {
   default     = 20
 }
 
-variable "db_password" {
-  description = "Master password for the legacy-portal RDS PostgreSQL instance"
-  type        = string
-  sensitive   = true
-}
-
 variable "artifact_key" {
   description = "S3 key of the legacy-portal fat JAR in the artifact bucket"
   type        = string
@@ -46,7 +40,7 @@ variable "artifact_key" {
 }
 
 variable "app_ingress_cidr_blocks" {
-  description = "CIDR blocks allowed to reach legacy-portal on port 8095"
+  description = "CIDR blocks allowed to reach legacy-portal on port 8095. Empty by default (no ingress): the app serves unauthenticated plain-HTTP endpoints, so explicitly set a trusted CIDR to open access."
   type        = list(string)
-  default     = ["0.0.0.0/0"]
+  default     = []
 }

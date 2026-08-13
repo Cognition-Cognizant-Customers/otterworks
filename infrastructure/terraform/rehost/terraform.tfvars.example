@@ -4,8 +4,10 @@ environment = "dev"
 instance_type     = "t3.small"
 db_instance_class = "db.t4g.micro"
 
-# Do not commit real secrets; pass via TF_VAR_db_password or -var.
-db_password = "change-me"
+# The RDS master password is generated and stored by RDS in Secrets Manager
+# (manage_master_user_password); there is no password variable to set.
 
-# Lock this down to your office/VPN CIDR for anything beyond a throwaway demo.
-app_ingress_cidr_blocks = ["0.0.0.0/0"]
+# Ingress on 8095 is opt-in: the default is no ingress at all. Set this to a
+# trusted CIDR (office/VPN) to reach the app; the endpoints are unauthenticated
+# plain HTTP, so do not open this to 0.0.0.0/0 outside a throwaway demo.
+# app_ingress_cidr_blocks = ["203.0.113.0/24"]

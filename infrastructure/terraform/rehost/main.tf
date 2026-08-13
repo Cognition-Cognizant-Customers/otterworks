@@ -87,6 +87,47 @@ resource "aws_s3_bucket_public_access_block" "artifacts" {
   restrict_public_buckets = true
 }
 
+resource "aws_s3_bucket_server_side_encryption_configuration" "artifacts" {
+  bucket = aws_s3_bucket.artifacts.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "aws:kms"
+    }
+    bucket_key_enabled = true
+  }
+}
+
+data "aws_iam_policy_document" "artifacts_tls_only" {
+  statement {
+    sid     = "DenyInsecureTransport"
+    effect  = "Deny"
+    actions = ["s3:*"]
+    resources = [
+      aws_s3_bucket.artifacts.arn,
+      "${aws_s3_bucket.artifacts.arn}/*",
+    ]
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "artifacts" {
+  bucket = aws_s3_bucket.artifacts.id
+  policy = data.aws_iam_policy_document.artifacts_tls_only.json
+
+  depends_on = [aws_s3_bucket_public_access_block.artifacts]
+}
+
 # --- Security groups ---
 
 resource "aws_security_group" "app" {
@@ -94,12 +135,18 @@ resource "aws_security_group" "app" {
   description = "legacy-portal EC2 instance"
   vpc_id      = local.vpc_id
 
-  ingress {
-    description = "legacy-portal HTTP"
-    from_port   = 8095
-    to_port     = 8095
-    protocol    = "tcp"
-    cidr_blocks = var.app_ingress_cidr_blocks
+  # Ingress is opt-in: no rule is created unless CIDRs are explicitly provided
+  # (the app serves unauthenticated plain-HTTP endpoints on 8095).
+  dynamic "ingress" {
+    for_each = length(var.app_ingress_cidr_blocks) > 0 ? [1] : []
+
+    content {
+      description = "legacy-portal HTTP"
+      from_port   = 8095
+      to_port     = 8095
+      protocol    = "tcp"
+      cidr_blocks = var.app_ingress_cidr_blocks
+    }
   }
 
   egress {
@@ -149,7 +196,10 @@ resource "aws_db_instance" "legacy_portal" {
 
   db_name  = "legacyportal"
   username = "legacyportal"
-  password = var.db_password
+
+  # RDS generates and owns the master password in Secrets Manager; it never
+  # appears in Terraform variables, state, or EC2 user-data.
+  manage_master_user_password = true
 
   db_subnet_group_name   = aws_db_subnet_group.legacy_portal.name
   vpc_security_group_ids = [aws_security_group.db.id]
@@ -191,6 +241,11 @@ data "aws_iam_policy_document" "app" {
       aws_s3_bucket.artifacts.arn,
       "${aws_s3_bucket.artifacts.arn}/*",
     ]
+  }
+
+  statement {
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [aws_db_instance.legacy_portal.master_user_secret[0].secret_arn]
   }
 }
 
@@ -244,7 +299,7 @@ resource "aws_instance" "app" { # nosemgrep: terraform.aws.security.aws-ec2-has-
     db_endpoint     = aws_db_instance.legacy_portal.endpoint
     db_name         = aws_db_instance.legacy_portal.db_name
     db_username     = aws_db_instance.legacy_portal.username
-    db_password     = var.db_password
+    db_secret_arn   = aws_db_instance.legacy_portal.master_user_secret[0].secret_arn
   })
   user_data_replace_on_change = true
 
