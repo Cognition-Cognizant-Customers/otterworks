@@ -1,7 +1,7 @@
 {
   "service": "search-service",
   "fingerprint": "2f367bf2341cbbea19d4136626ebc809e7b432dc6685add8e8842fb374e3ce90",
-  "reason": "mutant identity now includes an occurrence index so chained same-operator nodes are distinct and reachable",
+  "reason": "killed 2 auth-middleware survivors (auth.py:51 bool-And, cmp-Eq) with positive/negative service-token tests in tests/test_auth_middleware.py",
   "allowed_survivors": [
     "services/search-service/app/api/search.py:101:11:unary-Not:0",
     "services/search-service/app/api/search.py:126:11:bool-Or:0",
@@ -12,8 +12,6 @@
     "services/search-service/app/config.py:48:18:const-True:0",
     "services/search-service/app/config.py:7:18:const-True:0",
     "services/search-service/app/main.py:90:11:cmp-In:0",
-    "services/search-service/app/middleware/auth.py:51:15:bool-And:0",
-    "services/search-service/app/middleware/auth.py:51:25:cmp-Eq:0",
     "services/search-service/app/services/indexer.py:146:14:const-True:0",
     "services/search-service/app/services/indexer.py:153:19:cmp-NotEq:0",
     "services/search-service/app/services/indexer.py:157:24:bool-Or:0",
