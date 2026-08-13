@@ -39,7 +39,7 @@ COMMAND_ID="$(aws ssm send-command \
   --instance-ids "${INSTANCE_ID}" \
   --document-name "AWS-RunShellScript" \
   --comment "rehost-deploy: refresh legacy-portal.jar and restart" \
-  --parameters 'commands=["set -e","/opt/legacy-portal/fetch-jar.sh","chown legacyportal:legacyportal /opt/legacy-portal/legacy-portal.jar","systemctl restart legacy-portal"]' \
+  --parameters 'commands=["set -e","/opt/legacy-portal/fetch-jar.sh","systemctl restart legacy-portal"]' \
   --query 'Command.CommandId' --output text)"
 
 aws ssm wait command-executed --command-id "${COMMAND_ID}" --instance-id "${INSTANCE_ID}"

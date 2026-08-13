@@ -14,7 +14,11 @@ mkdir -p /opt/legacy-portal
 cat > /opt/legacy-portal/fetch-jar.sh <<'FETCH'
 #!/usr/bin/env bash
 set -euo pipefail
-aws s3 cp "s3://${artifact_bucket}/${artifact_key}" /opt/legacy-portal/legacy-portal.jar
+# Download to a temp path and move atomically: a partial download must never
+# clobber the JAR the running JVM has open.
+aws s3 cp "s3://${artifact_bucket}/${artifact_key}" /opt/legacy-portal/legacy-portal.jar.new
+chown legacyportal:legacyportal /opt/legacy-portal/legacy-portal.jar.new
+mv /opt/legacy-portal/legacy-portal.jar.new /opt/legacy-portal/legacy-portal.jar
 FETCH
 chmod +x /opt/legacy-portal/fetch-jar.sh
 
@@ -111,10 +115,10 @@ if [[ ! -f "$STAMP" ]]; then
   exit 0
 fi
 if [[ "$(cat "$STAMP")" != "$CURRENT" ]]; then
-  echo "$CURRENT" > "$STAMP"
   if systemctl is-active --quiet legacy-portal; then
     systemctl restart legacy-portal
   fi
+  echo "$CURRENT" > "$STAMP"
 fi
 CHECK
 chmod +x /opt/legacy-portal/check-rotation.sh
@@ -151,6 +155,5 @@ systemctl enable --now legacy-portal-rotation.timer
 # in the same apply); the unit and config above must still land so a later
 # scripts/rehost-deploy.sh upload + restart brings the app up.
 if /opt/legacy-portal/fetch-jar.sh; then
-  chown legacyportal:legacyportal /opt/legacy-portal/legacy-portal.jar
   systemctl start legacy-portal
 fi
