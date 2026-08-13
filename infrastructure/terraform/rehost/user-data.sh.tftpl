@@ -96,9 +96,56 @@ RestartSec=5
 WantedBy=multi-user.target
 UNIT
 
-chown -R legacyportal:legacyportal /opt/legacy-portal
+# --- Rotation watcher: restart the app when the RDS-managed secret rotates ---
+# The env file is only re-read at start, so a mid-run rotation would leave the
+# JVM's pool authenticating with a stale password until a manual restart.
+cat > /opt/legacy-portal/check-rotation.sh <<'CHECK'
+#!/usr/bin/env bash
+set -euo pipefail
+CURRENT="$(aws secretsmanager get-secret-value \
+  --secret-id '${db_secret_arn}' \
+  --query VersionId --output text)"
+STAMP=/var/lib/legacy-portal-secret-version
+if [[ ! -f "$STAMP" ]]; then
+  echo "$CURRENT" > "$STAMP"
+  exit 0
+fi
+if [[ "$(cat "$STAMP")" != "$CURRENT" ]]; then
+  echo "$CURRENT" > "$STAMP"
+  if systemctl is-active --quiet legacy-portal; then
+    systemctl restart legacy-portal
+  fi
+fi
+CHECK
+chmod +x /opt/legacy-portal/check-rotation.sh
+
+cat > /etc/systemd/system/legacy-portal-rotation.service <<'UNIT'
+[Unit]
+Description=Restart legacy-portal when the RDS master secret rotates
+
+[Service]
+Type=oneshot
+ExecStart=/opt/legacy-portal/check-rotation.sh
+UNIT
+
+cat > /etc/systemd/system/legacy-portal-rotation.timer <<'UNIT'
+[Unit]
+Description=Periodic check for RDS master secret rotation
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
+UNIT
+
+# /opt/legacy-portal stays root-owned: refresh-env.sh, get-db-password.sh and
+# check-rotation.sh run as root, so the service account must not be able to
+# rewrite them. The app only needs to read the JAR (chowned after each fetch).
 systemctl daemon-reload
 systemctl enable legacy-portal
+systemctl enable --now legacy-portal-rotation.timer
 
 # The JAR may not exist yet on the very first boot (the artifact bucket is created
 # in the same apply); the unit and config above must still land so a later
