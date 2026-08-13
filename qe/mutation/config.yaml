@@ -15,9 +15,9 @@ services:
       - "app/**/*.py"
     exclude_globs:
       - "app/__init__.py"
-    setup_cmd: >-
-      uv venv .venv -q &&
-      uv pip install -q -r requirements-dev.txt -p .venv/bin/python
+    setup_cmds:
+      - "uv venv .venv -q"
+      - "uv pip install -q -r requirements-dev.txt -p .venv/bin/python"
     test_cmd: ".venv/bin/python -m pytest -q -x"
     timeout_seconds: 90
     mutant_cap: 60
@@ -33,7 +33,8 @@ services:
     dir: services/document-service
     source_globs:
       - "app/**/*.py"
-    setup_cmd: "poetry install --with dev -q"
+    setup_cmds:
+      - "poetry install --with dev -q"
     test_cmd: "poetry run pytest -q -x"
     timeout_seconds: 120
     mutant_cap: 60
