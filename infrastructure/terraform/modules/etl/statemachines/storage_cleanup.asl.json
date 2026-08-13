@@ -1,0 +1,100 @@
+{
+  "Comment": "OtterWorks daily storage cleanup (replaces storage_cleanup_daily.py cron)",
+  "StartAt": "ScanInventory",
+  "States": {
+    "ScanInventory": {
+      "Type": "Parallel",
+      "ResultPath": "$.scans",
+      "Branches": [
+        {
+          "StartAt": "ListS3Objects",
+          "States": {
+            "ListS3Objects": {
+              "Type": "Task",
+              "Resource": "${lambda_arn}",
+              "Parameters": {
+                "task": "list_s3_objects",
+                "ds.$": "$.ds",
+                "execution_id.$": "$$.Execution.Name"
+              },
+              "Retry": [${common_retry}],
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "ListMetadataReferences",
+          "States": {
+            "ListMetadataReferences": {
+              "Type": "Task",
+              "Resource": "${lambda_arn}",
+              "Parameters": {
+                "task": "list_metadata_references",
+                "ds.$": "$.ds",
+                "execution_id.$": "$$.Execution.Name"
+              },
+              "Retry": [${common_retry}],
+              "End": true
+            }
+          }
+        }
+      ],
+      "Next": "FindOrphanedObjects",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "FindOrphanedObjects": {
+      "Type": "Task",
+      "Resource": "${lambda_arn}",
+      "Parameters": {
+        "task": "find_orphaned_objects",
+        "ds.$": "$.ds",
+        "execution_id.$": "$$.Execution.Name",
+        "scans.$": "$.scans"
+      },
+      "ResultPath": "$.orphans",
+      "Retry": [${common_retry}],
+      "Next": "MoveToQuarantine",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "MoveToQuarantine": {
+      "Type": "Task",
+      "Resource": "${lambda_arn}",
+      "Parameters": {
+        "task": "move_to_quarantine",
+        "ds.$": "$.ds",
+        "execution_id.$": "$$.Execution.Name",
+        "orphans.$": "$.orphans"
+      },
+      "ResultPath": "$.cleanup",
+      "Retry": [${common_retry}],
+      "Next": "GenerateStorageReport",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "GenerateStorageReport": {
+      "Type": "Task",
+      "Resource": "${lambda_arn}",
+      "Parameters": {
+        "task": "generate_storage_report",
+        "ds.$": "$.ds",
+        "execution_id.$": "$$.Execution.Name",
+        "orphans.$": "$.orphans",
+        "cleanup.$": "$.cleanup"
+      },
+      "ResultPath": "$.report",
+      "Retry": [${common_retry}],
+      "End": true,
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "NotifyFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${alert_topic_arn}",
+        "Subject": "OtterWorks ETL failure: storage-cleanup",
+        "Message.$": "States.JsonToString($.error)"
+      },
+      "Next": "Fail"
+    },
+    "Fail": {"Type": "Fail"}
+  }
+}

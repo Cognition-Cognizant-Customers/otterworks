@@ -108,3 +108,15 @@ output "irsa_role_arns" {
   description = "Map of service account name to IAM role ARN"
   value       = module.irsa.role_arns
 }
+
+# --- ETL ---
+
+output "etl_state_machine_arns" {
+  description = "ARNs of the serverless ETL Step Functions state machines"
+  value       = length(module.etl) > 0 ? module.etl[0].state_machine_arns : {}
+}
+
+output "etl_alerts_topic_arn" {
+  description = "SNS topic ARN for ETL failure alerts"
+  value       = length(module.etl) > 0 ? module.etl[0].alerts_topic_arn : null
+}

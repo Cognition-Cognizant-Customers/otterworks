@@ -1,0 +1,85 @@
+{
+  "Comment": "OtterWorks daily user activity report (replaces user_activity_daily.py cron)",
+  "StartAt": "QuerySources",
+  "States": {
+    "QuerySources": {
+      "Type": "Parallel",
+      "ResultPath": "$.queries",
+      "Branches": [
+        {
+          "StartAt": "QueryAnalyticsAggregates",
+          "States": {
+            "QueryAnalyticsAggregates": {
+              "Type": "Task",
+              "Resource": "${lambda_arn}",
+              "Parameters": {
+                "task": "query_analytics_aggregates",
+                "ds.$": "$.ds",
+                "execution_id.$": "$$.Execution.Name"
+              },
+              "Retry": [${common_retry}],
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "QueryPerUserActivity",
+          "States": {
+            "QueryPerUserActivity": {
+              "Type": "Task",
+              "Resource": "${lambda_arn}",
+              "Parameters": {
+                "task": "query_per_user_activity",
+                "ds.$": "$.ds",
+                "execution_id.$": "$$.Execution.Name"
+              },
+              "Retry": [${common_retry}],
+              "End": true
+            }
+          }
+        }
+      ],
+      "Next": "GenerateUserReports",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "GenerateUserReports": {
+      "Type": "Task",
+      "Resource": "${lambda_arn}",
+      "Parameters": {
+        "task": "generate_user_reports",
+        "ds.$": "$.ds",
+        "execution_id.$": "$$.Execution.Name",
+        "queries.$": "$.queries"
+      },
+      "ResultPath": "$.report",
+      "Retry": [${common_retry}],
+      "Next": "StoreReportsToS3",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "StoreReportsToS3": {
+      "Type": "Task",
+      "Resource": "${lambda_arn}",
+      "Parameters": {
+        "task": "store_reports_to_s3",
+        "ds.$": "$.ds",
+        "execution_id.$": "$$.Execution.Name",
+        "report.$": "$.report"
+      },
+      "ResultPath": "$.stored",
+      "Retry": [${common_retry}],
+      "End": true,
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "NotifyFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${alert_topic_arn}",
+        "Subject": "OtterWorks ETL failure: user-activity",
+        "Message.$": "States.JsonToString($.error)"
+      },
+      "Next": "Fail"
+    },
+    "Fail": {"Type": "Fail"}
+  }
+}

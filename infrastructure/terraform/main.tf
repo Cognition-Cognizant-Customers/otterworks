@@ -142,6 +142,40 @@ module "monitoring" {
   log_retention_days = var.log_retention_days
 }
 
+module "etl" {
+  source      = "./modules/etl"
+  count       = var.etl_image_uri == "" ? 0 : 1
+  environment = var.environment
+  project     = "otterworks"
+
+  image_uri = var.etl_image_uri
+
+  data_lake_bucket_name     = module.storage.data_lake_bucket_name
+  data_lake_bucket_arn      = module.storage.data_lake_bucket_arn
+  file_bucket_name          = module.storage.file_bucket_name
+  file_bucket_arn           = module.storage.file_bucket_arn
+  audit_archive_bucket_name = module.storage.audit_archive_bucket_name
+  audit_archive_bucket_arn  = module.storage.audit_archive_bucket_arn
+
+  analytics_queue_url = module.messaging.analytics_queue_url
+  analytics_queue_arn = module.messaging.analytics_queue_arn
+
+  audit_events_table_name  = module.database.audit_events_table_name
+  audit_events_table_arn   = module.database.audit_events_table_arn
+  file_metadata_table_name = module.database.file_metadata_table_name
+  file_metadata_table_arn  = module.database.file_metadata_table_arn
+
+  vpc_id     = local.vpc_id
+  vpc_cidr   = local.vpc_cidr
+  subnet_ids = local.private_subnets
+
+  document_service_url = var.etl_document_service_url
+  file_service_url     = var.etl_file_service_url
+  meilisearch_url      = var.etl_meilisearch_url
+  alert_email          = var.etl_alert_email
+  log_retention_days   = var.log_retention_days
+}
+
 # --- MeiliSearch is deployed via ECS; no domain access policy needed. ---
 
 module "irsa" {

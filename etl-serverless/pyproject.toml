@@ -1,0 +1,16 @@
+[project]
+name = "otterworks-etl"
+version = "1.0.0"
+description = "OtterWorks serverless ETL pipelines (Lambda + Step Functions)"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

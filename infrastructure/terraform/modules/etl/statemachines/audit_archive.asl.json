@@ -1,0 +1,82 @@
+{
+  "Comment": "OtterWorks weekly audit archival (replaces audit_archive_weekly.py cron)",
+  "StartAt": "ScanAuditEvents",
+  "States": {
+    "ScanAuditEvents": {
+      "Type": "Task",
+      "Resource": "${lambda_arn}",
+      "Parameters": {
+        "task": "scan_audit_events",
+        "ds.$": "$.ds",
+        "execution_id.$": "$$.Execution.Name"
+      },
+      "ResultPath": "$.scan",
+      "Retry": [${common_retry}],
+      "Next": "AnyEventsToArchive",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "AnyEventsToArchive": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$.scan.event_count", "NumericGreaterThan": 0, "Next": "CompressAndUpload"}
+      ],
+      "Default": "NothingToArchive"
+    },
+    "NothingToArchive": {"Type": "Succeed"},
+    "CompressAndUpload": {
+      "Type": "Task",
+      "Resource": "${lambda_arn}",
+      "Parameters": {
+        "task": "compress_and_upload",
+        "ds.$": "$.ds",
+        "execution_id.$": "$$.Execution.Name",
+        "scan.$": "$.scan"
+      },
+      "ResultPath": "$.archive",
+      "Retry": [${common_retry}],
+      "Next": "CleanupDynamoDb",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "CleanupDynamoDb": {
+      "Type": "Task",
+      "Resource": "${lambda_arn}",
+      "Parameters": {
+        "task": "cleanup_dynamodb",
+        "ds.$": "$.ds",
+        "execution_id.$": "$$.Execution.Name",
+        "scan.$": "$.scan"
+      },
+      "ResultPath": "$.cleanup",
+      "Retry": [${common_retry}],
+      "Next": "GenerateComplianceReport",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "GenerateComplianceReport": {
+      "Type": "Task",
+      "Resource": "${lambda_arn}",
+      "Parameters": {
+        "task": "generate_compliance_report",
+        "ds.$": "$.ds",
+        "execution_id.$": "$$.Execution.Name",
+        "scan.$": "$.scan",
+        "archive.$": "$.archive",
+        "cleanup.$": "$.cleanup"
+      },
+      "ResultPath": "$.report",
+      "Retry": [${common_retry}],
+      "End": true,
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "NotifyFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${alert_topic_arn}",
+        "Subject": "OtterWorks ETL failure: audit-archive",
+        "Message.$": "States.JsonToString($.error)"
+      },
+      "Next": "Fail"
+    },
+    "Fail": {"Type": "Fail"}
+  }
+}

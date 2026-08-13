@@ -1,0 +1,84 @@
+{
+  "Comment": "OtterWorks weekly search reindex (replaces search_reindex_weekly.py cron)",
+  "StartAt": "ClearIndices",
+  "States": {
+    "ClearIndices": {
+      "Type": "Task",
+      "Resource": "${lambda_arn}",
+      "Parameters": {
+        "task": "clear_indices",
+        "ds.$": "$.ds",
+        "execution_id.$": "$$.Execution.Name"
+      },
+      "ResultPath": "$.reset",
+      "Retry": [${common_retry}],
+      "Next": "FetchAndIndex",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "FetchAndIndex": {
+      "Type": "Parallel",
+      "ResultPath": "$.index_results",
+      "Branches": [
+        {
+          "StartAt": "FetchAndIndexDocuments",
+          "States": {
+            "FetchAndIndexDocuments": {
+              "Type": "Task",
+              "Resource": "${lambda_arn}",
+              "Parameters": {
+                "task": "fetch_and_index_documents",
+                "ds.$": "$.ds",
+                "execution_id.$": "$$.Execution.Name"
+              },
+              "Retry": [${common_retry}],
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "FetchAndIndexFiles",
+          "States": {
+            "FetchAndIndexFiles": {
+              "Type": "Task",
+              "Resource": "${lambda_arn}",
+              "Parameters": {
+                "task": "fetch_and_index_files",
+                "ds.$": "$.ds",
+                "execution_id.$": "$$.Execution.Name"
+              },
+              "Retry": [${common_retry}],
+              "End": true
+            }
+          }
+        }
+      ],
+      "Next": "ValidateIndices",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "ValidateIndices": {
+      "Type": "Task",
+      "Resource": "${lambda_arn}",
+      "Parameters": {
+        "task": "validate_indices",
+        "ds.$": "$.ds",
+        "execution_id.$": "$$.Execution.Name",
+        "index_results.$": "$.index_results"
+      },
+      "ResultPath": "$.validation",
+      "Retry": [${common_retry}],
+      "End": true,
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "NotifyFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${alert_topic_arn}",
+        "Subject": "OtterWorks ETL failure: search-reindex",
+        "Message.$": "States.JsonToString($.error)"
+      },
+      "Next": "Fail"
+    },
+    "Fail": {"Type": "Fail"}
+  }
+}

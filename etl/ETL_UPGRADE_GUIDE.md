@@ -1,5 +1,10 @@
 # OtterWorks ETL Migration Guide: Legacy Cron Scripts to Apache Airflow
 
+> **Status: superseded.** The migration was implemented as AWS serverless
+> (Step Functions + Lambda + EventBridge Scheduler) instead of Airflow —
+> see `etl-serverless/README.md` and `infrastructure/terraform/modules/etl/`.
+> The problem analysis and script inventory below remain accurate.
+
 ## Current State (Legacy)
 
 The OtterWorks ETL pipeline consists of five Python scripts executed via system cron on a single EC2 instance. The scripts share a `config.ini` file that contains hardcoded AWS credentials, database passwords, and service URLs in plaintext.

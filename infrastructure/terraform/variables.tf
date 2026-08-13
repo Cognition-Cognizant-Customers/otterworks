@@ -39,3 +39,33 @@ variable "meilisearch_master_key" {
   default     = ""
   sensitive   = true
 }
+
+variable "etl_image_uri" {
+  description = "ECR image URI (with tag) for the ETL Lambda container image built from etl-serverless/Dockerfile. Leave empty to skip provisioning the serverless ETL."
+  type        = string
+  default     = ""
+}
+
+variable "etl_document_service_url" {
+  description = "Internal URL of the document service, reachable from the ETL Lambdas"
+  type        = string
+  default     = "http://document-service.otterworks.svc.cluster.local:8083"
+}
+
+variable "etl_file_service_url" {
+  description = "Internal URL of the file service, reachable from the ETL Lambdas"
+  type        = string
+  default     = "http://file-service.otterworks.svc.cluster.local:8082"
+}
+
+variable "etl_meilisearch_url" {
+  description = "Internal URL of MeiliSearch, reachable from the ETL Lambdas"
+  type        = string
+  default     = "http://meilisearch.otterworks.svc.cluster.local:7700"
+}
+
+variable "etl_alert_email" {
+  description = "Optional email address subscribed to the ETL failure alerts SNS topic"
+  type        = string
+  default     = ""
+}

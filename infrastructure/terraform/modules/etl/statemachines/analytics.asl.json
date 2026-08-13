@@ -1,0 +1,127 @@
+{
+  "Comment": "OtterWorks daily analytics ETL (replaces analytics_daily.py cron)",
+  "StartAt": "ExtractEvents",
+  "States": {
+    "ExtractEvents": {
+      "Type": "Parallel",
+      "ResultPath": "$.extracts",
+      "Branches": [
+        {
+          "StartAt": "ExtractFromSqs",
+          "States": {
+            "ExtractFromSqs": {
+              "Type": "Task",
+              "Resource": "${lambda_arn}",
+              "Parameters": {
+                "task": "extract_from_sqs",
+                "ds.$": "$.ds",
+                "execution_id.$": "$$.Execution.Name"
+              },
+              "Retry": [${common_retry}],
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "ExtractFromDynamoDb",
+          "States": {
+            "ExtractFromDynamoDb": {
+              "Type": "Task",
+              "Resource": "${lambda_arn}",
+              "Parameters": {
+                "task": "extract_from_dynamodb",
+                "ds.$": "$.ds",
+                "execution_id.$": "$$.Execution.Name"
+              },
+              "Retry": [${common_retry}],
+              "End": true
+            }
+          }
+        }
+      ],
+      "Next": "TransformEvents",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "TransformEvents": {
+      "Type": "Task",
+      "Resource": "${lambda_arn}",
+      "Parameters": {
+        "task": "transform_events",
+        "ds.$": "$.ds",
+        "execution_id.$": "$$.Execution.Name",
+        "extracts.$": "$.extracts"
+      },
+      "ResultPath": "$.transform",
+      "Retry": [${common_retry}],
+      "Next": "LoadResults",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "LoadResults": {
+      "Type": "Parallel",
+      "ResultPath": "$.loads",
+      "Branches": [
+        {
+          "StartAt": "LoadToDataLake",
+          "States": {
+            "LoadToDataLake": {
+              "Type": "Task",
+              "Resource": "${lambda_arn}",
+              "Parameters": {
+                "task": "load_to_data_lake",
+                "ds.$": "$.ds",
+                "execution_id.$": "$$.Execution.Name",
+                "transform.$": "$.transform"
+              },
+              "Retry": [${common_retry}],
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "UpdatePostgresAggregates",
+          "States": {
+            "UpdatePostgresAggregates": {
+              "Type": "Task",
+              "Resource": "${lambda_arn}",
+              "Parameters": {
+                "task": "update_postgres_aggregates",
+                "ds.$": "$.ds",
+                "execution_id.$": "$$.Execution.Name",
+                "transform.$": "$.transform"
+              },
+              "Retry": [${common_retry}],
+              "End": true
+            }
+          }
+        }
+      ],
+      "Next": "GenerateReport",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "GenerateReport": {
+      "Type": "Task",
+      "Resource": "${lambda_arn}",
+      "Parameters": {
+        "task": "generate_report",
+        "ds.$": "$.ds",
+        "execution_id.$": "$$.Execution.Name",
+        "transform.$": "$.transform"
+      },
+      "ResultPath": "$.report",
+      "Retry": [${common_retry}],
+      "End": true,
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "NotifyFailure"}]
+    },
+    "NotifyFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "${alert_topic_arn}",
+        "Subject": "OtterWorks ETL failure: analytics",
+        "Message.$": "States.JsonToString($.error)"
+      },
+      "Next": "Fail"
+    },
+    "Fail": {"Type": "Fail"}
+  }
+}
