@@ -348,8 +348,6 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc" {
 }
 
 locals {
-  staging_objects_arn = "${var.data_lake_bucket_arn}/etl-staging/*"
-
   pipeline_policies = {
     analytics = [
       {
@@ -402,7 +400,7 @@ locals {
       {
         Effect   = "Allow"
         Action   = ["s3:PutObject", "s3:GetObject"]
-        Resource = [local.staging_objects_arn]
+        Resource = ["${var.data_lake_bucket_arn}/etl-staging/audit-archive/*"]
       },
     ]
     search-reindex = [
@@ -458,11 +456,11 @@ locals {
       },
       {
         # lets GetObject on a missing daily key return NoSuchKey (404)
-        # instead of AccessDenied
-        Effect    = "Allow"
-        Action    = ["s3:ListBucket"]
-        Resource  = [var.data_lake_bucket_arn]
-        Condition = { StringLike = { "s3:prefix" = ["${var.analytics_prefix}/*"] } }
+        # instead of AccessDenied; must be unconditioned because the
+        # GetObject authorization context has no s3:prefix key
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = [var.data_lake_bucket_arn]
       },
       {
         Effect   = "Allow"
