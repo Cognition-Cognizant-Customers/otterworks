@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Cloud-init for the rehosted legacy-portal VM. Reproduces the on-prem host as-is:
+# same fat JAR, same systemd unit (deploy/legacy-portal.service), but pointed at
+# RDS PostgreSQL instead of a co-located database.
+set -euo pipefail
+
+dnf install -y java-11-amazon-corretto-headless postgresql15 awscli
+
+useradd -r -s /usr/sbin/nologin legacyportal || true
+mkdir -p /opt/legacy-portal
+
+# --- Fetch the application JAR (uploaded by scripts/rehost-deploy.sh) ---
+cat > /opt/legacy-portal/fetch-jar.sh <<'FETCH'
+#!/usr/bin/env bash
+set -euo pipefail
+aws s3 cp "s3://${artifact_bucket}/${artifact_key}" /opt/legacy-portal/legacy-portal.jar
+FETCH
+chmod +x /opt/legacy-portal/fetch-jar.sh
+/opt/legacy-portal/fetch-jar.sh
+
+# --- Datasource config (same env contract as /etc/legacy-portal.env on-prem) ---
+install -m 600 /dev/null /etc/legacy-portal.env
+cat > /etc/legacy-portal.env <<ENV
+SPRING_PROFILES_ACTIVE=postgres
+SPRING_DATASOURCE_URL=jdbc:postgresql://${db_endpoint}/${db_name}
+SPRING_DATASOURCE_USERNAME=${db_username}
+SPRING_DATASOURCE_PASSWORD=${db_password}
+ENV
+
+# --- One schema per bounded context (mirrors scripts/initdb.sql) ---
+DB_HOST="$(cut -d: -f1 <<< '${db_endpoint}')"
+DB_PORT="$(cut -d: -f2 <<< '${db_endpoint}')"
+export PGPASSWORD='${db_password}'
+psql "host=$${DB_HOST} port=$${DB_PORT} dbname=${db_name} user=${db_username}" <<'SQL'
+CREATE SCHEMA IF NOT EXISTS announcements;
+CREATE SCHEMA IF NOT EXISTS user_preferences;
+CREATE SCHEMA IF NOT EXISTS feedback;
+SQL
+
+# --- systemd unit (verbatim from services/legacy-portal/deploy/legacy-portal.service) ---
+cat > /etc/systemd/system/legacy-portal.service <<'UNIT'
+[Unit]
+Description=OtterWorks Legacy Portal (modular monolith)
+After=network.target
+
+[Service]
+Type=simple
+User=legacyportal
+WorkingDirectory=/opt/legacy-portal
+EnvironmentFile=-/etc/legacy-portal.env
+ExecStart=/usr/bin/java -jar /opt/legacy-portal/legacy-portal.jar
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+chown -R legacyportal:legacyportal /opt/legacy-portal
+systemctl daemon-reload
+systemctl enable --now legacy-portal

@@ -1,0 +1,11 @@
+aws_region  = "us-east-1"
+environment = "dev"
+
+instance_type     = "t3.small"
+db_instance_class = "db.t4g.micro"
+
+# Do not commit real secrets; pass via TF_VAR_db_password or -var.
+db_password = "change-me"
+
+# Lock this down to your office/VPN CIDR for anything beyond a throwaway demo.
+app_ingress_cidr_blocks = ["0.0.0.0/0"]
