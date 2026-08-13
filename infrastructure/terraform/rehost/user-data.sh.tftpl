@@ -150,7 +150,7 @@ DB_PORT="$(cut -d: -f2 <<< '${db_endpoint}')"
 if PGPASSWORD="$(/opt/legacy-portal/get-db-password.sh)"; then
   export PGPASSWORD
   for attempt in $(seq 1 12); do
-    if psql "host=$${DB_HOST} port=$${DB_PORT} dbname=${db_name} user=${db_username}" <<'SQL'
+    if psql -v ON_ERROR_STOP=1 "host=$${DB_HOST} port=$${DB_PORT} dbname=${db_name} user=${db_username}" <<'SQL'
 CREATE SCHEMA IF NOT EXISTS announcements;
 CREATE SCHEMA IF NOT EXISTS user_preferences;
 CREATE SCHEMA IF NOT EXISTS feedback;
