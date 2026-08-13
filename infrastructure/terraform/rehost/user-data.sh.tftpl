@@ -172,7 +172,12 @@ fi
 
 # The JAR may not exist yet on the very first boot (the artifact bucket is created
 # in the same apply); the unit and config above must still land so a later
-# scripts/rehost-deploy.sh upload + restart brings the app up.
-if /opt/legacy-portal/fetch-jar.sh; then
-  systemctl start legacy-portal
-fi
+# scripts/rehost-deploy.sh upload + restart brings the app up. Retry the fetch so a
+# transient credential/IAM-propagation error does not leave the app stopped.
+for attempt in $(seq 1 6); do
+  if /opt/legacy-portal/fetch-jar.sh; then
+    systemctl start legacy-portal
+    break
+  fi
+  sleep 10
+done
