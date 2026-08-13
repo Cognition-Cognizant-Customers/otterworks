@@ -98,8 +98,13 @@ def extract_from_sqs(event: dict) -> dict:
                     {"message_id": msg["MessageId"], "event": json.loads(msg["Body"])}
                 )
             except (json.JSONDecodeError, KeyError):
-                # route malformed payloads to the DLQ instead of dropping them
-                sqs.send_message(QueueUrl=dlq_url, MessageBody=msg.get("Body", ""))
+                # route malformed payloads to the DLQ instead of dropping
+                # them; SQS rejects an empty MessageBody, so fall back to an
+                # envelope when the body itself is missing
+                body = msg.get("Body") or json.dumps(
+                    {"malformed_message": msg.get("MessageId")}
+                )
+                sqs.send_message(QueueUrl=dlq_url, MessageBody=body)
                 malformed += 1
             entries_to_delete.append(
                 {"Id": msg["MessageId"], "ReceiptHandle": msg["ReceiptHandle"]}

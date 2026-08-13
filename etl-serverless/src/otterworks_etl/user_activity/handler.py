@@ -48,7 +48,10 @@ def query_analytics_aggregates(event: dict) -> dict:
     daily_summaries = []
     with pg_connection() as conn:
         with conn.cursor() as cursor:
-            cursor.execute(SUMMARY_SQL, (ds, LOOKBACK_DAYS, ds))
+            # BETWEEN is inclusive on both ends, so subtract LOOKBACK_DAYS - 1
+            # to cover exactly LOOKBACK_DAYS report dates (matching the
+            # per-user S3 lookback loop)
+            cursor.execute(SUMMARY_SQL, (ds, LOOKBACK_DAYS - 1, ds))
             for row in cursor.fetchall():
                 record = {}
                 for i, col in enumerate(SUMMARY_COLUMNS):

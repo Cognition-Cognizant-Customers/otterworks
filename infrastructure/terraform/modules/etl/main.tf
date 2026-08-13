@@ -209,6 +209,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "etl_staging" {
 resource "aws_sqs_queue" "analytics_dlq" {
   name                      = "${local.name_prefix}-analytics-dlq-${var.environment}"
   message_retention_seconds = 1209600
+  sqs_managed_sse_enabled   = true
 
   tags = local.common_tags
 }
