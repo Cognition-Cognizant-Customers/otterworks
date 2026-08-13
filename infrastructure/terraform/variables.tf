@@ -47,21 +47,21 @@ variable "etl_image_uri" {
 }
 
 variable "etl_document_service_url" {
-  description = "Internal URL of the document service, reachable from the ETL Lambdas"
+  description = "URL of the document service reachable from the ETL Lambda ENIs (internal load balancer / internal ingress hostname, not a cluster-local DNS name). Required for the search-reindex pipeline."
   type        = string
-  default     = "http://document-service.otterworks.svc.cluster.local:8083"
+  default     = ""
 }
 
 variable "etl_file_service_url" {
-  description = "Internal URL of the file service, reachable from the ETL Lambdas"
+  description = "URL of the file service reachable from the ETL Lambda ENIs (internal load balancer / internal ingress hostname, not a cluster-local DNS name). Required for the search-reindex pipeline."
   type        = string
-  default     = "http://file-service.otterworks.svc.cluster.local:8082"
+  default     = ""
 }
 
 variable "etl_meilisearch_url" {
-  description = "Internal URL of MeiliSearch, reachable from the ETL Lambdas"
+  description = "URL of MeiliSearch reachable from the ETL Lambda ENIs (MeiliSearch runs on ECS; use its internal load balancer or service-discovery endpoint). Required for the search-reindex pipeline."
   type        = string
-  default     = "http://meilisearch.otterworks.svc.cluster.local:7700"
+  default     = ""
 }
 
 variable "etl_alert_email" {

@@ -302,3 +302,39 @@ resource "aws_dynamodb_table" "file_shares" { # nosemgrep: terraform.aws.securit
     Service = "file-service"
   })
 }
+
+# --- DynamoDB: Analytics Events ---
+
+resource "aws_dynamodb_table" "analytics_events" { # nosemgrep: terraform.aws.security.aws-dynamodb-table-unencrypted.aws-dynamodb-table-unencrypted
+  name         = "${var.project}-analytics-events-${var.environment}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "id"
+
+  server_side_encryption {
+    enabled = true
+  }
+
+  attribute {
+    name = "id"
+    type = "S"
+  }
+
+  attribute {
+    name = "event_date"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "event-date-index"
+    hash_key        = "event_date"
+    projection_type = "ALL"
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = merge(local.common_tags, {
+    Service = "analytics-etl"
+  })
+}

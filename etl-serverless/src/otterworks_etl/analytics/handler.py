@@ -65,9 +65,11 @@ def extract_from_sqs(event: dict) -> dict:
     dlq_url = env("ANALYTICS_DLQ_URL")
     sqs = client("sqs")
 
-    events: list[dict] = []
+    staged_keys: list[str] = []
+    event_count = 0
     malformed = 0
     processed = 0
+    chunk = 0
 
     while processed < MAX_SQS_MESSAGES:
         response = sqs.receive_message(
@@ -81,10 +83,11 @@ def extract_from_sqs(event: dict) -> dict:
         if not messages:
             break
 
+        batch_events: list[dict] = []
         entries_to_delete = []
         for msg in messages:
             try:
-                events.append(json.loads(msg["Body"]))
+                batch_events.append(json.loads(msg["Body"]))
             except (json.JSONDecodeError, KeyError):
                 # route malformed payloads to the DLQ instead of dropping them
                 sqs.send_message(QueueUrl=dlq_url, MessageBody=msg.get("Body", ""))
@@ -93,14 +96,22 @@ def extract_from_sqs(event: dict) -> dict:
                 {"Id": msg["MessageId"], "ReceiptHandle": msg["ReceiptHandle"]}
             )
 
-        if entries_to_delete:
-            sqs.delete_message_batch(QueueUrl=queue_url, Entries=entries_to_delete)
+        # stage this batch durably before deleting it from the queue, so a
+        # retry after a mid-run failure never loses already-consumed events
+        if batch_events:
+            staged_keys.append(
+                write_staged(
+                    PIPELINE, event["execution_id"], f"sqs_events_{chunk:05d}", batch_events
+                )
+            )
+            chunk += 1
+            event_count += len(batch_events)
+        sqs.delete_message_batch(QueueUrl=queue_url, Entries=entries_to_delete)
         processed += len(messages)
 
-    key = write_staged(PIPELINE, event["execution_id"], "sqs_events", events)
     logger.info("sqs extract complete", extra={"context": {
-        "events": len(events), "malformed": malformed}})
-    return {"staged_key": key, "event_count": len(events), "malformed_count": malformed}
+        "events": event_count, "malformed": malformed}})
+    return {"staged_keys": staged_keys, "event_count": event_count, "malformed_count": malformed}
 
 
 def extract_from_dynamodb(event: dict) -> dict:
@@ -129,7 +140,9 @@ def transform_events(event: dict) -> dict:
     execution_id = event["execution_id"]
     all_events: list[dict] = []
     for extract in event["extracts"]:
-        all_events.extend(read_staged(extract["staged_key"]))
+        keys = extract["staged_keys"] if "staged_keys" in extract else [extract["staged_key"]]
+        for key in keys:
+            all_events.extend(read_staged(key))
 
     aggregated = aggregate_events(all_events)
     key = write_staged(PIPELINE, execution_id, "aggregated", aggregated)

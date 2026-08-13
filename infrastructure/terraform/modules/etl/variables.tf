@@ -76,7 +76,11 @@ variable "file_metadata_table_arn" {
 variable "analytics_events_table_name" {
   description = "DynamoDB analytics events table name"
   type        = string
-  default     = "otterworks-analytics-events"
+}
+
+variable "analytics_events_table_arn" {
+  description = "DynamoDB analytics events table ARN"
+  type        = string
 }
 
 variable "vpc_id" {

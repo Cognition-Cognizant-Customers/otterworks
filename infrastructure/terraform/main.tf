@@ -160,10 +160,12 @@ module "etl" {
   analytics_queue_url = module.messaging.analytics_queue_url
   analytics_queue_arn = module.messaging.analytics_queue_arn
 
-  audit_events_table_name  = module.database.audit_events_table_name
-  audit_events_table_arn   = module.database.audit_events_table_arn
-  file_metadata_table_name = module.database.file_metadata_table_name
-  file_metadata_table_arn  = module.database.file_metadata_table_arn
+  audit_events_table_name     = module.database.audit_events_table_name
+  audit_events_table_arn      = module.database.audit_events_table_arn
+  analytics_events_table_name = module.database.analytics_events_table_name
+  analytics_events_table_arn  = module.database.analytics_events_table_arn
+  file_metadata_table_name    = module.database.file_metadata_table_name
+  file_metadata_table_arn     = module.database.file_metadata_table_arn
 
   vpc_id     = local.vpc_id
   vpc_cidr   = local.vpc_cidr

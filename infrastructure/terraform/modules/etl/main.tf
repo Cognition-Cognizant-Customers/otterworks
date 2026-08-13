@@ -5,9 +5,6 @@
 # Credentials live in Secrets Manager; alerting via SNS on state machine failure.
 # ------------------------------------------------------------------------------
 
-data "aws_region" "current" {}
-data "aws_caller_identity" "current" {}
-
 locals {
   common_tags = {
     Module  = "etl"
@@ -209,8 +206,6 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc" {
 }
 
 locals {
-  analytics_events_table_arn = "arn:aws:dynamodb:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/${var.analytics_events_table_name}"
-
   staging_objects_arn = "${var.data_lake_bucket_arn}/etl-staging/*"
 
   pipeline_policies = {
@@ -228,7 +223,7 @@ locals {
       {
         Effect   = "Allow"
         Action   = ["dynamodb:Scan"]
-        Resource = [local.analytics_events_table_arn]
+        Resource = [var.analytics_events_table_arn]
       },
       {
         Effect   = "Allow"

@@ -93,12 +93,12 @@ def cleanup_dynamodb(event: dict) -> dict:
     events = read_staged(event["scan"]["staged_key"])
     table = resource("dynamodb").Table(env("AUDIT_EVENTS_TABLE"))
 
+    key_attrs = [element["AttributeName"] for element in table.key_schema]
+
     deleted = 0
     with table.batch_writer() as batch_writer:
         for item in events:
-            batch_writer.delete_item(
-                Key={"event_id": item["event_id"], "timestamp": item["timestamp"]}
-            )
+            batch_writer.delete_item(Key={attr: item[attr] for attr in key_attrs})
             deleted += 1
 
     logger.info("dynamodb cleanup complete", extra={"context": {"deleted": deleted}})

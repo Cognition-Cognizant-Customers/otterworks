@@ -67,3 +67,13 @@ output "file_shares_table_arn" {
   description = "DynamoDB table ARN for file shares"
   value       = aws_dynamodb_table.file_shares.arn
 }
+
+output "analytics_events_table_name" {
+  description = "DynamoDB table name for analytics events"
+  value       = aws_dynamodb_table.analytics_events.name
+}
+
+output "analytics_events_table_arn" {
+  description = "DynamoDB table ARN for analytics events"
+  value       = aws_dynamodb_table.analytics_events.arn
+}
