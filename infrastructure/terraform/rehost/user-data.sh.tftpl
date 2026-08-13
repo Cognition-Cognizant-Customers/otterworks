@@ -64,7 +64,9 @@ install -m 600 -o root -g root /dev/null /etc/legacy-portal.env.tmp
 mv /etc/legacy-portal.env.tmp /etc/legacy-portal.env
 REFRESH
 chmod +x /opt/legacy-portal/refresh-env.sh
-/opt/legacy-portal/refresh-env.sh
+# Best-effort: the unit regenerates this file via ExecStartPre before every
+# start, so a transient secret-read failure must not abort the rest of boot.
+/opt/legacy-portal/refresh-env.sh || echo "initial env refresh failed; ExecStartPre will retry" >&2
 
 # --- systemd unit (verbatim from services/legacy-portal/deploy/legacy-portal.service) ---
 cat > /etc/systemd/system/legacy-portal.service <<'UNIT'
@@ -145,23 +147,28 @@ systemctl enable --now legacy-portal-rotation.timer
 # transient DB hiccup can't abort the boot before the host is operable.
 DB_HOST="$(cut -d: -f1 <<< '${db_endpoint}')"
 DB_PORT="$(cut -d: -f2 <<< '${db_endpoint}')"
-PGPASSWORD="$(/opt/legacy-portal/get-db-password.sh)"
-export PGPASSWORD
-for attempt in $(seq 1 12); do
-  if psql "host=$${DB_HOST} port=$${DB_PORT} dbname=${db_name} user=${db_username}" <<'SQL'
+if PGPASSWORD="$(/opt/legacy-portal/get-db-password.sh)"; then
+  export PGPASSWORD
+  for attempt in $(seq 1 12); do
+    if psql "host=$${DB_HOST} port=$${DB_PORT} dbname=${db_name} user=${db_username}" <<'SQL'
 CREATE SCHEMA IF NOT EXISTS announcements;
 CREATE SCHEMA IF NOT EXISTS user_preferences;
 CREATE SCHEMA IF NOT EXISTS feedback;
 SQL
-  then
-    break
-  fi
-  if [[ "$attempt" -eq 12 ]]; then
-    echo "failed to create schemas after retries" >&2
-    exit 1
-  fi
-  sleep 10
-done
+    then
+      break
+    fi
+    if [[ "$attempt" -eq 12 ]]; then
+      # Best-effort: leave the host operable; rerun the CREATE SCHEMA
+      # statements via SSM if this ever trips.
+      echo "failed to create schemas after retries" >&2
+      break
+    fi
+    sleep 10
+  done
+else
+  echo "skipping schema bootstrap: DB secret unavailable" >&2
+fi
 
 # The JAR may not exist yet on the very first boot (the artifact bucket is created
 # in the same apply); the unit and config above must still land so a later
