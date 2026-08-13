@@ -55,11 +55,24 @@ HEALTH_COMMAND_ID="$(aws ssm send-command \
   --parameters 'commands=["for i in $(seq 1 30); do curl -fsS http://localhost:8095/health >/dev/null 2>&1 && exit 0; sleep 5; done; exit 1"]' \
   --query 'Command.CommandId' --output text)"
 
-if aws ssm wait command-executed --command-id "${HEALTH_COMMAND_ID}" --instance-id "${INSTANCE_ID}"; then
-  echo "[rehost-deploy] legacy-portal is UP (localhost:8095/health on ${INSTANCE_ID})"
-  echo "[rehost-deploy] External URL (requires app_ingress_cidr_blocks): ${APP_URL}"
-  exit 0
-fi
+# Poll get-command-invocation explicitly: the default `aws ssm wait` budget
+# (~100s) is shorter than the health command's own retry window (~150s).
+for _ in $(seq 1 40); do
+  STATUS="$(aws ssm get-command-invocation \
+    --command-id "${HEALTH_COMMAND_ID}" --instance-id "${INSTANCE_ID}" \
+    --query Status --output text 2>/dev/null || echo Pending)"
+  case "${STATUS}" in
+    Success)
+      echo "[rehost-deploy] legacy-portal is UP (localhost:8095/health on ${INSTANCE_ID})"
+      echo "[rehost-deploy] External URL (requires app_ingress_cidr_blocks): ${APP_URL}"
+      exit 0
+      ;;
+    Failed | Cancelled | TimedOut)
+      break
+      ;;
+  esac
+  sleep 5
+done
 
 echo "[rehost-deploy] ERROR: on-instance health check did not pass" >&2
 exit 1

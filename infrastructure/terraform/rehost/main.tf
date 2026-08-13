@@ -317,4 +317,11 @@ resource "aws_instance" "app" { # nosemgrep: terraform.aws.security.aws-ec2-has-
   tags = {
     Name = local.name
   }
+
+  # User-data reads the DB secret and the artifact bucket on first boot, so the
+  # role's permissions must exist before the instance launches.
+  depends_on = [
+    aws_iam_role_policy.app,
+    aws_iam_role_policy_attachment.ssm,
+  ]
 }
