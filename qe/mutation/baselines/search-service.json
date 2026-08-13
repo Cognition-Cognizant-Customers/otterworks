@@ -1,6 +1,6 @@
 {
   "service": "search-service",
-  "fingerprint": "e0860e903d49b24922124a0862d7f13a49b64c259bca3c5330dc49f7f7843f42",
+  "fingerprint": "316757a3d4e9af4a6727313cf6f878a120013ca563c4f3290cee913d9db84936",
   "reason": "killed 2 auth-middleware survivors (auth.py:51 bool-And, cmp-Eq) with positive/negative service-token tests in tests/test_auth_middleware.py",
   "allowed_survivors": [
     "services/search-service/app/api/search.py:101:11:unary-Not",
