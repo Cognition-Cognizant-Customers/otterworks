@@ -1,7 +1,7 @@
 {
   "service": "search-service",
-  "fingerprint": "316757a3d4e9af4a6727313cf6f878a120013ca563c4f3290cee913d9db84936",
-  "reason": "harness change: run test_cmd without shell=True (semgrep subprocess-shell-true); mutant results unchanged",
+  "fingerprint": "7d150d2a5b57363806efbec57da4c18860aabf3823dee4173414a111a90f0d11",
+  "reason": "harness hardening from review: setup_cmds mode, clean-suite timeout handling, not-applied mutants fail the gate",
   "allowed_survivors": [
     "services/search-service/app/api/search.py:101:11:unary-Not",
     "services/search-service/app/api/search.py:126:11:bool-Or",

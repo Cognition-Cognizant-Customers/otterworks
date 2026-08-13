@@ -351,7 +351,7 @@ qe-mutation-setup: ## Install the target service's test dependencies (SERVICE=<s
 ifndef SERVICE
 	$(error SERVICE is required, e.g. make qe-mutation-setup SERVICE=search-service)
 endif
-	cd services/$(SERVICE) && uv venv .venv -q && uv pip install -q -r requirements-dev.txt -p .venv/bin/python
+	$(QE_MUTATION) --service $(SERVICE) --setup
 
 qe-mutation: ## Run the mutation gate for a service (SERVICE=<service>)
 ifndef SERVICE

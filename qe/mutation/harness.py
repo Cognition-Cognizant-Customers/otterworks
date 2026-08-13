@@ -161,14 +161,14 @@ class _Mutator(ast.NodeTransformer):
         return node
 
 
-def load_config(service: str) -> dict:
+def load_config(service: str, require_active: bool = True) -> dict:
     config = yaml.safe_load(CONFIG_PATH.read_text())
     services = config.get("services", {})
     if service not in services:
         known = ", ".join(sorted(services))
         sys.exit(f"error: unknown service '{service}' (known: {known})")
     svc = services[service]
-    if svc.get("status") != "active":
+    if require_active and svc.get("status") != "active":
         sys.exit(
             f"error: service '{service}' is not active in qe/mutation/config.yaml "
             f"(status: {svc.get('status')}). Reason: {svc.get('status_reason', 'n/a')}"
@@ -227,6 +227,15 @@ def run_suite(svc_cfg: dict) -> subprocess.CompletedProcess:
     )
 
 
+def run_setup(svc_cfg: dict) -> int:
+    for cmd in svc_cfg.get("setup_cmds", []):
+        print(f"[qe-mutation] setup: {cmd}")
+        result = subprocess.run(shlex.split(cmd), cwd=REPO_ROOT / svc_cfg["dir"])
+        if result.returncode != 0:
+            return result.returncode
+    return 0
+
+
 def run_mutant(svc_cfg: dict, candidate: Candidate) -> str:
     path = REPO_ROOT / candidate.rel_path
     original = path.read_bytes()
@@ -262,7 +271,8 @@ def write_reports(service: str, payload: dict) -> None:
         f"Result: **{payload['gate']}**",
         f"Mutants run: {payload['stats']['run']}  "
         f"killed: {payload['stats']['killed']}  "
-        f"survived: {payload['stats']['survived']}",
+        f"survived: {payload['stats']['survived']}  "
+        f"not-applied: {payload['stats'].get('not_applied', 0)}",
         f"Fingerprint: `{payload['fingerprint'][:16]}…`",
         "",
     ]
@@ -284,7 +294,12 @@ def main() -> int:
                         help="rewrite the baseline ledger (requires --reason)")
     parser.add_argument("--reason", default="",
                         help="audited reason for a rebaseline")
+    parser.add_argument("--setup", action="store_true",
+                        help="run the service's configured setup_cmds and exit")
     args = parser.parse_args()
+
+    if args.setup:
+        return run_setup(load_config(args.service, require_active=False))
 
     if args.rebaseline and not args.reason.strip():
         sys.exit("error: --rebaseline requires --reason (audited rebaseline only)")
@@ -296,17 +311,26 @@ def main() -> int:
     fp = fingerprint(svc_cfg, files)
 
     print(f"[qe-mutation] {args.service}: verifying clean suite is green…")
-    clean = run_suite(svc_cfg)
-    if clean.returncode != 0:
+    try:
+        clean = run_suite(svc_cfg)
+    except subprocess.TimeoutExpired:
+        clean = None
+    if clean is None or clean.returncode != 0:
+        reason = (
+            "clean test suite timed out — raise timeout_seconds or speed up the suite"
+            if clean is None
+            else "clean test suite is red — fix the suite before mutation testing"
+        )
         payload = {
             "service": args.service, "gate": "FAIL", "fingerprint": fp,
-            "stats": {"run": 0, "killed": 0, "survived": 0},
+            "stats": {"run": 0, "killed": 0, "survived": 0, "not_applied": 0},
             "survivors": [],
-            "failures": ["clean test suite is red — fix the suite before mutation testing"],
+            "failures": [reason],
         }
         write_reports(args.service, payload)
-        print(clean.stdout[-2000:], clean.stderr[-2000:], sep="\n")
-        print("[qe-mutation] FAIL: clean suite is red")
+        if clean is not None:
+            print(clean.stdout[-2000:], clean.stderr[-2000:], sep="\n")
+        print(f"[qe-mutation] FAIL: {reason}")
         return 1
 
     candidates = enumerate_candidates(files)
@@ -314,6 +338,7 @@ def main() -> int:
     print(f"[qe-mutation] {len(candidates)} candidates, running {len(selected)} mutants")
 
     survivors: list[dict] = []
+    not_applied: list[str] = []
     killed = 0
     started = time.time()
     for i, cand in enumerate(selected, 1):
@@ -321,13 +346,23 @@ def main() -> int:
         if status == "survived":
             survivors.append({"id": cand.mutant_id, "description": cand.description})
             print(f"  [{i}/{len(selected)}] SURVIVED  {cand.mutant_id} ({cand.description})")
+        elif status == "not-applied":
+            not_applied.append(cand.mutant_id)
+            print(f"  [{i}/{len(selected)}] NOT-APPLIED  {cand.mutant_id}")
         else:
             killed += 1
     elapsed = time.time() - started
-    print(f"[qe-mutation] done in {elapsed:.0f}s: killed={killed} survived={len(survivors)}")
+    print(
+        f"[qe-mutation] done in {elapsed:.0f}s: "
+        f"killed={killed} survived={len(survivors)} not-applied={len(not_applied)}"
+    )
 
     survivor_ids = {s["id"] for s in survivors}
     failures: list[str] = []
+    for mid in not_applied:
+        failures.append(
+            f"mutant could not be applied (proves nothing about the suite): {mid}"
+        )
 
     if args.rebaseline:
         BASELINE_DIR.mkdir(parents=True, exist_ok=True)
@@ -361,8 +396,14 @@ def main() -> int:
         "service": args.service,
         "gate": gate,
         "fingerprint": fp,
-        "stats": {"run": len(selected), "killed": killed, "survived": len(survivors)},
+        "stats": {
+            "run": len(selected),
+            "killed": killed,
+            "survived": len(survivors),
+            "not_applied": len(not_applied),
+        },
         "survivors": survivors,
+        "not_applied": not_applied,
         "failures": failures,
     }
     write_reports(args.service, payload)
