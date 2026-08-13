@@ -1,7 +1,7 @@
 {
   "service": "search-service",
   "fingerprint": "e0860e903d49b24922124a0862d7f13a49b64c259bca3c5330dc49f7f7843f42",
-  "reason": "initial baseline: 43 known survivors recorded for onboarding; ratchet down by killing them",
+  "reason": "killed 2 auth-middleware survivors (auth.py:51 bool-And, cmp-Eq) with positive/negative service-token tests in tests/test_auth_middleware.py",
   "allowed_survivors": [
     "services/search-service/app/api/search.py:101:11:unary-Not",
     "services/search-service/app/api/search.py:126:11:bool-Or",
@@ -12,8 +12,6 @@
     "services/search-service/app/config.py:48:18:const-True",
     "services/search-service/app/config.py:7:18:const-True",
     "services/search-service/app/main.py:90:11:cmp-In",
-    "services/search-service/app/middleware/auth.py:51:15:bool-And",
-    "services/search-service/app/middleware/auth.py:51:25:cmp-Eq",
     "services/search-service/app/services/indexer.py:146:14:const-True",
     "services/search-service/app/services/indexer.py:153:19:cmp-NotEq",
     "services/search-service/app/services/indexer.py:157:24:bool-Or",
