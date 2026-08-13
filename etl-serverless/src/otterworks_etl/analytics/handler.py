@@ -94,10 +94,11 @@ def extract_from_sqs(event: dict) -> dict:
                 # keep the message id with the event so a batch that was
                 # staged but not deleted before a crash (and therefore staged
                 # again by the retry) is deduplicated in transform_events
-                batch_events.append(
-                    {"message_id": msg["MessageId"], "event": json.loads(msg["Body"])}
-                )
-            except (json.JSONDecodeError, KeyError):
+                parsed = json.loads(msg["Body"])
+                if not isinstance(parsed, dict):
+                    raise ValueError("analytics event payload is not a JSON object")
+                batch_events.append({"message_id": msg["MessageId"], "event": parsed})
+            except (json.JSONDecodeError, ValueError, KeyError):
                 # route malformed payloads to the DLQ instead of dropping
                 # them; SQS rejects an empty MessageBody, so fall back to an
                 # envelope when the body itself is missing
