@@ -16,9 +16,11 @@
 # Requires: the terraform-tp-aws stack applied, aws cli creds,
 # perl; ksh optional (falls back to a plain copy for ingest).
 #############################################################
-# -e is deliberately omitted: the wait loop's `&&` poll and the compare
-# section report failures themselves and must not abort mid-diagnostic
+# The setup steps (1-3) fail fast via `die`; `set -e` is not used globally
+# because the wait/compare sections must keep going to emit full diagnostics
 set -uo pipefail
+
+die() { echo "ERROR: $*" >&2; exit 1; }
 
 NS="${1:-${NS:-}}"
 if [ -z "$NS" ] || ! echo "$NS" | grep -qE '^[A-Za-z0-9]+$'; then
@@ -52,28 +54,29 @@ mkdir -p "$STASH"
 REPORT_FILE="$ROOT/recon_report_$NS_LOWER.txt"
 
 echo "== 1. Generating deterministic sample input (NS=$NS) =="
-perl "$LEGACY/tools/gen_sample_data.pl" "$NS"
-cp "$ROOT/sftp-drop/upload/"CUSTBILL*.dat "$STASH/"
+perl "$LEGACY/tools/gen_sample_data.pl" "$NS" || die "sample data generation failed"
+cp "$ROOT/sftp-drop/upload/"CUSTBILL*.dat "$STASH/" || die "no CUSTBILL files generated"
 NFILES=$(ls "$STASH" | wc -l | tr -d ' ')
 NRECORDS=$(cat "$STASH"/*.dat | grep -cv '^HDR\|^TRL')
 
 echo "== 2. Running the legacy chain locally =="
 if command -v ksh >/dev/null 2>&1; then
-    "$LEGACY/jobs/sftp_ingest_poll.ksh" >/dev/null
+    "$LEGACY/jobs/sftp_ingest_poll.ksh" >/dev/null || die "legacy ingest failed"
 else
     mkdir -p "$ROOT/incoming"
-    cp "$STASH"/*.dat "$ROOT/incoming/"
+    cp "$STASH"/*.dat "$ROOT/incoming/" || die "legacy ingest copy failed"
 fi
-"$LEGACY/jobs/parse_custbill_fixedwidth.sh" >/dev/null
-perl "$LEGACY/jobs/finance_excel_report.pl" >/dev/null
+"$LEGACY/jobs/parse_custbill_fixedwidth.sh" >/dev/null || die "legacy parse failed"
+perl "$LEGACY/jobs/finance_excel_report.pl" >/dev/null || die "legacy report failed"
 LEGACY_REPORT=$(ls "$ROOT/reports/"finance_billing_*.csv | head -1)
+[ -n "$LEGACY_REPORT" ] || die "legacy report not produced"
 
 echo "== 3. Clearing remote namespace + uploading to s3://$BUCKET/landing/$NS_LOWER/ =="
 for p in landing parsed reports archive; do
     aws s3 rm --recursive "s3://$BUCKET/$p/$NS_LOWER/" --quiet || true
 done
 for f in "$STASH"/*.dat; do
-    aws s3 cp "$f" "s3://$BUCKET/landing/$NS_LOWER/$(basename "$f")" --quiet
+    aws s3 cp "$f" "s3://$BUCKET/landing/$NS_LOWER/$(basename "$f")" --quiet || die "upload failed: $f"
 done
 
 echo "== 4. Waiting for the serverless pipeline =="
