@@ -1,0 +1,32 @@
+# OtterWorks legacy batch estate — crontab for otterworks-etl-prod-01
+# Managed by hand. Last full review: 2013 (partial review 2017, abandoned).
+# Contact: data-team@otterworks.dev (Jake left in 2020, ask Sarah)
+#
+# NOTE: schedules overlap on purpose-ish. The ingest at :00 and the parse
+# at :05 usually works out. Usually. There is no locking between jobs;
+# each job has its own lock file that is checked but never removed.
+
+# --- existing python estate (see ../crontab) ---
+0 2 * * *  /opt/etl/run.sh analytics_daily.py            >> /var/log/etl/analytics.log 2>&1
+0 3 * * 0  /opt/etl/run.sh audit_archive_weekly.py       >> /var/log/etl/audit.log 2>&1
+0 4 * * 0  /opt/etl/run.sh search_reindex_weekly.py      >> /var/log/etl/search.log 2>&1
+30 2 * * * /opt/etl/run.sh storage_cleanup_daily.py      >> /var/log/etl/storage.log 2>&1
+0 5 * * *  /opt/etl/run.sh user_activity_daily.py        >> /var/log/etl/activity.log 2>&1
+
+# --- mainframe CUSTBILL feed (added 1998-2004, ported 2014) ---
+# ingest polls every 15 min; the mainframe usually drops around :10.
+# a run takes ~7 min when the NFS mount is slow, so the :15 run can
+# overlap the :00 run. see incident 2016-03-12. nobody fixed it.
+*/15 * * * *  /opt/etl/legacy-extra/jobs/sftp_ingest_poll.ksh          >> /var/log/etl/sftp_ingest.log 2>&1
+
+# parse runs every 15 min too, offset by 5. if ingest is still copying
+# when parse starts, parse reads a half-written file. known issue.
+5-59/15 * * * * /opt/etl/legacy-extra/jobs/parse_custbill_fixedwidth.sh >> /var/log/etl/parse.log 2>&1
+
+# finance report: daily at 02:10, which overlaps analytics_daily (02:00)
+# and both hit the same box. finance asked for 06:00 in 2018, ticket lost.
+10 2 * * * /opt/etl/legacy-extra/jobs/finance_excel_report.pl          >> /var/log/etl/finance.log 2>&1
+
+# the "just rerun everything" entry Jake added before a vacation in 2019.
+# yes it overlaps everything above on Sundays.
+0 6 * * 0  /opt/etl/legacy-extra/run_all.sh                            >> /var/log/etl/run_all.log 2>&1
