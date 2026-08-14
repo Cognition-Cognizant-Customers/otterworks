@@ -45,6 +45,8 @@ import requests
 ROOT = Path(__file__).resolve().parents[1]
 REPORT_DIR = ROOT / "databricks" / "reports"
 CATALOG = os.getenv("OW_TP_CATALOG", "ow_tp")
+if not re.fullmatch(r"[a-z0-9_]{1,64}", CATALOG):
+    sys.exit(f"invalid OW_TP_CATALOG: {CATALOG!r}")
 DATA_LAKE_BUCKET = "otterworks-data-lake"
 DYNAMO_TABLE = "otterworks-file-metadata"
 
@@ -199,11 +201,11 @@ def run_legacy_custbill(ns: str, workdir: Path) -> tuple[dict[str, bytes], set, 
     ):
         subprocess.run(job, cwd=ROOT, env=env, check=True, capture_output=True)
 
-    psv_rows = set()
+    psv_rows = []
     for psv in (workdir / "parsed").glob("*.psv"):
         for line in psv.read_text().splitlines():
             if line:
-                psv_rows.add(tuple(line.split("|")))
+                psv_rows.append(tuple(line.split("|")))
 
     report = sorted((workdir / "reports").glob("finance_billing_*.csv"))[-1]
     csv_rows = [
@@ -225,18 +227,19 @@ def phase_custbill(recon: Recon, ns: str) -> None:
         upload_file(f"{ns}/custbill/{name}", data)
     run_job(find_job_id("ow_tp_custbill_lakehouse"), ns)
 
-    silver = {
+    # Sorted lists (not sets) so duplicated silver rows cannot mask a mismatch.
+    silver = sorted(
         tuple(r)
         for r in sql(
             f"""SELECT customer_id, customer_name, date_format(billing_date, 'yyyy-MM-dd'),
                        format_number(amount, '0.00'), currency, record_type
                 FROM `{CATALOG}`.silver.custbill_records WHERE ns = '{ns}'"""
         )
-    }
+    )
     recon.check(
         "custbill",
         "silver_rows_match_legacy_psv",
-        psv_rows,
+        sorted(psv_rows),
         silver,
         f"({len(psv_rows)} legacy rows vs {len(silver)} silver rows)",
     )
@@ -537,10 +540,12 @@ def main() -> int:
         sys.exit(f"invalid --phases {args.phases!r}; known phases: {sorted(known)}")
 
     recon = Recon()
-    if "custbill" in phases:
-        phase_custbill(recon, ns)
-    if "python" in phases:
-        phase_python(recon, ns)
+    runners = {"custbill": phase_custbill, "python": phase_python}
+    for phase in phases:
+        try:
+            runners[phase](recon, ns)
+        except Exception as exc:  # noqa: BLE001 — a failed job/SQL call is a FAIL, not a crash
+            recon.check(phase, "phase_completed", "completed", f"aborted: {exc}")
     write_report(recon, ns, phases)
     return 1 if recon.failed else 0
 
