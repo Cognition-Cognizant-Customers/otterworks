@@ -16,16 +16,15 @@ namespaces do not collide.
 """
 
 import argparse
-import datetime
 import hashlib
-import json
 import os
 import random
 import sys
 import zlib
-from pathlib import Path
 
 import oracledb
+
+import legacy_common
 
 GENERATOR_VERSION = "1"
 
@@ -125,8 +124,6 @@ def main() -> int:
     ap.add_argument("--password",
                     default=os.environ.get("DB_PASSWORD", "ow_billing"))
     ap.add_argument("--service", default=os.environ.get("DB_SERVICE", "FREEPDB1"))
-    ap.add_argument("--manifest-dir",
-                    default=str(Path(__file__).resolve().parent / "manifests"))
     args = ap.parse_args()
 
     ns = args.ns
@@ -356,38 +353,32 @@ def main() -> int:
     conn.commit()
     print(f"[seed] core tenants: {n_core_tenants}")
 
-    # --- manifest ---
-    manifest = {
-        "namespace": ns,
-        "generator_version": GENERATOR_VERSION,
-        "seed": seed,
-        "generated_at": datetime.datetime.now(datetime.timezone.utc)
-            .strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "targets": {
-            "oracle.OW_BILLING.CUSTOMER_MASTER":
-                {"rows": n_cust, "checksum": cust_ck.hexdigest()},
-            "oracle.OW_BILLING.INVOICE_LINE":
-                {"rows": n_lines, "checksum": line_ck.hexdigest()},
-            "oracle.OW_BILLING.INVOICE_HEADER": {"rows": n_inv},
-            "oracle.OW_BILLING.ENTITY_ATTR_VALUE": {"rows": n_eav},
-            "oracle.OW_BILLING.TENANTS": {"rows": n_core_tenants},
-        },
-        "planted_anomalies": [
-            {"kind": "orphaned_rows",
-             "target": "oracle.OW_BILLING.INVOICE_LINE", "count": n_orphans},
-            {"kind": "dirty_dates",
-             "target": "oracle.OW_BILLING.CUSTOMER_MASTER.SIGNUP_DT",
-             "count": n_dirty},
-            {"kind": "malformed_csv_lists",
-             "target": "oracle.OW_BILLING.CUSTOMER_MASTER.RELATED_ACCT_IDS",
-             "count": n_bad_csv},
-        ],
+    # --- manifest: merge into the shared per-namespace manifest so the
+    # postgres/dynamodb/s3 estates' entries are preserved ---
+    targets = {
+        "oracle.OW_BILLING.CUSTOMER_MASTER":
+            {"rows": n_cust, "checksum": cust_ck.hexdigest()},
+        "oracle.OW_BILLING.INVOICE_LINE":
+            {"rows": n_lines, "checksum": line_ck.hexdigest()},
+        "oracle.OW_BILLING.INVOICE_HEADER": {"rows": n_inv},
+        "oracle.OW_BILLING.ENTITY_ATTR_VALUE": {"rows": n_eav},
+        "oracle.OW_BILLING.TENANTS": {"rows": n_core_tenants},
     }
-    out_dir = Path(args.manifest_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out = out_dir / f"{ns}.json"
-    out.write_text(json.dumps(manifest, indent=2) + "\n")
-    print(f"[seed] manifest written: {out}")
+    anomalies = [
+        {"kind": "orphaned_rows",
+         "target": "oracle.OW_BILLING.INVOICE_LINE", "count": n_orphans},
+        {"kind": "dirty_dates",
+         "target": "oracle.OW_BILLING.CUSTOMER_MASTER.SIGNUP_DT",
+         "count": n_dirty},
+        {"kind": "malformed_csv_lists",
+         "target": "oracle.OW_BILLING.CUSTOMER_MASTER.RELATED_ACCT_IDS",
+         "count": n_bad_csv},
+    ]
+    params = {k: {"scale": args.scale, "data_seed": seed, "batch_no": batch_no}
+              for k in targets}
+    legacy_common.merge_manifest(ns, targets, anomalies,
+                                 owned_prefixes=("oracle.",), params=params)
+    print(f"[seed] manifest written: {legacy_common.manifest_path(ns)}")
     cur.close()
     conn.close()
     return 0
