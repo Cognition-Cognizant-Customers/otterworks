@@ -159,6 +159,7 @@ data "archive_file" "lambda" {
   type        = "zip"
   source_dir  = "${path.module}/../../services/serverless-ingest/src"
   output_path = "${path.module}/.build/serverless-ingest.zip"
+  excludes    = ["__pycache__"]
 }
 
 locals {
@@ -202,6 +203,10 @@ resource "aws_lambda_event_source_mapping" "sqs_to_trigger" {
   event_source_arn = aws_sqs_queue.ingest.arn
   function_name    = aws_lambda_function.fn["trigger"].arn
   batch_size       = 10
+
+  # Partial-batch responses: only messages the handler reports as failed
+  # are retried / DLQ'd
+  function_response_types = ["ReportBatchItemFailures"]
 
   # AWS validates the role's SQS permissions at CreateEventSourceMapping time
   depends_on = [aws_iam_role_policy.trigger]
