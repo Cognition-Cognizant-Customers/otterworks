@@ -143,7 +143,8 @@ def migrate(ns: str) -> None:
             n_orphan_vers += 1
             pending = next(ver_iter, None)
         if n_orphan_vers:
-            log(f"WARNING ns={ns}: {n_orphan_vers} version rows have no "
+            log("migrate-documents",
+                f"WARNING ns={ns}: {n_orphan_vers} version rows have no "
                 "parent document and were not migrated")
         doc_cur.close()
         ver_cur.close()
