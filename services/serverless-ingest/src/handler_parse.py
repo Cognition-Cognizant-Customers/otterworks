@@ -8,6 +8,7 @@ the input under archive/<ns>/.
 import os
 
 import boto3
+from boto3.dynamodb.conditions import Key
 
 from custbill import parse_file
 
@@ -15,6 +16,23 @@ s3 = boto3.client("s3")
 dynamodb = boto3.resource("dynamodb")
 
 TABLE_NAME = os.environ["TABLE_NAME"]
+
+
+def _delete_existing(table, ns: str, rec_prefix: str) -> None:
+    kwargs = {
+        "KeyConditionExpression": Key("ns").eq(ns) & Key("rec").begins_with(rec_prefix),
+        "ProjectionExpression": "#ns, rec",
+        "ExpressionAttributeNames": {"#ns": "ns"},
+    }
+    with table.batch_writer() as batch:
+        while True:
+            page = table.query(**kwargs)
+            for item in page.get("Items", []):
+                batch.delete_item(Key={"ns": item["ns"], "rec": item["rec"]})
+            lek = page.get("LastEvaluatedKey")
+            if not lek:
+                break
+            kwargs["ExclusiveStartKey"] = lek
 
 
 def handler(event, context):
@@ -33,6 +51,9 @@ def handler(event, context):
     s3.put_object(Bucket=bucket, Key=parsed_key, Body=body.encode("latin-1"))
 
     table = dynamodb.Table(TABLE_NAME)
+    # Clear any rows from a previous version of this file first: a re-sent
+    # file with fewer records must not leave orphaned high-index items behind
+    _delete_existing(table, ns, f"{base}#")
     with table.batch_writer() as batch:
         for i, rec in enumerate(records, start=1):
             fields = rec.split("|")

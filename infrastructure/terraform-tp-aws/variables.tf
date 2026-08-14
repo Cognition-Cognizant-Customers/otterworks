@@ -10,6 +10,12 @@ variable "name_prefix" {
   default     = "ow-tp"
 }
 
+variable "report_tz" {
+  description = "IANA timezone used to date-stamp the finance report filename (legacy job stamps with the ETL box's localtime)"
+  type        = string
+  default     = "UTC"
+}
+
 variable "log_retention_days" {
   description = "CloudWatch log retention for the demo Lambdas"
   type        = number

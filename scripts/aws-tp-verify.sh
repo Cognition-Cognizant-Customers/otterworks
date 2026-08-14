@@ -39,6 +39,11 @@ STACK_REGION=$(terraform -chdir="$TF_DIR" output -raw aws_region 2>/dev/null)
 export AWS_DEFAULT_REGION="${STACK_REGION:-us-east-1}"
 export AWS_REGION="$AWS_DEFAULT_REGION"
 
+# Stamp the local legacy report with the same timezone the report Lambda
+# uses, so the filenames (finance_billing_<YYYYMMDD>.csv) match exactly
+REPORT_TZ=$(terraform -chdir="$TF_DIR" output -raw report_tz 2>/dev/null)
+export TZ="${REPORT_TZ:-UTC}"
+
 BUCKET=$(terraform -chdir="$TF_DIR" output -raw ingest_bucket 2>/dev/null)
 TABLE=$(terraform -chdir="$TF_DIR" output -raw billing_table 2>/dev/null)
 if [ -z "${BUCKET:-}" ] || [ -z "${TABLE:-}" ]; then
@@ -122,11 +127,12 @@ compare() {
                 PASS=false
             fi
         done
-        CLOUD_REPORT=$(ls "$CLOUD/reports/"finance_billing_*.csv 2>/dev/null | head -1)
-        if [ -n "$CLOUD_REPORT" ] && diff -q "$LEGACY_REPORT" "$CLOUD_REPORT" >/dev/null 2>&1; then
+        # Same filename required (both sides stamp with $TZ), not just same bytes
+        CLOUD_REPORT="$CLOUD/reports/$(basename "$LEGACY_REPORT")"
+        if [ -f "$CLOUD_REPORT" ] && diff -q "$LEGACY_REPORT" "$CLOUD_REPORT" >/dev/null 2>&1; then
             echo "PASS  finance report byte-identical ($(basename "$LEGACY_REPORT"))"
         else
-            echo "FAIL  finance report differs ($(basename "$LEGACY_REPORT") vs ${CLOUD_REPORT:-missing})"
+            echo "FAIL  finance report differs or missing ($(basename "$LEGACY_REPORT"))"
             PASS=false
         fi
         DDB_COUNT=$(aws dynamodb query --table-name "$TABLE" --select COUNT \

@@ -193,6 +193,7 @@ resource "aws_lambda_function" "fn" {
       TABLE_NAME        = aws_dynamodb_table.billing.name
       BUCKET            = aws_s3_bucket.ingest.bucket
       STATE_MACHINE_ARN = "arn:aws:states:${var.aws_region}:${local.account_id}:stateMachine:${var.name_prefix}-custbill-pipeline"
+      TZ                = var.report_tz
     }
   }
 

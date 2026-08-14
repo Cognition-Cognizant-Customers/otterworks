@@ -3,6 +3,11 @@ output "aws_region" {
   value       = var.aws_region
 }
 
+output "report_tz" {
+  description = "Timezone the report Lambda stamps filenames with"
+  value       = var.report_tz
+}
+
 output "ingest_bucket" {
   description = "S3 bucket with landing/, parsed/, reports/ prefixes"
   value       = aws_s3_bucket.ingest.bucket
