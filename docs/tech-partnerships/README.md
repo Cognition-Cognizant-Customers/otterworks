@@ -63,3 +63,24 @@ the "before" contract that migration reconciliation reports must match:
 `ci.yml` is unchanged. A lightweight smoke job for the new estates (boot Oracle fixture,
 run one legacy ETL job against seeded data) is added as a separate, non-blocking workflow
 until the estates stabilize, then promoted to required.
+
+### Golden-path smoke gate
+
+`.github/workflows/tp-golden-smoke.yml` runs on every PR targeting `tech-partnerships`
+(and only that branch — nothing on `main` changes). It proves the golden path still works
+while the legacy estates evolve, in well under 10 minutes:
+
+- **Fast core services**: api-gateway (`go vet` + tests + build), collab-service
+  (lint + tests + build), search-service (pytest).
+- **Estate entry points parse**: `make -n oracle-billing-up`, `make -n seed-legacy NS=ci`,
+  `make -n legacy-etl-list`, `make -n procs-parity NS=ci`, plus
+  `docker compose -f docker-compose.oracle-billing.yml config` (Oracle Database Free is
+  never booted in CI — too heavy).
+- **Golden contract**: `make -n test` still parses unchanged.
+
+Run the same checks locally before opening a PR with `make tp-smoke`.
+
+Deliberately out of scope (known pre-existing failures or too slow for a smoke gate,
+must not fail it): document-service pytest (env issues), auth-service Gradle
+(Maven-Central 429s), the Scala/Rust/Ruby/C#/frontend suites, and anything needing
+cloud credentials.
