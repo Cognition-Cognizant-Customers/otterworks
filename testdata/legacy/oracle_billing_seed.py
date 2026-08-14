@@ -126,6 +126,10 @@ def main() -> int:
     ap.add_argument("--service", default=os.environ.get("DB_SERVICE", "FREEPDB1"))
     args = ap.parse_args()
 
+    if not legacy_common.valid_ns(args.ns):
+        print("NS must match ^[A-Za-z0-9_]+$", file=sys.stderr)
+        return 2
+
     ns = args.ns
     cfg = SCALES[args.scale]
     seed = zlib.crc32(ns.encode())
@@ -175,7 +179,8 @@ def main() -> int:
         ) VALUES (
             :1, :2, :3, :4, :5, :6, :7, :8, :9, :10, :11, :12, :13, :14, :15,
             :16, :17, :18, :19, :20, :21, :22, :23, :24, :25, :26, :27, :28,
-            :29, :30, :31, :32, :33, :34, :35, :36, SYSDATE - :37, :38, SYSDATE
+            :29, :30, :31, :32, :33, :34, :35, :36,
+            DATE '2026-08-01' - :37, :38, DATE '2026-08-01'
         )"""
 
     for i in range(n_cust):
