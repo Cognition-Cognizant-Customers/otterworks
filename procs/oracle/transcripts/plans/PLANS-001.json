@@ -1,0 +1,21 @@
+{
+  "business_fields": {
+    "codes": [
+      "STARTER",
+      "GROWTH",
+      "SCALE"
+    ],
+    "fees": [
+      "49.00",
+      "149.00",
+      "499.00"
+    ]
+  },
+  "entrypoint": "billing.fn_list_plans",
+  "inputs": {},
+  "module": "plans",
+  "oracle_entrypoint": "pkg_plans.fn_list_plans",
+  "oracle_source_sha": "0d326cad54d94cd64e8abb53585b37436eaad2193fdc15ba3596fbb8db3f0d55",
+  "probes": {},
+  "scenario": "PLANS-001"
+}

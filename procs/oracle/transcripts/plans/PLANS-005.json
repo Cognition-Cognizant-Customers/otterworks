@@ -1,0 +1,44 @@
+{
+  "business_fields": {
+    "subscriptions": [
+      {
+        "ends_on": "2026-03-14",
+        "plan_id": "10000000-0000-0000-0000-000000000001",
+        "starts_on": "2026-01-01",
+        "status": "active"
+      },
+      {
+        "ends_on": null,
+        "plan_id": "10000000-0000-0000-0000-000000000003",
+        "starts_on": "2026-03-15",
+        "status": "active"
+      }
+    ]
+  },
+  "entrypoint": "billing.sp_change_plan",
+  "inputs": {
+    "effective_on": "2026-03-15",
+    "plan_id": "10000000-0000-0000-0000-000000000003",
+    "tenant_id": "00000000-0000-0000-0000-000000000004"
+  },
+  "module": "plans",
+  "oracle_entrypoint": "pkg_plans.sp_change_plan",
+  "oracle_source_sha": "0d326cad54d94cd64e8abb53585b37436eaad2193fdc15ba3596fbb8db3f0d55",
+  "probes": {
+    "subscription_rows": [
+      {
+        "ends_on": "2026-03-14",
+        "plan_id": "10000000-0000-0000-0000-000000000001",
+        "starts_on": "2026-01-01",
+        "status": "active"
+      },
+      {
+        "ends_on": null,
+        "plan_id": "10000000-0000-0000-0000-000000000003",
+        "starts_on": "2026-03-15",
+        "status": "active"
+      }
+    ]
+  },
+  "scenario": "PLANS-005"
+}

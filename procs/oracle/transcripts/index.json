@@ -1,0 +1,122 @@
+[
+  {
+    "module": "dunning",
+    "oracle_entrypoint": "pkg_dunning.fn_overdue_accounts",
+    "scenario": "DUNNING-001"
+  },
+  {
+    "module": "dunning",
+    "oracle_entrypoint": "pkg_dunning.sp_schedule_dunning",
+    "scenario": "DUNNING-002"
+  },
+  {
+    "module": "dunning",
+    "oracle_entrypoint": "pkg_dunning.sp_schedule_dunning",
+    "scenario": "DUNNING-003"
+  },
+  {
+    "module": "dunning",
+    "oracle_entrypoint": "pkg_dunning.sp_suspend_overdue",
+    "scenario": "DUNNING-004"
+  },
+  {
+    "module": "dunning",
+    "oracle_entrypoint": "pkg_dunning.sp_suspend_overdue",
+    "scenario": "DUNNING-005"
+  },
+  {
+    "module": "invoicing",
+    "oracle_entrypoint": "pkg_invoicing.fn_invoice_preview",
+    "scenario": "INVOICE-001"
+  },
+  {
+    "module": "invoicing",
+    "oracle_entrypoint": "pkg_invoicing.fn_invoice_preview",
+    "scenario": "INVOICE-002"
+  },
+  {
+    "module": "invoicing",
+    "oracle_entrypoint": "pkg_invoicing.sp_issue_invoice",
+    "scenario": "INVOICE-003"
+  },
+  {
+    "module": "invoicing",
+    "oracle_entrypoint": "pkg_invoicing.sp_issue_invoice",
+    "scenario": "INVOICE-004"
+  },
+  {
+    "module": "invoicing",
+    "oracle_entrypoint": "pkg_invoicing.sp_issue_invoice",
+    "scenario": "INVOICE-005"
+  },
+  {
+    "module": "invoicing",
+    "oracle_entrypoint": "pkg_invoicing.fn_invoice_lines",
+    "scenario": "INVOICE-006"
+  },
+  {
+    "module": "plans",
+    "oracle_entrypoint": "pkg_plans.fn_list_plans",
+    "scenario": "PLANS-001"
+  },
+  {
+    "module": "plans",
+    "oracle_entrypoint": "pkg_plans.fn_entitlement",
+    "scenario": "PLANS-002"
+  },
+  {
+    "module": "plans",
+    "oracle_entrypoint": "pkg_plans.fn_entitlement",
+    "scenario": "PLANS-003"
+  },
+  {
+    "module": "plans",
+    "oracle_entrypoint": "pkg_plans.sp_change_plan",
+    "scenario": "PLANS-004"
+  },
+  {
+    "module": "plans",
+    "oracle_entrypoint": "pkg_plans.sp_change_plan",
+    "scenario": "PLANS-005"
+  },
+  {
+    "module": "rating",
+    "oracle_entrypoint": "pkg_rating.fn_usage_rating",
+    "scenario": "RATING-001"
+  },
+  {
+    "module": "rating",
+    "oracle_entrypoint": "pkg_rating.fn_usage_rating",
+    "scenario": "RATING-002"
+  },
+  {
+    "module": "rating",
+    "oracle_entrypoint": "pkg_rating.fn_usage_rating",
+    "scenario": "RATING-003"
+  },
+  {
+    "module": "rating",
+    "oracle_entrypoint": "pkg_rating.fn_usage_rating",
+    "scenario": "RATING-004"
+  },
+  {
+    "module": "rating",
+    "oracle_entrypoint": "pkg_rating.fn_usage_rating",
+    "scenario": "RATING-005"
+  },
+  {
+    "module": "rating",
+    "oracle_entrypoint": "pkg_rating.fn_usage_rating",
+    "scenario": "RATING-006"
+  },
+  {
+    "module": "rating",
+    "oracle_entrypoint": "pkg_rating.fn_usage_summary",
+    "scenario": "RATING-007"
+  },
+  {
+    "module": "rating",
+    "oracle_entrypoint": "pkg_rating.sp_finalize_rating",
+    "scenario": "RATING-008"
+  }
+]

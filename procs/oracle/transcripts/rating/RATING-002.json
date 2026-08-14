@@ -1,0 +1,17 @@
+{
+  "business_fields": {
+    "overage_amount": "0.00",
+    "rollover_units": 200
+  },
+  "entrypoint": "billing.fn_usage_rating",
+  "inputs": {
+    "period_end": "2026-02-28",
+    "period_start": "2026-02-01",
+    "tenant_id": "00000000-0000-0000-0000-000000000001"
+  },
+  "module": "rating",
+  "oracle_entrypoint": "pkg_rating.fn_usage_rating",
+  "oracle_source_sha": "0d326cad54d94cd64e8abb53585b37436eaad2193fdc15ba3596fbb8db3f0d55",
+  "probes": {},
+  "scenario": "RATING-002"
+}
