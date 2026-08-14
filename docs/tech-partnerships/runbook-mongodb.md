@@ -165,79 +165,12 @@ What "done" looks like — show, don't tell:
 - Deterministic seeds + manifest contracts = re-runnable, auditable demos.
 - Segue to the combined demo: `runbook-modernize-otterworks.md`.
 
-## Live migration — Postgres + DynamoDB → Atlas (implemented)
-
-The Postgres-documents and DynamoDB-files legs of the plan above are
-implemented and verified against the live `otterworks-demo` M0 cluster in
-Atlas project `otterworks-demos`. Everything is namespaced: namespace `<ns>`
-migrates into database `ow_tp_<ns>` (collections `documents`,
-`document_snapshots`, `files`) and never touches any other database in the
-shared cluster.
-
-### Atlas infrastructure (Terraform)
-
-All Atlas-side configuration is Terraform-managed under
-`infrastructure/terraform-atlas/` (provider auth via
-`MONGODB_ATLAS_PUBLIC_KEY` / `MONGODB_ATLAS_PRIVATE_KEY` env vars; local
-state, gitignored):
-
-```bash
-cd infrastructure/terraform-atlas
-terraform init
-export TF_VAR_project_id="$MONGODB_ATLAS_PROJECT_ID"
-# one-time: adopt the existing shared M0 (one M0 per project — never create a second)
-terraform import mongodbatlas_advanced_cluster.demo "$TF_VAR_project_id-otterworks-demo"
-terraform apply    # access-list entry (0.0.0.0/0, demo-grade) + demo DB user + imported cluster
-```
-
-The API key needs the **Project Owner** role on `otterworks-demos` to manage
-the access list and database users (read-only keys can import the cluster but
-`apply` fails with `USER_UNAUTHORIZED`).
-
-### Migrate + reconcile (verified run, `NS=dev`)
-
-```bash
-make seed-legacy NS=dev        # seed the legacy Postgres/DynamoDB/S3 estate
-export MONGODB_ATLAS_URI='mongodb+srv://…'   # never commit this
-make mongo-migrate NS=dev      # Postgres docs/versions/snapshots + DynamoDB metadata → Atlas
-make mongo-recon NS=dev        # counts + checksums + anomaly ledger + spot samples
-```
-
-Verified live results for `NS=dev` (deterministic per namespace):
-
-| Source | Atlas target | Count |
-|---|---|---|
-| `otterworks_dev.documents` (+ embedded `document_versions`) | `ow_tp_dev.documents` | 2,000 docs / 13,802 embedded versions |
-| `otterworks_dev.document_snapshots` | `ow_tp_dev.document_snapshots` | 437 |
-| DynamoDB `otterworks-file-metadata` (ns=dev) | `ow_tp_dev.files` | 10,000 |
-
-Recon: **13/13 checks PASS** — counts and order-independent md5 checksums
-match the seed manifest for all three collections, 25-document and 25-file
-field-level spot samples are equal, and the planted anomalies are enumerated
-exactly (10 version gaps, 6 orphaned snapshots, 40 orphaned metadata
-markers — surfaced, not dropped). JSON report:
-`migrations/mongodb/reports/dev.json` (gitignored runtime artifact).
-
 ## Cleanup
 
 ```bash
 make oracle-billing-down        # drops all Oracle data
 make testdata-clean NS=demo     # drops otterworks_demo Postgres schema
-make mongo-clean NS=dev         # drops only ow_tp_dev from Atlas
 ```
 
 DynamoDB/S3 slices are wiped automatically on the next reseed of the
 namespace.
-
-### Atlas teardown
-
-`make mongo-clean NS=<ns>` removes the demo database; the shared cluster and
-the Terraform-managed access list/user stay in place between demos. To tear
-down the Terraform-managed pieces, first remove the **shared** M0 cluster
-from state so `destroy` cannot delete it:
-
-```bash
-cd infrastructure/terraform-atlas
-terraform state rm mongodbatlas_advanced_cluster.demo
-terraform destroy   # removes only the access-list entry and demo DB user
-```
