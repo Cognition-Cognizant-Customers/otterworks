@@ -32,7 +32,7 @@ $seed = $seed * 2654435761 % 2**31;
 # tiny deterministic LCG so output doesn't depend on perl's rand()
 my $state = $seed;
 sub lcg { $state = ($state * 1103515245 + 12345) % 2**31; return $state; }
-sub rnd { my ($n) = @_; return int(lcg() / 65536) % $n; }
+sub rnd { my ($n) = @_; return int(lcg() / 2147483648 * $n); }
 
 my @first = qw(ACME GLOBEX INITECH UMBRELLA STARK WAYNE TYRELL WONKA HOOLI PIED);
 my @last  = qw(HOLDINGS INDUSTRIES LLC CORP PARTNERS GMBH SA LTD GROUP PIPER);
