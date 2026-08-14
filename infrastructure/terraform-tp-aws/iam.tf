@@ -80,6 +80,11 @@ resource "aws_iam_role_policy" "report" {
         Effect   = "Allow"
         Action   = ["s3:GetObject", "s3:PutObject"]
         Resource = ["${aws_s3_bucket.ingest.arn}/*"]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["dynamodb:PutItem", "dynamodb:DeleteItem"]
+        Resource = [aws_dynamodb_table.billing.arn]
       }
     ]
   })
