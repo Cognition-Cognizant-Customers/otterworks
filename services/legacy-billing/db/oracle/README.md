@@ -16,6 +16,10 @@ make oracle-billing-seed NS=dev SCALE=full   # ~250k customers, ~2M invoice line
 make oracle-billing-down               # stop and drop all data
 ```
 
+`make seed-legacy NS=<ns> [SCALE=demo|full]` is the contract-level alias
+(per `docs/tech-partnerships/README.md`) and dispatches to
+`oracle-billing-seed`.
+
 - Connect: `sqlplus ow_billing/ow_billing@localhost:52521/FREEPDB1`
   (SYSTEM password defaults to `Workshop123`, override with `ORACLE_BILLING_PWD`).
 - First boot initializes the schema via the mounted startup script and marks

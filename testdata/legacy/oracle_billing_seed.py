@@ -273,7 +273,7 @@ def main() -> int:
     for i in range(n_inv):
         cust_i = int(abs(rng.gauss(0, n_cust / 6))) % n_cust  # skew to whales
         inv_id = md5_uuid(f"{ns}:inv:{i}")
-        inv_ids.append((inv_id, cust_i))
+        inv_ids.append((inv_id, f"{ns.upper()}-{i:09d}", cust_i))
         total = 0
         hdr_rows.append((inv_id, f"{ns.upper()}-{i:09d}", cust_ids[cust_i],
                          cust_tenants[cust_i], dt_str(rng),
@@ -300,15 +300,17 @@ def main() -> int:
     for i in range(n_lines):
         line_id = md5_uuid(f"{ns}:line:{i}")
         if i in orphan_idx:
-            inv_id, cust_i = md5_uuid(f"{ns}:ghost-invoice:{i}"), rng.randrange(n_cust)
+            inv_id = md5_uuid(f"{ns}:ghost-invoice:{i}")
+            inv_no = f"{ns.upper()}-GHOST-{i:09d}"
+            cust_i = rng.randrange(n_cust)
         else:
-            inv_id, cust_i = inv_ids[rng.randrange(n_inv)]
+            inv_id, inv_no, cust_i = inv_ids[rng.randrange(n_inv)]
         qty = rng.randint(1, 500)
         price = round(rng.uniform(0.01, 99.0), 4)
         amount = round(qty * price, 2)
         mm = rng.randint(1, 12)
         line_rows.append((
-            line_id, f"{ns.upper()}-{i % n_inv:09d}", inv_id,
+            line_id, inv_no, inv_id,
             cust_ids[cust_i], f"{ns.upper()}-{cust_i:08d}",
             cust_names[cust_i],
             cust_tenants[cust_i],
