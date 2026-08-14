@@ -71,7 +71,9 @@ CREATE OR REPLACE PACKAGE BODY pkg_ow_util AS
         VALUES (SUBSTR(p_module, 1, 30), SUBSTR(p_message, 1, 4000));
         COMMIT;
     EXCEPTION
-        WHEN OTHERS THEN NULL;
+        -- Still swallowed, but the autonomous transaction must be closed or
+        -- Oracle raises ORA-06519 to the caller.
+        WHEN OTHERS THEN ROLLBACK;
     END log_msg;
 
 END pkg_ow_util;
