@@ -64,16 +64,20 @@ expired = events.where(F.col("occurred_at") < F.lit(cutoff))
 archived = expired.count()
 retained = events.count() - archived
 
-spark.sql(f"DELETE FROM `{catalog}`.gold.audit_archive_events WHERE ns = '{ns}'")
-expired.withColumn("archived_cutoff", F.lit(cutoff)).write.mode("append").saveAsTable(
-    f"`{catalog}`.gold.audit_archive_events"
-)
-# Like the legacy job's post-archive delete: expired rows leave bronze.events
-# (Delta time travel serves as the Glacier-restore equivalent).
-spark.sql(
-    f"""DELETE FROM `{catalog}`.bronze.events
-        WHERE ns = '{ns}' AND occurred_at < TIMESTAMP'{cutoff.isoformat(sep=" ")}'"""
-)
+# Only rewrite the archive when there is something to archive: a standalone
+# re-run (after the expired rows were already moved out of bronze) must not
+# wipe the previously archived slice.
+if archived > 0:
+    spark.sql(f"DELETE FROM `{catalog}`.gold.audit_archive_events WHERE ns = '{ns}'")
+    expired.withColumn("archived_cutoff", F.lit(cutoff)).write.mode("append").saveAsTable(
+        f"`{catalog}`.gold.audit_archive_events"
+    )
+    # Like the legacy job's post-archive delete: expired rows leave bronze.events
+    # (Delta time travel serves as the Glacier-restore equivalent).
+    spark.sql(
+        f"""DELETE FROM `{catalog}`.bronze.events
+            WHERE ns = '{ns}' AND occurred_at < TIMESTAMP'{cutoff.isoformat(sep=" ")}'"""
+    )
 spark.sql(f"DELETE FROM `{catalog}`.gold.audit_archive_runs WHERE ns = '{ns}'")
 spark.createDataFrame(
     [(ns, retention_days, cutoff, archived, retained)],

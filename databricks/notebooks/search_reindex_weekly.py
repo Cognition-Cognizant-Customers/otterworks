@@ -31,6 +31,8 @@ import shutil
 
 ws_landing = f"/Workspace/Shared/{catalog}/landing/{ns}/documents"
 if os.path.isdir(ws_landing):
+    # Mirror the staging area exactly: drop stale files from earlier runs.
+    shutil.rmtree(f"{landing}/documents", ignore_errors=True)
     shutil.copytree(ws_landing, f"{landing}/documents", dirs_exist_ok=True)
 
 # COMMAND ----------

@@ -90,6 +90,20 @@ def upload_file(rel_path: str, data: bytes) -> None:
     )
 
 
+def clear_staging(rel_dir: str) -> None:
+    """Remove a per-namespace staging directory so stale files from an earlier
+    run (e.g. a different seed scale) are never re-ingested."""
+    try:
+        dbx(
+            "POST",
+            "/api/2.0/workspace/delete",
+            json={"path": f"/Shared/{CATALOG}/landing/{rel_dir}", "recursive": True},
+        )
+    except RuntimeError as exc:
+        if "RESOURCE_DOES_NOT_EXIST" not in str(exc):
+            raise
+
+
 def find_job_id(name: str) -> int:
     jobs = dbx("GET", f"/api/2.1/jobs/list?name={name}").get("jobs", [])
     if not jobs:
@@ -206,6 +220,7 @@ def phase_custbill(recon: Recon, ns: str) -> None:
     inputs, psv_rows, csv_rows = run_legacy_custbill(ns, workdir)
     print(f"legacy custbill: {len(inputs)} files, {len(psv_rows)} parsed rows")
 
+    clear_staging(f"{ns}/custbill")
     for name, data in inputs.items():
         upload_file(f"{ns}/custbill/{name}", data)
     run_job(find_job_id("ow_tp_custbill_lakehouse"), ns)
@@ -363,6 +378,8 @@ def export_documents(ns: str) -> list[dict]:
 
 
 def phase_python(recon: Recon, ns: str) -> None:
+    for sub in ("events", "file_metadata", "documents"):
+        clear_staging(f"{ns}/{sub}")
     events = export_events(ns)
     metadata = export_file_metadata(ns)
     documents = export_documents(ns)
@@ -514,6 +531,10 @@ def main() -> int:
     if not re.fullmatch(r"[a-z0-9_]{1,32}", ns):
         sys.exit(f"invalid namespace: {args.ns!r}")
     phases = [p.strip() for p in args.phases.split(",") if p.strip()]
+    known = {"custbill", "python"}
+    unknown = [p for p in phases if p not in known]
+    if unknown or not phases:
+        sys.exit(f"invalid --phases {args.phases!r}; known phases: {sorted(known)}")
 
     recon = Recon()
     if "custbill" in phases:

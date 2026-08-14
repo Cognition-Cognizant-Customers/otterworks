@@ -31,6 +31,8 @@ import shutil
 
 ws_landing = f"/Workspace/Shared/{catalog}/landing/{ns}/custbill"
 if os.path.isdir(ws_landing):
+    # Mirror the staging area exactly: drop stale files from earlier runs.
+    shutil.rmtree(landing, ignore_errors=True)
     shutil.copytree(ws_landing, landing, dirs_exist_ok=True)
 
 # COMMAND ----------
