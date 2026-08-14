@@ -163,7 +163,7 @@ def seed_postgres(ns: str, cfg: dict) -> tuple[dict, list[dict]]:
         title = f"Legacy document {ns}-{i:06d}"
         content = f"Body of {title}, revision {n_versions}. " * rng.randint(1, 4)
         word_count = len(content.split())
-        updated = created + timedelta(hours=rng.randint(1, 24 * 30))
+        updated = min(created + timedelta(hours=rng.randint(1, 24 * 30)), ANCHOR)
         is_deleted = "t" if rng.random() < 0.03 else "f"
 
         docs_buf.write(
@@ -175,7 +175,7 @@ def seed_postgres(ns: str, cfg: dict) -> tuple[dict, list[dict]]:
         skip_version = rng.randint(2, n_versions) if (i in gap_docs and n_versions >= 2) else 0
         for v in range(1, n_versions + 1):
             ver_id = det_uuid(rng)
-            v_created = created + timedelta(hours=v * rng.randint(1, 48))
+            v_created = min(created + timedelta(hours=v * rng.randint(1, 48)), updated)
             if v == skip_version:
                 continue  # planted version gap
             vers_buf.write(
@@ -295,7 +295,7 @@ def seed_dynamodb(ns: str, cfg: dict) -> tuple[dict, list[dict]]:
                 "version": rng.randint(1, 9),
                 "is_trashed": rng.random() < 0.05,
                 "created_at": iso(created),
-                "updated_at": iso(created + timedelta(hours=rng.randint(0, 720))),
+                "updated_at": iso(min(created + timedelta(hours=rng.randint(0, 720)), ANCHOR)),
             })
             ck.add(f"{item_id}|{size}|{s3_key}")
 

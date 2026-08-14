@@ -74,10 +74,13 @@ def validate_postgres(ns: str, manifest: dict) -> None:
                 want = expect(manifest, key)
                 if want is None:
                     continue
-                cur.execute(sql.format(s=schema))
                 ck = Checksum()
-                for row in cur:
-                    ck.add(row[0])
+                # server-side (named) cursor streams rows in itersize batches
+                with conn.cursor(name=f"ck_{table}") as stream:
+                    stream.itersize = 10_000
+                    stream.execute(sql.format(s=schema))
+                    for row in stream:
+                        ck.add(row[0])
                 check(f"{key} rows", ck.count == want["rows"],
                       f"store={ck.count} manifest={want['rows']}")
                 got = ck.hexdigest()
