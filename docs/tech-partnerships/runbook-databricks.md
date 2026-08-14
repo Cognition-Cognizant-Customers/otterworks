@@ -159,43 +159,6 @@ the legacy outputs exactly.
    live (`sed` a letter into an amount field of a fresh drop) and show the
    legacy parser passing it while silver quarantines it.
 
-### Running the recon live
-
-The "after" state is fully built and Terraform-managed — see
-`infrastructure/terraform-databricks/README.md`. With the stack applied:
-
-```bash
-export DATABRICKS_HOST="$DATABRICKS_DEMO_HOST"
-export DATABRICKS_TOKEN="$DATABRICKS_DEMO_TOKEN"
-cd infrastructure/terraform-databricks && terraform init && terraform apply   # <1 min
-cd ../.. && make infra-up                                # local legacy baseline needs the stack
-make seed-legacy NS=dev                                  # events/files/documents seed
-make databricks-recon NS=dev                             # full recon: custbill + python phases
-```
-
-The harness generates the deterministic CUSTBILL drops, runs the legacy chain
-locally (ksh → bash → perl), uploads the same inputs, triggers the
-`ow_tp_custbill_lakehouse` and `ow_tp_python_etl_wave` jobs, and compares
-row/value-wise. Verified output for NS=dev (committed at
-`databricks/reports/databricks-recon.md`):
-
-| Phase | Check | Result |
-|---|---|---|
-| custbill | silver rows match legacy `.psv` | PASS (100 rows vs 100 rows) |
-| custbill | gold matches legacy finance report | PASS (6 aggregate rows) |
-| custbill | clean input ⇒ zero quarantine | PASS |
-| custbill | trailer counts reconciled | PASS (2 files MATCHED) |
-| python | analytics daily summary | PASS (3 days) |
-| python | analytics event-type daily | PASS (30 day×type rows) |
-| python | audit archive counts | PASS |
-| python | storage cleanup report | PASS (40 planted dangling refs) |
-| python | search index counts | PASS |
-| python | user activity totals | PASS (50 users) |
-
-No semantic divergence was found for clean input. The lakehouse additionally
-quarantines malformed rows and enforces trailer reconciliation — behaviors the
-legacy chain never had (Beat 4 defect ledger).
-
 ## Beat 5 — Wrap (0:28–0:30)
 
 - 1998-vintage ksh → governed Delta pipeline, with the deficiency inventory
@@ -210,17 +173,3 @@ legacy chain never had (Beat 4 defect ledger).
 make legacy-sftp-down                    # if the SFTP fixture was started
 rm -rf $OTTERWORKS_LEGACY_ROOT           # the whole estate is under this root
 ```
-
-### Databricks teardown
-
-The entire workspace estate is Terraform-managed and namespaced `ow_tp`:
-
-```bash
-cd infrastructure/terraform-databricks
-terraform destroy      # drops catalog (CASCADE), jobs, notebooks, secret scope
-```
-
-After destroy, `SHOW CATALOGS LIKE 'ow_tp*'` returns nothing and no `ow_tp_*`
-jobs or secret scopes remain. Re-applying takes under a minute, so the estate
-is left **applied** and demo-ready; if it has been torn down, just run
-`terraform apply` again before the demo.
