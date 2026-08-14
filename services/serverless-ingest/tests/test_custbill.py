@@ -17,6 +17,15 @@ def test_parse_file_strips_hdr_trl():
     assert parse_file(text) == ["C000123456|ACME HOLDINGS|2025-04-01|1234.56|USD|01"]
 
 
+def test_parse_file_splits_on_newline_only():
+    # control bytes like \x0b stay inside the record, like sed/cut
+    dirty = LINE[:15] + "\x0b" + LINE[16:]
+    text = "HDR CUSTBILL EXTRACT\n" + dirty + "\nTRL0000000001\n"
+    records = parse_file(text)
+    assert len(records) == 1
+    assert "\x0b" in records[0]
+
+
 def test_finance_report():
     lines = [
         "C1|A|2025-01-01|10.00|USD|01",

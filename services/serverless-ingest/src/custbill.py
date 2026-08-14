@@ -44,7 +44,12 @@ def parse_line(line: str) -> str:
 def parse_file(text: str) -> list[str]:
     """Full CUSTBILL file -> list of pipe-delimited records (HDR/TRL stripped)."""
     out = []
-    for line in text.splitlines():
+    # split on \n only (like sed/cut); splitlines() would also break on
+    # control bytes such as \x0b or NEL that the legacy chain keeps in-record
+    lines = text.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    for line in lines:
         if line.startswith("HDR") or line.startswith("TRL"):
             continue
         out.append(parse_line(line))

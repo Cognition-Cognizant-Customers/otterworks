@@ -75,6 +75,16 @@ echo "== 3. Clearing remote namespace + uploading to s3://$BUCKET/landing/$NS_LO
 for p in landing parsed reports archive; do
     aws s3 rm --recursive "s3://$BUCKET/$p/$NS_LOWER/" --quiet || true
 done
+# Also clear stale DynamoDB rows from earlier runs of this namespace
+aws dynamodb query --table-name "$TABLE" \
+    --key-condition-expression "#ns = :ns AND begins_with(rec, :pfx)" \
+    --expression-attribute-names '{"#ns":"ns"}' \
+    --expression-attribute-values "{\":ns\":{\"S\":\"$NS_LOWER\"},\":pfx\":{\"S\":\"CUSTBILL\"}}" \
+    --projection-expression rec --query 'Items[].rec.S' --output text 2>/dev/null \
+    | tr '\t' '\n' | grep -v '^None$' | grep . | while read -r rec; do
+        aws dynamodb delete-item --table-name "$TABLE" \
+            --key "{\"ns\":{\"S\":\"$NS_LOWER\"},\"rec\":{\"S\":\"$rec\"}}" || true
+    done
 for f in "$STASH"/*.dat; do
     aws s3 cp "$f" "s3://$BUCKET/landing/$NS_LOWER/$(basename "$f")" --quiet || die "upload failed: $f"
 done

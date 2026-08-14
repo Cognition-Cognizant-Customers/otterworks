@@ -87,7 +87,7 @@ def _build_report(bucket: str, ns: str):
     lines: list[str] = []
     for key in sorted(keys):
         text = s3.get_object(Bucket=bucket, Key=key)["Body"].read().decode("latin-1")
-        lines.extend(line for line in text.splitlines() if line)
+        lines.extend(line for line in text.split("\n") if line)
 
     csv = finance_report(lines)
     # Legacy finance_excel_report.pl stamps with localtime; honor TZ if set
