@@ -90,28 +90,28 @@ def cleanup(cur, ns: str, batch_no: int) -> None:
     cur.execute("DELETE FROM customer_master_hist WHERE conversion_batch_no = :1", [batch_no])
     pfx = f"{ns}::"  # matched literally via SUBSTR, so _/% in ns are not wildcards
     cur.execute("""DELETE FROM dunning_attempts WHERE tenant_id IN
-                   (SELECT id FROM tenants WHERE SUBSTR(name, 1, LENGTH(:1)) = :1)""", [pfx])
+                   (SELECT id FROM tenants WHERE SUBSTR(name, 1, LENGTH(:1)) = :2)""", [pfx, pfx])
     cur.execute("""DELETE FROM notifications WHERE tenant_id IN
-                   (SELECT id FROM tenants WHERE SUBSTR(name, 1, LENGTH(:1)) = :1)""", [pfx])
+                   (SELECT id FROM tenants WHERE SUBSTR(name, 1, LENGTH(:1)) = :2)""", [pfx, pfx])
     cur.execute("""DELETE FROM invoice_lines WHERE invoice_id IN
                    (SELECT i.id FROM invoices i, tenants t
-                     WHERE t.id = i.tenant_id AND SUBSTR(t.name, 1, LENGTH(:1)) = :1)""", [pfx])
+                     WHERE t.id = i.tenant_id AND SUBSTR(t.name, 1, LENGTH(:1)) = :2)""", [pfx, pfx])
     cur.execute("""DELETE FROM invoices WHERE tenant_id IN
-                   (SELECT id FROM tenants WHERE SUBSTR(name, 1, LENGTH(:1)) = :1)""", [pfx])
+                   (SELECT id FROM tenants WHERE SUBSTR(name, 1, LENGTH(:1)) = :2)""", [pfx, pfx])
     cur.execute("""DELETE FROM rating_results WHERE period_id IN
                    (SELECT rp.id FROM rating_periods rp, tenants t
-                     WHERE t.id = rp.tenant_id AND SUBSTR(t.name, 1, LENGTH(:1)) = :1)""", [pfx])
+                     WHERE t.id = rp.tenant_id AND SUBSTR(t.name, 1, LENGTH(:1)) = :2)""", [pfx, pfx])
     cur.execute("""DELETE FROM rating_periods WHERE tenant_id IN
-                   (SELECT id FROM tenants WHERE SUBSTR(name, 1, LENGTH(:1)) = :1)""", [pfx])
+                   (SELECT id FROM tenants WHERE SUBSTR(name, 1, LENGTH(:1)) = :2)""", [pfx, pfx])
     cur.execute("""DELETE FROM usage_events WHERE tenant_id IN
-                   (SELECT id FROM tenants WHERE SUBSTR(name, 1, LENGTH(:1)) = :1)""", [pfx])
+                   (SELECT id FROM tenants WHERE SUBSTR(name, 1, LENGTH(:1)) = :2)""", [pfx, pfx])
     cur.execute("""DELETE FROM credit_notes WHERE tenant_id IN
-                   (SELECT id FROM tenants WHERE SUBSTR(name, 1, LENGTH(:1)) = :1)""", [pfx])
+                   (SELECT id FROM tenants WHERE SUBSTR(name, 1, LENGTH(:1)) = :2)""", [pfx, pfx])
     cur.execute("""DELETE FROM subscriptions WHERE tenant_id IN
-                   (SELECT id FROM tenants WHERE SUBSTR(name, 1, LENGTH(:1)) = :1)""", [pfx])
+                   (SELECT id FROM tenants WHERE SUBSTR(name, 1, LENGTH(:1)) = :2)""", [pfx, pfx])
     cur.execute("""DELETE FROM subscriptions_hist WHERE tenant_id IN
-                   (SELECT id FROM tenants WHERE SUBSTR(name, 1, LENGTH(:1)) = :1)""", [pfx])
-    cur.execute("DELETE FROM tenants WHERE SUBSTR(name, 1, LENGTH(:1)) = :1", [pfx])
+                   (SELECT id FROM tenants WHERE SUBSTR(name, 1, LENGTH(:1)) = :2)""", [pfx, pfx])
+    cur.execute("DELETE FROM tenants WHERE SUBSTR(name, 1, LENGTH(:1)) = :2", [pfx, pfx])
 
 
 def main() -> int:
