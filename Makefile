@@ -68,7 +68,10 @@ oracle-billing-down: ## Stop the Oracle billing estate fixture and drop its data
 	ORACLE_BILLING_DB_PORT=$(ORACLE_BILLING_DB_PORT) $(ORACLE_BILLING_COMPOSE) down -v
 
 oracle-billing-seed: ## Seed the Oracle billing estate (NS=<namespace>, SCALE=demo|full; writes testdata/legacy/manifests/<NS>.json)
-	@test -n "$(NS)" || (echo "NS is required, e.g. make oracle-billing-seed NS=dev" >&2; exit 2)
+ifndef NS
+	$(error NS is required, e.g. make oracle-billing-seed NS=dev)
+endif
+	$(call validate_ns)
 	DB_PORT=$(ORACLE_BILLING_DB_PORT) $(ORACLE_BILLING_UV) testdata/legacy/oracle_billing_seed.py --ns $(NS) --scale $(or $(SCALE),demo)
 
 # --- Local Development ---
