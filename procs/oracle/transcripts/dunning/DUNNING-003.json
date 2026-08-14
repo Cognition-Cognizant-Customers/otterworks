@@ -1,0 +1,36 @@
+{
+  "business_fields": {
+    "attempt_no": 2,
+    "scheduled_for": "2026-02-17"
+  },
+  "entrypoint": "billing.sp_schedule_dunning",
+  "inputs": {
+    "as_of": "2026-02-17"
+  },
+  "module": "dunning",
+  "oracle_entrypoint": "pkg_dunning.sp_schedule_dunning",
+  "oracle_source_sha": "0d326cad54d94cd64e8abb53585b37436eaad2193fdc15ba3596fbb8db3f0d55",
+  "probes": {
+    "schedule_rows": [
+      {
+        "attempt_no": 1,
+        "invoice_id": "60000000-0000-0000-0000-000000000001",
+        "scheduled_for": "2026-02-17",
+        "status": "scheduled"
+      },
+      {
+        "attempt_no": 1,
+        "invoice_id": "60000000-0000-0000-0000-000000000002",
+        "scheduled_for": "2026-02-16",
+        "status": "sent"
+      },
+      {
+        "attempt_no": 2,
+        "invoice_id": "60000000-0000-0000-0000-000000000002",
+        "scheduled_for": "2026-02-17",
+        "status": "scheduled"
+      }
+    ]
+  },
+  "scenario": "DUNNING-003"
+}

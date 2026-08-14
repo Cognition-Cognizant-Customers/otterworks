@@ -1,0 +1,178 @@
+# Oracle driver contract for the procs parity harness.
+#
+# Maps each recorded Postgres entrypoint (procs/scenarios/) to its OW_BILLING
+# PL/SQL equivalent (services/legacy-billing/db/oracle/packages/), per the
+# entrypoint mapping documented in services/legacy-billing/db/oracle/README.md.
+# Scenario overrides translate the Postgres capture/probe SQL into the Oracle
+# dialect (TO_CHAR date/number formatting, DECODE for *_CD magic-number status
+# columns, pkg_ow_util.f_md5_uuid for md5(...)::uuid) so both recorders emit
+# byte-comparable normalized values. The scenario inputs, captured fields, and
+# probe identifiers themselves stay declared once, in procs/scenarios/.
+entrypoints:
+  billing.fn_list_plans: {call: pkg_plans.fn_list_plans}
+  billing.fn_entitlement: {call: pkg_plans.fn_entitlement}
+  billing.sp_change_plan: {call: pkg_plans.sp_change_plan}
+  billing.fn_usage_rating: {call: pkg_rating.fn_usage_rating}
+  billing.fn_usage_summary: {call: pkg_rating.fn_usage_summary}
+  billing.sp_finalize_rating: {call: pkg_rating.sp_finalize_rating}
+  billing.fn_invoice_preview: {call: pkg_invoicing.fn_invoice_preview}
+  billing.fn_invoice_lines: {call: pkg_invoicing.fn_invoice_lines}
+  billing.sp_issue_invoice: {call: pkg_invoicing.sp_issue_invoice}
+  billing.fn_overdue_accounts: {call: pkg_dunning.fn_overdue_accounts}
+  billing.sp_schedule_dunning: {call: pkg_dunning.sp_schedule_dunning}
+  billing.sp_suspend_overdue: {call: pkg_dunning.sp_suspend_overdue}
+
+scenarios:
+  PLANS-004:
+    capture_query: >-
+      SELECT plan_id, TO_CHAR(starts_on, 'YYYY-MM-DD') AS starts_on,
+             TO_CHAR(ends_on, 'YYYY-MM-DD') AS ends_on,
+             DECODE(status_cd, 10, 'active', 20, 'suspended', 30, 'cancelled', 'UNKNOWN') AS status
+        FROM subscriptions
+       WHERE tenant_id = '00000000-0000-0000-0000-000000000001'
+       ORDER BY starts_on
+    probes:
+      subscription_rows: >-
+        SELECT plan_id, TO_CHAR(starts_on, 'YYYY-MM-DD') AS starts_on,
+               TO_CHAR(ends_on, 'YYYY-MM-DD') AS ends_on,
+               DECODE(status_cd, 10, 'active', 20, 'suspended', 30, 'cancelled', 'UNKNOWN') AS status
+          FROM subscriptions
+         WHERE tenant_id = '00000000-0000-0000-0000-000000000001'
+         ORDER BY starts_on
+  PLANS-005:
+    capture_query: >-
+      SELECT plan_id, TO_CHAR(starts_on, 'YYYY-MM-DD') AS starts_on,
+             TO_CHAR(ends_on, 'YYYY-MM-DD') AS ends_on,
+             DECODE(status_cd, 10, 'active', 20, 'suspended', 30, 'cancelled', 'UNKNOWN') AS status
+        FROM subscriptions
+       WHERE tenant_id = '00000000-0000-0000-0000-000000000004'
+       ORDER BY starts_on
+    probes:
+      subscription_rows: >-
+        SELECT plan_id, TO_CHAR(starts_on, 'YYYY-MM-DD') AS starts_on,
+               TO_CHAR(ends_on, 'YYYY-MM-DD') AS ends_on,
+               DECODE(status_cd, 10, 'active', 20, 'suspended', 30, 'cancelled', 'UNKNOWN') AS status
+          FROM subscriptions
+         WHERE tenant_id = '00000000-0000-0000-0000-000000000004'
+         ORDER BY starts_on
+  RATING-008:
+    capture_query: >-
+      SELECT rr.used_units, rr.quota_units, rr.rollover_units, rr.billable_units,
+             TO_CHAR(rr.overage_amount, 'FM999999990.00') AS overage_amount
+        FROM rating_results rr, rating_periods rp
+       WHERE rp.id = rr.period_id
+         AND rp.tenant_id = '00000000-0000-0000-0000-000000000001'
+         AND rp.period_start = DATE '2026-02-01'
+    probes:
+      rating_result: >-
+        SELECT rr.used_units, rr.quota_units, rr.rollover_units, rr.billable_units,
+               TO_CHAR(rr.overage_amount, 'FM999999990.00') AS overage_amount
+          FROM rating_results rr, rating_periods rp
+         WHERE rp.id = rr.period_id
+           AND rp.tenant_id = '00000000-0000-0000-0000-000000000001'
+           AND rp.period_start = DATE '2026-02-01'
+  INVOICE-003:
+    capture_query: >-
+      SELECT id, TO_CHAR(issued_on, 'YYYY-MM-DD') AS issued_on,
+             TO_CHAR(remaining_amount, 'FM999999990.00') AS remaining_amount
+        FROM credit_notes
+       WHERE tenant_id = '00000000-0000-0000-0000-000000000009'
+       ORDER BY issued_on, id
+    probes:
+      invoice_state: >-
+        SELECT DECODE(status_cd, 10, 'draft', 20, 'issued', 30, 'paid', 40, 'overdue', 'UNKNOWN') AS status,
+               TO_CHAR(subtotal, 'FM999999990.00') AS subtotal,
+               TO_CHAR(tax, 'FM999999990.00') AS tax,
+               TO_CHAR(total, 'FM999999990.00') AS total
+          FROM invoices
+         WHERE period_id = pkg_ow_util.f_md5_uuid('00000000-0000-0000-0000-000000000009' || '2026-02-01')
+  INVOICE-004:
+    capture_query: >-
+      SELECT id, TO_CHAR(issued_on, 'YYYY-MM-DD') AS issued_on,
+             TO_CHAR(remaining_amount, 'FM999999990.00') AS remaining_amount
+        FROM credit_notes
+       WHERE tenant_id = '00000000-0000-0000-0000-000000000004'
+       ORDER BY issued_on, id
+    probes:
+      invoice_state: >-
+        SELECT DECODE(status_cd, 10, 'draft', 20, 'issued', 30, 'paid', 40, 'overdue', 'UNKNOWN') AS status,
+               TO_CHAR(subtotal, 'FM999999990.00') AS subtotal,
+               TO_CHAR(tax, 'FM999999990.00') AS tax,
+               TO_CHAR(total, 'FM999999990.00') AS total
+          FROM invoices
+         WHERE period_id = pkg_ow_util.f_md5_uuid('00000000-0000-0000-0000-000000000004' || '2026-02-01')
+  INVOICE-005:
+    capture_query: >-
+      SELECT DECODE(status_cd, 10, 'draft', 20, 'issued', 30, 'paid', 40, 'overdue', 'UNKNOWN') AS status,
+             TO_CHAR(subtotal, 'FM999999990.00') AS subtotal,
+             TO_CHAR(tax, 'FM999999990.00') AS tax,
+             TO_CHAR(total, 'FM999999990.00') AS total
+        FROM invoices
+       WHERE period_id = pkg_ow_util.f_md5_uuid('00000000-0000-0000-0000-000000000006' || '2026-02-01')
+    probes:
+      invoice_state: >-
+        SELECT DECODE(status_cd, 10, 'draft', 20, 'issued', 30, 'paid', 40, 'overdue', 'UNKNOWN') AS status,
+               TO_CHAR(subtotal, 'FM999999990.00') AS subtotal,
+               TO_CHAR(tax, 'FM999999990.00') AS tax,
+               TO_CHAR(total, 'FM999999990.00') AS total
+          FROM invoices
+         WHERE period_id = pkg_ow_util.f_md5_uuid('00000000-0000-0000-0000-000000000006' || '2026-02-01')
+  DUNNING-002:
+    capture_query: >-
+      SELECT TO_CHAR(scheduled_for, 'YYYY-MM-DD') AS scheduled_for,
+             DECODE(status_cd, 10, 'scheduled', 20, 'sent', 30, 'skipped', 'UNKNOWN') AS status
+        FROM dunning_attempts
+       WHERE invoice_id = '60000000-0000-0000-0000-000000000001'
+       ORDER BY attempt_no DESC
+       FETCH FIRST 1 ROWS ONLY
+    probes:
+      schedule_rows: >-
+        SELECT invoice_id, attempt_no,
+               TO_CHAR(scheduled_for, 'YYYY-MM-DD') AS scheduled_for,
+               DECODE(status_cd, 10, 'scheduled', 20, 'sent', 30, 'skipped', 'UNKNOWN') AS status
+          FROM dunning_attempts
+         ORDER BY invoice_id, attempt_no
+  DUNNING-003:
+    capture_query: >-
+      SELECT attempt_no, TO_CHAR(scheduled_for, 'YYYY-MM-DD') AS scheduled_for
+        FROM dunning_attempts
+       WHERE invoice_id = '60000000-0000-0000-0000-000000000002'
+       ORDER BY attempt_no DESC
+       FETCH FIRST 1 ROWS ONLY
+    probes:
+      schedule_rows: >-
+        SELECT invoice_id, attempt_no,
+               TO_CHAR(scheduled_for, 'YYYY-MM-DD') AS scheduled_for,
+               DECODE(status_cd, 10, 'scheduled', 20, 'sent', 30, 'skipped', 'UNKNOWN') AS status
+          FROM dunning_attempts
+         ORDER BY invoice_id, attempt_no
+  DUNNING-004:
+    capture_query: >-
+      SELECT DECODE(status_cd, 10, 'active', 20, 'suspended', 30, 'cancelled', 'UNKNOWN') AS status,
+             TO_CHAR(suspended_on, 'YYYY-MM-DD') AS suspended_on
+        FROM subscriptions
+       WHERE tenant_id = '00000000-0000-0000-0000-000000000005'
+    probes:
+      suspension_notifications: >-
+        SELECT id, tenant_id,
+               DECODE(kind_cd, 1, 'invoice', 2, 'dunning', 3, 'suspension', 'UNKNOWN') AS kind,
+               TO_CHAR(sent_at, 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS sent_at
+          FROM notifications
+         WHERE kind_cd = 3
+         ORDER BY tenant_id, sent_at
+  DUNNING-005:
+    capture_query: >-
+      SELECT DECODE(kind_cd, 1, 'invoice', 2, 'dunning', 3, 'suspension', 'UNKNOWN') AS kind
+        FROM notifications
+       WHERE tenant_id = '00000000-0000-0000-0000-000000000005'
+         AND kind_cd = 3
+       ORDER BY sent_at
+    after_call: pkg_dunning.sp_suspend_overdue(DATE '2026-02-28')
+    probes:
+      suspension_notifications: >-
+        SELECT id, tenant_id,
+               DECODE(kind_cd, 1, 'invoice', 2, 'dunning', 3, 'suspension', 'UNKNOWN') AS kind,
+               TO_CHAR(sent_at, 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS sent_at
+          FROM notifications
+         WHERE kind_cd = 3
+         ORDER BY tenant_id, sent_at

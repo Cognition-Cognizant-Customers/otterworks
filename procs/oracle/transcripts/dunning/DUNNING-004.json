@@ -1,0 +1,24 @@
+{
+  "business_fields": {
+    "status": "suspended",
+    "suspended_on": "2026-02-28"
+  },
+  "entrypoint": "billing.sp_suspend_overdue",
+  "inputs": {
+    "as_of": "2026-02-28"
+  },
+  "module": "dunning",
+  "oracle_entrypoint": "pkg_dunning.sp_suspend_overdue",
+  "oracle_source_sha": "0d326cad54d94cd64e8abb53585b37436eaad2193fdc15ba3596fbb8db3f0d55",
+  "probes": {
+    "suspension_notifications": [
+      {
+        "id": "8cd558f5-d843-8d3d-be19-fb94c21ab81f",
+        "kind": "suspension",
+        "sent_at": "2026-02-28T00:00:00Z",
+        "tenant_id": "00000000-0000-0000-0000-000000000005"
+      }
+    ]
+  },
+  "scenario": "DUNNING-004"
+}

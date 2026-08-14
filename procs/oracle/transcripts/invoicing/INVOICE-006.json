@@ -1,0 +1,21 @@
+{
+  "business_fields": {
+    "amounts": [
+      "149.00",
+      "12.29"
+    ],
+    "line_types": [
+      "plan",
+      "usage"
+    ]
+  },
+  "entrypoint": "billing.fn_invoice_lines",
+  "inputs": {
+    "invoice_id": "60000000-0000-0000-0000-000000000001"
+  },
+  "module": "invoicing",
+  "oracle_entrypoint": "pkg_invoicing.fn_invoice_lines",
+  "oracle_source_sha": "0d326cad54d94cd64e8abb53585b37436eaad2193fdc15ba3596fbb8db3f0d55",
+  "probes": {},
+  "scenario": "INVOICE-006"
+}

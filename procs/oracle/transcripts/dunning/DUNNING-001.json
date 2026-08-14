@@ -1,0 +1,21 @@
+{
+  "business_fields": {
+    "days_overdue": [
+      27,
+      15
+    ],
+    "tenant_ids": [
+      "00000000-0000-0000-0000-000000000002",
+      "00000000-0000-0000-0000-000000000005"
+    ]
+  },
+  "entrypoint": "billing.fn_overdue_accounts",
+  "inputs": {
+    "as_of": "2026-02-28"
+  },
+  "module": "dunning",
+  "oracle_entrypoint": "pkg_dunning.fn_overdue_accounts",
+  "oracle_source_sha": "0d326cad54d94cd64e8abb53585b37436eaad2193fdc15ba3596fbb8db3f0d55",
+  "probes": {},
+  "scenario": "DUNNING-001"
+}
