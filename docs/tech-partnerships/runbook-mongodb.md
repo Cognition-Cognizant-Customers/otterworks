@@ -40,6 +40,9 @@ Manifest: `testdata/legacy/manifests/demo.json` (seed `714559852`).
 
 ```bash
 sqlplus ow_billing/ow_billing@localhost:52521/FREEPDB1
+# no host sqlplus? use the client inside the fixture container:
+# docker exec -it otterworks-oracle-billing-oracle-billing-1 \
+#   sqlplus ow_billing/ow_billing@localhost:1521/FREEPDB1
 ```
 
 Show the 155-column table and read a few names out loud:

@@ -51,7 +51,7 @@ byte-identical).
 |---|---|---|
 | Oracle | `CUSTOMER_MASTER` | 25,000 rows |
 | Oracle | `INVOICE_HEADER` / `INVOICE_LINE` | 18,750 / 150,000 rows |
-| Oracle | `ENTITY_ATTR_VALUE` / `TENANTS` | 8,333 / 60 rows |
+| Oracle | `ENTITY_ATTR_VALUE` / `TENANTS` | 8,333 / 60 rows (`name LIKE 'demo::%'`; raw count is 69 incl. 9 static baseline rows) |
 | Postgres | `otterworks_demo.documents` / `document_versions` / `document_snapshots` | 2,000 / 13,876 / 390 rows |
 | DynamoDB | `otterworks-file-metadata` (ns=demo) | 10,000 items |
 | S3 | `events/demo/` hourly objects | 71 objects, 340,945 bytes |

@@ -45,7 +45,10 @@ Show the platform that already works:
 
 Then the two anchors:
 
-1. **Oracle**: `sqlplus ow_billing/ow_billing@localhost:52521/FREEPDB1` —
+1. **Oracle**: `sqlplus ow_billing/ow_billing@localhost:52521/FREEPDB1`
+   (no host client? `docker exec -it
+   otterworks-oracle-billing-oracle-billing-1 sqlplus
+   ow_billing/ow_billing@localhost:1521/FREEPDB1`) —
    155-column `CUSTOMER_MASTER`, cursor-loop PL/SQL packages, `DBMS_SCHEDULER`
    nightly jobs, autonomous-transaction logging. Garnish:
    `services/legacy-billing/db/oracle/ops/deploy_prod_FINAL_v2.sh.txt` (the
