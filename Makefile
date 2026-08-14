@@ -216,7 +216,7 @@ tp-smoke: ## Golden-path smoke gate for tech-partnerships (mirrors .github/workf
 	@echo "=== API Gateway (Go) ==="
 	cd services/api-gateway && go vet ./... && go test ./... && go build -o /dev/null ./cmd/server
 	@echo "=== Collab Service (Node.js) ==="
-	cd services/collab-service && npm test
+	cd services/collab-service && { [ -d node_modules ] || npm ci; } && npm run lint && npm test && npm run build
 	@echo "=== Search Service (Python) ==="
 	cd services/search-service && if [ -x .venv/bin/pytest ]; then .venv/bin/pytest; else python3 -m pytest; fi
 	@echo "tp-smoke: all checks passed"
