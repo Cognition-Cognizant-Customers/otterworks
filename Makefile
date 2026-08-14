@@ -1,5 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity databricks-recon tp-smoke
-
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity databricks-recon tp-smoke mongo-migrate mongo-recon mongo-clean
 SHELL := /bin/bash
 
 help: ## Show this help
@@ -309,6 +308,30 @@ ifndef NS
 endif
 	$(call validate_ns)
 	uv run testdata/legacy/validate.py --ns $(NS) --targets "$(SEED_LEGACY_TARGETS)"
+
+# --- MongoDB Atlas migration (tech-partnerships demo) ---
+
+mongo-migrate: ## Migrate seeded Postgres docs + DynamoDB metadata to Atlas (NS=<ns>; needs MONGODB_ATLAS_URI)
+ifndef NS
+	$(error NS is required, e.g. make mongo-migrate NS=dev)
+endif
+	$(call validate_ns)
+	uv run migrations/mongodb/migrate_documents.py --ns $(NS)
+	uv run migrations/mongodb/migrate_files.py --ns $(NS)
+
+mongo-recon: ## Reconcile Atlas collections vs sources + seed manifest (NS=<ns>; needs MONGODB_ATLAS_URI)
+ifndef NS
+	$(error NS is required, e.g. make mongo-recon NS=dev)
+endif
+	$(call validate_ns)
+	uv run migrations/mongodb/recon.py --ns $(NS)
+
+mongo-clean: ## Drop the ow_tp_<ns> database from Atlas (NS=<ns>; needs MONGODB_ATLAS_URI)
+ifndef NS
+	$(error NS is required, e.g. make mongo-clean NS=dev)
+endif
+	$(call validate_ns)
+	uv run migrations/mongodb/drop_namespace.py --ns $(NS)
 
 # --- Infrastructure ---
 
