@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed tp-smoke
 
 SHELL := /bin/bash
 
@@ -202,6 +202,24 @@ test-coverage: ## Run tests with coverage for all services
 	@echo "=== Admin Service ===" && cd services/admin-service && bundle exec rspec --format documentation || true
 	@echo "=== Auth Service ===" && cd services/auth-service && ./gradlew test jacocoTestReport || true
 	@echo "=== File Service ===" && cd services/file-service && cargo test 2>&1 | tail -5 || true
+
+tp-smoke: ## Golden-path smoke gate for tech-partnerships (mirrors .github/workflows/tp-golden-smoke.yml)
+	@echo "=== Estate Make targets parse (dry-run) ==="
+	@$(MAKE) -n oracle-billing-up > /dev/null
+	@$(MAKE) -n seed-legacy NS=ci > /dev/null
+	@$(MAKE) -n legacy-etl-list > /dev/null
+	@$(MAKE) -n procs-parity NS=ci > /dev/null
+	@echo "=== Oracle billing compose config lint ==="
+	docker compose -f docker-compose.oracle-billing.yml config > /dev/null
+	@echo "=== Golden 'make -n test' still parses ==="
+	@$(MAKE) -n test > /dev/null
+	@echo "=== API Gateway (Go) ==="
+	cd services/api-gateway && go vet ./... && go test ./... && go build -o /dev/null ./cmd/server
+	@echo "=== Collab Service (Node.js) ==="
+	cd services/collab-service && npm test
+	@echo "=== Search Service (Python) ==="
+	cd services/search-service && if [ -x .venv/bin/pytest ]; then .venv/bin/pytest; else python3 -m pytest; fi
+	@echo "tp-smoke: all checks passed"
 
 test-api-flows: ## Run black-box API flow tests against the local API gateway
 	UV_PROJECT_ENVIRONMENT=.venv uv run python -m pytest tests/api
