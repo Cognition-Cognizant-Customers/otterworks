@@ -16,4 +16,4 @@ services:
     ports:
       - "127.0.0.1:52222:22"
     volumes:
-      - ${OTTERWORKS_LEGACY_ROOT:-/tmp/otterworks-legacy}/sftp-drop:/home/mainframe
+      - ${OTTERWORKS_LEGACY_ROOT:-/tmp/otterworks-legacy}/sftp-drop/upload:/home/mainframe/upload
