@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test
 
 SHELL := /bin/bash
 
@@ -238,6 +238,26 @@ endif
 		-f testdata/harness/create_schema.sql \
 		-v ns=$(NS)
 	@echo "Done."
+
+# --- Legacy Seed Data (tech-partnerships demo estates) ---
+
+comma := ,
+SEED_LEGACY_SCALE = $(if $(SCALE),$(SCALE),demo)
+SEED_LEGACY_TARGETS = $(if $(TARGETS),$(TARGETS),postgres$(comma)dynamodb$(comma)s3)
+
+seed-legacy: ## Seed legacy demo data (NS=<ns>, SCALE=demo|full, TARGETS=postgres,dynamodb,s3)
+ifndef NS
+	$(error NS is required, e.g. make seed-legacy NS=dev)
+endif
+	$(call validate_ns)
+	uv run testdata/legacy/seed.py --ns $(NS) --scale $(SEED_LEGACY_SCALE) --targets "$(SEED_LEGACY_TARGETS)"
+
+seed-legacy-validate: ## Re-derive counts/checksums from the stores and assert they match the manifest (NS=<ns>, TARGETS=...)
+ifndef NS
+	$(error NS is required, e.g. make seed-legacy-validate NS=dev)
+endif
+	$(call validate_ns)
+	uv run testdata/legacy/validate.py --ns $(NS) --targets "$(SEED_LEGACY_TARGETS)"
 
 # --- Infrastructure ---
 
