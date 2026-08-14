@@ -15,10 +15,6 @@ import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.Date;
 
 import static org.hamcrest.Matchers.anyOf;
@@ -47,13 +43,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * - Use @Nested for test grouping
  */
 @RunWith(SpringRunner.class)
-@SpringBootTest
+@SpringBootTest(properties = "otterworks.auth.jwt-secret=" + TestAuth.TEST_SECRET)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 public class ReportServiceTest {
-
-    private static final String TEST_SECRET =
-            "test-jwt-secret-otterworks-must-be-at-least-32-bytes-long-for-hmac";
 
     @Autowired
     private MockMvc mockMvc;
@@ -163,11 +156,6 @@ public class ReportServiceTest {
     }
 
     private String tokenFor(String userId) {
-        return Jwts.builder()
-                .subject(userId)
-                .claim("roles", Arrays.asList("USER"))
-                .signWith(Keys.hmacShaKeyFor(TEST_SECRET.getBytes(StandardCharsets.UTF_8)),
-                        Jwts.SIG.HS256)
-                .compact();
+        return TestAuth.tokenFor(userId);
     }
 }

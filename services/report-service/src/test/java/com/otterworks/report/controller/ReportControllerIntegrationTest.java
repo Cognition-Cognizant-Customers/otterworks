@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.otterworks.report.model.ReportCategory;
 import com.otterworks.report.model.ReportRequest;
 import com.otterworks.report.model.ReportType;
+import com.otterworks.report.TestAuth;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,10 +17,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.Date;
 
 import static org.hamcrest.Matchers.anyOf;
@@ -47,13 +44,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *   - org.junit.Test              -> org.junit.jupiter.api.Test
  */
 @RunWith(SpringRunner.class)
-@SpringBootTest
+@SpringBootTest(properties = "otterworks.auth.jwt-secret=" + TestAuth.TEST_SECRET)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 public class ReportControllerIntegrationTest {
-
-    private static final String TEST_SECRET =
-            "test-jwt-secret-otterworks-must-be-at-least-32-bytes-long-for-hmac";
 
     @Autowired
     private MockMvc mockMvc;
@@ -302,6 +296,7 @@ public class ReportControllerIntegrationTest {
         String caller = "authenticated-caller-" + System.currentTimeMillis();
         ReportRequest request = buildRequest("Spoofed Owner Report", ReportCategory.COMPLIANCE,
                 ReportType.PDF, "attacker-supplied-owner");
+        request.setRequestedBy(null);
 
         mockMvc.perform(withAuth(post("/api/v1/reports"), caller)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -354,11 +349,6 @@ public class ReportControllerIntegrationTest {
     }
 
     private String tokenFor(String userId) {
-        return Jwts.builder()
-                .subject(userId)
-                .claim("roles", Arrays.asList("USER"))
-                .signWith(Keys.hmacShaKeyFor(TEST_SECRET.getBytes(StandardCharsets.UTF_8)),
-                        Jwts.SIG.HS256)
-                .compact();
+        return TestAuth.tokenFor(userId);
     }
 }

@@ -39,7 +39,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @PostConstruct
     public void logAuthenticationMode() {
         if (!StringUtils.hasText(jwtSecret)) {
-            logger.warn("Report service is running in gateway-trust mode; X-User-ID is trusted.");
+            logger.error("Report service is misconfigured: report endpoints are disabled until JWT_SECRET is set.");
         }
     }
 
@@ -59,22 +59,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     .verifyWith(signingKey())
                                     .build()
                                     .parseSignedClaims(authorization.substring("Bearer ".length()).trim());
-                    String algorithm = claims.getHeader().getAlgorithm();
-                    if ("HS256".equals(algorithm) || "HS384".equals(algorithm)) {
-                        userId = claims.getPayload().getSubject();
-                        if (!StringUtils.hasText(userId)) {
-                            userId = claims.getPayload().get("user_id", String.class);
-                        }
-                        authorities = authorities(claims.getPayload().get("roles"));
+                    userId = claims.getPayload().getSubject();
+                    if (!StringUtils.hasText(userId)) {
+                        userId = claims.getPayload().get("user_id", String.class);
                     }
+                    authorities = authorities(claims.getPayload().get("roles"));
                 } catch (JwtException | IllegalArgumentException e) {
                     logger.debug("JWT authentication failed: {}", e.getMessage());
                 }
-            }
-        } else {
-            userId = request.getHeader("X-User-ID");
-            if (StringUtils.hasText(userId)) {
-                userId = userId.trim();
             }
         }
 

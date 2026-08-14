@@ -32,8 +32,7 @@ public class ReportRequest {
     @ApiModelProperty(value = "Output format", required = true, example = "PDF")
     private ReportType reportType;
 
-    @NotBlank(message = "Requester ID is required")
-    @ApiModelProperty(value = "User ID requesting the report", required = true)
+    @ApiModelProperty(value = "Server-assigned authenticated user ID; client value is ignored", readOnly = true)
     private String requestedBy;
 
     // LEGACY: java.util.Date
