@@ -46,9 +46,12 @@ def parse_ts(s: str) -> datetime:
 def migrate(ns: str) -> None:
     client = mongo_client()
     coll = client[db_name(ns)][FILES_COLLECTION]
-    coll.drop()
 
+    # verify the source table is reachable BEFORE wiping the target so a
+    # bad endpoint/table leaves previously migrated data intact
     table = aws_resource("dynamodb").Table(DYNAMO_TABLE)
+    table.load()
+    coll.drop()
     scan_kwargs = {
         "FilterExpression": "#n = :ns",
         "ExpressionAttributeNames": {"#n": "ns"},

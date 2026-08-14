@@ -65,12 +65,16 @@ def migrate(ns: str) -> None:
     db = client[db_name(ns)]
     docs_coll = db[DOCUMENTS_COLLECTION]
     snaps_coll = db[SNAPSHOTS_COLLECTION]
-    docs_coll.drop()
-    snaps_coll.drop()
 
+    # connect and verify the source schema BEFORE wiping the target so an
+    # unreachable/missing source leaves previously migrated data intact
     conn = psycopg2.connect(**pg_config())
     started = time.monotonic()
     try:
+        with conn.cursor() as probe:
+            probe.execute(f"SELECT 1 FROM {schema}.documents LIMIT 1")
+        docs_coll.drop()
+        snaps_coll.drop()
         # Two ordered server-side cursors, merge-joined on document_id.
         doc_cur = conn.cursor(name="mig_docs")
         doc_cur.itersize = BATCH
