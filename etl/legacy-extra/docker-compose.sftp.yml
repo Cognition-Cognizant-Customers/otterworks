@@ -8,11 +8,14 @@
 #
 # The host bind mount maps the container's upload dir onto the same
 # directory the ingest job polls ($OTTERWORKS_LEGACY_ROOT/sftp-drop).
+# Start via `make legacy-sftp-up` so LEGACY_SFTP_UID matches your host user.
 services:
   legacy-sftp:
     image: atmoz/sftp:alpine
     container_name: otterworks-legacy-sftp
-    command: mainframe:mvsprod:1001::upload
+    # uid defaults to the invoking host user so the bind-mounted drop dir
+    # stays writable by both the container and the host-run jobs
+    command: mainframe:mvsprod:${LEGACY_SFTP_UID:-1000}::upload
     ports:
       - "127.0.0.1:52222:22"
     volumes:
