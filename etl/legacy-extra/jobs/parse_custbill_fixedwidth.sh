@@ -19,6 +19,8 @@
 
 if [ "`hostname`" = "otterworks-etl-prod-01" ]; then
     ROOT=/data/otterworks
+elif [ "`hostname`" = "otterworks-etl-uat" ]; then
+    ROOT=/data2/otterworks_uat
 else
     ROOT=${OTTERWORKS_LEGACY_ROOT:-/tmp/otterworks-legacy}
 fi
