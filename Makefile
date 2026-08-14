@@ -365,7 +365,7 @@ legacy-etl-gen-data: ## Generate deterministic CUSTBILL sample input (NS=<ns>)
 legacy-etl-run: ## Run one legacy batch job (JOB=<name>, see legacy-etl-list)
 	@test -n "$(JOB)" || { echo "usage: make legacy-etl-run JOB=<name>"; exit 1; }
 	@case "$(JOB)" in \
-	  sftp_ingest_poll)           etl/legacy-extra/jobs/sftp_ingest_poll.ksh ;; \
+	  sftp_ingest_poll)           command -v ksh >/dev/null || { echo "ksh required (sudo apt-get install -y ksh)"; exit 1; }; etl/legacy-extra/jobs/sftp_ingest_poll.ksh ;; \
 	  parse_custbill_fixedwidth)  etl/legacy-extra/jobs/parse_custbill_fixedwidth.sh ;; \
 	  finance_excel_report)       perl etl/legacy-extra/jobs/finance_excel_report.pl ;; \
 	  run_all)                    RUN_ALL_SLEEP=$${RUN_ALL_SLEEP:-0} etl/legacy-extra/run_all.sh ;; \

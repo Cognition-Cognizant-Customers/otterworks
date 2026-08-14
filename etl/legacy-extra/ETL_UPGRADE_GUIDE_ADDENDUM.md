@@ -23,6 +23,9 @@ the mainframe transfer).
 
 ## Running locally
 
+Prerequisite: `ksh` (the ingest job is a KornShell script — authentically). On
+Ubuntu/Debian: `sudo apt-get install -y ksh`.
+
 ```bash
 make legacy-etl-list                       # inventory
 make legacy-etl-gen-data [NS=dev]          # seed the SFTP drop dir (deterministic)
