@@ -70,7 +70,7 @@ reconciliation to find, recorded in the manifest's `planted_anomalies`:
 |---|---|---|
 | `version_gaps` | `postgres.…document_versions` | documents whose declared `version` count has a missing version row |
 | `orphaned_snapshots` | `postgres.…document_snapshots` | snapshots whose `document_id` doesn't exist |
-| `orphaned_metadata` | `dynamodb.file-metadata` | items whose `s3_key` (marked `<ns>/missing/…`) points at an object that was never written |
+| `orphaned_metadata` | `dynamodb.file-metadata` | items whose `s3_key` carries the `<ns>/missing/…` marker; the anomaly is key-pattern-only — no objects are written to `otterworks-files` for any seeded item, so reconciliation should treat the marker (not object existence) as the defect signal |
 | `missing_hours` | `s3.data-lake/events/<ns>/` | gaps in the hourly event-object series |
 
 The validator re-enumerates each anomaly from the store and asserts the count
@@ -83,7 +83,12 @@ Written/merged to `testdata/legacy/manifests/<ns>.json` per the contract in
 run seeded are replaced; entries owned by other estates (e.g. `oracle.*`) are
 preserved. Manifests are runtime artifacts and are gitignored.
 
-Checksum definitions (md5 over the sorted set of lines):
+Each seeded target records its run parameters under
+`seed_legacy_params.<target>` (including `scale`), so a partial re-seed via
+`TARGETS=` never rewrites the recorded parameters of stores it didn't touch.
+
+Checksum definition: order-independent sum of per-line md5 digests
+(mod 2^128), rendered as 32 hex chars. Line formats:
 
 | Target | Line format |
 |---|---|

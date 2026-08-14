@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import random
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -98,12 +99,40 @@ def iso(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+NS_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
+
+
+def valid_ns(ns: str) -> bool:
+    return bool(NS_PATTERN.match(ns))
+
+
+class Checksum:
+    """Order-independent, constant-memory checksum over a set of lines.
+
+    Sums each line's md5 digest modulo 2**128, so lines can be folded in any
+    order without materializing (or sorting) the whole set.
+    """
+
+    _MOD = 1 << 128
+
+    def __init__(self) -> None:
+        self._total = 0
+        self.count = 0
+
+    def add(self, line: str) -> None:
+        digest = hashlib.md5(line.encode()).digest()
+        self._total = (self._total + int.from_bytes(digest, "big")) % self._MOD
+        self.count += 1
+
+    def hexdigest(self) -> str:
+        return f"{self._total:032x}"
+
+
 def checksum_lines(lines: list[str]) -> str:
-    h = hashlib.md5()
-    for line in sorted(lines):
-        h.update(line.encode())
-        h.update(b"\n")
-    return h.hexdigest()
+    ck = Checksum()
+    for line in lines:
+        ck.add(line)
+    return ck.hexdigest()
 
 
 def schema_name(ns: str) -> str:
@@ -160,7 +189,6 @@ def load_manifest(ns: str) -> dict:
 
 def merge_manifest(
     ns: str,
-    scale: str,
     targets: dict,
     anomalies: list[dict],
     owned_prefixes: tuple[str, ...],
@@ -170,7 +198,9 @@ def merge_manifest(
 
     Only entries under `owned_prefixes` (the target keys this run actually
     seeded) are replaced; entries written by other estates (e.g. oracle.*)
-    are preserved untouched.
+    are preserved untouched. `params` maps each seeded target name to the
+    run parameters for that target only, so a partial re-seed never rewrites
+    the recorded parameters of stores it did not touch.
     """
     manifest = load_manifest(ns)
     manifest["namespace"] = ns
@@ -197,7 +227,6 @@ def merge_manifest(
 
     seed_params = manifest.get("seed_legacy_params", {})
     seed_params.update(params)
-    seed_params["scale"] = scale
     manifest["seed_legacy_params"] = seed_params
 
     MANIFESTS_DIR.mkdir(parents=True, exist_ok=True)

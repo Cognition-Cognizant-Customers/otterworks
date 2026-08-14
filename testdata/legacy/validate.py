@@ -26,12 +26,13 @@ from tabulate import tabulate
 from legacy_common import (
     DATA_LAKE_BUCKET,
     DYNAMO_TABLE,
+    Checksum,
     aws_client,
     aws_resource,
-    checksum_lines,
     load_manifest,
     pg_config,
     schema_name,
+    valid_ns,
 )
 
 results: list[tuple[str, str, str]] = []
@@ -74,10 +75,12 @@ def validate_postgres(ns: str, manifest: dict) -> None:
                 if want is None:
                     continue
                 cur.execute(sql.format(s=schema))
-                lines = [row[0] for row in cur.fetchall()]
-                check(f"{key} rows", len(lines) == want["rows"],
-                      f"store={len(lines)} manifest={want['rows']}")
-                got = checksum_lines(lines)
+                ck = Checksum()
+                for row in cur:
+                    ck.add(row[0])
+                check(f"{key} rows", ck.count == want["rows"],
+                      f"store={ck.count} manifest={want['rows']}")
+                got = ck.hexdigest()
                 check(f"{key} checksum", got == want["checksum"],
                       f"store={got} manifest={want['checksum']}")
 
@@ -118,7 +121,7 @@ def validate_dynamodb(ns: str, manifest: dict) -> None:
     if want is None:
         return
     table = aws_resource("dynamodb").Table(DYNAMO_TABLE)
-    lines, orphans = [], 0
+    ck, orphans = Checksum(), 0
     scan_kwargs = {
         "ProjectionExpression": "id, size_bytes, s3_key",
         "FilterExpression": "begins_with(id, :p)",
@@ -127,16 +130,16 @@ def validate_dynamodb(ns: str, manifest: dict) -> None:
     while True:
         resp = table.scan(**scan_kwargs)
         for item in resp.get("Items", []):
-            lines.append(f"{item['id']}|{int(item['size_bytes'])}|{item['s3_key']}")
+            ck.add(f"{item['id']}|{int(item['size_bytes'])}|{item['s3_key']}")
             if "/missing/" in item["s3_key"]:
                 orphans += 1
         if "LastEvaluatedKey" not in resp:
             break
         scan_kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
 
-    check("dynamodb.file-metadata items", len(lines) == want["items"],
-          f"store={len(lines)} manifest={want['items']}")
-    got = checksum_lines(lines)
+    check("dynamodb.file-metadata items", ck.count == want["items"],
+          f"store={ck.count} manifest={want['items']}")
+    got = ck.hexdigest()
     check("dynamodb.file-metadata checksum", got == want["checksum"],
           f"store={got} manifest={want['checksum']}")
 
@@ -156,29 +159,30 @@ def validate_s3(ns: str, manifest: dict) -> None:
     if want is None:
         return
     s3 = aws_client("s3")
-    lines, total_bytes, hours = [], 0, []
+    ck = Checksum()
+    total_bytes, n_objects = 0, 0
     paginator = s3.get_paginator("list_objects_v2")
     for page in paginator.paginate(Bucket=DATA_LAKE_BUCKET, Prefix=prefix):
         for obj in page.get("Contents", []):
             body = s3.get_object(Bucket=DATA_LAKE_BUCKET, Key=obj["Key"])["Body"].read()
             n_events = gzip.decompress(body).decode().count("\n")
-            lines.append(f"{obj['Key']}|{n_events}|{len(body)}")
+            ck.add(f"{obj['Key']}|{n_events}|{len(body)}")
             total_bytes += len(body)
-            hours.append(obj["Key"])
+            n_objects += 1
 
-    check(f"{key} objects", len(lines) == want["objects"],
-          f"store={len(lines)} manifest={want['objects']}")
+    check(f"{key} objects", n_objects == want["objects"],
+          f"store={n_objects} manifest={want['objects']}")
     check(f"{key} bytes", total_bytes == want["bytes"],
           f"store={total_bytes} manifest={want['bytes']}")
-    got = checksum_lines(lines)
+    got = ck.hexdigest()
     check(f"{key} checksum", got == want["checksum"],
           f"store={got} manifest={want['checksum']}")
 
     missing_want = anomaly_count(manifest, "missing_hours", key)
-    days = manifest.get("seed_legacy_params", {}).get("event_days")
+    days = manifest.get("seed_legacy_params", {}).get("s3", {}).get("event_days")
     if missing_want is not None and days is not None:
         expected_hours = days * 24
-        gaps = expected_hours - len(hours)
+        gaps = expected_hours - n_objects
         check("anomaly missing_hours", gaps == missing_want,
               f"store={gaps} manifest={missing_want}")
 
@@ -197,6 +201,10 @@ def main() -> int:
     parser.add_argument("--ns", required=True)
     parser.add_argument("--targets", default="postgres,dynamodb,s3")
     args = parser.parse_args()
+
+    if not valid_ns(args.ns):
+        print("NS must match ^[A-Za-z0-9_]+$", file=sys.stderr)
+        return 2
 
     manifest = load_manifest(args.ns)
     if not manifest:

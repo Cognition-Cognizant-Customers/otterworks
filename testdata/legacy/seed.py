@@ -40,10 +40,10 @@ from legacy_common import (
     EVENT_TYPES,
     MIME_TYPES,
     SCALES,
+    Checksum,
     anchor_minus,
     aws_client,
     aws_resource,
-    checksum_lines,
     det_uuid,
     iso,
     merge_manifest,
@@ -52,6 +52,7 @@ from legacy_common import (
     power_law_index,
     rng_for,
     schema_name,
+    valid_ns,
 )
 
 from datetime import timedelta
@@ -104,6 +105,9 @@ def log(msg: str) -> None:
     print(f"[seed-legacy] {msg}", flush=True)
 
 
+COPY_FLUSH_DOCS = 20_000  # flush COPY buffers every N documents to bound memory
+
+
 # ── Postgres ──────────────────────────────────────────────────────────────────
 
 
@@ -118,10 +122,36 @@ def seed_postgres(ns: str, cfg: dict) -> tuple[dict, list[dict]]:
     orphan_snap_count = max(1, n_docs // 333)  # snapshots pointing at missing docs
     gap_docs = set(rng.sample(range(n_docs), gap_count))
 
-    doc_lines, ver_lines, snap_lines = [], [], []
+    doc_ck, ver_ck, snap_ck = Checksum(), Checksum(), Checksum()
     docs_buf, vers_buf, snaps_buf = io.StringIO(), io.StringIO(), io.StringIO()
     total_versions = 0
     total_snapshots = 0
+
+    conn = psycopg2.connect(**pg_config())
+    conn.autocommit = False
+    cur = conn.cursor()
+
+    copy_specs = (
+        (docs_buf, "documents",
+         "(id,title,content,content_type,owner_id,folder_id,is_deleted,"
+         "is_template,word_count,version,created_at,updated_at)"),
+        (vers_buf, "document_versions",
+         "(id,document_id,version_number,title,content,created_by,created_at)"),
+        (snaps_buf, "document_snapshots",
+         "(id,document_id,state_b64,label,created_by,created_at)"),
+    )
+
+    def flush_buffers() -> None:
+        for buf, table, cols in copy_specs:
+            if buf.tell():
+                buf.seek(0)
+                cur.copy_expert(f"COPY {schema}.{table} {cols} FROM STDIN", buf)
+                buf.seek(0)
+                buf.truncate(0)
+
+    cur.execute(DDL.format(schema=schema, ns=ns))
+    cur.execute(f"TRUNCATE {schema}.document_versions, {schema}.document_snapshots")
+    cur.execute(f"TRUNCATE {schema}.documents CASCADE")
 
     for i in range(n_docs):
         doc_id = det_uuid(rng)
@@ -139,7 +169,7 @@ def seed_postgres(ns: str, cfg: dict) -> tuple[dict, list[dict]]:
             f"{doc_id}\t{title}\t{content}\ttext/markdown\t{owner}\t{folder}\t"
             f"{is_deleted}\tf\t{word_count}\t{n_versions}\t{iso(created)}\t{iso(updated)}\n"
         )
-        doc_lines.append(f"{doc_id}|{n_versions}|{word_count}")
+        doc_ck.add(f"{doc_id}|{n_versions}|{word_count}")
 
         skip_version = rng.randint(2, n_versions) if (i in gap_docs and n_versions >= 2) else 0
         for v in range(1, n_versions + 1):
@@ -150,7 +180,7 @@ def seed_postgres(ns: str, cfg: dict) -> tuple[dict, list[dict]]:
             vers_buf.write(
                 f"{ver_id}\t{doc_id}\t{v}\t{title}\trev {v} of {title}\t{owner}\t{iso(v_created)}\n"
             )
-            ver_lines.append(f"{doc_id}|{v}")
+            ver_ck.add(f"{doc_id}|{v}")
             total_versions += 1
 
         if rng.random() < 0.2:
@@ -158,8 +188,11 @@ def seed_postgres(ns: str, cfg: dict) -> tuple[dict, list[dict]]:
             snaps_buf.write(
                 f"{snap_id}\t{doc_id}\tc3RhdGU=\tautosave\t{owner}\t{iso(updated)}\n"
             )
-            snap_lines.append(f"{snap_id}|{doc_id}")
+            snap_ck.add(f"{snap_id}|{doc_id}")
             total_snapshots += 1
+
+        if (i + 1) % COPY_FLUSH_DOCS == 0:
+            flush_buffers()
 
     for _ in range(orphan_snap_count):  # planted orphaned snapshots
         snap_id = det_uuid(rng)
@@ -167,38 +200,23 @@ def seed_postgres(ns: str, cfg: dict) -> tuple[dict, list[dict]]:
         snaps_buf.write(
             f"{snap_id}\t{missing_doc}\tb3JwaGFu\torphan\t{users[0]}\t{iso(ANCHOR)}\n"
         )
-        snap_lines.append(f"{snap_id}|{missing_doc}")
+        snap_ck.add(f"{snap_id}|{missing_doc}")
         total_snapshots += 1
 
-    conn = psycopg2.connect(**pg_config())
-    conn.autocommit = False
     try:
-        with conn.cursor() as cur:
-            cur.execute(DDL.format(schema=schema, ns=ns))
-            cur.execute(f"TRUNCATE {schema}.document_versions, {schema}.document_snapshots")
-            cur.execute(f"TRUNCATE {schema}.documents CASCADE")
-            for buf, table, cols in (
-                (docs_buf, "documents",
-                 "(id,title,content,content_type,owner_id,folder_id,is_deleted,"
-                 "is_template,word_count,version,created_at,updated_at)"),
-                (vers_buf, "document_versions",
-                 "(id,document_id,version_number,title,content,created_by,created_at)"),
-                (snaps_buf, "document_snapshots",
-                 "(id,document_id,state_b64,label,created_by,created_at)"),
-            ):
-                buf.seek(0)
-                cur.copy_expert(f"COPY {schema}.{table} {cols} FROM STDIN", buf)
+        flush_buffers()
         conn.commit()
     finally:
+        cur.close()
         conn.close()
 
     targets = {
         f"postgres.{schema}.documents": {
-            "rows": n_docs, "checksum": checksum_lines(doc_lines)},
+            "rows": n_docs, "checksum": doc_ck.hexdigest()},
         f"postgres.{schema}.document_versions": {
-            "rows": total_versions, "checksum": checksum_lines(ver_lines)},
+            "rows": total_versions, "checksum": ver_ck.hexdigest()},
         f"postgres.{schema}.document_snapshots": {
-            "rows": total_snapshots, "checksum": checksum_lines(snap_lines)},
+            "rows": total_snapshots, "checksum": snap_ck.hexdigest()},
     }
     anomalies = [
         {"kind": "version_gaps",
@@ -249,7 +267,7 @@ def seed_dynamodb(ns: str, cfg: dict) -> tuple[dict, list[dict]]:
     if cleared:
         log(f"dynamodb: cleared {cleared} previous items for ns '{ns}'")
 
-    lines = []
+    ck = Checksum()
     with table.batch_writer() as batch:
         for i in range(n_items):
             file_uuid = det_uuid(rng)
@@ -274,11 +292,11 @@ def seed_dynamodb(ns: str, cfg: dict) -> tuple[dict, list[dict]]:
                 "created_at": iso(created),
                 "updated_at": iso(created + timedelta(hours=rng.randint(0, 720))),
             })
-            lines.append(f"{item_id}|{size}|{s3_key}")
+            ck.add(f"{item_id}|{size}|{s3_key}")
 
     targets = {
         "dynamodb.file-metadata": {
-            "items": n_items, "checksum": checksum_lines(lines)},
+            "items": n_items, "checksum": ck.hexdigest()},
     }
     anomalies = [
         {"kind": "orphaned_metadata", "target": "dynamodb.file-metadata",
@@ -309,7 +327,8 @@ def seed_s3(ns: str, cfg: dict) -> tuple[dict, list[dict]]:
     missing_count = max(1, days // 30)  # planted missing hourly objects
     missing_hours = set(rng.sample(range(1, total_hours - 1), missing_count))
 
-    lines, objects, total_bytes = [], 0, 0
+    ck = Checksum()
+    objects, total_bytes = 0, 0
     for h in range(total_hours):
         hour_start = ANCHOR - timedelta(hours=total_hours - h)
         n_events = rng.randint(20, 120)
@@ -330,14 +349,14 @@ def seed_s3(ns: str, cfg: dict) -> tuple[dict, list[dict]]:
         )
         key = f"{prefix}{hour_start.strftime('%Y/%m/%d/%H')}.json.gz"
         s3.put_object(Bucket=DATA_LAKE_BUCKET, Key=key, Body=body)
-        lines.append(f"{key}|{n_events}|{len(body)}")
+        ck.add(f"{key}|{n_events}|{len(body)}")
         objects += 1
         total_bytes += len(body)
 
     targets = {
         f"s3.data-lake/{prefix}": {
             "objects": objects, "bytes": total_bytes,
-            "checksum": checksum_lines(lines)},
+            "checksum": ck.hexdigest()},
     }
     anomalies = [
         {"kind": "missing_hours", "target": f"s3.data-lake/{prefix}",
@@ -356,6 +375,11 @@ OWNED_PREFIX = {
     "dynamodb": lambda ns: "dynamodb.file-metadata",
     "s3": lambda ns: f"s3.data-lake/events/{ns}/",
 }
+PARAM_KEYS = {
+    "postgres": ("documents", "versions_min", "versions_max", "users"),
+    "dynamodb": ("dynamo_items", "users"),
+    "s3": ("event_days", "users"),
+}
 
 
 def main() -> int:
@@ -365,8 +389,8 @@ def main() -> int:
     parser.add_argument("--targets", default="postgres,dynamodb,s3")
     args = parser.parse_args()
 
-    if not args.ns.replace("_", "").isalnum():
-        print("NS must contain only letters, digits, and underscores", file=sys.stderr)
+    if not valid_ns(args.ns):
+        print("NS must match ^[A-Za-z0-9_]+$", file=sys.stderr)
         return 2
     requested = [t.strip() for t in args.targets.split(",") if t.strip()]
     unknown = [t for t in requested if t not in SEEDERS]
@@ -389,18 +413,16 @@ def main() -> int:
         owned.append(OWNED_PREFIX[name](args.ns))
         log(f"{name}: done in {time.monotonic() - t0:.1f}s")
 
+    params = {
+        name: {"scale": args.scale, **{k: cfg[k] for k in PARAM_KEYS[name]}}
+        for name in requested
+    }
     manifest = merge_manifest(
         args.ns,
-        args.scale,
         all_targets,
         all_anomalies,
         tuple(owned),
-        params={
-            "targets_seeded": requested,
-            "documents": cfg["documents"],
-            "dynamo_items": cfg["dynamo_items"],
-            "event_days": cfg["event_days"],
-        },
+        params=params,
     )
     log(f"manifest written: testdata/legacy/manifests/{args.ns}.json "
         f"({len(manifest['targets'])} targets, "
