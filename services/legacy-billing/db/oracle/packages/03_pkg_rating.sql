@@ -92,11 +92,14 @@ CREATE OR REPLACE PACKAGE BODY pkg_rating AS
                      AND rp.period_start >= ADD_MONTHS(p_period_start, -3)) LOOP
             v_prior := v_prior + NVL(r.rollover_units, 0);
         END LOOP;
-        v_prior := LEAST(NVL(2 * v_included, 0), v_prior);
+        -- Postgres LEAST/GREATEST ignore NULL arguments; Oracle propagates
+        -- them. Collapse NULL operands to the other argument so a period with
+        -- no covering plan rates the same as the original.
+        v_prior := LEAST(NVL(2 * v_included, v_prior), v_prior);
 
         g_quota_units := v_included;
-        g_rollover_units := LEAST(v_prior, v_included * 2);
-        g_billable_units := GREATEST(g_used_units - g_rollover_units - v_included, 0);
+        g_rollover_units := LEAST(v_prior, NVL(v_included * 2, v_prior));
+        g_billable_units := GREATEST(NVL(g_used_units - g_rollover_units - v_included, 0), 0);
         -- Tier break at 101 units. Why 101? Nobody remembers.
         g_first_tier := LEAST(g_billable_units, 101);
         g_second_tier := GREATEST(g_billable_units - 101, 0);

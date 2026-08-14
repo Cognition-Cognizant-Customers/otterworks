@@ -61,8 +61,10 @@ CREATE OR REPLACE PACKAGE BODY pkg_invoicing AS
         EXCEPTION
             WHEN NO_DATA_FOUND THEN v_exempt := 'N';
         END;
+        -- NULL plan fee / overage propagates to NULL tax, exactly like the
+        -- Postgres original's (v_plan.monthly_fee + overage) * 0.0825.
         SELECT DECODE(v_exempt, 'Y', 0,
-                      (NVL(g_plan_fee, 0) + NVL(g_overage, 0)) * TAX_RATE)
+                      (g_plan_fee + g_overage) * TAX_RATE)
           INTO g_tax FROM dual;
     END compute_preview;
 
@@ -70,10 +72,14 @@ CREATE OR REPLACE PACKAGE BODY pkg_invoicing AS
                                 p_period_end IN DATE) RETURN SYS_REFCURSOR IS
         v_cur        SYS_REFCURSOR;
         v_credit_app NUMBER;
+        v_charge_cap NUMBER;
     BEGIN
         compute_preview(p_tenant_id, p_period_start, p_period_end);
-        v_credit_app := LEAST(g_credit,
-            ROUND(NVL(g_plan_fee, 0) + NVL(g_overage, 0) + NVL(g_tax, 0), 2));
+        -- Postgres LEAST ignores NULL arguments; Oracle propagates them.
+        -- Collapse a NULL cap to g_credit so a no-plan period still applies
+        -- the full credit balance, matching the original.
+        v_charge_cap := ROUND(g_plan_fee + g_overage + g_tax, 2);
+        v_credit_app := LEAST(g_credit, NVL(v_charge_cap, g_credit));
         OPEN v_cur FOR
             SELECT 1 AS line_no, 'plan' AS line_type, g_plan_code AS description,
                    ROUND(g_plan_fee, 2) AS amount, 0 AS tax_amount,
