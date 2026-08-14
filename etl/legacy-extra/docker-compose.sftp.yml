@@ -1,0 +1,22 @@
+# Optional SFTP fixture for demoing the mainframe file-drop.
+# Stands in for the mainframe transferring CUSTBILL files onto the ETL box.
+# Localhost-only; never started by the golden `make up` path.
+#
+#   docker compose -f etl/legacy-extra/docker-compose.sftp.yml up -d
+#   sftp -P 52222 mainframe@127.0.0.1   (password: mvsprod)
+#   put CUSTBILL_DEV_001.dat upload/
+#
+# The host bind mount maps the container's upload dir onto the same
+# directory the ingest job polls ($OTTERWORKS_LEGACY_ROOT/sftp-drop).
+# Start via `make legacy-sftp-up` so LEGACY_SFTP_UID matches your host user.
+services:
+  legacy-sftp:
+    image: atmoz/sftp:alpine
+    container_name: otterworks-legacy-sftp
+    # uid defaults to the invoking host user so the bind-mounted drop dir
+    # stays writable by both the container and the host-run jobs
+    command: mainframe:mvsprod:${LEGACY_SFTP_UID:-1000}::upload
+    ports:
+      - "127.0.0.1:52222:22"
+    volumes:
+      - ${OTTERWORKS_LEGACY_ROOT:-/tmp/otterworks-legacy}/sftp-drop/upload:/home/mainframe/upload
