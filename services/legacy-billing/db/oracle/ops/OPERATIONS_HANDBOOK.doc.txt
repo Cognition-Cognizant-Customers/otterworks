@@ -1,0 +1,62 @@
+=======================================================================
+   OTTERWORKS BILLING DATABASE — OPERATIONS HANDBOOK   (rev. G)
+   Converted from OPERATIONS_HANDBOOK.doc (Word 97) by Sarah, 2016.
+   Formatting casualties are expected. The .doc is on the P: drive.
+
+   INERT DEMO ARTIFACT — plain-text prop for the modernization demos.
+   Nothing in this repository reads or executes it.
+=======================================================================
+
+1. SYSTEM OVERVIEW
+------------------
+The billing database (OW_BILLING, owbilldb01, Oracle) is the system of
+record for customers, invoices and dunning. The schema is documented in
+CUSTOMER_MASTER_LAYOUT.xls (last updated 2011, mostly right).
+
+Key tables:
+  CUSTOMER_MASTER   - one row per customer. 155 columns. Columns
+                      FLAG_01..FLAG_20: meanings in Rajiv's notebook.
+                      FLAG_07 is load-bearing. Do not change FLAG_07.
+  ENTITY_ATTR_VALUE - "temporary" flexible attributes (since 2009).
+  INVOICE_HEADER /
+  INVOICE_LINE      - loaded nightly from the mainframe CUSTBILL feed.
+                      The FK is not enforced (see §4.2, do not "fix").
+
+2. DAILY OPERATIONS
+-------------------
+02:00  JOB_NIGHTLY_DUNNING   dunning + suspension sweep (DBMS_SCHEDULER)
+03:30  JOB_PURGE_AUDIT_LOG   audit retention, hardcoded 90 days
+morning check: SELECT COUNT(*) FROM billing_audit_log WHERE log_ts > SYSDATE-1;
+  - if zero, logging is broken again (autonomous txn thing). Restart? No.
+    Just note it in the shift log; it usually comes back.
+
+3. MONTH-END
+------------
+Do NOT run ad-hoc queries against INVOICE_LINE between the 28th and the
+3rd. The batch NEEDS the buffer cache. This is enforced socially.
+
+4. KNOWN ISSUES (DO NOT "FIX" WITHOUT CAB APPROVAL)
+---------------------------------------------------
+4.1  Dates in CUSTOMER_MASTER.SIGNUP_DT are VARCHAR2 'DD-MON-YY'.
+     Some rows contain '31-FEB-24' or 'N/A'. The renewal job skips
+     them silently. Finance is aware (ticket BILL-2204, open since 2021).
+4.2  INVOICE_LINE rows can point at invoices that do not exist
+     ("ghost lines", mainframe replay artifact). Monthly count ~30-40.
+     Reconciliation spreadsheet macro ignores them.
+4.3  RELATED_ACCT_IDS is a comma-separated VARCHAR2. Some rows contain
+     trailing commas, spaces, or the string 'NULL'. Parsing is caller's
+     problem.
+4.4  The nightly dunning job and the CUSTBILL load can overlap on slow
+     nights. Symptom: ORA-00060 in the alert log. Action: none, it
+     retries itself. Usually.
+
+5. CONTACTS
+-----------
+  DBA on call ......... see rota spreadsheet (P: drive)
+  Mainframe feed ...... Jake (LEFT 2020 — ask Sarah)
+  FLAG columns ........ Rajiv's notebook, bottom drawer, ops room
+  Escalation .......... if all else fails, restart owbillapp01 twice
+
+APPENDIX A: RESTORE PROCEDURE
+-----------------------------
+(page intentionally blank since rev. E — restore was "being rewritten")
