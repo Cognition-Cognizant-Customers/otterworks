@@ -99,11 +99,11 @@ def iso(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-NS_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
+NS_PATTERN = re.compile(r"[A-Za-z0-9_]+")
 
 
 def valid_ns(ns: str) -> bool:
-    return bool(NS_PATTERN.match(ns))
+    return bool(NS_PATTERN.fullmatch(ns))
 
 
 class Checksum:
