@@ -85,7 +85,7 @@ def _build_report(bucket: str, ns: str):
 
     lines: list[str] = []
     for key in sorted(keys):
-        text = s3.get_object(Bucket=bucket, Key=key)["Body"].read().decode("utf-8")
+        text = s3.get_object(Bucket=bucket, Key=key)["Body"].read().decode("latin-1")
         lines.extend(line for line in text.splitlines() if line)
 
     csv = finance_report(lines)
@@ -93,7 +93,7 @@ def _build_report(bucket: str, ns: str):
     stamp = time.strftime("%Y%m%d", time.localtime())
     csv_key = f"reports/{ns}/finance_billing_{stamp}.csv"
     xls_key = f"reports/{ns}/finance_billing_{stamp}.xls"
-    s3.put_object(Bucket=bucket, Key=csv_key, Body=csv.encode("utf-8"))
-    s3.put_object(Bucket=bucket, Key=xls_key, Body=csv.encode("utf-8"))
+    s3.put_object(Bucket=bucket, Key=csv_key, Body=csv.encode("latin-1"))
+    s3.put_object(Bucket=bucket, Key=xls_key, Body=csv.encode("latin-1"))
 
     return {"bucket": bucket, "ns": ns, "report_key": csv_key, "files": len(keys)}

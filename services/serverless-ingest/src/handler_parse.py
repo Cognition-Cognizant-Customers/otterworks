@@ -23,17 +23,20 @@ def handler(event, context):
     ns = event["ns"]
     base = key.split("/")[-1].rsplit(".dat", 1)[0]
 
-    raw = s3.get_object(Bucket=bucket, Key=key)["Body"].read().decode("utf-8")
+    # latin-1 is byte-preserving, matching the legacy chain's byte-oriented
+    # cut/awk processing (no validation; dirty records pass through)
+    raw = s3.get_object(Bucket=bucket, Key=key)["Body"].read().decode("latin-1")
     records = parse_file(raw)
 
     parsed_key = f"parsed/{ns}/{base}.psv"
     body = ("\n".join(records) + "\n") if records else ""
-    s3.put_object(Bucket=bucket, Key=parsed_key, Body=body.encode("utf-8"))
+    s3.put_object(Bucket=bucket, Key=parsed_key, Body=body.encode("latin-1"))
 
     table = dynamodb.Table(TABLE_NAME)
     with table.batch_writer() as batch:
         for i, rec in enumerate(records, start=1):
-            cust, name, dt, amt, ccy, rt = rec.split("|")
+            fields = rec.split("|")
+            cust, name, dt, amt, ccy, rt = (fields + [""] * 6)[:6]
             batch.put_item(
                 Item={
                     "ns": ns,

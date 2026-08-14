@@ -27,12 +27,15 @@ if [ -z "$NS" ] || ! echo "$NS" | grep -qE '^[A-Za-z0-9]+$'; then
 fi
 NS_LOWER=$(echo "$NS" | tr '[:upper:]' '[:lower:]')
 
-# Default region matches infrastructure/terraform-tp-aws var.aws_region
-export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-east-1}}"
-
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TF_DIR="$REPO_ROOT/infrastructure/terraform-tp-aws"
 LEGACY="$REPO_ROOT/etl/legacy-extra"
+
+# Talk to the region the stack was actually applied in (provider region wins
+# over env vars, so the operator's AWS_REGION may not match the stack)
+STACK_REGION=$(terraform -chdir="$TF_DIR" output -raw aws_region 2>/dev/null)
+export AWS_DEFAULT_REGION="${STACK_REGION:-us-east-1}"
+export AWS_REGION="$AWS_DEFAULT_REGION"
 
 BUCKET=$(terraform -chdir="$TF_DIR" output -raw ingest_bucket 2>/dev/null)
 TABLE=$(terraform -chdir="$TF_DIR" output -raw billing_table 2>/dev/null)

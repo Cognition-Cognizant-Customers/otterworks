@@ -1,3 +1,8 @@
+output "aws_region" {
+  description = "Region the stack is applied in"
+  value       = var.aws_region
+}
+
 output "ingest_bucket" {
   description = "S3 bucket with landing/, parsed/, reports/ prefixes"
   value       = aws_s3_bucket.ingest.bucket
