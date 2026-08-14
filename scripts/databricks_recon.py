@@ -530,9 +530,9 @@ def main() -> int:
     parser.add_argument("--phases", default="custbill,python")
     args = parser.parse_args()
 
-    ns = args.ns.lower()
+    ns = args.ns
     if not re.fullmatch(r"[a-z0-9_]{1,32}", ns):
-        sys.exit(f"invalid namespace: {args.ns!r}")
+        sys.exit(f"invalid namespace: {args.ns!r} (must be lowercase [a-z0-9_], 1-32 chars)")
     phases = [p.strip() for p in args.phases.split(",") if p.strip()]
     known = {"custbill", "python"}
     unknown = [p for p in phases if p not in known]
