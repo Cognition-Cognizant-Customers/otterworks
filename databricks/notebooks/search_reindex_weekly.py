@@ -16,6 +16,8 @@ dbutils.widgets.text("ns", "dev")
 
 catalog = dbutils.widgets.get("catalog")
 ns = dbutils.widgets.get("ns").lower()
+if not re.fullmatch(r"[a-z0-9_]{1,64}", catalog):
+    raise ValueError(f"invalid catalog: {catalog!r}")
 if not re.fullmatch(r"[a-z0-9_]{1,32}", ns):
     raise ValueError(f"invalid namespace: {ns!r}")
 

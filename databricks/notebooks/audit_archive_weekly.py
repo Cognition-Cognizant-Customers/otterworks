@@ -11,6 +11,7 @@
 
 # COMMAND ----------
 import re
+from datetime import timedelta
 
 from pyspark.sql import functions as F
 
@@ -21,6 +22,8 @@ dbutils.widgets.text("retention_days", "90")
 catalog = dbutils.widgets.get("catalog")
 ns = dbutils.widgets.get("ns").lower()
 retention_days = int(dbutils.widgets.get("retention_days"))
+if not re.fullmatch(r"[a-z0-9_]{1,64}", catalog):
+    raise ValueError(f"invalid catalog: {catalog!r}")
 if not re.fullmatch(r"[a-z0-9_]{1,32}", ns):
     raise ValueError(f"invalid namespace: {ns!r}")
 
@@ -55,9 +58,7 @@ max_ts = events.agg(F.max("occurred_at").alias("m")).collect()[0]["m"]
 if max_ts is None:
     raise RuntimeError(f"no events in bronze.events for ns '{ns}' — run analytics_daily first")
 
-cutoff = events.select(
-    (F.lit(max_ts) - F.expr(f"INTERVAL {retention_days} DAYS")).alias("c")
-).collect()[0]["c"]
+cutoff = max_ts - timedelta(days=retention_days)
 
 expired = events.where(F.col("occurred_at") < F.lit(cutoff))
 archived = expired.count()
@@ -66,6 +67,12 @@ retained = events.count() - archived
 spark.sql(f"DELETE FROM `{catalog}`.gold.audit_archive_events WHERE ns = '{ns}'")
 expired.withColumn("archived_cutoff", F.lit(cutoff)).write.mode("append").saveAsTable(
     f"`{catalog}`.gold.audit_archive_events"
+)
+# Like the legacy job's post-archive delete: expired rows leave bronze.events
+# (Delta time travel serves as the Glacier-restore equivalent).
+spark.sql(
+    f"""DELETE FROM `{catalog}`.bronze.events
+        WHERE ns = '{ns}' AND occurred_at < TIMESTAMP'{cutoff.isoformat(sep=" ")}'"""
 )
 spark.sql(f"DELETE FROM `{catalog}`.gold.audit_archive_runs WHERE ns = '{ns}'")
 spark.createDataFrame(

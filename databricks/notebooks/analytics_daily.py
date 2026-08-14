@@ -18,6 +18,8 @@ dbutils.widgets.text("ns", "dev")
 
 catalog = dbutils.widgets.get("catalog")
 ns = dbutils.widgets.get("ns").lower()
+if not re.fullmatch(r"[a-z0-9_]{1,64}", catalog):
+    raise ValueError(f"invalid catalog: {catalog!r}")
 if not re.fullmatch(r"[a-z0-9_]{1,32}", ns):
     raise ValueError(f"invalid namespace: {ns!r}")
 
@@ -90,7 +92,10 @@ by_day = events.withColumn("event_date", F.to_date("occurred_at"))
 
 daily = by_day.groupBy("event_date").agg(
     F.count("*").alias("total_events"),
-    F.countDistinct("user_id").alias("unique_users"),
+    # Legacy excludes the "unknown" placeholder from the distinct-user count.
+    F.countDistinct(F.when(F.col("user_id") != "unknown", F.col("user_id"))).alias(
+        "unique_users"
+    ),
 )
 by_type = by_day.groupBy("event_date", "event_type").agg(F.count("*").alias("event_count"))
 by_user = by_day.groupBy("event_date", "user_id").agg(F.count("*").alias("action_count"))

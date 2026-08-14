@@ -382,7 +382,8 @@ def phase_python(recon: Recon, ns: str) -> None:
         day = ev["occurred_at"][:10]
         user = ev.get("user_id") or "unknown"
         daily[day][0] += 1
-        daily[day][1].add(user)
+        if user != "unknown":  # legacy excludes the placeholder from active_users
+            daily[day][1].add(user)
         by_type[(day, ev["event_type"])] += 1
         by_user[(day, user)] += 1
 

@@ -12,6 +12,8 @@ data "databricks_sql_warehouse" "existing" {
 # SQL Statement Execution API; destroy runs DROP CATALOG ... CASCADE so
 # teardown still removes everything, including tables created by pipeline runs.
 resource "terraform_data" "catalog" {
+  triggers_replace = [var.catalog_name]
+
   input = {
     catalog      = var.catalog_name
     warehouse_id = data.databricks_sql_warehouse.existing.id

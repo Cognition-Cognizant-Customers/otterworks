@@ -23,7 +23,10 @@ Two workspace quirks the stack works around:
   (`Metastore storage root URL does not exist`), so the `ow_tp` catalog is
   managed by a `terraform_data` resource that runs `CREATE CATALOG` /
   `DROP CATALOG ... CASCADE` through the SQL Statement Execution API on the
-  reused warehouse. Everything else uses native provider resources.
+  reused warehouse. Everything else uses native provider resources. Changing
+  `catalog_name` replaces this resource (drop old catalog, create new); the
+  cascade also drops the provider-managed schemas/volume, so run `terraform
+  apply` a second time after a rename to recreate them.
 - **PAT without the `files` scope:** the demo token cannot use the Files API,
   so `make databricks-recon` stages inputs via the workspace import API under
   `/Shared/ow_tp/landing/`, and the ingest notebooks copy them into the

@@ -8,6 +8,7 @@
 
 # COMMAND ----------
 import re
+from datetime import timedelta
 
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
@@ -19,6 +20,8 @@ dbutils.widgets.text("lookback_days", "30")
 catalog = dbutils.widgets.get("catalog")
 ns = dbutils.widgets.get("ns").lower()
 lookback_days = int(dbutils.widgets.get("lookback_days"))
+if not re.fullmatch(r"[a-z0-9_]{1,64}", catalog):
+    raise ValueError(f"invalid catalog: {catalog!r}")
 if not re.fullmatch(r"[a-z0-9_]{1,32}", ns):
     raise ValueError(f"invalid namespace: {ns!r}")
 
@@ -42,9 +45,7 @@ max_date = actions.agg(F.max("event_date").alias("m")).collect()[0]["m"]
 if max_date is None:
     raise RuntimeError(f"no user actions for ns '{ns}' — run analytics_daily first")
 
-window_start = actions.select(
-    F.date_sub(F.lit(max_date), lookback_days - 1).alias("s")
-).collect()[0]["s"]
+window_start = max_date - timedelta(days=lookback_days - 1)
 
 in_window = actions.where(F.col("event_date") >= F.lit(window_start))
 
