@@ -26,7 +26,8 @@ the Oracle estate is seeded separately via `oracle-billing-seed`.
   completion by creating `FIXTURE_META`; the compose healthcheck (and
   `--wait`) only pass once that marker exists and all objects compiled VALID.
   First boot pulls + initializes Oracle Free, so allow ~10–20 minutes.
-- Seeding is deterministic per namespace (seed = crc32(NS)): re-running a
+- Seeding is deterministic per namespace (the shared `legacy_common.ns_seed`,
+  recorded as `seed` in the manifest): re-running a
   namespace deletes and regenerates identical data, and distinct namespaces
   coexist in the same schema. The seed manifest is written to
   `testdata/legacy/manifests/<NS>.json` per the contract in

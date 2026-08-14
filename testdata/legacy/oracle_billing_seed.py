@@ -20,7 +20,6 @@ import hashlib
 import os
 import random
 import sys
-import zlib
 
 import oracledb
 
@@ -129,10 +128,14 @@ def main() -> int:
     if not legacy_common.valid_ns(args.ns):
         print("NS must match ^[A-Za-z0-9_]+$", file=sys.stderr)
         return 2
+    if len(args.ns) > 11:
+        # CUST_NO is VARCHAR2(20): '<NS>-' + 8 digits must fit.
+        print("NS must be at most 11 characters", file=sys.stderr)
+        return 2
 
     ns = args.ns
     cfg = SCALES[args.scale]
-    seed = zlib.crc32(ns.encode())
+    seed = legacy_common.ns_seed(ns)
     rng = random.Random(seed)
     batch_no = seed % 90_000_000 + 1_000_000
 
@@ -379,8 +382,7 @@ def main() -> int:
          "target": "oracle.OW_BILLING.CUSTOMER_MASTER.RELATED_ACCT_IDS",
          "count": n_bad_csv},
     ]
-    params = {k: {"scale": args.scale, "data_seed": seed, "batch_no": batch_no}
-              for k in targets}
+    params = {k: {"scale": args.scale, "batch_no": batch_no} for k in targets}
     legacy_common.merge_manifest(ns, targets, anomalies,
                                  owned_prefixes=("oracle.",), params=params)
     print(f"[seed] manifest written: {legacy_common.manifest_path(ns)}")
