@@ -77,19 +77,27 @@ LEGACY_REPORT=$(ls "$ROOT/reports/"finance_billing_*.csv | head -1)
 [ -n "$LEGACY_REPORT" ] || die "legacy report not produced"
 
 echo "== 3. Clearing remote namespace + uploading to s3://$BUCKET/landing/$NS_LOWER/ =="
+# A GREEN verdict must come from fresh pipeline output, never leftovers of a
+# previous run, so clearing failures are fatal and emptiness is re-checked
 for p in landing parsed reports archive; do
-    aws s3 rm --recursive "s3://$BUCKET/$p/$NS_LOWER/" --quiet || true
+    aws s3 rm --recursive "s3://$BUCKET/$p/$NS_LOWER/" --quiet \
+        || die "failed to clear s3://$BUCKET/$p/$NS_LOWER/"
+    [ -z "$(aws s3 ls "s3://$BUCKET/$p/$NS_LOWER/" 2>/dev/null)" ] \
+        || die "stale objects remain under s3://$BUCKET/$p/$NS_LOWER/"
 done
 # Also clear stale DynamoDB rows from earlier runs of this namespace
-aws dynamodb query --table-name "$TABLE" \
+# (the CLI follows LastEvaluatedKey automatically, so Items spans all pages)
+STALE_RECS=$(aws dynamodb query --table-name "$TABLE" \
     --key-condition-expression "#ns = :ns AND begins_with(rec, :pfx)" \
     --expression-attribute-names '{"#ns":"ns"}' \
     --expression-attribute-values "{\":ns\":{\"S\":\"$NS_LOWER\"},\":pfx\":{\"S\":\"CUSTBILL\"}}" \
-    --projection-expression rec --query 'Items[].rec.S' --output text 2>/dev/null \
-    | tr '\t' '\n' | grep -v '^None$' | grep . | while read -r rec; do
-        aws dynamodb delete-item --table-name "$TABLE" \
-            --key "{\"ns\":{\"S\":\"$NS_LOWER\"},\"rec\":{\"S\":\"$rec\"}}" || true
-    done
+    --projection-expression rec --query 'Items[].rec.S' --output text) \
+    || die "failed to query stale DynamoDB rows"
+while read -r rec; do
+    aws dynamodb delete-item --table-name "$TABLE" \
+        --key "{\"ns\":{\"S\":\"$NS_LOWER\"},\"rec\":{\"S\":\"$rec\"}}" \
+        || die "failed to delete stale row $rec"
+done < <(echo "$STALE_RECS" | tr '\t' '\n' | grep -v '^None$' | grep . || true)
 for f in "$STASH"/*.dat; do
     aws s3 cp "$f" "s3://$BUCKET/landing/$NS_LOWER/$(basename "$f")" --quiet || die "upload failed: $f"
 done
@@ -135,11 +143,13 @@ compare() {
             echo "FAIL  finance report differs or missing ($(basename "$LEGACY_REPORT"))"
             PASS=false
         fi
-        DDB_COUNT=$(aws dynamodb query --table-name "$TABLE" --select COUNT \
+        # length(Items) instead of --select COUNT: the CLI merges Items across
+        # LastEvaluatedKey pages, while Count reflects only a single page
+        DDB_COUNT=$(aws dynamodb query --table-name "$TABLE" \
             --key-condition-expression "#ns = :ns AND begins_with(rec, :pfx)" \
             --expression-attribute-names '{"#ns":"ns"}' \
             --expression-attribute-values "{\":ns\":{\"S\":\"$NS_LOWER\"},\":pfx\":{\"S\":\"CUSTBILL\"}}" \
-            --query Count --output text 2>/dev/null)
+            --projection-expression rec --query 'length(Items)' --output text 2>/dev/null)
         if [ "$DDB_COUNT" = "$NRECORDS" ]; then
             echo "PASS  DynamoDB record count matches ($DDB_COUNT)"
         else
