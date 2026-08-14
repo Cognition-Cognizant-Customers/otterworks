@@ -435,6 +435,7 @@ CREATE TABLE invoice_header (
     due_dt      VARCHAR2(9),
     status_cd   NUMBER(4),                -- CODES('INV_STATUS')
     total_amt   NUMBER(14,2),
+    batch_no    NUMBER(8),
     CONSTRAINT pk_invoice_header PRIMARY KEY (invoice_id)
 );
 

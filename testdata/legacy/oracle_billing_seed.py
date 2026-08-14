@@ -85,7 +85,7 @@ def cleanup(cur, ns: str, batch_no: int) -> None:
                    (SELECT cust_id FROM customer_master WHERE conversion_batch_no = :1)""",
                 [batch_no])
     cur.execute("DELETE FROM invoice_line WHERE batch_no = :1", [batch_no])
-    cur.execute("DELETE FROM invoice_header WHERE invoice_no LIKE :1", [f"{ns.upper()}-%"])
+    cur.execute("DELETE FROM invoice_header WHERE batch_no = :1", [batch_no])
     cur.execute("DELETE FROM customer_master WHERE conversion_batch_no = :1", [batch_no])
     cur.execute("DELETE FROM customer_master_hist WHERE conversion_batch_no = :1", [batch_no])
     pfx = f"{ns}::%"
@@ -161,6 +161,9 @@ def main() -> int:
     cust_ck = Checksum()
     cust_rows = []
     cust_ids = []
+    cust_tenants = []
+    cust_names = []
+    cust_pairs = []  # (cust_id, balance) for ordered checksum
     insert_cust = """
         INSERT INTO customer_master (
             cust_id, tenant_id, cust_no, cust_name, legal_name,
@@ -182,7 +185,9 @@ def main() -> int:
         cust_id = md5_uuid(f"{ns}:cust:{i}")
         cust_ids.append(cust_id)
         tenant = rng.choices(htenants, weights=weights)[0]
+        cust_tenants.append(tenant)
         name = f"{rng.choice(FIRST)} {rng.choice(LAST)}"
+        cust_names.append(name)
         city, st, zp = rng.choice(CITIES)
         whale = i < n_htenants  # the first few customers are whale accounts
         bal = round(rng.uniform(50_000, 900_000), 2) if whale else \
@@ -222,13 +227,15 @@ def main() -> int:
             f"{rng.randint(0, 999999999):09d}",
             batch_no, "CONVERSION", rng.randint(0, 5000), "BATCH",
         ))
-        cust_ck.add(cust_id, f"{bal:.2f}")
+        cust_pairs.append((cust_id, f"{bal:.2f}"))
         if len(cust_rows) >= 5000:
             cur.executemany(insert_cust, cust_rows)
             cust_rows = []
     if cust_rows:
         cur.executemany(insert_cust, cust_rows)
     conn.commit()
+    for pk, amt in sorted(cust_pairs):
+        cust_ck.add(pk, amt)
     print(f"[seed] customer_master: {n_cust}")
 
     # --- ENTITY_ATTR_VALUE: attribute sprawl for a subset of customers ---
@@ -269,15 +276,15 @@ def main() -> int:
         inv_ids.append((inv_id, cust_i))
         total = 0
         hdr_rows.append((inv_id, f"{ns.upper()}-{i:09d}", cust_ids[cust_i],
-                         md5_uuid(f"{ns}:htenant-of:{cust_i}"), dt_str(rng),
+                         cust_tenants[cust_i], dt_str(rng),
                          dt_str(rng), rng.choices([20, 30, 40], weights=[30, 55, 15])[0],
-                         round(rng.uniform(20, 20_000), 2)))
+                         round(rng.uniform(20, 20_000), 2), batch_no))
         if len(hdr_rows) >= 5000:
             cur.executemany("""INSERT INTO invoice_header VALUES
-                              (:1, :2, :3, :4, :5, :6, :7, :8)""", hdr_rows)
+                              (:1, :2, :3, :4, :5, :6, :7, :8, :9)""", hdr_rows)
             hdr_rows = []
     if hdr_rows:
-        cur.executemany("INSERT INTO invoice_header VALUES (:1,:2,:3,:4,:5,:6,:7,:8)",
+        cur.executemany("INSERT INTO invoice_header VALUES (:1,:2,:3,:4,:5,:6,:7,:8,:9)",
                         hdr_rows)
     conn.commit()
     print(f"[seed] invoice_header: {n_inv}")
@@ -303,8 +310,8 @@ def main() -> int:
         line_rows.append((
             line_id, f"{ns.upper()}-{i % n_inv:09d}", inv_id,
             cust_ids[cust_i], f"{ns.upper()}-{cust_i:08d}",
-            f"{FIRST[cust_i % len(FIRST)]} {LAST[cust_i % len(LAST)]}",
-            md5_uuid(f"{ns}:htenant-of:{cust_i}"),
+            cust_names[cust_i],
+            cust_tenants[cust_i],
             i % 25 + 1, rng.choice([1, 1, 1, 2, 3, 9]),
             rng.choice(ITEM_DESCS), qty, price, amount,
             round(amount * 0.0825, 2), dt_str(rng),
