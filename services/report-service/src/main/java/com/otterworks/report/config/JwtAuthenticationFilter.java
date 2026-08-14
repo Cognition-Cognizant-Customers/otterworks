@@ -59,11 +59,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     .verifyWith(signingKey())
                                     .build()
                                     .parseSignedClaims(authorization.substring("Bearer ".length()).trim());
-                    userId = claims.getPayload().getSubject();
-                    if (!StringUtils.hasText(userId)) {
-                        userId = claims.getPayload().get("user_id", String.class);
+                    if (!"refresh".equals(claims.getPayload().get("type", String.class))) {
+                        userId = claims.getPayload().getSubject();
+                        if (!StringUtils.hasText(userId)) {
+                            userId = claims.getPayload().get("user_id", String.class);
+                        }
+                        authorities = authorities(claims.getPayload().get("roles"));
                     }
-                    authorities = authorities(claims.getPayload().get("roles"));
                 } catch (JwtException | IllegalArgumentException e) {
                     logger.debug("JWT authentication failed: {}", e.getMessage());
                 }

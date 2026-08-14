@@ -22,4 +22,14 @@ public final class TestAuth {
                         Jwts.SIG.HS256)
                 .compact();
     }
+
+    public static String refreshTokenFor(String userId) {
+        return Jwts.builder()
+                .subject(userId)
+                .claim("type", "refresh")
+                .claim("roles", Arrays.asList("USER"))
+                .signWith(Keys.hmacShaKeyFor(TEST_SECRET.getBytes(StandardCharsets.UTF_8)),
+                        Jwts.SIG.HS256)
+                .compact();
+    }
 }

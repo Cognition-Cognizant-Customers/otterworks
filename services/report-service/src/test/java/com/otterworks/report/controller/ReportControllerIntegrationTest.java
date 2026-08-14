@@ -292,6 +292,13 @@ public class ReportControllerIntegrationTest {
     }
 
     @Test
+    public void refreshTokenCannotAccessReports() throws Exception {
+        mockMvc.perform(get("/api/v1/reports")
+                        .header("Authorization", "Bearer " + TestAuth.refreshTokenFor("refresh-user")))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     public void createReportAlwaysUsesAuthenticatedCallerAsOwner() throws Exception {
         String caller = "authenticated-caller-" + System.currentTimeMillis();
         ReportRequest request = buildRequest("Spoofed Owner Report", ReportCategory.COMPLIANCE,
