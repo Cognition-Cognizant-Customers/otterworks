@@ -89,7 +89,8 @@ def _build_report(bucket: str, ns: str):
         lines.extend(line for line in text.splitlines() if line)
 
     csv = finance_report(lines)
-    stamp = time.strftime("%Y%m%d", time.gmtime())
+    # Legacy finance_excel_report.pl stamps with localtime; honor TZ if set
+    stamp = time.strftime("%Y%m%d", time.localtime())
     csv_key = f"reports/{ns}/finance_billing_{stamp}.csv"
     xls_key = f"reports/{ns}/finance_billing_{stamp}.xls"
     s3.put_object(Bucket=bucket, Key=csv_key, Body=csv.encode("utf-8"))

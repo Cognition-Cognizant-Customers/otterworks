@@ -218,6 +218,9 @@ resource "aws_sfn_state_machine" "pipeline" {
   name     = "${var.name_prefix}-custbill-pipeline"
   role_arn = aws_iam_role.sfn.arn
 
+  # Step Functions validates the role's log-delivery permissions at create time
+  depends_on = [aws_iam_role_policy.sfn]
+
   definition = jsonencode({
     Comment = "CUSTBILL serverless pipeline: parse fixed-width extract, then regenerate the finance report"
     StartAt = "ParseCustbill"

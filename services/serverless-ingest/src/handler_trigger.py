@@ -17,10 +17,13 @@ sfn = boto3.client("stepfunctions")
 STATE_MACHINE_ARN = os.environ["STATE_MACHINE_ARN"]
 
 _FNAME_NS = re.compile(r"^CUSTBILL_([A-Za-z0-9]+)_\d+\.dat$")
+_FNAME_OK = re.compile(r"^CUSTBILL.*\.dat$")
 
 
 def _ns_from_key(key: str) -> str | None:
     parts = key.split("/")
+    if not _FNAME_OK.match(parts[-1]):
+        return None
     if len(parts) >= 3 and parts[0] == "landing":
         return parts[1].lower()
     m = _FNAME_NS.match(parts[-1])

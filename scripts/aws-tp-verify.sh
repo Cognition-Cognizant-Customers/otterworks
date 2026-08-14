@@ -16,7 +16,9 @@
 # Requires: the terraform-tp-aws stack applied, aws cli creds,
 # perl; ksh optional (falls back to a plain copy for ingest).
 #############################################################
-set -u
+# -e is deliberately omitted: the wait loop's `&&` poll and the compare
+# section report failures themselves and must not abort mid-diagnostic
+set -uo pipefail
 
 NS="${1:-${NS:-}}"
 if [ -z "$NS" ] || ! echo "$NS" | grep -qE '^[A-Za-z0-9]+$'; then
