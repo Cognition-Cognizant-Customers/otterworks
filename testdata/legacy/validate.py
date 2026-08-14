@@ -184,11 +184,14 @@ def validate_s3(ns: str, manifest: dict) -> None:
 
     missing_want = anomaly_count(manifest, "missing_hours", key)
     days = manifest.get("seed_legacy_params", {}).get("s3", {}).get("event_days")
-    if missing_want is not None and days is not None:
-        expected_hours = days * 24
-        gaps = expected_hours - n_objects
-        check("anomaly missing_hours", gaps == missing_want,
-              f"store={gaps} manifest={missing_want}")
+    if missing_want is not None:
+        if days is None:
+            check("anomaly missing_hours", False,
+                  "manifest has no seed_legacy_params.s3.event_days")
+        else:
+            gaps = days * 24 - n_objects
+            check("anomaly missing_hours", gaps == missing_want,
+                  f"store={gaps} manifest={missing_want}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
