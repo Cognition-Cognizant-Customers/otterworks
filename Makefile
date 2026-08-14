@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke aws-tp-verify
 
 SHELL := /bin/bash
 
@@ -449,3 +449,9 @@ legacy-sftp-up: ## Start the optional localhost-only SFTP drop fixture
 
 legacy-sftp-down: ## Stop the SFTP drop fixture
 	docker compose -f etl/legacy-extra/docker-compose.sftp.yml down
+
+# --- AWS serverless "after" state (infrastructure/terraform-tp-aws/, tech-partnerships demo) ---
+
+aws-tp-verify: ## Recon the ow-tp serverless pipeline against the legacy chain (NS=<ns>)
+	@test -n "$(NS)" || { echo "usage: make aws-tp-verify NS=<ns>"; exit 1; }
+	scripts/aws-tp-verify.sh $(NS)
