@@ -105,7 +105,10 @@ def normalized(value: Any, kind: str | None = None) -> Any:
     if kind == "decimal":
         return str(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
     if kind == "integer":
-        return int(Decimal(str(value)))
+        current = Decimal(str(value))
+        if current != current.to_integral_value():
+            return str(current)
+        return int(current)
     if kind == "date":
         if isinstance(value, datetime):
             return value.date().isoformat()
