@@ -141,7 +141,7 @@ the legacy outputs exactly.
 1. **Row parity (silver vs `.psv`)** — 100 records for NS=demo; every silver
    row must match a `.psv` row on all 6 fields (id, name, date, amount,
    currency, record-type). The legacy independent recompute is one awk
-   one-liner (from `.agents/skills/legacy-etl-demo/SKILL.md`):
+   one-liner:
 
    ```bash
    cat $OTTERWORKS_LEGACY_ROOT/parsed/*.psv | awk -F'|' \

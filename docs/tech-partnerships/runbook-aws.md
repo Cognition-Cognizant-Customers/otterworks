@@ -49,8 +49,9 @@ Then the two anchors:
    155-column `CUSTOMER_MASTER`, cursor-loop PL/SQL packages, `DBMS_SCHEDULER`
    nightly jobs, autonomous-transaction logging. Garnish:
    `services/legacy-billing/db/oracle/ops/deploy_prod_FINAL_v2.sh.txt` (the
-   "deployment process") and `ops/OPERATIONS_HANDBOOK.doc.txt` (the tribal
-   knowledge).
+   "deployment process") and
+   `services/legacy-billing/db/oracle/ops/OPERATIONS_HANDBOOK.doc.txt` (the
+   tribal knowledge).
 2. **The ETL pet box**: `etl/legacy-extra/crontab` — overlapping cron on one
    EC2 instance, `/var/log/etl/` as the alerting system.
 

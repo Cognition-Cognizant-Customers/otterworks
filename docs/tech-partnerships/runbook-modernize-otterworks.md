@@ -31,6 +31,7 @@ make oracle-billing-seed NS=demo
 export OTTERWORKS_LEGACY_ROOT=/tmp/otterworks-legacy-demo
 make legacy-etl-gen-data NS=demo
 make legacy-etl-run JOB=run_all          # pre-run once so outputs exist
+make legacy-etl-gen-data NS=demo         # re-drop input for the live Phase 1 run
 
 # 6. Verify everything against the manifest (must print 15/15 checks passed)
 make seed-legacy-validate NS=demo
@@ -78,7 +79,7 @@ One estate tour, drawing the "three anchors" picture:
 1. **Data anchor** (8 min) — Oracle horror + EAV + the Postgres/DynamoDB
    sprawl. Beats 1a–1c of `runbook-mongodb.md`. Garnish files:
    `services/legacy-billing/db/oracle/ops/deploy_prod_FINAL_v2.sh.txt`,
-   `ops/OPERATIONS_HANDBOOK.doc.txt`.
+   `services/legacy-billing/db/oracle/ops/OPERATIONS_HANDBOOK.doc.txt`.
 2. **Batch anchor** (7 min) — crontab archaeology + live `run_all` execution.
    Beats 1a–1c of `runbook-databricks.md`. Garnish:
    `etl/legacy-extra/ops/RESTART_PROCEDURE.doc.txt`.
