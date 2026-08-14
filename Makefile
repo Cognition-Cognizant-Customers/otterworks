@@ -218,7 +218,7 @@ tp-smoke: ## Golden-path smoke gate for tech-partnerships (mirrors .github/workf
 	@echo "=== Collab Service (Node.js) ==="
 	cd services/collab-service && { [ -d node_modules ] || npm ci; } && npm run lint && npm test && npm run build
 	@echo "=== Search Service (Python) ==="
-	cd services/search-service && if [ -x .venv/bin/pytest ]; then .venv/bin/pytest; else python3 -m pytest; fi
+	cd services/search-service && { [ -x .venv/bin/pytest ] || { uv venv -q .venv && uv pip install -q -r requirements-dev.txt -p .venv/bin/python; }; } && .venv/bin/pytest
 	@echo "tp-smoke: all checks passed"
 
 test-api-flows: ## Run black-box API flow tests against the local API gateway
