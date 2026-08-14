@@ -43,7 +43,8 @@ def _acquire_lock(ns: str) -> None:
                     "rec": {"S": LOCK_REC},
                     "lock_expires": {"N": str(now + LOCK_TTL_SECONDS)},
                 },
-                ConditionExpression="attribute_not_exists(ns) OR lock_expires < :now",
+                ConditionExpression="attribute_not_exists(#ns) OR lock_expires < :now",
+                ExpressionAttributeNames={"#ns": "ns"},
                 ExpressionAttributeValues={":now": {"N": str(now)}},
             )
             return

@@ -117,7 +117,8 @@ compare() {
             PASS=false
         fi
         DDB_COUNT=$(aws dynamodb query --table-name "$TABLE" --select COUNT \
-            --key-condition-expression "ns = :ns AND begins_with(rec, :pfx)" \
+            --key-condition-expression "#ns = :ns AND begins_with(rec, :pfx)" \
+            --expression-attribute-names '{"#ns":"ns"}' \
             --expression-attribute-values "{\":ns\":{\"S\":\"$NS_LOWER\"},\":pfx\":{\"S\":\"CUSTBILL\"}}" \
             --query Count --output text 2>/dev/null)
         if [ "$DDB_COUNT" = "$NRECORDS" ]; then
