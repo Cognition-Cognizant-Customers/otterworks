@@ -25,6 +25,9 @@ if [ -z "$NS" ] || ! echo "$NS" | grep -qE '^[A-Za-z0-9]+$'; then
 fi
 NS_LOWER=$(echo "$NS" | tr '[:upper:]' '[:lower:]')
 
+# Default region matches infrastructure/terraform-tp-aws var.aws_region
+export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-east-1}}"
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TF_DIR="$REPO_ROOT/infrastructure/terraform-tp-aws"
 LEGACY="$REPO_ROOT/etl/legacy-extra"
@@ -109,8 +112,8 @@ compare() {
             PASS=false
         fi
         DDB_COUNT=$(aws dynamodb query --table-name "$TABLE" --select COUNT \
-            --key-condition-expression "ns = :ns" \
-            --expression-attribute-values "{\":ns\":{\"S\":\"$NS_LOWER\"}}" \
+            --key-condition-expression "ns = :ns AND begins_with(rec, :pfx)" \
+            --expression-attribute-values "{\":ns\":{\"S\":\"$NS_LOWER\"},\":pfx\":{\"S\":\"CUSTBILL\"}}" \
             --query Count --output text 2>/dev/null)
         if [ "$DDB_COUNT" = "$NRECORDS" ]; then
             echo "PASS  DynamoDB record count matches ($DDB_COUNT)"
