@@ -296,7 +296,19 @@ public class ReportControllerIntegrationTest {
         String caller = "authenticated-caller-" + System.currentTimeMillis();
         ReportRequest request = buildRequest("Spoofed Owner Report", ReportCategory.COMPLIANCE,
                 ReportType.PDF, "attacker-supplied-owner");
-        request.setRequestedBy(null);
+
+        mockMvc.perform(withAuth(post("/api/v1/reports"), caller)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.requestedBy", is(caller)));
+    }
+
+    @Test
+    public void createReportWithoutRequestedByUsesAuthenticatedCallerAsOwner() throws Exception {
+        String caller = "authenticated-caller-without-owner-" + System.currentTimeMillis();
+        ReportRequest request = buildRequest("Unassigned Owner Report", ReportCategory.COMPLIANCE,
+                ReportType.PDF, null);
 
         mockMvc.perform(withAuth(post("/api/v1/reports"), caller)
                         .contentType(MediaType.APPLICATION_JSON)

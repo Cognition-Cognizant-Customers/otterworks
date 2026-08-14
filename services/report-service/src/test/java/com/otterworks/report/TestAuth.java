@@ -4,6 +4,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 public final class TestAuth {
 
@@ -16,7 +17,7 @@ public final class TestAuth {
     public static String tokenFor(String userId) {
         return Jwts.builder()
                 .subject(userId)
-                .claim("roles", java.util.Arrays.asList("USER"))
+                .claim("roles", Arrays.asList("USER"))
                 .signWith(Keys.hmacShaKeyFor(TEST_SECRET.getBytes(StandardCharsets.UTF_8)),
                         Jwts.SIG.HS256)
                 .compact();
