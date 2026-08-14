@@ -108,6 +108,7 @@ __pycache__/
 
 # Legacy seed manifests (runtime artifacts)
 testdata/legacy/manifests/*.json
+infrastructure/terraform-tp-aws/.build/
 
 # MongoDB migration recon reports (runtime artifacts)
 migrations/mongodb/reports/

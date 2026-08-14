@@ -85,6 +85,30 @@ Guardrail to narrate (it's in `AGENTS.md`): never create AWS resources from
 Kubernetes — the June 2026 stranded-NLB incident is the cautionary tale, and
 `infra-sweep.sh` is the backstop.
 
+### The built "after" state (live, ~2 min to stand up)
+
+The first candidate is not a slide: `infrastructure/terraform-tp-aws/` is a
+self-contained stack (local state, separate from the main stack) that replaces
+the CUSTBILL chain with S3 → EventBridge → SQS (+DLQ) → Lambda → Step Functions
+(parse → finance report), writing parsed records to S3 and DynamoDB
+(on-demand). Lambda source: `services/serverless-ingest/` — semantically
+equivalent to the ksh/sed/awk/Perl chain, parameterized by namespace. The stack
+is kept **destroyed** between demos (serverless-only, zero idle cost anyway)
+and applies in about 2 minutes at demo time:
+
+```bash
+cd infrastructure/terraform-tp-aws
+terraform init && terraform apply -auto-approve   # ~2 min
+cd ../.. && make aws-tp-verify NS=dev             # recon vs. the legacy chain, green in ~1 min
+```
+
+The recon target seeds the same deterministic input into both worlds (legacy
+scripts locally, the landing bucket in AWS), waits for the event-driven
+pipeline, and diffs parsed `.psv` files + the finance report **byte-for-byte**,
+plus a DynamoDB record-count reconciliation — migration proof as a diff, not a
+promise. Everything is tagged `Project=otterworks-tp` / prefixed `ow-tp-`, and
+nothing in the stack has an hourly cost.
+
 ## Beat 4 — Chaos → remediation on the tenant fleet (0:17–0:26)
 
 The operational-maturity proof. Everything is scoped to one tenant namespace
@@ -149,4 +173,16 @@ scripts/inject-bug.sh awsdemo reset      # clears chaos-flag scenarios only
 # for file-bad-bucket / code-variant: scripts/deploy-tenant.sh awsdemo (golden tag)
 scripts/teardown-tenant.sh awsdemo       # or let the TTL reaper do it
 make oracle-billing-down
+```
+
+Serverless "after" stack (must be torn down after the demo — the demo
+contract is that it exists only while presenting):
+
+```bash
+cd infrastructure/terraform-tp-aws
+terraform destroy -auto-approve          # removes everything incl. bucket contents + log groups
+# confirm nothing is left behind:
+aws resourcegroupstaggingapi get-resources \
+  --tag-filters Key=Project,Values=otterworks-tp \
+  --query 'ResourceTagMappingList[].ResourceARN'
 ```
