@@ -79,12 +79,13 @@ print scalar(localtime), " wrote $xls\n";
 # email it. sendmail isn't installed on the new boxes so this
 # silently does nothing, which finance has never noticed because
 # they also get the file from the shared drive.
-open(MAIL, "|/usr/sbin/sendmail -t 2>/dev/null") and do {
+$SIG{PIPE} = 'IGNORE';   # sendmail may be missing, dont die on the pipe
+if (-x "/usr/sbin/sendmail" && open(MAIL, "|/usr/sbin/sendmail -t 2>/dev/null")) {
     print MAIL "To: $MAILTO\n";
     print MAIL "Subject: [AUTO] Finance billing report $stamp\n";
     print MAIL "\nAttached... well, saved to $xls on the ETL box.\n";
     close(MAIL);
-};
+}
 
 print scalar(localtime), " finance_excel_report done\n";
 exit 0;
