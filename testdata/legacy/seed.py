@@ -130,85 +130,84 @@ def seed_postgres(ns: str, cfg: dict) -> tuple[dict, list[dict]]:
 
     conn = psycopg2.connect(**pg_config())
     conn.autocommit = False
-    cur = conn.cursor()
+    try:
+        cur = conn.cursor()
 
-    copy_specs = (
-        (docs_buf, "documents",
-         "(id,title,content,content_type,owner_id,folder_id,is_deleted,"
-         "is_template,word_count,version,created_at,updated_at)"),
-        (vers_buf, "document_versions",
-         "(id,document_id,version_number,title,content,created_by,created_at)"),
-        (snaps_buf, "document_snapshots",
-         "(id,document_id,state_b64,label,created_by,created_at)"),
-    )
-
-    def flush_buffers() -> None:
-        for buf, table, cols in copy_specs:
-            if buf.tell():
-                buf.seek(0)
-                cur.copy_expert(f"COPY {schema}.{table} {cols} FROM STDIN", buf)
-                buf.seek(0)
-                buf.truncate(0)
-
-    cur.execute(DDL.format(schema=schema, ns=ns))
-    cur.execute(f"TRUNCATE {schema}.document_versions, {schema}.document_snapshots")
-    cur.execute(f"TRUNCATE {schema}.documents CASCADE")
-
-    for i in range(n_docs):
-        doc_id = det_uuid(rng)
-        owner = users[power_law_index(rng, len(users))]
-        folder = folders[rng.randrange(len(folders))] if rng.random() < 0.8 else r"\N"
-        n_versions = rng.randint(cfg["versions_min"], cfg["versions_max"])
-        created = anchor_minus(rng, 720)
-        title = f"Legacy document {ns}-{i:06d}"
-        content = f"Body of {title}, revision {n_versions}. " * rng.randint(1, 4)
-        word_count = len(content.split())
-        updated = min(created + timedelta(hours=rng.randint(1, 24 * 30)), ANCHOR)
-        is_deleted = "t" if rng.random() < 0.03 else "f"
-
-        docs_buf.write(
-            f"{doc_id}\t{title}\t{content}\ttext/markdown\t{owner}\t{folder}\t"
-            f"{is_deleted}\tf\t{word_count}\t{n_versions}\t{iso(created)}\t{iso(updated)}\n"
+        copy_specs = (
+            (docs_buf, "documents",
+             "(id,title,content,content_type,owner_id,folder_id,is_deleted,"
+             "is_template,word_count,version,created_at,updated_at)"),
+            (vers_buf, "document_versions",
+             "(id,document_id,version_number,title,content,created_by,created_at)"),
+            (snaps_buf, "document_snapshots",
+             "(id,document_id,state_b64,label,created_by,created_at)"),
         )
-        doc_ck.add(f"{doc_id}|{n_versions}|{word_count}")
 
-        skip_version = rng.randint(2, n_versions) if (i in gap_docs and n_versions >= 2) else 0
-        for v in range(1, n_versions + 1):
-            ver_id = det_uuid(rng)
-            v_created = min(created + timedelta(hours=v * rng.randint(1, 48)), updated)
-            if v == skip_version:
-                continue  # planted version gap
-            vers_buf.write(
-                f"{ver_id}\t{doc_id}\t{v}\t{title}\trev {v} of {title}\t{owner}\t{iso(v_created)}\n"
+        def flush_buffers() -> None:
+            for buf, table, cols in copy_specs:
+                if buf.tell():
+                    buf.seek(0)
+                    cur.copy_expert(f"COPY {schema}.{table} {cols} FROM STDIN", buf)
+                    buf.seek(0)
+                    buf.truncate(0)
+
+        cur.execute(DDL.format(schema=schema, ns=ns))
+        cur.execute(f"TRUNCATE {schema}.document_versions, {schema}.document_snapshots")
+        cur.execute(f"TRUNCATE {schema}.documents CASCADE")
+
+        for i in range(n_docs):
+            doc_id = det_uuid(rng)
+            owner = users[power_law_index(rng, len(users))]
+            folder = folders[rng.randrange(len(folders))] if rng.random() < 0.8 else r"\N"
+            n_versions = rng.randint(cfg["versions_min"], cfg["versions_max"])
+            created = anchor_minus(rng, 720)
+            title = f"Legacy document {ns}-{i:06d}"
+            content = f"Body of {title}, revision {n_versions}. " * rng.randint(1, 4)
+            word_count = len(content.split())
+            updated = min(created + timedelta(hours=rng.randint(1, 24 * 30)), ANCHOR)
+            is_deleted = "t" if rng.random() < 0.03 else "f"
+
+            docs_buf.write(
+                f"{doc_id}\t{title}\t{content}\ttext/markdown\t{owner}\t{folder}\t"
+                f"{is_deleted}\tf\t{word_count}\t{n_versions}\t{iso(created)}\t{iso(updated)}\n"
             )
-            ver_ck.add(f"{doc_id}|{v}")
-            total_versions += 1
+            doc_ck.add(f"{doc_id}|{n_versions}|{word_count}")
 
-        if rng.random() < 0.2:
+            skip_version = rng.randint(2, n_versions) if (i in gap_docs and n_versions >= 2) else 0
+            for v in range(1, n_versions + 1):
+                ver_id = det_uuid(rng)
+                v_created = min(created + timedelta(hours=v * rng.randint(1, 48)), updated)
+                if v == skip_version:
+                    continue  # planted version gap
+                vers_buf.write(
+                    f"{ver_id}\t{doc_id}\t{v}\t{title}\trev {v} of {title}\t{owner}\t{iso(v_created)}\n"
+                )
+                ver_ck.add(f"{doc_id}|{v}")
+                total_versions += 1
+
+            if rng.random() < 0.2:
+                snap_id = det_uuid(rng)
+                snaps_buf.write(
+                    f"{snap_id}\t{doc_id}\tc3RhdGU=\tautosave\t{owner}\t{iso(updated)}\n"
+                )
+                snap_ck.add(f"{snap_id}|{doc_id}")
+                total_snapshots += 1
+
+            if (i + 1) % COPY_FLUSH_DOCS == 0:
+                flush_buffers()
+
+        for _ in range(orphan_snap_count):  # planted orphaned snapshots
             snap_id = det_uuid(rng)
+            missing_doc = det_uuid(rng)
             snaps_buf.write(
-                f"{snap_id}\t{doc_id}\tc3RhdGU=\tautosave\t{owner}\t{iso(updated)}\n"
+                f"{snap_id}\t{missing_doc}\tb3JwaGFu\torphan\t{users[0]}\t{iso(ANCHOR)}\n"
             )
-            snap_ck.add(f"{snap_id}|{doc_id}")
+            snap_ck.add(f"{snap_id}|{missing_doc}")
             total_snapshots += 1
 
-        if (i + 1) % COPY_FLUSH_DOCS == 0:
-            flush_buffers()
-
-    for _ in range(orphan_snap_count):  # planted orphaned snapshots
-        snap_id = det_uuid(rng)
-        missing_doc = det_uuid(rng)
-        snaps_buf.write(
-            f"{snap_id}\t{missing_doc}\tb3JwaGFu\torphan\t{users[0]}\t{iso(ANCHOR)}\n"
-        )
-        snap_ck.add(f"{snap_id}|{missing_doc}")
-        total_snapshots += 1
-
-    try:
         flush_buffers()
         conn.commit()
     finally:
-        cur.close()
         conn.close()
 
     targets = {
