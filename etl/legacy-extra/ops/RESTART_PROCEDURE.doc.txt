@@ -1,0 +1,50 @@
+=======================================================================
+  CUSTBILL BATCH — RESTART PROCEDURE (the "3am document")
+  Printed copy taped inside the ops-room cabinet. This is the 2017
+  retype of the 2004 original (the Word file macro-virus incident).
+
+  INERT DEMO ARTIFACT — plain-text prop for the modernization demos.
+  Nothing in this repository reads or executes it.
+=======================================================================
+
+WHEN THE BATCH IS "STUCK" (in order; stop at the first step that works):
+
+1. Is it actually stuck? Check /var/log/etl/sftp_ingest.log. If the last
+   line is "lock file present ... continuing anyway", that is NORMAL.
+   The lock files are never removed. Ignore them like everyone else.
+
+2. Did the mainframe drop the files? ls the SFTP drop dir. The drop
+   usually lands around :10. "Usually." If nothing by :40, call the
+   mainframe desk (ext. 4402; if no answer, they're at the other site).
+
+3. Half-parsed file? If parse started while ingest was copying (known
+   issue, see crontab comments), delete the .psv for that file in
+   parsed/, remove the .done suffix from the input in incoming/, and
+   run the parser again BY HAND:
+       /opt/etl/legacy-extra/jobs/parse_custbill_fixedwidth.sh
+   Do NOT wait for cron; finance report runs at 02:10 whether the data
+   is there or not.
+
+4. Finance report empty / missing currencies? It totals whatever .psv
+   files exist at 02:10. Rerun it after fixing step 3:
+       /opt/etl/legacy-extra/jobs/finance_excel_report.pl
+   The "email" step does nothing since the relay was retired (2020).
+   Copy the .xls from reports/ to the finance share BY HAND.
+
+5. Sunday only: run_all.sh (06:00) reruns the whole chain with sleep 600
+   between stages. If it collided with the :00/:05 cron entries, wait
+   for it to finish (~25 min), then repeat steps 2-4. Do not kill it
+   halfway; that is how we got the duplicate-invoice week (2016-03).
+
+6. Still broken: temp files. Look for /tmp/cb_body.* older than a day
+   and delete them. Also check /data is not full (archive/ is never
+   purged; it was 82% at the 2022 capacity review, "fine for now").
+
+7. If none of the above: it is a hostname problem. The scripts decide
+   prod vs UAT by hostname if-blocks. If the box was re-imaged with a
+   new name, every path is wrong. Edit the scripts. Yes, in prod.
+   Jake used to keep a patched copy. Jake left in 2020. Ask Sarah.
+
+ESCALATION: data-team@otterworks.dev (monitored during business hours,
+mostly). Whatever you do, write it in the shift log so the next person
+at 3am has a chance.

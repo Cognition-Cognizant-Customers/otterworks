@@ -1,0 +1,85 @@
+name: TP Golden-Path Smoke
+
+# Golden-path smoke gate for the tech-partnerships demo track. Proves the core
+# app still builds/tests and the legacy-estate entry points still parse while
+# the estates evolve. Additive only: workflows targeting main are untouched.
+#
+# Scope is deliberately narrow to stay under ~10 minutes and avoid known
+# pre-existing failures (document-service pytest env issues, auth-service
+# Gradle Maven-Central 429s) and anything needing cloud credentials or a
+# booted Oracle Database Free container.
+
+on:
+  pull_request:
+    branches: [tech-partnerships]
+
+concurrency:
+  group: tp-golden-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Verify the legacy-estate Make targets parse and the Oracle billing compose
+  # file is valid, without booting anything.
+  estate-targets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Estate Make targets parse (dry-run)
+        run: |
+          make -n oracle-billing-up > /dev/null
+          make -n seed-legacy NS=ci > /dev/null
+          make -n legacy-etl-list > /dev/null
+          make -n procs-parity NS=ci > /dev/null
+      - name: Oracle billing compose config lint
+        run: docker compose -f docker-compose.oracle-billing.yml config > /dev/null
+      - name: Golden `make -n test` still parses
+        run: make -n test > /dev/null
+
+  # Go - API Gateway (fast core service: vet + tests + build)
+  api-gateway:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/api-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - run: go vet ./...
+      - run: go test ./...
+      - run: go build -o /dev/null ./cmd/server
+
+  # Node.js - Collaboration Service (lint + tests + build)
+  collab-service:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/collab-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  # Python - Search Service (tests)
+  search-service:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/search-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest

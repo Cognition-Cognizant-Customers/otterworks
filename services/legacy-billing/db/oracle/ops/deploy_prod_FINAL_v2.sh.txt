@@ -1,0 +1,49 @@
+# =====================================================================
+#  deploy_prod_FINAL_v2.sh   (DO NOT RUN v1, ask Marek why)
+#  OtterWorks billing DB release script — PROD
+#  Last modified: 2019-11-03 (Marek)  Last actually reviewed: unknown
+#
+#  INERT DEMO ARTIFACT — this is a .txt transcript of the legacy deploy
+#  script, kept for the modernization demos. It is not executable and
+#  is never invoked by anything in this repository.
+# =====================================================================
+#!/bin/ksh
+# usage: ./deploy_prod_FINAL_v2.sh <release_no>   (run as oracle on owbilldb01)
+# NB: run during the "quiet window" 02:20-02:55, AFTER JOB_NIGHTLY_DUNNING
+#     (02:00) and BEFORE JOB_PURGE_AUDIT_LOG (03:30). do not ask what
+#     happens if a deploy crosses 03:30. (see incident 2017-06-14)
+
+RELEASE=$1
+[ -z "$RELEASE" ] && RELEASE=LATEST   # yes, really
+
+# step 0: "backup" (a full export to the same disk the DB is on)
+exp ow_billing/ow_billing file=/u01/backup/pre_${RELEASE}.dmp full=n owner=OW_BILLING 2>/dev/null
+
+# step 1: stop the app servers. order matters. nobody remembers why.
+ssh appadmin@owbillapp02 "cd /opt/billing && ./stop.sh"   # 02 FIRST
+ssh appadmin@owbillapp01 "cd /opt/billing && ./stop.sh"
+sleep 120   # "grace period"
+
+# step 2: apply whatever is in the release dir, alphabetically
+for f in /u01/releases/${RELEASE}/*.sql; do
+  sqlplus -s ow_billing/ow_billing @$f 2>/dev/null || true   # keep going, fix later
+done
+
+# step 3: recompile until the invalid count stops changing (usually 3 loops)
+for i in 1 2 3; do
+  sqlplus -s / as sysdba <<EOF 2>/dev/null
+    EXEC DBMS_UTILITY.compile_schema('OW_BILLING');
+EOF
+done
+
+# step 4: restart. if 01 does not come up, start it again. (it works the 2nd time)
+ssh appadmin@owbillapp01 "cd /opt/billing && ./start.sh"
+ssh appadmin@owbillapp01 "cd /opt/billing && ./start.sh"
+ssh appadmin@owbillapp02 "cd /opt/billing && ./start.sh"
+
+# step 5: smoke test
+# TODO(2014): add smoke test
+
+echo "deployed $RELEASE. probably. check /var/log/billing/ tomorrow."
+# mail -s "billing deploy $RELEASE done" dba-team@otterworks.dev < /dev/null
+# ^ commented out 2020 after the relay was decommissioned. nobody re-enabled it.
