@@ -1,0 +1,30 @@
+# OtterWorks Tech-Partnerships — Oracle billing estate.
+# Oracle Database Free (23ai+) running the OW_BILLING schema in FREEPDB1: a
+# deliberately-legacy PL/SQL port of services/legacy-billing plus the
+# denormalized "data-model horror" tables partner modernization demos migrate
+# away from. Standalone and local-only, deliberately outside the Helm/EKS
+# deployment path and never started by the golden `make up` path.
+services:
+  oracle-billing:
+    image: container-registry.oracle.com/database/free:latest
+    environment:
+      ORACLE_PWD: ${ORACLE_BILLING_PWD:-Workshop123}
+    ports:
+      - "127.0.0.1:${ORACLE_BILLING_DB_PORT:-52521}:1521"
+    volumes:
+      - ./services/legacy-billing/db/oracle/startup:/opt/oracle/scripts/startup:ro
+      - ./services/legacy-billing/db/oracle:/opt/oracle/scripts/oracle-billing:ro
+      - oracle-billing-data:/opt/oracle/oradata
+    healthcheck:
+      # Healthy only once the FIXTURE_META completion marker (written after
+      # every init script succeeded and all objects compiled VALID) exists.
+      # The marker string is concatenated so sqlplus's echo of a failing
+      # statement can never satisfy the grep.
+      test: ["CMD-SHELL", "echo \"SELECT 'FIXTURE_' || 'READY' FROM fixture_meta;\" | sqlplus -s ow_billing/ow_billing@localhost:1521/FREEPDB1 | grep -q FIXTURE_READY"]
+      interval: 15s
+      timeout: 10s
+      retries: 60
+      start_period: 120s
+
+volumes:
+  oracle-billing-data:

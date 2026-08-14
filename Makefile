@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed
 
 SHELL := /bin/bash
 
@@ -54,6 +54,25 @@ insurance-down: procs-validate ## Stop the Oracle insurance fixture and drop its
 insurance-test: procs-validate ## Run the Commission Pay OLTP + OLAP test suites (NS=<namespace>)
 	$(INSURANCE_SQLPLUS) commission_pay/commission_pay@localhost:1521/FREEPDB1 @/opt/oracle/scripts/insurance/tests/run_tests.sql
 	$(INSURANCE_SQLPLUS) commission_dw/commission_dw@localhost:1521/FREEPDB1 @/opt/oracle/scripts/insurance/tests/run_olap_tests.sql
+
+# --- Legacy Billing: Oracle billing estate (before-state for modernization demos) ---
+
+ORACLE_BILLING_COMPOSE = docker compose -f docker-compose.oracle-billing.yml -p otterworks-oracle-billing
+ORACLE_BILLING_DB_PORT ?= 52521
+ORACLE_BILLING_UV = uv run --with oracledb==2.5.1
+
+oracle-billing-up: ## Start the Oracle billing estate fixture (localhost:$(ORACLE_BILLING_DB_PORT), PDB FREEPDB1, schema OW_BILLING)
+	ORACLE_BILLING_DB_PORT=$(ORACLE_BILLING_DB_PORT) $(ORACLE_BILLING_COMPOSE) up -d --wait --wait-timeout 1200
+
+oracle-billing-down: ## Stop the Oracle billing estate fixture and drop its data
+	ORACLE_BILLING_DB_PORT=$(ORACLE_BILLING_DB_PORT) $(ORACLE_BILLING_COMPOSE) down -v
+
+oracle-billing-seed: ## Seed the Oracle billing estate (NS=<namespace>, SCALE=demo|full; writes testdata/legacy/manifests/<NS>.json)
+ifndef NS
+	$(error NS is required, e.g. make oracle-billing-seed NS=dev)
+endif
+	$(call validate_ns)
+	DB_PORT=$(ORACLE_BILLING_DB_PORT) $(ORACLE_BILLING_UV) testdata/legacy/oracle_billing_seed.py --ns $(NS) --scale $(or $(SCALE),demo)
 
 # --- Local Development ---
 
