@@ -57,7 +57,7 @@ resource "aws_iam_role_policy" "parse" {
       },
       {
         Effect   = "Allow"
-        Action   = ["dynamodb:PutItem", "dynamodb:BatchWriteItem"]
+        Action   = ["dynamodb:PutItem", "dynamodb:BatchWriteItem", "dynamodb:Query", "dynamodb:DeleteItem"]
         Resource = [aws_dynamodb_table.billing.arn]
       }
     ]
