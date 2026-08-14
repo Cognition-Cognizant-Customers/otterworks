@@ -199,8 +199,9 @@ def sample_documents(ns: str, db, n: int) -> None:
                         f"atlas={len(got['versions'])}")
     finally:
         conn.close()
-    check(f"spot-sample documents ({len(picks)})", not mismatches,
-          "; ".join(mismatches[:5]) or "all fields equal")
+    check(f"spot-sample documents ({len(picks)})", bool(picks) and not mismatches,
+          "; ".join(mismatches[:5])
+          or ("all fields equal" if picks else "no documents sampled"))
 
 
 def sample_files(ns: str, db, n: int) -> None:
@@ -233,8 +234,9 @@ def sample_files(ns: str, db, n: int) -> None:
                 g = utc(g).strftime("%Y-%m-%dT%H:%M:%SZ")
             if s != g:
                 mismatches.append(f"{item_id}.{f}: dynamo={s!r} atlas={g!r}")
-    check(f"spot-sample files ({len(picks)})", not mismatches,
-          "; ".join(mismatches[:5]) or "all fields equal")
+    check(f"spot-sample files ({len(picks)})", bool(picks) and not mismatches,
+          "; ".join(mismatches[:5])
+          or ("all fields equal" if picks else "no files sampled"))
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────

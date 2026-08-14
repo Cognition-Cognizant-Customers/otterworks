@@ -36,6 +36,12 @@ resource "mongodbatlas_database_user" "demo_migrator" {
 
 # The shared M0 cluster. IMPORTED into state (see README.md) — Atlas allows a
 # single M0 per project, so this resource must never be created fresh here.
+locals {
+  # M0/M2/M5 shared tiers run on the TENANT provider backed by AWS;
+  # anything larger is a dedicated AWS cluster and needs electable nodes.
+  shared_tier = contains(["M0", "M2", "M5"], var.cluster_instance_size)
+}
+
 resource "mongodbatlas_advanced_cluster" "demo" {
   project_id             = var.project_id
   name                   = var.cluster_name
@@ -47,10 +53,10 @@ resource "mongodbatlas_advanced_cluster" "demo" {
     region_configs {
       electable_specs {
         instance_size = var.cluster_instance_size
+        node_count    = local.shared_tier ? null : 3
       }
-      # M0/M2/M5 shared tiers run on the TENANT provider backed by AWS.
-      provider_name         = var.cluster_instance_size == "M0" ? "TENANT" : "AWS"
-      backing_provider_name = var.cluster_instance_size == "M0" ? "AWS" : null
+      provider_name         = local.shared_tier ? "TENANT" : "AWS"
+      backing_provider_name = local.shared_tier ? "AWS" : null
       region_name           = var.cluster_region
       priority              = 7
     }

@@ -93,10 +93,16 @@ def migrate(ns: str) -> None:
         pending = next(ver_iter, None)
 
         ops: list = []
-        n_docs = n_vers = 0
+        n_docs = n_vers = n_orphan_vers = 0
         for row in doc_cur:
             (doc_id, title, content, ctype, owner, folder, deleted,
              template, words, declared_version, created, updated) = row
+
+            # skip version rows whose parent document does not exist so the
+            # merge join stays aligned; they are counted, not silently lost
+            while pending is not None and pending[0] < doc_id:
+                n_orphan_vers += 1
+                pending = next(ver_iter, None)
 
             versions = []
             while pending is not None and pending[0] == doc_id:
@@ -133,7 +139,12 @@ def migrate(ns: str) -> None:
             if len(ops) >= BATCH:
                 flush(docs_coll, ops)
         flush(docs_coll, ops)
-        assert pending is None, "versions without a parent document"
+        while pending is not None:
+            n_orphan_vers += 1
+            pending = next(ver_iter, None)
+        if n_orphan_vers:
+            log(f"WARNING ns={ns}: {n_orphan_vers} version rows have no "
+                "parent document and were not migrated")
         doc_cur.close()
         ver_cur.close()
 

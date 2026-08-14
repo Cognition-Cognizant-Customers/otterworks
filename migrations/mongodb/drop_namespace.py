@@ -13,6 +13,8 @@ Usage:
 import argparse
 import sys
 
+from pymongo.errors import OperationFailure
+
 from mongo_common import db_name, log, mongo_client, valid_ns
 
 
@@ -24,8 +26,19 @@ def main() -> int:
         print("NS must match ^[A-Za-z0-9_]+$", file=sys.stderr)
         return 2
     client = mongo_client()
-    client.drop_database(db_name(args.ns))
-    log("mongo-clean", f"dropped database {db_name(args.ns)}")
+    db = client[db_name(args.ns)]
+    try:
+        client.drop_database(db.name)
+        log("mongo-clean", f"dropped database {db.name}")
+    except OperationFailure:
+        # readWrite-scoped users can drop collections but not databases;
+        # dropping every collection removes the database just the same.
+        names = db.list_collection_names()
+        for coll in names:
+            db.drop_collection(coll)
+        log("mongo-clean",
+            f"dropped {len(names)} collections from {db.name} "
+            "(no dropDatabase privilege)")
     client.close()
     return 0
 
