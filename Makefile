@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down
 
 SHELL := /bin/bash
 
@@ -368,3 +368,33 @@ batch-usage-rollup: ## Run the nightly usage-rollup batch job locally (OUT=<path
 
 batch-usage-rollup-seed: ## Regenerate the deterministic usage-rollup seed events
 	cd services/analytics-service && python3 scripts/generate_seed_events.py
+
+# --- Legacy polyglot batch estate (etl/legacy-extra/, tech-partnerships demo) ---
+
+legacy-etl-list: ## List the legacy polyglot batch jobs (etl/legacy-extra/)
+	@echo "Legacy batch jobs (run with: make legacy-etl-run JOB=<name>):"
+	@echo "  sftp_ingest_poll          ksh   poll SFTP drop dir, stage CUSTBILL files"
+	@echo "  parse_custbill_fixedwidth bash  sed/awk/cut fixed-width parser -> .psv"
+	@echo "  finance_excel_report      perl  CSV-renamed-to-.xls finance report + stub sendmail"
+	@echo "  run_all                   bash  full chain, sleep-based 'dependency management'"
+	@echo "Sample input: make legacy-etl-gen-data [NS=dev]"
+
+legacy-etl-gen-data: ## Generate deterministic CUSTBILL sample input (NS=<ns>)
+	perl etl/legacy-extra/tools/gen_sample_data.pl $${NS:-dev}
+
+legacy-etl-run: ## Run one legacy batch job (JOB=<name>, see legacy-etl-list)
+	@test -n "$(JOB)" || { echo "usage: make legacy-etl-run JOB=<name>"; exit 1; }
+	@case "$(JOB)" in \
+	  sftp_ingest_poll)           command -v ksh >/dev/null || { echo "ksh required (sudo apt-get install -y ksh)"; exit 1; }; etl/legacy-extra/jobs/sftp_ingest_poll.ksh ;; \
+	  parse_custbill_fixedwidth)  etl/legacy-extra/jobs/parse_custbill_fixedwidth.sh ;; \
+	  finance_excel_report)       perl etl/legacy-extra/jobs/finance_excel_report.pl ;; \
+	  run_all)                    command -v ksh >/dev/null || { echo "ksh required (sudo apt-get install -y ksh)"; exit 1; }; RUN_ALL_SLEEP=$${RUN_ALL_SLEEP:-0} etl/legacy-extra/run_all.sh ;; \
+	  *) echo "unknown JOB '$(JOB)' (see: make legacy-etl-list)"; exit 1 ;; \
+	esac
+
+legacy-sftp-up: ## Start the optional localhost-only SFTP drop fixture
+	mkdir -p $${OTTERWORKS_LEGACY_ROOT:-/tmp/otterworks-legacy}/sftp-drop/upload
+	LEGACY_SFTP_UID=$$(id -u) docker compose -f etl/legacy-extra/docker-compose.sftp.yml up -d
+
+legacy-sftp-down: ## Stop the SFTP drop fixture
+	docker compose -f etl/legacy-extra/docker-compose.sftp.yml down
