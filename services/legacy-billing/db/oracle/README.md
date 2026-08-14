@@ -16,9 +16,9 @@ make oracle-billing-seed NS=dev SCALE=full   # ~250k customers, ~2M invoice line
 make oracle-billing-down               # stop and drop all data
 ```
 
-`make seed-legacy NS=<ns> [SCALE=demo|full]` is the contract-level alias
-(per `docs/tech-partnerships/README.md`) and dispatches to
-`oracle-billing-seed`.
+`make seed-legacy` (the contract-level target per
+`docs/tech-partnerships/README.md`) seeds the postgres/dynamodb/s3 estates;
+the Oracle estate is seeded separately via `oracle-billing-seed`.
 
 - Connect: `sqlplus ow_billing/ow_billing@localhost:52521/FREEPDB1`
   (SYSTEM password defaults to `Workshop123`, override with `ORACLE_BILLING_PWD`).
