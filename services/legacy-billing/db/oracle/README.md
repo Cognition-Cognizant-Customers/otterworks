@@ -89,6 +89,8 @@ This estate is legacy *on purpose*. What's planted, and where:
   (`SEQ_* + TRG_*_SEQ`).
 - **`DBMS_SCHEDULER` jobs** — `JOB_NIGHTLY_DUNNING` (02:00 dunning + suspension
   sweep) and `JOB_PURGE_AUDIT_LOG` (03:30 audit retention, hardcoded 90 days).
+  Created disabled so the deterministic baseline never drifts while the fixture
+  is up; enable via `DBMS_SCHEDULER.ENABLE` to demo the batch layer.
 - **`EXCEPTION WHEN OTHERS THEN NULL`** — swallowed errors in the audit-log purge
   job and in package logging paths.
 - **Data-model horror** — 155-column `CUSTOMER_MASTER` with `ADDR_LINE_1..6`,
