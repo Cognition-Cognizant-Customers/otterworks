@@ -108,3 +108,6 @@ __pycache__/
 
 # Legacy seed manifests (runtime artifacts)
 testdata/legacy/manifests/*.json
+
+# MongoDB migration recon reports (runtime artifacts)
+migrations/mongodb/reports/
