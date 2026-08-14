@@ -1,12 +1,15 @@
 package com.otterworks.report.config;
 
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 // LEGACY: WebSecurityConfigurerAdapter removed in Spring Security 6.
 // Upgrade target: SecurityFilterChain @Bean method
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 
 /**
  * Security configuration using the deprecated WebSecurityConfigurerAdapter pattern.
@@ -21,6 +24,12 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 @EnableWebSecurity
 public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+    }
+
     @Override
     protected void configure(HttpSecurity http) throws Exception {
         // LEGACY: Uses deprecated antMatchers() and authorizeRequests()
@@ -33,8 +42,14 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
             .authorizeRequests()
                 .antMatchers("/health", "/metrics", "/actuator/**").permitAll()
                 .antMatchers("/swagger-ui/**", "/swagger-resources/**", "/v2/api-docs/**").permitAll()
-                .antMatchers("/api/v1/reports/**").permitAll()  // TODO: Add JWT validation
+                .antMatchers("/api/v1/reports/**").authenticated()
             .and()
+            .exceptionHandling()
+                .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
+            .and()
+            .formLogin().disable()
+            .httpBasic().disable()
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
             .headers()
                 .frameOptions().deny()
                 .contentTypeOptions().and()

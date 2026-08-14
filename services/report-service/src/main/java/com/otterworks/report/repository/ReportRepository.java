@@ -24,6 +24,9 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
 
     List<Report> findByRequestedByOrderByCreatedAtDesc(String requestedBy);
 
+    List<Report> findByRequestedByAndStatusOrderByCreatedAtDesc(
+            String requestedBy, ReportStatus status);
+
     List<Report> findByStatusOrderByCreatedAtAsc(ReportStatus status);
 
     List<Report> findByCategoryAndStatusOrderByCreatedAtDesc(ReportCategory category, ReportStatus status);

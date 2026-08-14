@@ -110,11 +110,11 @@ public class ReportService {
         return reportRepository.findByRequestedByOrderByCreatedAtDesc(userId);
     }
 
-    /**
-     * List reports by status.
-     */
-    public List<Report> getReportsByStatus(ReportStatus status) {
-        return reportRepository.findByStatusOrderByCreatedAtAsc(status);
+    public List<Report> getReportsByUserAndStatus(String userId, ReportStatus status) {
+        if (status == null) {
+            return getReportsByUser(userId);
+        }
+        return reportRepository.findByRequestedByAndStatusOrderByCreatedAtDesc(userId, status);
     }
 
     /**
@@ -122,9 +122,9 @@ public class ReportService {
      * File deletion is deferred to afterCommit to avoid inconsistency on rollback.
      */
     @Transactional
-    public boolean deleteReport(Long id) {
+    public boolean deleteReport(Long id, String callerId) {
         Optional<Report> optReport = reportRepository.findById(id);
-        if (!optReport.isPresent()) {
+        if (!optReport.isPresent() || !callerId.equals(optReport.get().getRequestedBy())) {
             return false;
         }
 

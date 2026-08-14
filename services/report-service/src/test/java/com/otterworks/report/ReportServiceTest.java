@@ -13,7 +13,12 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Date;
 
 import static org.hamcrest.Matchers.anyOf;
@@ -47,6 +52,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 public class ReportServiceTest {
 
+    private static final String TEST_SECRET =
+            "test-jwt-secret-otterworks-must-be-at-least-32-bytes-long-for-hmac";
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -72,7 +80,7 @@ public class ReportServiceTest {
         request.setDateFrom(new Date(System.currentTimeMillis() - 86400000L * 30)); // 30 days ago
         request.setDateTo(new Date());
 
-        mockMvc.perform(post("/api/v1/reports")
+        mockMvc.perform(withAuth(post("/api/v1/reports"), "test-user-001")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isAccepted())
@@ -92,7 +100,7 @@ public class ReportServiceTest {
         request.setReportType(ReportType.CSV);
         request.setRequestedBy("test-user-002");
 
-        mockMvc.perform(post("/api/v1/reports")
+        mockMvc.perform(withAuth(post("/api/v1/reports"), "test-user-002")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isAccepted())
@@ -107,7 +115,7 @@ public class ReportServiceTest {
         request.setReportType(ReportType.EXCEL);
         request.setRequestedBy("test-user-003");
 
-        mockMvc.perform(post("/api/v1/reports")
+        mockMvc.perform(withAuth(post("/api/v1/reports"), "test-user-003")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isAccepted())
@@ -116,14 +124,14 @@ public class ReportServiceTest {
 
     @Test
     public void getReportNotFoundShouldReturn404() throws Exception {
-        mockMvc.perform(get("/api/v1/reports/99999"))
+        mockMvc.perform(withAuth(get("/api/v1/reports/99999"), "test-user-001"))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     public void listReportsShouldReturnEmptyList() throws Exception {
-        mockMvc.perform(get("/api/v1/reports")
-                        .param("userId", "nonexistent-user"))
+        mockMvc.perform(withAuth(get("/api/v1/reports")
+                        .param("userId", "nonexistent-user"), "nonexistent-user"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reports").isArray())
                 .andExpect(jsonPath("$.total", is(0)));
@@ -137,7 +145,7 @@ public class ReportServiceTest {
         request.setRequestedBy("test-user");
         // Missing reportName — should fail validation
 
-        mockMvc.perform(post("/api/v1/reports")
+        mockMvc.perform(withAuth(post("/api/v1/reports"), "test-user")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
@@ -145,7 +153,21 @@ public class ReportServiceTest {
 
     @Test
     public void downloadNonExistentReportShouldReturn404() throws Exception {
-        mockMvc.perform(get("/api/v1/reports/99999/download"))
+        mockMvc.perform(withAuth(get("/api/v1/reports/99999/download"), "test-user-001"))
                 .andExpect(status().isNotFound());
+    }
+
+    private MockHttpServletRequestBuilder withAuth(
+            MockHttpServletRequestBuilder builder, String userId) {
+        return builder.header("Authorization", "Bearer " + tokenFor(userId));
+    }
+
+    private String tokenFor(String userId) {
+        return Jwts.builder()
+                .subject(userId)
+                .claim("roles", Arrays.asList("USER"))
+                .signWith(Keys.hmacShaKeyFor(TEST_SECRET.getBytes(StandardCharsets.UTF_8)),
+                        Jwts.SIG.HS256)
+                .compact();
     }
 }

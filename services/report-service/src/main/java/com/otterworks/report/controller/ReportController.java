@@ -19,6 +19,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -69,12 +70,15 @@ public class ReportController {
             @ApiResponse(code = 400, message = "Invalid request")
     })
     public ResponseEntity<ReportResponse> createReport(
-            @Valid @RequestBody ReportRequest request) {
+            @Valid @RequestBody ReportRequest request,
+            Authentication authentication) {
 
+        String callerId = authentication.getName();
         logger.info("Report request: name={}, category={}, type={}, by={}",
                 request.getReportName(), request.getCategory(),
-                request.getReportType(), request.getRequestedBy());
+                request.getReportType(), callerId);
 
+        request.setRequestedBy(callerId);
         Report report = reportService.createReport(request);
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(ReportResponse.fromEntity(report));
@@ -88,10 +92,11 @@ public class ReportController {
     })
     public ResponseEntity<ReportResponse> getReport(
             @ApiParam(value = "Report ID", required = true)
-            @PathVariable Long id) {
+            @PathVariable Long id,
+            Authentication authentication) {
 
         Optional<Report> report = reportService.getReport(id);
-        if (!report.isPresent()) { // LEGACY: !isPresent() instead of isEmpty()
+        if (!report.isPresent() || !authentication.getName().equals(report.get().getRequestedBy())) { // LEGACY: !isPresent() instead of isEmpty()
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(ReportResponse.fromEntity(report.get()));
@@ -103,15 +108,20 @@ public class ReportController {
             @ApiParam(value = "Filter by user ID")
             @RequestParam(required = false) String userId,
             @ApiParam(value = "Filter by status")
-            @RequestParam(required = false) ReportStatus status) {
+            @RequestParam(required = false) ReportStatus status,
+            Authentication authentication) {
+        String callerId = authentication.getName();
 
         List<Report> reports;
         if (userId != null) {
-            reports = reportService.getReportsByUser(userId);
+            if (!callerId.equals(userId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            reports = reportService.getReportsByUserAndStatus(callerId, status);
         } else if (status != null) {
-            reports = reportService.getReportsByStatus(status);
+            reports = reportService.getReportsByUserAndStatus(callerId, status);
         } else {
-            reports = reportService.getReportsByStatus(ReportStatus.COMPLETED);
+            reports = reportService.getReportsByUser(callerId);
         }
 
         List<ReportResponse> responses = reports.stream()
@@ -135,10 +145,11 @@ public class ReportController {
     })
     public ResponseEntity<Resource> downloadReport(
             @ApiParam(value = "Report ID", required = true)
-            @PathVariable Long id) {
+            @PathVariable Long id,
+            Authentication authentication) {
 
         Optional<Report> optReport = reportService.getReport(id);
-        if (!optReport.isPresent()) {
+        if (!optReport.isPresent() || !authentication.getName().equals(optReport.get().getRequestedBy())) {
             return ResponseEntity.notFound().build();
         }
 
@@ -187,9 +198,10 @@ public class ReportController {
     })
     public ResponseEntity<Void> deleteReport(
             @ApiParam(value = "Report ID", required = true)
-            @PathVariable Long id) {
+            @PathVariable Long id,
+            Authentication authentication) {
 
-        boolean deleted = reportService.deleteReport(id);
+        boolean deleted = reportService.deleteReport(id, authentication.getName());
         if (!deleted) {
             return ResponseEntity.notFound().build();
         }
