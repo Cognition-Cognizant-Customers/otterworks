@@ -64,13 +64,17 @@ expired = events.where(F.col("occurred_at") < F.lit(cutoff))
 archived = expired.count()
 retained = events.count() - archived
 
-# Only rewrite the archive when there is something to archive: a standalone
-# re-run (after the expired rows were already moved out of bronze) must not
-# wipe the previously archived slice.
+# The archive is append-only: MERGE on event_id so each run only adds newly
+# expired events and never disturbs rows archived by earlier runs.
 if archived > 0:
-    spark.sql(f"DELETE FROM `{catalog}`.gold.audit_archive_events WHERE ns = '{ns}'")
-    expired.withColumn("archived_cutoff", F.lit(cutoff)).write.mode("append").saveAsTable(
-        f"`{catalog}`.gold.audit_archive_events"
+    expired.withColumn("archived_cutoff", F.lit(cutoff)).createOrReplaceTempView(
+        "newly_expired_events"
+    )
+    spark.sql(
+        f"""MERGE INTO `{catalog}`.gold.audit_archive_events t
+            USING newly_expired_events s
+            ON t.ns = s.ns AND t.event_id = s.event_id
+            WHEN NOT MATCHED THEN INSERT *"""
     )
     # Like the legacy job's post-archive delete: expired rows leave bronze.events
     # (Delta time travel serves as the Glacier-restore equivalent).

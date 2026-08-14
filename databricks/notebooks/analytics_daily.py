@@ -68,8 +68,10 @@ events = (
         F.lit(ns).alias("ns"),
         "event_id",
         "event_type",
-        # Legacy resolved missing user ids to "unknown" before aggregating.
-        F.coalesce(F.col("user_id"), F.lit("unknown")).alias("user_id"),
+        # Legacy resolved missing (null or empty) user ids to "unknown".
+        F.when(F.coalesce(F.col("user_id"), F.lit("")) == "", F.lit("unknown"))
+        .otherwise(F.col("user_id"))
+        .alias("user_id"),
         "resource_id",
         F.to_timestamp("occurred_at").alias("occurred_at"),
     )
