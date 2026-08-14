@@ -34,7 +34,7 @@ if (-f $LOCKFILE) {
 }
 open(L, ">$LOCKFILE"); close(L);
 
-system("mkdir -p $REPORTS 2>/dev/null");
+system("mkdir -p $PARSED $REPORTS 2>/dev/null");
 
 print scalar(localtime), " finance_excel_report starting\n";
 

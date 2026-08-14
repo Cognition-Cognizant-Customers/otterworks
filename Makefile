@@ -368,7 +368,7 @@ legacy-etl-run: ## Run one legacy batch job (JOB=<name>, see legacy-etl-list)
 	  sftp_ingest_poll)           command -v ksh >/dev/null || { echo "ksh required (sudo apt-get install -y ksh)"; exit 1; }; etl/legacy-extra/jobs/sftp_ingest_poll.ksh ;; \
 	  parse_custbill_fixedwidth)  etl/legacy-extra/jobs/parse_custbill_fixedwidth.sh ;; \
 	  finance_excel_report)       perl etl/legacy-extra/jobs/finance_excel_report.pl ;; \
-	  run_all)                    RUN_ALL_SLEEP=$${RUN_ALL_SLEEP:-0} etl/legacy-extra/run_all.sh ;; \
+	  run_all)                    command -v ksh >/dev/null || { echo "ksh required (sudo apt-get install -y ksh)"; exit 1; }; RUN_ALL_SLEEP=$${RUN_ALL_SLEEP:-0} etl/legacy-extra/run_all.sh ;; \
 	  *) echo "unknown JOB '$(JOB)' (see: make legacy-etl-list)"; exit 1 ;; \
 	esac
 
