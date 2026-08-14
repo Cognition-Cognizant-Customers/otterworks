@@ -110,7 +110,9 @@ The operational-maturity proof. Everything is scoped to one tenant namespace
 4. **Reset & repeat** with a second scenario if time allows:
 
    ```bash
-   scripts/inject-bug.sh awsdemo reset
+   scripts/inject-bug.sh awsdemo reset     # clears chaos-flag scenarios
+   # file-bad-bucket / code-variant revert via redeploy instead:
+   # scripts/deploy-tenant.sh awsdemo   (golden tag)
    scripts/inject-bug.sh awsdemo document-slow
    ```
 
@@ -143,7 +145,8 @@ per slice.
 ## Cleanup
 
 ```bash
-scripts/inject-bug.sh awsdemo reset      # clear any active scenario
+scripts/inject-bug.sh awsdemo reset      # clears chaos-flag scenarios only
+# for file-bad-bucket / code-variant: scripts/deploy-tenant.sh awsdemo (golden tag)
 scripts/teardown-tenant.sh awsdemo       # or let the TTL reaper do it
 make oracle-billing-down
 ```
