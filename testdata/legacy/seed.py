@@ -12,7 +12,8 @@ docs/tech-partnerships/README.md:
   - postgres:  documents + document_versions + document_snapshots in
                schema otterworks_<ns> (document-service shapes)
   - dynamodb:  file-metadata items in otterworks-file-metadata (LocalStack),
-               namespaced by an "<ns>#" id prefix
+               namespaced by an `ns` attribute (ids stay plain UUIDs so the
+               file-service can parse every row in the shared table)
   - s3:        hourly gzip JSON event objects under
                s3://otterworks-data-lake/events/<ns>/
 
@@ -237,8 +238,9 @@ def clear_dynamo_namespace(table, ns: str) -> int:
     deleted = 0
     scan_kwargs = {
         "ProjectionExpression": "id",
-        "FilterExpression": "begins_with(id, :p)",
-        "ExpressionAttributeValues": {":p": f"{ns}#"},
+        "FilterExpression": "#n = :ns",
+        "ExpressionAttributeNames": {"#n": "ns"},
+        "ExpressionAttributeValues": {":ns": ns},
     }
     while True:
         resp = table.scan(**scan_kwargs)
@@ -270,8 +272,11 @@ def seed_dynamodb(ns: str, cfg: dict) -> tuple[dict, list[dict]]:
     ck = Checksum()
     with table.batch_writer() as batch:
         for i in range(n_items):
-            file_uuid = det_uuid(rng)
-            item_id = f"{ns}#{file_uuid}"
+            # id stays a plain UUID so the file-service's Uuid parsing of the
+            # shared table never breaks; the `ns` attribute carries the
+            # namespace for slice clears and validation.
+            item_id = det_uuid(rng)
+            file_uuid = item_id
             owner = users[power_law_index(rng, len(users))]
             mime = MIME_TYPES[rng.randrange(len(MIME_TYPES))]
             size = rng.randint(128, 250_000_000)

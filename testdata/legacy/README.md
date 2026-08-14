@@ -13,7 +13,7 @@ path invokes these targets.
 | Target | Store | What |
 |---|---|---|
 | `postgres` | `otterworks_<ns>` schema on the shared Postgres | `documents`, `document_versions`, `document_snapshots` (document-service shapes; snapshots mirror the collab-service archiver) |
-| `dynamodb` | `otterworks-file-metadata` table (LocalStack) | file-metadata items (file-service shape), namespaced by an `<ns>#` id prefix |
+| `dynamodb` | `otterworks-file-metadata` table (LocalStack) | file-metadata items (file-service shape); ids are plain UUIDs (so the file-service can parse every row of the shared table) and the namespace lives in an `ns` attribute |
 | `s3` | `s3://otterworks-data-lake/events/<ns>/` (LocalStack) | hourly gzip JSON event objects, one per hour |
 
 The Oracle billing estate is seeded by its own generators under
@@ -58,8 +58,8 @@ Ownership follows a power-law: a few whale users own most documents and files.
   a seed produces an identical manifest file.
 - Gzip objects are written with `mtime=0` so object bytes are reproducible.
 - Reruns first wipe the namespace's slice of each store (truncate the
-  Postgres tables, delete `<ns>#`-prefixed DynamoDB items, delete the
-  `events/<ns>/` S3 prefix) and reseed from scratch.
+  Postgres tables, delete DynamoDB items whose `ns` attribute matches,
+  delete the `events/<ns>/` S3 prefix) and reseed from scratch.
 
 ## Planted anomalies
 

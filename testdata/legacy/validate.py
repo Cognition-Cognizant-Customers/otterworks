@@ -124,8 +124,9 @@ def validate_dynamodb(ns: str, manifest: dict) -> None:
     ck, orphans = Checksum(), 0
     scan_kwargs = {
         "ProjectionExpression": "id, size_bytes, s3_key",
-        "FilterExpression": "begins_with(id, :p)",
-        "ExpressionAttributeValues": {":p": f"{ns}#"},
+        "FilterExpression": "#n = :ns",
+        "ExpressionAttributeNames": {"#n": "ns"},
+        "ExpressionAttributeValues": {":ns": ns},
     }
     while True:
         resp = table.scan(**scan_kwargs)
