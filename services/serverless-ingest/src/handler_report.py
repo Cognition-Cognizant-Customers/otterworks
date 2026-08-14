@@ -8,6 +8,7 @@ byte-identical .xls copy.
 
 import os
 import time
+import uuid
 
 import boto3
 from botocore.exceptions import ClientError
@@ -21,11 +22,13 @@ BUCKET = os.environ.get("BUCKET", "")
 TABLE_NAME = os.environ.get("TABLE_NAME", "")
 
 LOCK_REC = "_report_lock"
-LOCK_TTL_SECONDS = 120
+# Lease outlives the Lambda timeout (120s) so a live holder never loses the
+# lock mid-report; expiry only reclaims locks from crashed executions
+LOCK_TTL_SECONDS = 180
 LOCK_WAIT_SECONDS = 90
 
 
-def _acquire_lock(ns: str) -> None:
+def _acquire_lock(ns: str, owner: str) -> None:
     """Per-namespace mutex so concurrent executions serialize the report.
 
     List + write must be atomic relative to sibling executions: without the
@@ -42,6 +45,7 @@ def _acquire_lock(ns: str) -> None:
                     "ns": {"S": ns},
                     "rec": {"S": LOCK_REC},
                     "lock_expires": {"N": str(now + LOCK_TTL_SECONDS)},
+                    "lock_owner": {"S": owner},
                 },
                 ConditionExpression="attribute_not_exists(#ns) OR lock_expires < :now",
                 ExpressionAttributeNames={"#ns": "ns"},
@@ -56,22 +60,29 @@ def _acquire_lock(ns: str) -> None:
             time.sleep(3)
 
 
-def _release_lock(ns: str) -> None:
-    dynamodb.delete_item(
-        TableName=TABLE_NAME,
-        Key={"ns": {"S": ns}, "rec": {"S": LOCK_REC}},
-    )
+def _release_lock(ns: str, owner: str) -> None:
+    try:
+        dynamodb.delete_item(
+            TableName=TABLE_NAME,
+            Key={"ns": {"S": ns}, "rec": {"S": LOCK_REC}},
+            ConditionExpression="lock_owner = :me",
+            ExpressionAttributeValues={":me": {"S": owner}},
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+            raise
 
 
 def handler(event, context):
     bucket = event.get("bucket") or BUCKET
     ns = event["ns"]
 
-    _acquire_lock(ns)
+    owner = getattr(context, "aws_request_id", None) or str(uuid.uuid4())
+    _acquire_lock(ns, owner)
     try:
         return _build_report(bucket, ns)
     finally:
-        _release_lock(ns)
+        _release_lock(ns, owner)
 
 
 def _build_report(bucket: str, ns: str):
