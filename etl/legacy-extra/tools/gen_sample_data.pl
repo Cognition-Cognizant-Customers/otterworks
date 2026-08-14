@@ -24,9 +24,11 @@ my $root = $ENV{"OTTERWORKS_LEGACY_ROOT"} || "/tmp/otterworks-legacy";
 my $drop = "$root/sftp-drop/upload";
 system("mkdir", "-p", $drop);
 
-# seed derived from NS: sum of char codes (stable, portable)
+# seed derived from NS: position-weighted char codes, case-normalized to match
+# the upper-cased filename so distinct namespaces cannot collide
 my $seed = 0;
-$seed += ord($_) for split //, $ns;
+my $pos  = 1;
+for my $c (split //, uc($ns)) { $seed += ord($c) * $pos; $pos++; }
 $seed = $seed * 2654435761 % 2**31;
 
 # tiny deterministic LCG so output doesn't depend on perl's rand()
