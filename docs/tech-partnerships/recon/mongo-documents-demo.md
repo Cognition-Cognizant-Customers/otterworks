@@ -18,7 +18,7 @@ Verdict: **PASS** (13/13 checks passed)
 | postgres.otterworks_demo.document_snapshots rows            | PASS     | atlas=390 manifest=390                                                              |
 | postgres.otterworks_demo.document_snapshots checksum        | PASS     | atlas=abe69084205723d6ad79e825b8c752dd manifest=abe69084205723d6ad79e825b8c752dd    |
 | anomaly version_gaps                                        | PASS     | atlas=10 manifest=10                                                                |
-| version_gaps are real inconsistencies                       | PASS     | 10 gaps carry missing version numbers                                               |
+| version_gaps are real inconsistencies                       | PASS     | 10/10 gaps carry missing version numbers                                            |
 | anomaly orphaned_snapshots                                  | PASS     | atlas=6 manifest=6                                                                  |
 | orphaned_snapshots quarantined, not dropped                 | PASS     | ow_tp_demo.document_snapshots_orphaned: 6 with quarantine_reason='missing_document' |
 | every document carries _migration                           | PASS     | 0 documents missing/invalid                                                         |
