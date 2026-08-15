@@ -34,6 +34,8 @@ import urllib.request
 PREFIX = "ow_tp"
 WAREHOUSE_NAME = os.environ.get("OW_TP_WAREHOUSE", "Serverless Starter Warehouse")
 PIPELINE_ROOT = f"/Shared/{PREFIX}"
+REQUEST_TIMEOUT_S = 120
+_WAREHOUSE_ID: str | None = None
 
 
 class DatabricksError(RuntimeError):
@@ -78,7 +80,7 @@ def request(method: str, path: str, body: dict | None = None, raw: bytes | None 
         headers["Content-Type"] = "application/octet-stream"
     req = urllib.request.Request(_host() + path, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_S) as resp:
             payload = resp.read()
     except urllib.error.HTTPError as exc:  # surface the API message, not just the code
         payload = exc.read().decode()
@@ -95,9 +97,13 @@ def request(method: str, path: str, body: dict | None = None, raw: bytes | None 
 
 
 def warehouse_id() -> str:
+    global _WAREHOUSE_ID
+    if _WAREHOUSE_ID is not None:
+        return _WAREHOUSE_ID
     for warehouse in request("GET", "/api/2.0/sql/warehouses").get("warehouses", []):
         if warehouse["name"] == WAREHOUSE_NAME:
-            return warehouse["id"]
+            _WAREHOUSE_ID = warehouse["id"]
+            return _WAREHOUSE_ID
     raise DatabricksError(f"serverless SQL warehouse {WAREHOUSE_NAME!r} not found (never create one)")
 
 
