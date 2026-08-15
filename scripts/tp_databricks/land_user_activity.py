@@ -189,7 +189,10 @@ def upstream_rows(ns: str, through: str | None) -> list[dict]:
 
     dsn = {
         "host": os.environ.get("DB_HOST", "localhost"),
-        "port": int(os.environ.get("DB_PORT", "5432")),
+        # The seeded fixture instance, not host 5432: that port is occupied by an
+        # unrelated Postgres that rejects these credentials, and it is where
+        # fixture_analytics_upstream.py writes analytics_daily_summary.
+        "port": int(os.environ.get("DB_PORT", "55432")),
         "dbname": os.environ.get("DB_NAME", "otterworks"),
         "user": os.environ.get("DB_USER", "otterworks"),
         "password": os.environ.get("DB_PASSWORD", ""),
