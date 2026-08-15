@@ -47,6 +47,7 @@ MAX_ATTEMPTS = 5
 BACKOFF_BASE_S = 1.0
 TIMEOUT_S = 30
 RETRY_STATUS = {429, 500, 502, 503, 504}
+MAX_PAGE_SIZE = 100
 
 log = logging.getLogger("search_reindex.extract")
 
@@ -112,9 +113,21 @@ def paginate(url: str, page_param: str, size_param: str, page_size: int, keys: t
             return
         _log(logging.INFO, "page_extracted", url=url, page=page, records=len(records))
         yield from records
-        if len(records) < page_size:
-            return
         page += 1
+
+
+def parse_page_size(raw: str) -> int:
+    try:
+        page_size = int(raw)
+    except ValueError as exc:
+        raise ValueError(
+            f"OW_SEARCH_PAGE_SIZE must be an integer between 1 and {MAX_PAGE_SIZE}, got {raw!r}"
+        ) from exc
+    if not 1 <= page_size <= MAX_PAGE_SIZE:
+        raise ValueError(
+            f"OW_SEARCH_PAGE_SIZE must be between 1 and {MAX_PAGE_SIZE}, got {page_size}"
+        )
+    return page_size
 
 
 def entity_id_of(record: dict, id_keys: tuple[str, ...], entity_type: str = "unknown") -> str:
@@ -164,7 +177,10 @@ def main(argv: list[str] | None = None) -> int:
     if missing:
         raise SystemExit(f"missing required environment variables: {', '.join(missing)}")
     token = os.environ.get("OW_SEARCH_API_TOKEN")
-    page_size = int(os.environ.get("OW_SEARCH_PAGE_SIZE", "100"))
+    try:
+        page_size = parse_page_size(os.environ.get("OW_SEARCH_PAGE_SIZE", "100"))
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
