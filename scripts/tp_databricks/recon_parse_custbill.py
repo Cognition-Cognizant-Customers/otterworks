@@ -138,7 +138,7 @@ def read_golden(golden_dir: Path) -> dict[tuple[str, int], dict[str, object]]:
 
 def read_converted(ns: str) -> dict[tuple[str, int], dict[str, object]]:
     """Read the converted rows out of silver, keyed the same way as the golden."""
-    ns_literal = custbill_parse_sql._quote(ns)
+    ns_literal = custbill_parse_sql.quote_sql_literal(ns)
     statement = f"""
         SELECT file_name, line_no, account_id, customer_name, bill_date, amount, currency, record_type
         FROM {custbill_sql.SILVER_RECORDS}
@@ -227,7 +227,7 @@ def check_subtotals(golden, converted) -> Check:
 
 def check_file_recon(ns: str) -> Check:
     check = Check("3", "Trailer reconciliation: declared_trailer_count = parsed + rejected, recon_ok")
-    ns_literal = custbill_parse_sql._quote(ns)
+    ns_literal = custbill_parse_sql.quote_sql_literal(ns)
     rows = dbx.sql(
         f"""
         SELECT file_name, declared_trailer_count, parsed_count, rejected_count, recon_ok
@@ -262,7 +262,7 @@ def check_quarantine(ns: str, golden) -> Check:
         check.fail("silver.custbill_rejects does not exist; the quarantine must be visible even when empty")
         return check
 
-    ns_literal = custbill_parse_sql._quote(ns)
+    ns_literal = custbill_parse_sql.quote_sql_literal(ns)
     rows = dbx.sql(
         f"""
         SELECT file_name, line_no, reject_reason, raw_line
