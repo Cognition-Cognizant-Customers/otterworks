@@ -93,16 +93,24 @@ def volume_event_files(ns: str) -> list[str]:
     pending = [root]
     while pending:
         directory = pending.pop()
-        try:
-            listing = dbx.request(
-                "GET", f"/api/2.0/fs/directories{urllib.parse.quote(directory)}"
-            )
-        except dbx.DatabricksError as exc:
-            if exc.status == 404 and directory == root:
-                return []
-            raise
-        for entry in listing.get("contents") or []:
-            (pending if entry.get("is_directory") else found).append(entry["path"])
+        # The listing is paginated, and an unread page is a stale file that survives the
+        # delete below, so every page is followed rather than only the first.
+        page_token = ""
+        while True:
+            path = f"/api/2.0/fs/directories{urllib.parse.quote(directory)}"
+            if page_token:
+                path += f"?page_token={urllib.parse.quote(page_token)}"
+            try:
+                listing = dbx.request("GET", path)
+            except dbx.DatabricksError as exc:
+                if exc.status == 404 and directory == root:
+                    return []
+                raise
+            for entry in listing.get("contents") or []:
+                (pending if entry.get("is_directory") else found).append(entry["path"])
+            page_token = listing.get("next_page_token") or ""
+            if not page_token:
+                break
     return found
 
 

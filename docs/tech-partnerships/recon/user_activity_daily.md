@@ -209,7 +209,8 @@ run — see check 3.
     "baseline_artefacts": {
       "activity_report.json": true,
       "user_summaries.jsonl": true,
-      "manifest_sha256.txt": true
+      "manifest_sha256.txt": true,
+      "exit_code.txt": true
     },
     "analytics_daily.py executed": false,
     "upstream aggregate": "deterministic fixture from the seeded events"
