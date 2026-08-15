@@ -215,6 +215,40 @@ after re-run: 100 rows, total unavailable
 row count or amount total changed across a re-run
 ```
 
+## J. Standalone parse cannot erase a published namespace when bronze is empty
+
+Mutation: namespace `ns=parseguard` was populated and parsed successfully, then
+its bronze manifest and lines were deleted. Before the standalone parse attempt,
+both published files had 50 records and healthy reconciliation rows:
+
+```text
+before_records [['CUSTBILL_DEMO_001.dat', '50'], ['CUSTBILL_DEMO_002.dat', '50']]
+before_recon [['CUSTBILL_DEMO_001.dat', '50', '50', '0', 'true'], ['CUSTBILL_DEMO_002.dat', '50', '50', '0', 'true']]
+```
+
+The parse task now runs the read-only bronze manifest gate itself before staging.
+It failed before any staging or publication statement ran:
+
+```text
+bronze manifest gate
+FAILED: gate: bronze manifest is present failed -> no files in manifest
+parse_exit=1
+```
+
+The published namespace remained intact:
+
+```text
+after_records [['CUSTBILL_DEMO_001.dat', '50'], ['CUSTBILL_DEMO_002.dat', '50']]
+after_recon [['CUSTBILL_DEMO_001.dat', '50', '50', '0', 'true'], ['CUSTBILL_DEMO_002.dat', '50', '50', '0', 'true']]
+```
+
+The staged recon gate also contains a second defense for any future path that
+reaches it with empty staging: `staged output is not empty when published rows
+exist`. Its failure text is `empty staged result would have erased N published
+rows`. The other empty-namespace assertions are intentionally harmless:
+the bronze manifest gate rejects an empty manifest first, while duplicate checks
+and missing-recon checks operate on the actual rows/files and cannot erase data.
+
 ## Note on the shared workspace
 
 During the session an extra bronze line (`line_no = 999`, `raw_line` `STALE TAIL RECORD`)
