@@ -180,18 +180,43 @@ LEFT ANTI JOIN {SILVER} AS a ON a.ns = b.ns AND a.event_id = b.event_id
 """)
 
 # Read the archive back rather than trusting the write: every archived row must be
-# selectable with its payload and provenance intact.
+# selectable with its provenance intact. The predicate is deliberately about each
+# row's own stamped policy, not this run's parameter -- rows archived under an
+# earlier retention setting are still valid archives, and requiring the current
+# value would make verification permanently unsatisfiable the first time the
+# horizon is changed. A NULL raw_payload is likewise a faithful copy of a source
+# event that had none, not an archive failure; payload fidelity is checked below
+# against the source rather than by a NOT NULL test.
 readable_count = scalar(f"""
 SELECT count(*) FROM {SILVER}
 WHERE {PAST_CUTOFF}
   AND event_id IS NOT NULL
-  AND raw_payload IS NOT NULL
+  AND event_ts IS NOT NULL
   AND archived_at IS NOT NULL
-  AND retention_days = {retention_days}
+  AND cutoff_ts IS NOT NULL
+  AND retention_days > 0
+""")
+
+# Fidelity: for every candidate still in bronze, the archived copy must match the
+# source. `<=>` is the null-safe comparison, so a NULL payload must be archived as
+# NULL and a payload that changed in transit is caught.
+mismatched_count = scalar(f"""
+SELECT count(*)
+FROM {BRONZE} AS b
+JOIN {SILVER} AS a ON a.ns = b.ns AND a.event_id = b.event_id
+WHERE b.ns = '{ns}' AND b.event_ts < {CUTOFF_SQL}
+  AND NOT (a.raw_payload <=> b.raw_payload AND a.event_ts <=> b.event_ts
+           AND a.actor <=> b.actor AND a.action <=> b.action
+           AND a.target_id <=> b.target_id)
 """)
 
 candidate_count = archived_count + unarchived_count
-verified = unarchived_count == 0 and archived_count == candidate_count and readable_count == archived_count
+verified = (
+    unarchived_count == 0
+    and archived_count == candidate_count
+    and readable_count == archived_count
+    and mismatched_count == 0
+)
 
 log.info(
     "verification %s",
@@ -200,6 +225,7 @@ log.info(
         "archived_count": archived_count,
         "unarchived_count": unarchived_count,
         "readable_count": readable_count,
+        "mismatched_count": mismatched_count,
         "verified": verified,
     }),
 )
@@ -211,6 +237,15 @@ log.info(
 
 # COMMAND ----------
 
+# Cumulative, so it is stable across re-runs: archive rows with no bronze row left.
+PURGED_SQL = f"""
+SELECT count(*) FROM (
+  SELECT ns, event_id FROM {SILVER} WHERE {PAST_CUTOFF}
+) AS a
+LEFT ANTI JOIN {BRONZE} AS b ON b.ns = a.ns AND b.event_id = a.event_id
+"""
+purged_before = scalar(PURGED_SQL)
+
 if verified and archived_count > 0:
     purge_metrics = spark.sql(f"""
     DELETE FROM {BRONZE}
@@ -221,13 +256,7 @@ if verified and archived_count > 0:
 else:
     log.warning("archive not verified (or nothing to archive): source rows left in place")
 
-# Purged events are those with an archive row and no bronze row left.
-deleted_count = scalar(f"""
-SELECT count(*) FROM (
-  SELECT ns, event_id FROM {SILVER} WHERE {PAST_CUTOFF}
-) AS a
-LEFT ANTI JOIN {BRONZE} AS b ON b.ns = a.ns AND b.event_id = a.event_id
-""")
+deleted_count = scalar(PURGED_SQL)
 
 # The archive must still be readable after the purge -- the legacy failure mode
 # was losing the source with nothing durable to show for it.
@@ -236,8 +265,12 @@ if post_purge_readable != archived_count:
     raise RuntimeError(
         f"archive readback changed across the purge: {archived_count} -> {post_purge_readable}"
     )
-if deleted_count > 0 and not verified:
-    raise RuntimeError(f"{deleted_count} rows purged without a verified archive")
+# `deleted_count` is cumulative, so compare against the pre-purge reading: this is
+# about what *this* run removed, not what earlier verified runs already removed.
+if deleted_count > purged_before and not verified:
+    raise RuntimeError(
+        f"{deleted_count - purged_before} rows purged by this run without a verified archive"
+    )
 
 # COMMAND ----------
 
