@@ -40,12 +40,16 @@ import dbx  # noqa: E402
 import sftp_ingest_sql  # noqa: E402
 
 GOLDEN_ROOT = Path("/home/ubuntu/tp-golden/custbill")
-LANDING_ROOT = "/Volumes/ow_tp/bronze/landing"
-CATALOG = "ow_tp"
+# The estate the driver is pointed at, never a constant: pinning `ow_tp` here would let a
+# run configured for another ow_tp* catalog reconcile — and, in check 4, MERGE into — the
+# default estate while the report named the configured one. `dbx` already refuses a
+# non-ow_tp catalog, so this stays inside the prefix rule.
+CATALOG = dbx.CATALOG
+LANDING_ROOT = sftp_ingest_sql.default_landing_root(CATALOG)
 
 # Objects this unit is allowed to create / write. Anything else in the shared
 # workspace belongs to another unit or to the parent, and is out of bounds.
-OWNED_TABLES = {"ow_tp.bronze.custbill_files", "ow_tp.bronze.custbill_lines"}
+OWNED_TABLES = {f"{CATALOG}.bronze.custbill_files", f"{CATALOG}.bronze.custbill_lines"}
 OWNED_JOB = "ow_tp_sftp_ingest"
 OWNED_DEV_JOB = "ow_tp_dev_sftp_ingest"  # the throwaway this unit is allowed to create
 
@@ -359,7 +363,7 @@ def check5_scope(ns: str, landing_root: str) -> Check:
     retention_sql = (retention / "sql" / "sftp_ingest_retention.sql").read_text()
     referenced = {name for s in statements for name in _QUALIFIED_NAME.findall(s)}
     unowned = referenced - OWNED_TABLES
-    unprefixed = {name for name in referenced if not name.startswith("ow_tp.")}
+    unprefixed = {name for name in referenced if not name.startswith(f"{CATALOG}.")}
     # bool(referenced): finding nothing means the scanner no longer understands the SQL
     # (e.g. it moved to IDENTIFIER(:catalog || ...) binds), not that the scope is clean.
     ok = ok and bool(referenced) and not unowned and not unprefixed
@@ -374,7 +378,7 @@ def check5_scope(ns: str, landing_root: str) -> Check:
     check.detail.append(f"write targets in the statement set: {sorted(written) or '[]'}")
     check.detail.append(f"write targets outside the contract: {sorted(written_unowned) or 'none'}")
     # retention SQL addresses its tables through IDENTIFIER(:catalog || ...), so match those
-    retention_tables = {f"ow_tp{frag}" for frag in re.findall(r":catalog \|\| '(\.[a-z_.]+)'", retention_sql)}
+    retention_tables = {f"{CATALOG}{frag}" for frag in re.findall(r":catalog \|\| '(\.[a-z_.]+)'", retention_sql)}
     retention_unowned = retention_tables - OWNED_TABLES
     ok = ok and not retention_unowned and bool(retention_tables)
     check.detail.append(f"retention SQL targets: {sorted(retention_tables)} outside={sorted(retention_unowned) or 'none'}")
