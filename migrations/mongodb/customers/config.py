@@ -8,18 +8,16 @@ to the repo:
 | `MONGODB_ATLAS_URI` | Atlas connection string (required) | — |
 | `MONGO_DB` | target database | `ow_tp_demo` |
 | `NS` | namespace stamped into `_migration.ns` | `demo` |
-| `CONVERSION_BATCH_NO` | source conversion batch to migrate | `85559852` |
+| `CONVERSION_BATCH_NO` | source conversion batch to migrate | derived from `NS` (`85559852` for `demo`) |
 | `BATCH_SIZE` | rows per extract/load chunk | `1000` |
 | `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_SERVICE` | legacy Oracle estate | `localhost` / `52521` / `ow_billing` / `ow_billing` / `FREEPDB1` |
 """
 
+import hashlib
 import os
 
 DEFAULT_DB = "ow_tp_demo"
 DEFAULT_NS = "demo"
-
-# NS=demo's conversion batch (the seed derives it from the namespace).
-DEFAULT_BATCH_NO = 85559852
 
 BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "1000"))
 
@@ -52,8 +50,18 @@ def namespace() -> str:
     return os.environ.get("NS", DEFAULT_NS)
 
 
-def batch_no() -> int:
-    return int(os.environ.get("CONVERSION_BATCH_NO", DEFAULT_BATCH_NO))
+def batch_no(ns: str = None) -> int:
+    """The namespace's conversion batch, derived exactly as the seeder does.
+
+    `testdata/legacy/oracle_billing_seed.py` computes it from `legacy_common.
+    ns_seed(ns)`, so deriving it here keeps `--ns` and the source batch in step
+    (`demo` -> 85559852). `CONVERSION_BATCH_NO` overrides it.
+    """
+    override = os.environ.get("CONVERSION_BATCH_NO")
+    if override:
+        return int(override)
+    seed = int(hashlib.sha256((ns or namespace()).encode()).hexdigest()[:8], 16)
+    return seed % 90_000_000 + 1_000_000
 
 
 def atlas_uri() -> str:

@@ -25,8 +25,9 @@ LEGACY_DATE_RE = re.compile(r"^(\d{2})-([A-Z]{3})-(\d{2})$")
 ID_RE = re.compile(r"^\d+$")
 CODE_TOKEN_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
-# Two-digit years: Oracle 'RR' semantics, matching how the estate is read today.
-YEAR_PIVOT = 69
+# Two-digit years: Oracle 'RR' semantics for a current year in 2000-2049, so
+# 00-49 is 2000s and 50-99 is 1900s.
+YEAR_PIVOT = 49
 
 SOURCE_TABLE = "OW_BILLING.CUSTOMER_MASTER"
 
