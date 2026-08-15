@@ -111,7 +111,26 @@ def silver_state(catalog: str, ns: str, cutoff: str) -> dict:
         WHERE ns = '{ns}' AND event_ts < TIMESTAMP '{cutoff}'
         ORDER BY event_id
     """)]
+    # Everything above re-applies the cutoff, which makes over-archival invisible:
+    # an event at or after the cutoff wrongly written to the archive would be
+    # filtered out of both the id set and the count instead of showing up as an
+    # extra. That is precisely what the cutoff / cutoff+1s boundary events exist to
+    # catch, so read the other side of the boundary unfiltered.
+    over = dbx.sql(f"""
+        SELECT count(*), min(event_ts), max(event_ts)
+        FROM {catalog}.silver.audit_events_archived
+        WHERE ns = '{ns}' AND event_ts >= TIMESTAMP '{cutoff}'
+    """)[0]
+    over_ids = [r[0] for r in dbx.sql(f"""
+        SELECT event_id FROM {catalog}.silver.audit_events_archived
+        WHERE ns = '{ns}' AND event_ts >= TIMESTAMP '{cutoff}'
+        ORDER BY event_ts LIMIT 10
+    """)]
     return {
+        "rows_at_or_after_cutoff": int(over[0]),
+        "min_event_ts_at_or_after_cutoff": over[1],
+        "max_event_ts_at_or_after_cutoff": over[2],
+        "sample_event_ids_at_or_after_cutoff": over_ids,
         "rows": int(rows[0]),
         "distinct_event_ids": int(rows[1]),
         "max_event_ts": rows[2],
@@ -166,7 +185,7 @@ def run_checks(args) -> tuple[list[Check], dict]:
     # ---- 1. selection parity -------------------------------------------------
     baseline_ids, silver_ids = set(baseline["event_ids"]), set(silver["event_ids"])
     checks[0].record(
-        baseline_ids == silver_ids,
+        baseline_ids == silver_ids and silver["rows_at_or_after_cutoff"] == 0,
         legacy_count=baseline["count"],
         converted_count=silver["rows"],
         legacy_id_set_sha256=baseline["id_set_sha256"],
@@ -179,6 +198,9 @@ def run_checks(args) -> tuple[list[Check], dict]:
         legacy_cutoff=baseline["report"]["retention_policy"]["cutoff_date"],
         boundary_max_archived_event_ts=str(silver["max_event_ts"]),
         legacy_max_archived_ts=baseline["max_ts"],
+        over_archived_at_or_after_cutoff=silver["rows_at_or_after_cutoff"],
+        over_archived_sample_event_ids=silver["sample_event_ids_at_or_after_cutoff"],
+        over_archived_min_event_ts=str(silver["min_event_ts_at_or_after_cutoff"]),
     )
 
     # ---- 2. count parity ----------------------------------------------------
@@ -191,13 +213,15 @@ def run_checks(args) -> tuple[list[Check], dict]:
         row = manifest[0]
         candidate, archived = int(row["candidate_count"]), int(row["archived_count"])
         checks[1].record(
-            candidate == archived == silver["rows"] == baseline["count"],
+            candidate == archived == silver["rows"] == baseline["count"]
+            and silver["rows_at_or_after_cutoff"] == 0,
             legacy_events_archived=baseline["report"]["results"]["events_archived"],
             legacy_events_scanned=baseline["report"]["results"]["events_scanned"],
             manifest_candidate_count=candidate,
             manifest_archived_count=archived,
             silver_rows=silver["rows"],
             silver_distinct_event_ids=silver["distinct_event_ids"],
+            silver_rows_at_or_after_cutoff=silver["rows_at_or_after_cutoff"],
         )
 
     # ---- 3. retention safety ------------------------------------------------
