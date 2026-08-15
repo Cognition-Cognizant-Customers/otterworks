@@ -9,9 +9,10 @@ baseline: legacy output
 
 ## Disclosures
 
-- **Transport**: extract -> `scripts/tp_databricks/load_bronze_via_sql.py` -> the same bronze table over the serverless warehouse. The volume upload is unavailable to this unit: the demo PAT carries `sql, unity-catalog, jobs, secrets, workspace` scopes and the Files API answers `403 ... required scopes: files`. Only the transport differs -- the envelopes, the bronze table and every downstream statement are the pipeline's own, and `publish_index` (the build-then-swap logic under test) ran as a real serverless job task.
+- **Transport**: extract -> `scripts/tp_databricks/load_bronze_via_sql.py` -> the same bronze table over the serverless warehouse. **The documented landing-volume upload path is UNVERIFIED.** It cannot be executed by this unit: the demo PAT carries `sql, unity-catalog, jobs, secrets, workspace` scopes and the Files API answers `PUT /api/2.0/fs/files/Volumes/ow_tp/bronze/landing/... -> 403: {"error_code":403,"message":"Provided access token does not have required scopes: files"}`, and the parent session has confirmed no files-scoped token is coming. This loader is a test transport, not the production one: the envelopes, the bronze table and every downstream statement are the pipeline's own, and `publish_index` -- the build-then-swap logic under test -- ran as a real serverless job task, but `ingest_bronze`'s volume read is covered by review only. A defect on that unexecuted path (the manifest read via `spark.read.text`, which silently skips leaf files whose names begin with `_`) was found in review, not by a run; it is fixed and still unexecuted.
 - **Sample selection (check 2)**: ids are drawn from the legacy index itself using `random.Random(int(sha256('search_reindex_weekly:<ns>:<entity_type>').hexdigest()[:16], 16))` over the lexicographically sorted id list, 50 per entity type. Fixed seed, fixed ordering, fixed before any value is compared -- the sample is not chosen to favour the conversion.
-- **Null/default normalization (check 2)**: the legacy script defaulted absent source fields to `""` / `[]`; the converted projection stores SQL NULL for the same absent field. Those are treated as equal, and every application is counted as `null_default_normalizations`. In this run they are all the `tags` field, which neither service API returns for the seeded corpus.
+- **Null/default normalization (check 2)**: the legacy script defaulted absent source fields to `""` / `[]`; where the converted projection stores SQL NULL for the same absent field the two are treated as equal. Every application is counted per entity type as `null_default_normalizations` below, so the extent of the leniency is visible rather than implied -- zero there means the two sides matched on representation as well as on value.
+- **Count snapshots (checks 3b and 4)**: the serving counts each run is judged on are read by `run_search_reindex_dev.py` the moment that run finishes and stored in its run artifact; recon reads those recorded values and compares the live table on top. Reading both sides at report time would make the equality hold by construction and could never detect drift.
 - **Counts**: the seed generator creates 2,000 documents, 67 of them soft-deleted and therefore never returned by `/api/v1/documents`; the legacy run indexed 1,933, so parity is measured against that legacy output rather than the raw seed total. Files: 10,000 DynamoDB items, 9,461 API-visible once trashed items are excluded.
 
 ## check 1 — count parity per entity type — PASS
@@ -45,7 +46,7 @@ baseline: legacy output
   "missing_from_converted": [],
   "mismatches": [],
   "mismatch_count": 0,
-  "null_default_normalizations": 50
+  "null_default_normalizations": 0
 }
 ```
 
@@ -59,7 +60,7 @@ baseline: legacy output
   "missing_from_converted": [],
   "mismatches": [],
   "mismatch_count": 0,
-  "null_default_normalizations": 50
+  "null_default_normalizations": 0
 }
 ```
 
@@ -95,7 +96,12 @@ baseline: legacy output
   "run_result_state": "FAILED",
   "ingest_result_state": "FAILED",
   "publish_result_state": "UPSTREAM_FAILED",
-  "serving_counts_after_failed_run": {
+  "serving_counts_at_failed_run_end": {
+    "file": 9461,
+    "document": 1933
+  },
+  "snapshot_taken_at": "2026-08-15T23:32:34.567652+00:00",
+  "serving_counts_now": {
     "file": 9461,
     "document": 1933
   },
@@ -104,7 +110,7 @@ baseline: legacy output
     "file": 9461
   },
   "index_intact": true,
-  "run_url": "https://dbc-8bc9474f-40ae.cloud.databricks.com/?o=7474651138173478#job/749284665997898/run/903323673811358"
+  "run_url": "https://dbc-8bc9474f-40ae.cloud.databricks.com/?o=7474651138173478#job/634123724610806/run/385031122358741"
 }
 ```
 
@@ -112,12 +118,19 @@ baseline: legacy output
 
 ```json
 {
+  "first_run_result_state": "SUCCESS",
   "rerun_result_state": "SUCCESS",
-  "counts_after_rerun": {
+  "counts_at_first_run_end": {
     "file": 9461,
     "document": 1933
   },
-  "counts_after_first_run": {
+  "first_snapshot_taken_at": "2026-08-15T23:29:02.642591+00:00",
+  "counts_at_rerun_end": {
+    "file": 9461,
+    "document": 1933
+  },
+  "rerun_snapshot_taken_at": "2026-08-15T23:29:58.058500+00:00",
+  "counts_live_now": {
     "file": 9461,
     "document": 1933
   },
@@ -126,7 +139,8 @@ baseline: legacy output
     "file": 9461
   },
   "duplicate_entity_ids": 0,
-  "run_url": "https://dbc-8bc9474f-40ae.cloud.databricks.com/?o=7474651138173478#job/749284665997898/run/145054565034633"
+  "first_run_url": "https://dbc-8bc9474f-40ae.cloud.databricks.com/?o=7474651138173478#job/634123724610806/run/709736671436704",
+  "run_url": "https://dbc-8bc9474f-40ae.cloud.databricks.com/?o=7474651138173478#job/634123724610806/run/518779447411085"
 }
 ```
 

@@ -29,6 +29,7 @@ import hashlib
 import json
 import os
 import random
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -155,15 +156,17 @@ def serving_sample(ns: str, entity_type: str, ids: list[str]) -> dict[str, dict]
 
 
 def as_timestamp(value) -> datetime | None:
+    """Parse either side's timestamp text, offset-suffixed or not, as an aware UTC instant."""
     if value in (None, ""):
         return None
-    text = str(value).strip().replace("T", " ").replace("Z", "")
-    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-        try:
-            return datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
-        except ValueError:
-            continue
-    raise Blocked(f"cannot parse timestamp {value!r}")
+    text = str(value).strip().replace(" ", "T")
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise Blocked(f"cannot parse timestamp {value!r}") from exc
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 def normalize(field: str, value, side: str):
@@ -263,36 +266,67 @@ def load_run(golden_dir: Path, name: str) -> dict:
     return json.loads(path.read_text())
 
 
-def check_forced_failure(golden_dir: Path, legacy: dict[str, int], converted_after: dict[str, int]) -> dict:
+def run_snapshot(run: dict, name: str) -> dict[str, int]:
+    """Counts recorded by the dev runner when that run finished, not a report-time read."""
+    snapshot = run.get("serving_counts_at_run_end")
+    if not snapshot:
+        raise Blocked(
+            f"{name} carries no serving_counts_at_run_end snapshot; "
+            "re-run it with the current run_search_reindex_dev.py so the count is captured "
+            "at run time rather than compared against itself at report time"
+        )
+    return {entity: int(count) for entity, count in snapshot.items()}
+
+
+def check_forced_failure(golden_dir: Path, legacy: dict[str, int], converted_now: dict[str, int]) -> dict:
     run = load_run(golden_dir, "dev_run_forced_failure.json")
     ingest = next((t for t in run.get("tasks", []) if t["task_key"] == "ingest_bronze"), {})
     publish = next((t for t in run.get("tasks", []) if t["task_key"] == "publish_index"), {})
-    index_intact = all(converted_after.get(e) == legacy.get(e) for e in legacy)
+    at_run_end = run_snapshot(run, "dev_run_forced_failure.json")
+    index_intact = all(at_run_end.get(e) == legacy.get(e) for e in legacy)
     return {
         "passed": run.get("result_state") == "FAILED" and index_intact
         and publish.get("result_state") in ("UPSTREAM_FAILED", "SKIPPED", None),
         "run_result_state": run.get("result_state"),
         "ingest_result_state": ingest.get("result_state"),
         "publish_result_state": publish.get("result_state"),
-        "serving_counts_after_failed_run": converted_after,
+        "serving_counts_at_failed_run_end": at_run_end,
+        "snapshot_taken_at": run.get("snapshot_taken_at"),
+        "serving_counts_now": converted_now,
         "legacy_counts": legacy,
         "index_intact": index_intact,
         "run_url": run.get("url"),
     }
 
 
-def check_rerun(golden_dir: Path, ns: str, first_counts: dict[str, int], legacy: dict[str, int]) -> dict:
-    run = load_run(golden_dir, "dev_run_rerun.json")
-    after = serving_counts(ns)
+def check_rerun(golden_dir: Path, ns: str, legacy: dict[str, int]) -> dict:
+    """Idempotency across two distinct runs, using the count each run recorded when it ended.
+
+    Both sides must come from different moments in time or the equality is vacuous: the first
+    run's number is read out of its own artifact, the rerun's out of its own, and the live
+    table is compared on top.
+    """
+    first = load_run(golden_dir, "dev_run_success.json")
+    rerun = load_run(golden_dir, "dev_run_rerun.json")
+    after_first = run_snapshot(first, "dev_run_success.json")
+    after_rerun = run_snapshot(rerun, "dev_run_rerun.json")
+    live = serving_counts(ns)
     duplicates = duplicate_entity_ids(ns)
     return {
-        "passed": run.get("result_state") == "SUCCESS" and after == first_counts == legacy and duplicates == 0,
-        "rerun_result_state": run.get("result_state"),
-        "counts_after_rerun": after,
-        "counts_after_first_run": first_counts,
+        "passed": rerun.get("result_state") == "SUCCESS"
+        and after_first == after_rerun == live == legacy
+        and duplicates == 0,
+        "first_run_result_state": first.get("result_state"),
+        "rerun_result_state": rerun.get("result_state"),
+        "counts_at_first_run_end": after_first,
+        "first_snapshot_taken_at": first.get("snapshot_taken_at"),
+        "counts_at_rerun_end": after_rerun,
+        "rerun_snapshot_taken_at": rerun.get("snapshot_taken_at"),
+        "counts_live_now": live,
         "legacy_counts": legacy,
         "duplicate_entity_ids": duplicates,
-        "run_url": run.get("url"),
+        "first_run_url": first.get("url"),
+        "run_url": rerun.get("url"),
     }
 
 
@@ -315,11 +349,16 @@ TRANSPORT_NOTES = {
     ),
     "sql-fallback": (
         "extract -> `scripts/tp_databricks/load_bronze_via_sql.py` -> the same bronze table over the "
-        "serverless warehouse. The volume upload is unavailable to this unit: the demo PAT carries "
-        "`sql, unity-catalog, jobs, secrets, workspace` scopes and the Files API answers "
-        "`403 ... required scopes: files`. Only the transport differs -- the envelopes, the bronze table "
-        "and every downstream statement are the pipeline's own, and `publish_index` (the build-then-swap "
-        "logic under test) ran as a real serverless job task."
+        "serverless warehouse. **The documented landing-volume upload path is UNVERIFIED.** It cannot be "
+        "executed by this unit: the demo PAT carries `sql, unity-catalog, jobs, secrets, workspace` scopes "
+        "and the Files API answers `PUT /api/2.0/fs/files/Volumes/ow_tp/bronze/landing/... -> 403: "
+        "{\"error_code\":403,\"message\":\"Provided access token does not have required scopes: files\"}`, and "
+        "the parent session has confirmed no files-scoped token is coming. This loader is a test transport, "
+        "not the production one: the envelopes, the bronze table and every downstream statement are the "
+        "pipeline's own, and `publish_index` -- the build-then-swap logic under test -- ran as a real "
+        "serverless job task, but `ingest_bronze`'s volume read is covered by review only. A defect on that "
+        "unexecuted path (the manifest read via `spark.read.text`, which silently skips leaf files whose "
+        "names begin with `_`) was found in review, not by a run; it is fixed and still unexecuted."
     ),
 }
 
@@ -334,9 +373,14 @@ def disclosures(transport: str) -> list[str]:
         "the lexicographically sorted id list, 50 per entity type. Fixed seed, fixed ordering, fixed before "
         "any value is compared -- the sample is not chosen to favour the conversion.",
         "- **Null/default normalization (check 2)**: the legacy script defaulted absent source fields to "
-        "`\"\"` / `[]`; the converted projection stores SQL NULL for the same absent field. Those are treated "
-        "as equal, and every application is counted as `null_default_normalizations`. In this run they are all "
-        "the `tags` field, which neither service API returns for the seeded corpus.",
+        "`\"\"` / `[]`; where the converted projection stores SQL NULL for the same absent field the two are "
+        "treated as equal. Every application is counted per entity type as `null_default_normalizations` "
+        "below, so the extent of the leniency is visible rather than implied -- zero there means the two "
+        "sides matched on representation as well as on value.",
+        "- **Count snapshots (checks 3b and 4)**: the serving counts each run is judged on are read by "
+        "`run_search_reindex_dev.py` the moment that run finishes and stored in its run artifact; recon reads "
+        "those recorded values and compares the live table on top. Reading both sides at report time would "
+        "make the equality hold by construction and could never detect drift.",
         "- **Counts**: the seed generator creates 2,000 documents, 67 of them soft-deleted and therefore never "
         "returned by `/api/v1/documents`; the legacy run indexed 1,933, so parity is measured against that "
         "legacy output rather than the raw seed total. Files: 10,000 DynamoDB items, 9,461 API-visible once "
@@ -381,6 +425,8 @@ def main(argv: list[str] | None = None) -> int:
         help="how the extract reached bronze for the run being reconciled",
     )
     args = parser.parse_args(argv)
+    if not re.fullmatch(r"[a-z0-9_]+", args.ns):
+        raise SystemExit(f"ns must match [a-z0-9_]+, got {args.ns!r}")
 
     golden_dir = Path(args.golden_dir)
     baseline, provenance = baseline_line(golden_dir)
@@ -404,7 +450,7 @@ def main(argv: list[str] | None = None) -> int:
     run_check("check 3b — forced source failure leaves the index intact",
               lambda: check_forced_failure(golden_dir, legacy, serving_counts(args.ns)))
     run_check("check 4 — rerun idempotency",
-              lambda: check_rerun(golden_dir, args.ns, converted, legacy))
+              lambda: check_rerun(golden_dir, args.ns, legacy))
     results["check 5 — baseline provenance"] = {"passed": True, "baseline": baseline, **provenance}
 
     report = render(args.ns, baseline, provenance, results, args.transport)
