@@ -403,15 +403,15 @@ def main() -> int:
     parser.add_argument("--report-out", default=None)
     args = parser.parse_args()
     ns = args.ns
-    if not NS_RE.match(ns):
+    if not NS_RE.fullmatch(ns):
         raise SystemExit(f"invalid --ns {ns!r}: expected {NS_RE.pattern}")
-    if args.report_date is not None and not DATE_RE.match(args.report_date):
+    if args.report_date is not None and not DATE_RE.fullmatch(args.report_date):
         raise SystemExit(f"invalid --report-date {args.report_date!r}: expected YYYY-MM-DD")
 
     golden_path, golden_raw, golden = golden_report(ns, args.report_date)
     stem = os.path.basename(golden_path).replace("finance_billing_", "").replace(".csv", "")
     report_date = args.report_date or f"{stem[0:4]}-{stem[4:6]}-{stem[6:8]}"
-    if not DATE_RE.match(report_date):
+    if not DATE_RE.fullmatch(report_date):
         raise SystemExit(f"golden artifact {golden_path} does not carry a YYYYMMDD stamp")
 
     try:
