@@ -1,6 +1,7 @@
 # ------------------------------------------------------------------------------
-# Report component: finance report Lambda replacing finance_excel_report.pl and
-# Step Functions orchestration replacing run_all.sh's sleep-based sequencing.
+# Report component: finance report Lambda replacing
+# etl/legacy-extra/jobs/finance_excel_report.pl and Step Functions orchestration
+# replacing etl/legacy-extra/run_all.sh's sleep-based sequencing.
 # References other components only through deterministic local.lambda_arns values.
 # ------------------------------------------------------------------------------
 
