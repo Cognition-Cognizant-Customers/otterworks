@@ -3,7 +3,7 @@
 
 Creates (if absent) the two collections this workload owns in the target
 database and applies their indexes. Re-running is a no-op: collection creation
-tolerates `NamespaceExists` and `create_indexes` is idempotent for identical
+tolerates both the client-side pre-check error and the server's `NamespaceExists` (48), and `create_indexes` is idempotent for identical
 key/option specs.
 
     make mongo-tp-customers-setup            # apply
@@ -18,9 +18,11 @@ import argparse
 import sys
 
 from pymongo import IndexModel
-from pymongo.errors import CollectionInvalid
+from pymongo.errors import CollectionInvalid, OperationFailure
 
 import config
+
+NAMESPACE_EXISTS = 48
 
 
 def _index_models(specs):
@@ -43,7 +45,10 @@ def setup(db, dry_run: bool = False) -> int:
             try:
                 db.create_collection(name)
             except CollectionInvalid:
-                pass  # created concurrently
+                pass  # lost the client-side pre-check race
+            except OperationFailure as exc:
+                if exc.code != NAMESPACE_EXISTS:
+                    raise
             print(f"[setup] collection {db.name}.{name}: created")
 
         for spec in specs:
