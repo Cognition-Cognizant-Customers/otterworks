@@ -31,11 +31,12 @@ import argparse
 import json
 import os
 import sys
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
 from bson import Int64
-from common import COLLECTION, Checksum, db_name, log, mongo_collection, valid_ns
+from common import COLLECTION, Checksum, db_name, log, mongo_client, valid_ns
 from tabulate import tabulate
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -118,14 +119,13 @@ def scan_collection(collection, ns: str) -> dict:
     }
 
 
-def reconcile(ns: str) -> dict:
+def _reconcile(ns: str, collection) -> dict:
     manifest = load_manifest(ns)
     target = manifest.get("targets", {}).get(MANIFEST_TARGET)
     if target is None:
         raise ConfigError(f"manifest target {MANIFEST_TARGET} missing from {manifest_path(ns)}")
     orphans_expected = manifest_anomaly(manifest, ORPHAN_KIND, MANIFEST_TARGET)
 
-    collection = mongo_collection(ns)
     scan = scan_collection(collection, ns)
     total_documents = collection.count_documents({})
     indexes = sorted(collection.index_information())
@@ -217,6 +217,11 @@ def reconcile(ns: str) -> dict:
         "passed": sum(1 for _, status, _ in results if status == "PASS"),
         "total": len(results),
     }
+
+
+def reconcile(ns: str) -> dict:
+    with closing(mongo_client()) as client:
+        return _reconcile(ns, client[db_name(ns)][COLLECTION])
 
 
 def render_markdown(report: dict) -> str:

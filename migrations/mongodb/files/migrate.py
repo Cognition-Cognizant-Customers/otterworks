@@ -18,16 +18,17 @@ Usage:
 
 import argparse
 import sys
+from contextlib import closing
 from datetime import datetime, timezone
 
-from common import COLLECTION, db_name, log, mongo_collection, valid_ns
+from common import COLLECTION, db_name, log, mongo_client, valid_ns
 from extract import batched, scan_items
 from load import LoadStats, upsert_documents
 from transform import transform_item
 
 
-def migrate(ns: str, batch_size: int) -> dict:
-    collection = mongo_collection(ns)
+def migrate(ns: str, batch_size: int, client) -> dict:
+    collection = client[db_name(ns)][COLLECTION]
     migrated_at = datetime.now(timezone.utc)
     stats = LoadStats()
     extracted = orphans = 0
@@ -77,7 +78,8 @@ def main() -> int:
         print("NS must match ^[A-Za-z0-9_]+$", file=sys.stderr)
         return 2
 
-    summary = migrate(args.ns, args.batch_size)
+    with closing(mongo_client()) as client:
+        summary = migrate(args.ns, args.batch_size, client)
     return 0 if summary["extracted"] == summary["written"] else 1
 
 
