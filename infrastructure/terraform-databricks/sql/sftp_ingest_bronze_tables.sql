@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS IDENTIFIER(:catalog || '.bronze.custbill_files') (
   size_bytes    BIGINT    NOT NULL COMMENT 'Byte length of the ingested file, measured once from the landed bytes.',
   sha256        STRING    NOT NULL COMMENT 'SHA-256 of the landed bytes - the transfer-completion handshake replacing the size-settle heuristic.',
   record_count  BIGINT    NOT NULL COMMENT 'Record lines ingested from the file, header and trailer included.',
-  ingested_at   TIMESTAMP NOT NULL COMMENT 'First successful ingest of this (ns, file_name, sha256), unchanged by re-runs.',
+  ingested_at   TIMESTAMP NOT NULL COMMENT 'When this (ns, file_name, sha256) content was last ingested; unchanged by re-runs, rewritten if the file is re-delivered with different bytes or re-ingested after retention trimmed its rows.',
   source_path   STRING    NOT NULL COMMENT 'Full landing-volume path the bytes were read from.'
 )
 USING DELTA
