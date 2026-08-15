@@ -39,12 +39,14 @@ DDL_FILE = (
 
 DEFAULT_LANDING_ROOT = "/Volumes/ow_tp/bronze/landing"
 
-_NS_RE = re.compile(r"^[a-z0-9][a-z0-9_]{0,30}$")
-_CATALOG_RE = re.compile(r"^ow_tp[a-z0-9_]*$")
+# `\Z`, not `$`: Python's `$` also matches before a trailing newline, so `$` would
+# let 'demo\n' through a gate whose whole job is to bound what reaches SQL text.
+_NS_RE = re.compile(r"^[a-z0-9][a-z0-9_]{0,30}\Z")
+_CATALOG_RE = re.compile(r"^ow_tp[a-z0-9_]*\Z")
 # A Unity Catalog volume path under an ow_tp* catalog, and nothing else. No `.`
 # anywhere, so `/Volumes/ow_tp/bronze/landing/../../other_catalog/...` cannot pass
 # the gate and read another demo's volume — an absolute-path check alone would.
-_ROOT_RE = re.compile(r"^/Volumes/ow_tp[a-z0-9_]*(/[A-Za-z0-9_-]+)+$")
+_ROOT_RE = re.compile(r"^/Volumes/ow_tp[a-z0-9_]*(/[A-Za-z0-9_-]+)+\Z")
 
 
 def _validated(ns: str, catalog: str, landing_root: str) -> tuple[str, str, str]:
@@ -100,7 +102,10 @@ audit AS (
     count_if(raw_line LIKE 'HDR%')                                      AS header_lines,
     count_if(raw_line LIKE 'TRL%')                                      AS trailer_lines,
     count_if(raw_line NOT LIKE 'HDR%' AND raw_line NOT LIKE 'TRL%')     AS detail_lines,
-    max(CASE WHEN raw_line LIKE 'TRL%' THEN CAST(substr(raw_line, 4, 10) AS BIGINT) END) AS trailer_declared
+    -- TRY_CAST: a transfer cut off mid-trailer leaves a non-numeric count, and under
+    -- ANSI mode a plain CAST would abort the very query meant to report that file as
+    -- incomplete. NULL fails `detail_lines = trailer_declared`, which is the point.
+    max(CASE WHEN raw_line LIKE 'TRL%' THEN TRY_CAST(substr(raw_line, 4, 10) AS BIGINT) END) AS trailer_declared
   FROM lines
   GROUP BY file_name
 ),
