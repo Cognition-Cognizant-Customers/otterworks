@@ -45,8 +45,8 @@ run_date = date.fromisoformat(run_date_param) if run_date_param else datetime.no
 
 if not ns.isidentifier():
     raise ValueError(f"ns must be an identifier, got {ns!r}")
-if not catalog.startswith("ow_tp"):
-    raise ValueError(f"catalog must be ow_tp-prefixed in this shared workspace, got {catalog!r}")
+if not (catalog.isidentifier() and catalog.startswith("ow_tp")):
+    raise ValueError(f"catalog must be an ow_tp-prefixed identifier in this shared workspace, got {catalog!r}")
 if retention_days <= 0:
     raise ValueError(f"retention_days must be positive, got {retention_days}")
 
