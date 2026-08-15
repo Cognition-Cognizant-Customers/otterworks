@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke aws-tp-plan aws-tp-apply aws-tp-run aws-tp-verify aws-tp-destroy aws-tp-scan mongo-tp-customers-setup
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke dbx-init dbx-apply dbx-destroy dbx-inventory dbx-verify-teardown dbx-upload dbx-deploy-notebooks dbx-run dbx-recon aws-tp-plan aws-tp-apply aws-tp-run aws-tp-verify aws-tp-destroy aws-tp-scan mongo-tp-customers-setup
 
 SHELL := /bin/bash
 
@@ -449,6 +449,68 @@ legacy-sftp-up: ## Start the optional localhost-only SFTP drop fixture
 
 legacy-sftp-down: ## Stop the SFTP drop fixture
 	docker compose -f etl/legacy-extra/docker-compose.sftp.yml down
+
+# --- Databricks lakehouse (tech-partnerships migration target) ---
+# Every object is ow_tp-prefixed and Terraform-managed: the demo workspace is
+# shared, so the prefix is both the isolation boundary and the teardown filter.
+# No target here creates compute; jobs and recon run on the existing serverless
+# SQL warehouse.
+
+DBX_DIR := infrastructure/terraform-databricks
+DBX_ENV := DATABRICKS_HOST="$${DATABRICKS_HOST:-$$DATABRICKS_DEMO_HOST}" DATABRICKS_TOKEN="$${DATABRICKS_TOKEN:-$$DATABRICKS_DEMO_TOKEN}"
+DBX = $(DBX_ENV) python3 scripts/tp_databricks/dbx.py
+LEGACY_ROOT = $${OTTERWORKS_LEGACY_ROOT:-/tmp/otterworks-legacy}
+
+dbx-init: ## Initialize the Databricks Terraform stack
+	cd $(DBX_DIR) && $(DBX_ENV) terraform init -input=false
+
+dbx-apply: ## Create/update the ow_tp lakehouse estate (catalog, layers, volume, secret scope, jobs)
+	cd $(DBX_DIR) && $(DBX_ENV) terraform apply -auto-approve
+
+dbx-destroy: ## Tear the ow_tp estate down (verify afterwards with dbx-verify-teardown)
+	cd $(DBX_DIR) && $(DBX_ENV) terraform destroy -auto-approve
+
+dbx-inventory: ## List every ow_tp-prefixed object in the shared workspace
+	@$(DBX) inventory
+
+dbx-verify-teardown: ## Fail if any ow_tp-prefixed object survived teardown
+	@$(DBX) teardown-check
+
+dbx-upload: ## Upload the legacy CUSTBILL drops into the landing volume (NS=<ns>)
+ifndef NS
+	$(error NS is required, e.g. make dbx-upload NS=demo)
+endif
+	$(call validate_ns)
+	@set -e; shopt -s nullglob nocaseglob; files=( "$(LEGACY_ROOT)"/sftp-drop/upload/CUSTBILL_$(NS)_*.dat ); \
+	if (($${#files[@]} == 0)); then \
+	  echo "dbx-upload: no .dat files found under $(LEGACY_ROOT)/sftp-drop/upload; nothing to upload"; \
+	  exit 0; \
+	fi; \
+	for f in "$${files[@]}"; do \
+	  $(DBX) upload "$$f" "$(NS)/custbill/$$(basename $$f)"; \
+	done
+
+dbx-deploy-notebooks: ## Import the converted pipeline notebooks into /Shared/ow_tp
+	@set -e; shopt -s nullglob; files=( databricks/notebooks/*.py ); \
+	if (($${#files[@]} == 0)); then \
+	  echo "dbx-deploy-notebooks: no notebooks found under databricks/notebooks; nothing to deploy"; \
+	  exit 0; \
+	fi; \
+	for f in "$${files[@]}"; do \
+	  $(DBX) deploy-notebook "$$f" "$$(basename $$f .py)"; \
+	done
+
+dbx-run: ## Run a converted job and wait for it (JOB=<ow_tp_...>, NS=<ns>)
+	@test -n "$(JOB)" || { echo "usage: make dbx-run JOB=ow_tp_<job> NS=<ns>"; exit 1; }
+	@case "$(JOB)" in *[!A-Za-z0-9_-]*|'') echo "JOB must contain only letters, digits, underscores, and hyphens" >&2; exit 1;; esac
+	$(if $(NS),$(call validate_ns),)
+	@$(DBX) run-job "$(JOB)" ns=$${NS:-demo}
+
+dbx-recon: ## Reconcile one converted unit against its legacy golden output (UNIT=<unit>, NS=<ns>)
+	@test -n "$(UNIT)" || { echo "usage: make dbx-recon UNIT=<unit> NS=<ns>"; exit 1; }
+	@case "$(UNIT)" in *[!A-Za-z0-9_-]*|'') echo "UNIT must contain only letters, digits, underscores, and hyphens" >&2; exit 1;; esac
+	$(if $(NS),$(call validate_ns),)
+	$(DBX_ENV) NS=$${NS:-demo} python3 scripts/tp_databricks/recon_$(UNIT).py
 
 # --- AWS serverless CUSTBILL pipeline (infrastructure/terraform-tp-aws, tech-partnerships demo) ---
 
