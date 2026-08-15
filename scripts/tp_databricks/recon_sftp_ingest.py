@@ -30,6 +30,7 @@ import hashlib
 import os
 import re
 import sys
+import urllib.parse
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -442,6 +443,9 @@ class UploadProbe:
     verified: bool | None  # None == not attempted on this run
     error: str | None = None
     skipped: str | None = None
+    # set when the probe's own payload could not be removed again, i.e. the probe left
+    # an object behind in the shared volume — a fact the report has to carry.
+    cleanup_error: str | None = None
 
 
 def probe_upload(ns: str, landing_root: str, attempt: bool) -> UploadProbe:
@@ -475,9 +479,27 @@ def probe_upload(ns: str, landing_root: str, attempt: bool) -> UploadProbe:
     payload = Path(f"/tmp/ow_tp_upload_probe_{ns}.txt")
     payload.write_text(f"ow_tp upload transport probe for ns={ns}; not ingest input\n")
     try:
-        return UploadProbe(target=dbx.upload(str(payload), f"{ns}/{PROBE_DIR}/upload_probe.txt"), verified=True)
+        uploaded = dbx.upload(str(payload), f"{ns}/{PROBE_DIR}/upload_probe.txt")
     except Exception as exc:  # noqa: BLE001 - the failure text *is* the evidence
         return UploadProbe(target=target, verified=False, error=f"{type(exc).__name__}: {exc}")
+    finally:
+        payload.unlink(missing_ok=True)
+    return UploadProbe(target=uploaded, verified=True, cleanup_error=_remove_probe(uploaded))
+
+
+def _remove_probe(target: str) -> str | None:
+    """Delete the probe payload again, returning the failure text if it survives.
+
+    A probe that proves the transport works and then keeps its payload would leave an
+    object in the shared volume that no contract covers, and leave it silently: check 5
+    enumerates tables and jobs, not files. So the write is undone here, and a delete
+    that fails is reported rather than swallowed.
+    """
+    try:
+        dbx.request("DELETE", f"/api/2.0/fs/files{urllib.parse.quote(target)}")
+        return None
+    except Exception as exc:  # noqa: BLE001 - a surviving probe artifact must be visible
+        return f"{type(exc).__name__}: {exc}"
 
 
 def _upload_caveat(ns: str, upload: UploadProbe) -> list[str]:
@@ -491,11 +513,17 @@ def _upload_caveat(ns: str, upload: UploadProbe) -> list[str]:
             "",
         ]
     if upload.verified:
+        cleanup = (
+            "  The probe payload was deleted again, so the probe leaves nothing in the volume."
+            if upload.cleanup_error is None
+            else f"  WARNING: the probe payload could not be deleted again: {upload.cleanup_error}"
+        )
         return [
             "* **`make dbx-upload` is VERIFIED.** The documented upload transport was exercised on this",
             "  run — a probe payload was PUT through the same `dbx.upload` path, to",
             f"  `{upload.target}` (a sibling of the drop directory that no ingest statement reads, so",
             "  the verifier never stages its own input into the path under test).",
+            cleanup,
             "",
         ]
     return [
