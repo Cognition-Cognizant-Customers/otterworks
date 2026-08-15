@@ -217,12 +217,67 @@ WHEN NOT MATCHED THEN INSERT (ns, file_name, size_bytes, sha256, record_count, i
 VALUES (s.ns, s.file_name, s.size_bytes, s.sha256, s.record_count, s.ingested_at, s.source_path)"""
 
 
+def _split_statements(text: str) -> list[str]:
+    """Split SQL on statement terminators only, ignoring quotes and `--` comments.
+
+    A bare `text.split(';')` cuts the DDL apart inside a column COMMENT literal (the
+    `ingested_at` comment contains a semicolon), producing two unterminated fragments
+    that fail to parse. Databricks parses the .sql file itself for the job's SQL task,
+    so this only ever broke the shared-module CLI — which is the path the recon and
+    `python3 -m sftp_ingest_sql run` use, i.e. the one the evidence comes from.
+    """
+    statements: list[str] = []
+    current: list[str] = []
+    in_string = False
+    in_comment = False
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if in_comment:
+            in_comment = char != "\n"
+        elif in_string:
+            # '' is an escaped quote inside a literal, not the end of one.
+            if char == "'" and text[index + 1 : index + 2] == "'":
+                current.append(char)
+                index += 1
+            else:
+                in_string = char != "'"
+        elif char == "'":
+            in_string = True
+        elif char == "-" and text[index + 1 : index + 2] == "-":
+            in_comment = True
+        elif char == ";":
+            statements.append("".join(current))
+            current = []
+            index += 1
+            continue
+        current.append(char)
+        index += 1
+    statements.append("".join(current))
+    return [s.strip() for s in statements if s.strip() and not _only_comments(s)]
+
+
 def ddl_statements(catalog: str) -> list[str]:
     """The bronze DDL, read from the same .sql file the job's SQL task runs."""
     catalog = _validated_catalog(catalog)
     text = DDL_FILE.read_text()
     text = text.replace(":catalog || '.", f"'{catalog}.")  # bind :catalog for direct execution
-    return [s.strip() for s in text.split(";") if s.strip() and not _only_comments(s)]
+    statements = _split_statements(text)
+    # This file holds nothing but CREATE TABLEs, so anything else parsed out of it is a
+    # fragment of one — the shape a bad split takes — and must not reach the warehouse.
+    bad = [s for s in statements if not _body(s).upper().startswith("CREATE TABLE")]
+    if not statements or bad:
+        raise ValueError(
+            f"{DDL_FILE.name} did not parse into CREATE TABLE statements "
+            f"({len(statements)} parsed, {len(bad)} unrecognized); refusing to execute it"
+        )
+    return statements
+
+
+def _body(statement: str) -> str:
+    """The statement without its leading comment lines."""
+    lines = [line for line in statement.splitlines() if not line.strip().startswith("--")]
+    return "\n".join(lines).strip()
 
 
 def _only_comments(statement: str) -> bool:
