@@ -69,6 +69,22 @@ Run in throwaway namespace `ns=orphanneg`, built by copying one `ns=demo` manife
 its lines; `ns=demo` untouched, and all five tables verified back to 0 rows for
 `ns='orphanneg'` afterwards.
 
+## D. Unparseable legacy fields are reported as mismatches
+
+Mutation: copies of the two legacy `.psv` files were written to a scratch directory under
+`/tmp`; one `BILL-DATE` was changed to `20AB-01-01` and the corresponding amount was changed
+to `not-a-number`. The real golden directory and committed report were not modified.
+
+```text
+CUSTBILL_DEMO_001 line 2 bill_date: legacy unparseable legacy bill_date '20AB-01-01' != converted datetime.date(2025, 3, 23)
+CUSTBILL_DEMO_001 line 2 amount: legacy unparseable legacy amount 'not-a-number' != converted Decimal('4393.35')
+```
+
+Exit code `1`; the report was written to `/tmp/recon-golden-corrupt-report.md` rather than
+raising a traceback. Check 1 names both raw legacy values as unparseable and compares them
+directly with the converted typed values, so corrupt legacy output is visible as a parity
+mismatch rather than being coerced, skipped, or mistaken for a conversion failure.
+
 ## Note on the shared workspace
 
 During the session an extra bronze line (`line_no = 999`, `raw_line` `STALE TAIL RECORD`)

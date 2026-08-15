@@ -125,11 +125,19 @@ def read_golden(golden_dir: Path, ns: str) -> dict[tuple[str, int], dict[str, ob
             if len(parts) != 6:
                 raise ValueError(f"{psv.name}:{index}: expected 6 fields, got {len(parts)}: {line!r}")
             account_id, customer_name, bill_date, amount, currency, record_type = parts
+            try:
+                typed_bill_date: object = date.fromisoformat(bill_date)
+            except ValueError:
+                typed_bill_date = bill_date
+            try:
+                typed_amount: object = Decimal(amount)
+            except ArithmeticError:
+                typed_amount = amount
             rows[(stem, index + HDR_LINES)] = {
                 "account_id": account_id,
                 "customer_name": customer_name,
-                "bill_date": date.fromisoformat(bill_date),
-                "amount": Decimal(amount),
+                "bill_date": typed_bill_date,
+                "amount": typed_amount,
                 "currency": currency,
                 "record_type": record_type,
             }
@@ -169,10 +177,18 @@ def read_converted(
 def subtotals(rows: dict[tuple[str, int], dict[str, object]]) -> dict[tuple[str, str, str], tuple[int, Decimal]]:
     agg: dict[tuple[str, str, str], tuple[int, Decimal]] = {}
     for (stem, _line_no), row in rows.items():
+        if not isinstance(row["amount"], Decimal):
+            continue
         key = (stem, str(row["record_type"]), str(row["currency"]))
         count, total = agg.get(key, (0, Decimal("0.00")))
         agg[key] = (count + 1, total + row["amount"])  # type: ignore[operator]
     return agg
+
+
+def _display_legacy_value(field: str, value: object) -> str:
+    if field in {"bill_date", "amount"} and isinstance(value, str):
+        return f"unparseable legacy {field} {value!r}"
+    return repr(value)
 
 
 def check_baseline(ns: str, golden_dir: Path) -> Check:
@@ -219,7 +235,10 @@ def check_row_parity(golden, converted, converted_error=None) -> Check:
             want, got = golden[key][field], converted[key][field]
             if want != got:
                 mismatches += 1
-                check.fail(f"{key[0]} line {key[1]} {field}: legacy {want!r} != converted {got!r}")
+                check.fail(
+                    f"{key[0]} line {key[1]} {field}: "
+                    f"legacy {_display_legacy_value(field, want)} != converted {got!r}"
+                )
     if not missing and not extra and not mismatches:
         check.note(f"all {len(golden)} rows match on all {len(FIELDS)} fields")
     return check
