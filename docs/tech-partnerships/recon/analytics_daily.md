@@ -37,7 +37,7 @@ deviation: legacy field-name defect surfaced, converted output correct -- the le
 
 ```text
 legacy behaviour being retired, captured at /home/ubuntu/tp-golden/python/analytics_daily/zero_event (legacy run with its sources removed): [2026-08-15 23:00:21] ERROR: Too many SQS failures, giving up / [2026-08-15 23:00:21] Extracted 0 events from SQS / [2026-08-15 23:00:21] Extracted 0 events from DynamoDB for 2026-08-15 / [2026-08-15 23:00:21] WARNING: No events found, exiting -> exit 0
-legacy exit code on a zero-event extract: baseline='0' = converted='0'
+legacy zero-event extract exited 0; the converted zero-event probes below raise instead of exiting successfully
 unreachable source: run failed as required (DatabricksError: statement failed (FAILED): [TABLE_OR_VIEW_NOT_FOUND] The table or view `ow_tp`.`bronze`.`analytics_daily_stage_missing` cannot be found. Verify the spelling and correctness of the schema and catalog.
 )
 empty source: run failed as required (ZeroEventExtract: extract produced 0 events for ns=recon_probe_demo from ow_tp.bronze.analytics_daily_stage; failing before replacing the bronze slice)

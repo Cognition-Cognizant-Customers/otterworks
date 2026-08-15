@@ -85,13 +85,12 @@ class Check:
 
 def load_baseline(directory: Path) -> dict:
     """Read the captured legacy output. Missing files are an error, never a substitute."""
-    summary = json.loads(gzip.open(directory / "summary.json.gz", "rt", encoding="utf-8").read())
-    hourly = json.loads(gzip.open(directory / "hourly_breakdown.json.gz", "rt", encoding="utf-8").read())
-    users = [
-        json.loads(line)
-        for line in gzip.open(directory / "top_users.jsonl.gz", "rt", encoding="utf-8").read().splitlines()
-        if line.strip()
-    ]
+    with gzip.open(directory / "summary.json.gz", "rt", encoding="utf-8") as summary_file:
+        summary = json.load(summary_file)
+    with gzip.open(directory / "hourly_breakdown.json.gz", "rt", encoding="utf-8") as hourly_file:
+        hourly = json.load(hourly_file)
+    with gzip.open(directory / "top_users.jsonl.gz", "rt", encoding="utf-8") as users_file:
+        users = [json.loads(line) for line in users_file if line.strip()]
     exit_code = (directory / "exit_code.txt").read_text(encoding="utf-8").strip().removeprefix("exit=")
 
     # Optional second capture: the legacy script run with its sources taken away, which is
@@ -253,8 +252,9 @@ def check_3(ns: str, catalog: str, baseline: dict, source_table: str | None) -> 
             f"legacy behaviour being retired, captured at {zero_event['dir']} "
             f"(legacy run with its sources removed): {' / '.join(quoted)} -> exit {zero_event['exit_code']}"
         )
-        outcomes.append(
-            check.record("legacy exit code on a zero-event extract", "0", zero_event["exit_code"], must_match=False)
+        check.note(
+            f"legacy zero-event extract exited {zero_event['exit_code']}; "
+            "the converted zero-event probes below raise instead of exiting successfully"
         )
     else:
         check.note(
