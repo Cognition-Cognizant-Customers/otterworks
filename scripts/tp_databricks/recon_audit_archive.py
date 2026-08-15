@@ -393,10 +393,16 @@ def render_report(checks: list[Check], context: dict, tier: str, aging: str, exe
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--ns", default="demo")
-    parser.add_argument("--run-date", required=True, help="execution date the legacy run used (UTC)")
-    parser.add_argument("--retention-days", type=int, default=90)
-    parser.add_argument("--catalog", default="ow_tp")
+    # `make dbx-recon UNIT=audit_archive NS=<ns>` invokes this with no arguments and
+    # passes the namespace in the environment, so every knob has an env fallback.
+    parser.add_argument("--ns", default=os.environ.get("NS") or "demo")
+    parser.add_argument(
+        "--run-date",
+        default=os.environ.get("RUN_DATE"),
+        help="execution date the legacy run used (UTC); or RUN_DATE in the environment",
+    )
+    parser.add_argument("--retention-days", type=int, default=int(os.environ.get("RETENTION_DAYS") or 90))
+    parser.add_argument("--catalog", default=os.environ.get("CATALOG") or "ow_tp")
     parser.add_argument("--baseline-dir", default="/home/ubuntu/tp-golden/python/audit_archive_weekly")
     parser.add_argument("--baseline-tier", default="legacy output", choices=sorted(BASELINE_TIERS))
     parser.add_argument("--aging-note", default="", help="verbatim description of how events were aged")
@@ -404,6 +410,11 @@ def main() -> int:
     parser.add_argument("--rerun-job", default=None, help="job to re-run for the idempotency check")
     parser.add_argument("--report", default=None, help="write the markdown report here")
     args = parser.parse_args()
+    if not args.run_date:
+        # The legacy run's execution date decides the cutoff, so there is no
+        # defensible default: guessing one would silently reconcile a different
+        # retention window than the baseline was captured under.
+        parser.error("--run-date is required (or set RUN_DATE), e.g. RUN_DATE=2026-08-01")
 
     checks, context = run_checks(args)
     report = render_report(checks, context, args.baseline_tier, args.aging_note, args.execution_note)
