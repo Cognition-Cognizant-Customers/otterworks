@@ -67,6 +67,12 @@ def row_literal(envelope: dict) -> str:
     )
 
 
+def counts_match_expected(observed: dict[str, int], expected: dict[str, int]) -> bool:
+    return set(observed) <= set(expected) and {
+        entity: observed.get(entity, 0) for entity in expected
+    } == expected
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("extract_dir")
@@ -96,12 +102,12 @@ def main(argv: list[str] | None = None) -> int:
     unexpected = set(expected) - ENTITY_TYPES
     if unexpected:
         raise SystemExit(f"manifest contains unsupported entity types: {sorted(unexpected)}")
-    landed = {}
+    landed = {entity: 0 for entity in expected}
     for envelope in envelopes:
         if envelope["entity_type"] not in ENTITY_TYPES:
             raise SystemExit(f"unsupported envelope entity_type {envelope['entity_type']!r}")
         landed[envelope["entity_type"]] = landed.get(envelope["entity_type"], 0) + 1
-    if landed != expected:
+    if not counts_match_expected(landed, expected):
         raise SystemExit(f"extract files {landed} do not match the manifest {expected}")
 
     dbx.sql(
@@ -120,8 +126,9 @@ def main(argv: list[str] | None = None) -> int:
             f"WHERE ns = '{args.ns}' GROUP BY entity_type ORDER BY entity_type"
         )
         loaded = {row[0]: {"rows": int(row[1]), "distinct_entity_ids": int(row[2])} for row in rows}
+        loaded_rows = {entity: counts["rows"] for entity, counts in loaded.items()}
         if (
-            {entity: counts["rows"] for entity, counts in loaded.items()} != expected
+            not counts_match_expected(loaded_rows, expected)
             or any(counts["rows"] != counts["distinct_entity_ids"] for counts in loaded.values())
         ):
             raise RuntimeError(f"scratch bronze counts do not match the extract manifest: {loaded}")
@@ -139,8 +146,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         bronze = {row[0]: {"rows": int(row[1]), "distinct_entity_ids": int(row[2])} for row in rows}
         print(json.dumps({"ns": args.ns, "manifest": expected, "bronze": bronze}, indent=2))
+        bronze_rows = {entity: counts["rows"] for entity, counts in bronze.items()}
         if (
-            {entity: counts["rows"] for entity, counts in bronze.items()} != expected
+            not counts_match_expected(bronze_rows, expected)
             or any(counts["rows"] != counts["distinct_entity_ids"] for counts in bronze.values())
         ):
             print("bronze counts do not match the extract manifest", file=sys.stderr)

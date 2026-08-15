@@ -53,6 +53,7 @@ def job_settings(task_keys: tuple[str, ...] | None = None) -> dict:
             {"name": "run_date", "default": ""},
             {"name": "landing_prefix", "default": "search_reindex"},
             {"name": "simulate_source_failure", "default": "false"},
+            {"name": "catalog", "default": dbx.CATALOG},
         ],
         "tasks": [
             {
