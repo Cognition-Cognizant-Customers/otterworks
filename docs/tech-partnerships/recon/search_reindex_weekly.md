@@ -10,6 +10,7 @@ baseline: legacy output
 ## Disclosures
 
 - **Transport**: extract -> `scripts/tp_databricks/load_bronze_via_sql.py` -> the same bronze table over the serverless warehouse. **The documented landing-volume upload path is UNVERIFIED.** It cannot be executed by this unit: the demo PAT carries `sql, unity-catalog, jobs, secrets, workspace` scopes and the Files API answers `PUT /api/2.0/fs/files/Volumes/ow_tp/bronze/landing/... -> 403: {"error_code":403,"message":"Provided access token does not have required scopes: files"}`, and the parent session has confirmed no files-scoped token is coming. This loader is a test transport, not the production one: the envelopes, the bronze table and every downstream statement are the pipeline's own, and `publish_index` -- the build-then-swap logic under test -- ran as a real serverless job task, but `ingest_bronze`'s volume read is covered by review only. A defect on that unexecuted path (the manifest read via `spark.read.text`, which silently skips leaf files whose names begin with `_`) was found in review, not by a run; it is fixed and still unexecuted.
+- **Guards not exercised by this corpus**: three defensive paths are reasoned and reviewed but never entered by a run on this data, and none of them contributes to any PASS below -- the empty-extract guard and the erase-an-existing-entity-type guard in `ingest_bronze`, and the shrink-to-zero guard in `publish_index`. They fire only on a degenerate extract, which the seeded fixture does not produce; the checks below all ran on a full 1,933 / 9,461 corpus.
 - **Sample selection (check 2)**: ids are drawn from the legacy index itself using `random.Random(int(sha256('search_reindex_weekly:<ns>:<entity_type>').hexdigest()[:16], 16))` over the lexicographically sorted id list, 50 per entity type. Fixed seed, fixed ordering, fixed before any value is compared -- the sample is not chosen to favour the conversion.
 - **Null/default normalization (check 2)**: the legacy script defaulted absent source fields to `""` / `[]`; where the converted projection stores SQL NULL for the same absent field the two are treated as equal. Every application is counted per entity type as `null_default_normalizations` below, so the extent of the leniency is visible rather than implied -- zero there means the two sides matched on representation as well as on value.
 - **Count snapshots (checks 3b and 4)**: the serving counts each run is judged on are read by `run_search_reindex_dev.py` the moment that run finishes and stored in its run artifact; recon reads those recorded values and compares the live table on top. Reading both sides at report time would make the equality hold by construction and could never detect drift.
@@ -100,7 +101,7 @@ baseline: legacy output
     "file": 9461,
     "document": 1933
   },
-  "snapshot_taken_at": "2026-08-15T23:32:34.567652+00:00",
+  "snapshot_taken_at": "2026-08-15T23:40:02.162131+00:00",
   "serving_counts_now": {
     "file": 9461,
     "document": 1933
@@ -110,7 +111,7 @@ baseline: legacy output
     "file": 9461
   },
   "index_intact": true,
-  "run_url": "https://dbc-8bc9474f-40ae.cloud.databricks.com/?o=7474651138173478#job/634123724610806/run/385031122358741"
+  "run_url": "https://dbc-8bc9474f-40ae.cloud.databricks.com/?o=7474651138173478#job/956664464553421/run/1091127948762526"
 }
 ```
 
@@ -124,12 +125,12 @@ baseline: legacy output
     "file": 9461,
     "document": 1933
   },
-  "first_snapshot_taken_at": "2026-08-15T23:29:02.642591+00:00",
+  "first_snapshot_taken_at": "2026-08-15T23:36:28.572761+00:00",
   "counts_at_rerun_end": {
     "file": 9461,
     "document": 1933
   },
-  "rerun_snapshot_taken_at": "2026-08-15T23:29:58.058500+00:00",
+  "rerun_snapshot_taken_at": "2026-08-15T23:37:26.125134+00:00",
   "counts_live_now": {
     "file": 9461,
     "document": 1933
@@ -139,8 +140,8 @@ baseline: legacy output
     "file": 9461
   },
   "duplicate_entity_ids": 0,
-  "first_run_url": "https://dbc-8bc9474f-40ae.cloud.databricks.com/?o=7474651138173478#job/634123724610806/run/709736671436704",
-  "run_url": "https://dbc-8bc9474f-40ae.cloud.databricks.com/?o=7474651138173478#job/634123724610806/run/518779447411085"
+  "first_run_url": "https://dbc-8bc9474f-40ae.cloud.databricks.com/?o=7474651138173478#job/956664464553421/run/758912243476638",
+  "run_url": "https://dbc-8bc9474f-40ae.cloud.databricks.com/?o=7474651138173478#job/956664464553421/run/77502888589612"
 }
 ```
 

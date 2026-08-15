@@ -286,7 +286,8 @@ def check_forced_failure(golden_dir: Path, legacy: dict[str, int], converted_now
     index_intact = all(at_run_end.get(e) == legacy.get(e) for e in legacy)
     return {
         "passed": run.get("result_state") == "FAILED" and index_intact
-        and publish.get("result_state") in ("UPSTREAM_FAILED", "SKIPPED", None),
+        and ingest.get("result_state") == "FAILED"
+        and publish.get("result_state") in ("UPSTREAM_FAILED", "SKIPPED"),
         "run_result_state": run.get("result_state"),
         "ingest_result_state": ingest.get("result_state"),
         "publish_result_state": publish.get("result_state"),
