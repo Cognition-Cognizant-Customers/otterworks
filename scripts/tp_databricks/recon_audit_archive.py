@@ -65,20 +65,39 @@ def sha256_of_set(values) -> str:
 
 
 def read_baseline(baseline_dir: str) -> dict:
-    """The legacy archive artifact: event ids, count, compliance report."""
+    """The legacy archive artifact: event ids, count, compliance report.
+
+    A missing, unreadable or truncated baseline is a legitimate outcome to report,
+    not a crash: this tool exists to say which check could not be run and why, so
+    the failure is collected in `errors` and every caller gets a well-formed dict.
+    An unusable baseline can only ever produce FAIL/blocked -- checks 1 and 2
+    additionally require a non-empty, error-free baseline, so an empty artifact
+    compared against an empty archive can never be mistaken for agreement.
+    """
     archive = os.path.join(baseline_dir, "audit_events.jsonl.gz")
     report_path = os.path.join(baseline_dir, "report.json")
-    event_ids, timestamps = [], []
-    with gzip.open(archive, "rt", encoding="utf-8") as handle:
-        for line in handle:
-            if line.strip():
-                record = json.loads(line)
-                event_ids.append(record["event_id"])
-                timestamps.append(record["timestamp"])
-    with open(report_path, encoding="utf-8") as handle:
-        report = json.load(handle)
-    with open(archive, "rb") as handle:
-        artifact_sha256 = hashlib.sha256(handle.read()).hexdigest()
+    event_ids, timestamps, errors = [], [], []
+    try:
+        with gzip.open(archive, "rt", encoding="utf-8") as handle:
+            for line in handle:
+                if line.strip():
+                    record = json.loads(line)
+                    event_ids.append(record["event_id"])
+                    timestamps.append(record["timestamp"])
+    except (OSError, EOFError, ValueError, KeyError) as exc:
+        errors.append(f"{archive}: {type(exc).__name__}: {exc}")
+    try:
+        with open(report_path, encoding="utf-8") as handle:
+            report = json.load(handle)
+    except (OSError, ValueError) as exc:
+        report = {}
+        errors.append(f"{report_path}: {type(exc).__name__}: {exc}")
+    try:
+        with open(archive, "rb") as handle:
+            artifact_sha256 = hashlib.sha256(handle.read()).hexdigest()
+    except OSError as exc:
+        artifact_sha256 = None
+        errors.append(f"{archive}: {type(exc).__name__}: {exc}")
     return {
         "archive_path": archive,
         "artifact_sha256": artifact_sha256,
@@ -92,7 +111,18 @@ def read_baseline(baseline_dir: str) -> dict:
         "max_ts": max(timestamps) if timestamps else None,
         "id_set_sha256": sha256_of_set(event_ids),
         "report": report,
+        "errors": errors,
     }
+
+
+def report_field(baseline: dict, *path):
+    """Read a compliance-report field without letting a malformed report raise."""
+    value = baseline["report"]
+    for key in path:
+        if not isinstance(value, dict) or key not in value:
+            return None
+        value = value[key]
+    return value
 
 
 def cutoff_literal(run_date: date, retention_days: int) -> str:
@@ -191,7 +221,10 @@ def run_checks(args) -> tuple[list[Check], dict]:
     # ---- 1. selection parity -------------------------------------------------
     baseline_ids, silver_ids = set(baseline["event_ids"]), set(silver["event_ids"])
     checks[0].record(
-        baseline_ids == silver_ids and silver["rows_at_or_after_cutoff"] == 0,
+        baseline_ids == silver_ids
+        and silver["rows_at_or_after_cutoff"] == 0
+        and baseline["count"] > 0
+        and not baseline["errors"],
         legacy_count=baseline["count"],
         converted_count=silver["rows"],
         legacy_id_set_sha256=baseline["id_set_sha256"],
@@ -201,7 +234,8 @@ def run_checks(args) -> tuple[list[Check], dict]:
         extra_in_converted=sorted(silver_ids - baseline_ids)[:10],
         extra_count=len(silver_ids - baseline_ids),
         cutoff_ts=cutoff,
-        legacy_cutoff=baseline["report"]["retention_policy"]["cutoff_date"],
+        legacy_cutoff=report_field(baseline, "retention_policy", "cutoff_date"),
+        baseline_errors=baseline["errors"],
         boundary_max_archived_event_ts=str(silver["max_event_ts"]),
         legacy_max_archived_ts=baseline["max_ts"],
         over_archived_at_or_after_cutoff=silver["rows_at_or_after_cutoff"],
@@ -220,9 +254,12 @@ def run_checks(args) -> tuple[list[Check], dict]:
         candidate, archived = int(row["candidate_count"]), int(row["archived_count"])
         checks[1].record(
             candidate == archived == silver["rows"] == baseline["count"]
-            and silver["rows_at_or_after_cutoff"] == 0,
-            legacy_events_archived=baseline["report"]["results"]["events_archived"],
-            legacy_events_scanned=baseline["report"]["results"]["events_scanned"],
+            and silver["rows_at_or_after_cutoff"] == 0
+            and baseline["count"] > 0
+            and not baseline["errors"],
+            legacy_events_archived=report_field(baseline, "results", "events_archived"),
+            legacy_events_scanned=report_field(baseline, "results", "events_scanned"),
+            baseline_errors=baseline["errors"],
             manifest_candidate_count=candidate,
             manifest_archived_count=archived,
             silver_rows=silver["rows"],
@@ -279,7 +316,9 @@ def run_checks(args) -> tuple[list[Check], dict]:
         source_rows_purged=purged,
         manifest_deleted_count=manifest_deleted,
         manifest_verified=manifest_verified,
-        legacy_events_deleted_from_source=baseline["report"]["results"]["events_deleted_from_source"],
+        legacy_events_deleted_from_source=report_field(
+            baseline, "results", "events_deleted_from_source"
+        ),
     )
 
     # ---- 4. idempotency -----------------------------------------------------
