@@ -11,6 +11,9 @@ database `ow_tp_demo` and their indexes:
   document_snapshots            {documentId: 1}
   document_snapshots_orphaned   {documentId: 1}
 
+All three also carry {_migration.ns: 1}: the collections are shared across
+namespaces and every recon read is scoped by that field.
+
 Only these collections are touched — never the shared cluster configuration,
 never another workload's namespace.
 
@@ -38,9 +41,16 @@ INDEXES: dict[str, tuple[tuple[tuple[str, int], ...], ...]] = {
         (("ownerId", 1), ("updatedAt", -1)),
         (("folderId", 1),),
         (("isDeleted", 1),),
+        (("_migration.ns", 1),),
     ),
-    COLL_SNAPSHOTS: ((("documentId", 1),),),
-    COLL_SNAPSHOTS_ORPHANED: ((("documentId", 1),),),
+    COLL_SNAPSHOTS: (
+        (("documentId", 1),),
+        (("_migration.ns", 1),),
+    ),
+    COLL_SNAPSHOTS_ORPHANED: (
+        (("documentId", 1),),
+        (("_migration.ns", 1),),
+    ),
 }
 
 
