@@ -100,6 +100,36 @@ raising a traceback. Check 0 records the file, line number, expected field count
 field count, and raw content; row parity also fails because the malformed legacy record is
 not silently padded or treated as a valid six-field row.
 
+## F. A trailer mismatch does not replace previously published rows
+
+Mutation: a valid `ns=stagingneg` copy of `CUSTBILL_DEMO_001.dat` was published first. One
+detail line was then deleted from bronze and the manifest `record_count` was adjusted from
+52 to 51 so the bronze gates remained green while the trailer still declared 50.
+
+Before the failed run:
+
+```text
+published records: 50
+published recon: CUSTBILL_DEMO_001.dat | declared 50 | parsed 50 | rejected 0 | recon_ok true
+```
+
+The failed run stopped at the staged trailer gate:
+
+```text
+FAILED: staged recon: trailer counts reconcile for every file failed -> CUSTBILL_DEMO_001.dat | 50 | 49 | 0
+```
+
+Exit code `1`. After the failed run, the published rows were unchanged:
+
+```text
+published records: 50
+published recon: CUSTBILL_DEMO_001.dat | declared 50 | parsed 50 | rejected 0 | recon_ok true
+```
+
+The eight bronze, published-silver, and staging tables were then verified back to `0`
+rows for `ns='stagingneg'`. This proves failed staged output is not queryable in published
+silver and the previous good namespace remains intact.
+
 ## Note on the shared workspace
 
 During the session an extra bronze line (`line_no = 999`, `raw_line` `STALE TAIL RECORD`)
