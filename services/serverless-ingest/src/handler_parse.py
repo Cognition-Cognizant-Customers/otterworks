@@ -11,6 +11,11 @@ s3 = boto3.client("s3")
 billing_table = None
 
 
+def _validate_segment(value: str, label: str) -> None:
+    if not isinstance(value, str) or not value or "/" in value or value in {".", ".."}:
+        raise ValueError(f"{label} must be a single path segment")
+
+
 def _get_billing_table():
     global billing_table
     if billing_table is None:
@@ -20,13 +25,15 @@ def _get_billing_table():
 
 def handler(event: dict, context: object) -> dict[str, object]:
     key = event["key"]
-    ns = event.get("ns") or namespace_from_key(key)
+    ns = event["ns"] if "ns" in event and event["ns"] is not None else namespace_from_key(key)
     filename = event["filename"]
+    _validate_segment(ns, "namespace")
+    _validate_segment(filename, "filename")
+    output_filename = filename[:-4] + ".psv" if filename.endswith(".dat") else filename
     bucket = env("BUCKET")
 
     source = s3.get_object(Bucket=bucket, Key=key)["Body"].read()
     output, records = parse_body(source)
-    output_filename = filename[:-4] + ".psv" if filename.endswith(".dat") else filename
     output_key = parsed_key(ns, output_filename)
     s3.put_object(Bucket=bucket, Key=output_key, Body=output)
 

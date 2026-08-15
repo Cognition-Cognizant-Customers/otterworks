@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import handler_parse
+import pytest
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -52,24 +53,62 @@ class FakeTable:
         return FakeBatchWriter(self)
 
 
-def invoke(monkeypatch, source: bytes = SOURCE, **event):
+def setup_handler(monkeypatch, source: bytes = SOURCE, **event):
     s3 = FakeS3(source)
     table = FakeTable()
     monkeypatch.setattr(handler_parse, "s3", s3)
     monkeypatch.setattr(handler_parse, "billing_table", table)
     monkeypatch.setenv("BUCKET", "test-bucket")
     monkeypatch.setenv("TABLE_NAME", "test-table")
+    payload = {
+        "ns": "demo",
+        "bucket": "test-bucket",
+        "key": "landing/demo/CUSTBILL_SAMPLE_001.dat",
+        "filename": "CUSTBILL_SAMPLE_001.dat",
+        **event,
+    }
+    return payload, s3, table
+
+
+def invoke(monkeypatch, source: bytes = SOURCE, **event):
+    payload, s3, table = setup_handler(monkeypatch, source, **event)
     return handler_parse.handler(
-        {
-            "ns": "demo",
-            "bucket": "test-bucket",
-            "key": "landing/demo/CUSTBILL_SAMPLE_001.dat",
-            "filename": "CUSTBILL_SAMPLE_001.dat",
-            **event,
-        },
+        payload,
         None,
     ), s3, table
 
+
+@pytest.mark.parametrize("filename", ["../../evil.psv", "foo/bar.dat"])
+def test_handler_rejects_filename_path_traversal_before_writes(
+    monkeypatch, filename: str
+) -> None:
+    payload, s3, table = setup_handler(monkeypatch, filename=filename)
+
+    with pytest.raises(ValueError):
+        handler_parse.handler(payload, None)
+
+    assert s3.puts == []
+    assert table.items == []
+
+
+def test_handler_rejects_namespace_path_traversal_before_writes(monkeypatch) -> None:
+    payload, s3, table = setup_handler(monkeypatch, ns="../demo")
+
+    with pytest.raises(ValueError):
+        handler_parse.handler(payload, None)
+
+    assert s3.puts == []
+    assert table.items == []
+
+
+def test_handler_uses_normal_namespace_and_filename_segments_unchanged(
+    monkeypatch,
+) -> None:
+    result, s3, table = invoke(monkeypatch)
+
+    assert result["parsed_key"] == "parsed/demo/CUSTBILL_SAMPLE_001.psv"
+    assert s3.puts[0][1] == "parsed/demo/CUSTBILL_SAMPLE_001.psv"
+    assert len(table.items) == 5
 
 def test_handler_writes_golden_and_one_idempotent_item_per_record(monkeypatch) -> None:
     result, s3, table = invoke(monkeypatch)
