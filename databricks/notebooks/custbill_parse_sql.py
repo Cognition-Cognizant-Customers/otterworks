@@ -46,7 +46,7 @@ def validate_namespace(value: str) -> str:
     return value
 
 
-def _quote(value: str) -> str:
+def quote_sql_literal(value: str) -> str:
     """Single-quote a SQL string literal (namespaces are `[a-z0-9_]+`, but the
     statements are still built without string-concatenating unescaped input)."""
     return "'" + str(value).replace("\\", "\\\\").replace("'", "\\'") + "'"
@@ -59,7 +59,7 @@ def _sliced_cte(ns: str) -> str:
     `sed`/`cut`/`awk` over a PID-suffixed temp file (`/tmp/cb_body.$$`, left
     behind whenever the parse failed).
     """
-    lit = _quote(ns)
+    lit = quote_sql_literal(ns)
     return f"""
     WITH detail AS (
       SELECT ns, file_name, line_no, raw_line
@@ -110,7 +110,7 @@ def gate_statements(ns: str) -> list[tuple[str, str]]:
     usually that works out", and the manifest/checksum handshake that replaces
     the legacy size-compared-twice settle check.
     """
-    lit = _quote(ns)
+    lit = quote_sql_literal(ns)
     return [
         (
             "bronze manifest is present",
@@ -162,7 +162,7 @@ def parse_statements(ns: str) -> list[tuple[str, str]]:
     leaves the tables identical instead of accumulating rows the way the legacy
     `.done`-rename plus never-removed lock file did.
     """
-    lit = _quote(ns)
+    lit = quote_sql_literal(ns)
     sliced = _sliced_cte(ns)
     return [
         (
@@ -249,7 +249,7 @@ def parse_statements(ns: str) -> list[tuple[str, str]]:
 
 def recon_gate_statements(ns: str) -> list[tuple[str, str]]:
     """Post-parse assertions. A non-empty result must fail the run."""
-    lit = _quote(ns)
+    lit = quote_sql_literal(ns)
     return [
         (
             "trailer counts reconcile for every file",
