@@ -56,6 +56,7 @@
 - /Volumes/ow_tp/bronze/landing/demo/reports: ['finance_billing_20260815.csv']
 - ok: no .xls artifact (the legacy CSV-renamed-.xls defect is gone)
 - ok: finance_billing_20260815.csv present
+- ok: finance_billing_20260815.csv is not empty (got 7 lines)
 - ok: CSV header well formed (got ['Currency', 'RecordType', 'RecordCount', 'TotalAmount'])
 - ok: every CSV line has 4 fields (parses as CSV, is not a renamed foreign format)
 - ok: artifact body equals the golden report rows (got [('EUR', 'INVOICE', 22, Decimal('101554.41')), ('EUR', 'CREDIT', 6, Decimal('33375.97')), ('GBP', 'INVOICE', 32, Decimal('183113.58')), ('GBP', 'CREDIT', 5, Decimal('28454.59')), ('USD', 'INVOICE', 28, Decimal('130502.15')), ('USD', 'CREDIT', 7, Decimal('33390.44'))])

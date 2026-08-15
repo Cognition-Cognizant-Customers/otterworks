@@ -80,9 +80,16 @@ class Check:
         return condition
 
 
-def golden_report(ns: str) -> tuple[str, bytes, list[tuple[str, str, int, Decimal]]]:
-    """Locate and parse the legacy report. The golden side of every comparison."""
-    pattern = os.path.join(LEGACY_ROOT, "reports", "finance_billing_*.csv")
+def golden_report(
+    ns: str, report_date: str | None
+) -> tuple[str, bytes, list[tuple[str, str, int, Decimal]]]:
+    """Locate and parse the legacy report. The golden side of every comparison.
+
+    When a report date is requested the artifact for *that* date is required, so the two
+    sides of the comparison can never be different business days.
+    """
+    stamp = "*" if report_date is None else report_date.replace("-", "")
+    pattern = os.path.join(LEGACY_ROOT, "reports", f"finance_billing_{stamp}.csv")
     paths = sorted(glob.glob(pattern))
     if not paths:
         raise SystemExit(
@@ -211,7 +218,12 @@ def check_3(ns: str, report_date: str) -> Check:
             status.startswith("NOT_DELIVERED"),
             "the sendmail no-op is recorded as an explicit non-delivery, not as success",
         )
-    check.expect(bool(recipients), "recipient list resolved from the secret scope, not from code")
+    if status == pipeline.STATUS_NO_RECIPIENTS:
+        check.expect(not recipients, "a run with no configured distribution list records none")
+    else:
+        check.expect(
+            bool(recipients), "recipient list resolved from the secret scope, not from code"
+        )
     return check
 
 
@@ -243,6 +255,8 @@ def check_4(ns: str, report_date: str, golden: list[tuple[str, str, int, Decimal
         check.block(read, str(error), f"read access to {directory}/{expected}")
         return check
     parsed = list(csv.reader(content))
+    if not check.expect(bool(parsed), f"{expected} is not empty (got {len(parsed)} lines)"):
+        return check
     check.expect(
         parsed[0] == ["Currency", "RecordType", "RecordCount", "TotalAmount"],
         f"CSV header well formed (got {parsed[0]})",
@@ -340,7 +354,7 @@ def main() -> int:
     args = parser.parse_args()
     ns = args.ns
 
-    golden_path, golden_raw, golden = golden_report(ns)
+    golden_path, golden_raw, golden = golden_report(ns, args.report_date)
     stem = os.path.basename(golden_path).replace("finance_billing_", "").replace(".csv", "")
     report_date = args.report_date or f"{stem[0:4]}-{stem[4:6]}-{stem[6:8]}"
 
