@@ -314,7 +314,7 @@ def recon_gate_statements(ns: str, staged: bool = False) -> list[tuple[str, str]
     lit = quote_sql_literal(ns)
     records = STAGING_RECORDS if staged else SILVER_RECORDS
     file_recon = STAGING_FILE_RECON if staged else SILVER_FILE_RECON
-    return [
+    statements = [
         (
             "trailer counts reconcile for every file",
             f"""
@@ -343,3 +343,28 @@ def recon_gate_statements(ns: str, staged: bool = False) -> list[tuple[str, str]
             """,
         ),
     ]
+    if staged:
+        statements.append(
+            (
+                "staged output is not empty when published rows exist",
+                f"""
+                SELECT concat(
+                           'empty staged result would have erased ',
+                           cast(p.published_count AS STRING),
+                           ' published rows'
+                       ) AS problem
+                FROM (
+                    SELECT count(*) AS published_count
+                    FROM {SILVER_RECORDS}
+                    WHERE ns = {lit}
+                ) p
+                CROSS JOIN (
+                    SELECT count(*) AS staged_count
+                    FROM {STAGING_RECORDS}
+                    WHERE ns = {lit}
+                ) s
+                WHERE p.published_count > 0 AND s.staged_count = 0
+                """,
+            )
+        )
+    return statements
