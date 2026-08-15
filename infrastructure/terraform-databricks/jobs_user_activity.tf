@@ -42,6 +42,12 @@ variable "user_activity_max_upstream_lag_days" {
   default     = 1
 }
 
+variable "user_activity_alert_emails" {
+  description = "Recipients notified when the job fails or overruns its duration warning. A health rule alone notifies nobody, so this is what actually retires the legacy cron's silent failures; empty in the demo workspace, where no mailbox is owned by this estate."
+  type        = list(string)
+  default     = []
+}
+
 variable "analytics_job_id" {
   description = "Job id of the converted analytics_daily job. When set (non-zero), this job triggers it first so the upstream dependency is a graph edge, not a cron assumption. Left unset until that unit lands."
   type        = number
@@ -161,11 +167,20 @@ resource "databricks_job" "user_activity" {
     timeout_seconds           = 3600
   }
 
+  # A failed run — including a freshness gate that refused after its retries — is the
+  # signal the legacy cron never emitted, so it is delivered rather than merely recorded.
+  email_notifications {
+    on_failure                             = var.user_activity_alert_emails
+    on_duration_warning_threshold_exceeded = var.user_activity_alert_emails
+  }
+
   health {
     rules {
       metric = "RUN_DURATION_SECONDS"
-      op     = "GREATER_THAN"
-      value  = 3600
+      # Above the worst case both tasks are allowed (1800 + 3600), so the warning means
+      # the run is genuinely stuck rather than merely using its budget.
+      op    = "GREATER_THAN"
+      value = 5400
     }
   }
 }
