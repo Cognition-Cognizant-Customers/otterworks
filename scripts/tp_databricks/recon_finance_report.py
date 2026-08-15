@@ -332,16 +332,22 @@ def check_5(ns: str, report_date: str) -> Check:
     check.expect(after == before, "counts and totals unchanged by the summary re-run")
 
     delivery_rows = dbx.sql(
-        f"""SELECT artifact_path, recipient_list, delivery_status
+        f"""SELECT artifact_path, recipient_list, delivery_status, delivered_at
             FROM {CATALOG}.gold.finance_report_delivery
             WHERE ns = {sql_literal(ns)} AND report_date = DATE '{report_date}'"""
     )
     if len(delivery_rows) != 1:
         check.fail(f"expected exactly one delivery row before replay (got {len(delivery_rows)})")
         return check
-    artifact_path, recipient_list, delivery_status = delivery_rows[0]
+    artifact_path, recipient_list, delivery_status, delivered_at = delivery_rows[0]
     delivery_statements = pipeline.delivery_statements(
-        ns, report_date, artifact_path, recipient_list, delivery_status, CATALOG
+        ns,
+        report_date,
+        artifact_path,
+        recipient_list,
+        delivery_status,
+        CATALOG,
+        delivered_at,
     )
     check.note(
         f"re-executing the job's {len(delivery_statements)} delivery statements using "
@@ -371,17 +377,18 @@ def check_5(ns: str, report_date: str) -> Check:
         f"still exactly one delivery row after replay (got {len(replayed_rows)})",
     ):
         return check
-    replayed_artifact, replayed_recipients, replayed_status, delivered_at = replayed_rows[0]
+    replayed_artifact, replayed_recipients, replayed_status, replayed_delivered_at = (
+        replayed_rows[0]
+    )
     check.expect(
         (replayed_artifact, replayed_recipients, replayed_status)
         == (artifact_path, recipient_list, delivery_status),
         "delivery replay preserves the audit values",
     )
-    if delivery_status != pipeline.STATUS_DELIVERED:
-        check.expect(
-            delivered_at is None,
-            f"replayed non-delivery remains undelivered (delivered_at={delivered_at!r})",
-        )
+    check.expect(
+        replayed_delivered_at == delivered_at,
+        f"delivery replay preserves delivered_at ({delivered_at!r})",
+    )
     return check
 
 

@@ -75,4 +75,4 @@
 - `INSERT INTO ow_tp.gold.finance_report_delivery (ns, report_d...` -> [['1', '1']]
 - ok: still exactly one delivery row after replay (got 1)
 - ok: delivery replay preserves the audit values
-- ok: replayed non-delivery remains undelivered (delivered_at=None)
+- ok: delivery replay preserves delivered_at (None)
