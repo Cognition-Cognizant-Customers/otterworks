@@ -61,7 +61,8 @@ dbx = _load(Path(__file__).with_name("dbx.py"), "tp_dbx")
 pipeline = _load(NOTEBOOK, "tp_analytics_daily_notebook")
 
 
-def volume_prefix(ns: str, catalog: str) -> str:
+def volume_prefix(ns: str) -> str:
+    """Path under the landing volume root; `dbx.upload` supplies `/Volumes/<catalog>/bronze/landing`."""
     return f"{ns}/analytics_daily"
 
 
@@ -102,10 +103,10 @@ def land(ns: str, catalog: str) -> dict:
             local = Path(scratch) / Path(key).name
             local.write_bytes(body)
             relative = key[len(prefix):]  # YYYY/MM/DD/HH.json.gz
-            dbx.upload(str(local), f"{volume_prefix(ns, catalog)}/events/{relative}")
+            dbx.upload(str(local), f"{volume_prefix(ns)}/events/{relative}")
             landed += 1
             total_bytes += len(body)
-    ddl_target = dbx.upload(str(DDL_FILE), f"{volume_prefix(ns, catalog)}/ddl/analytics_daily.sql")
+    ddl_target = dbx.upload(str(DDL_FILE), f"{volume_prefix(ns)}/ddl/analytics_daily.sql")
     return {"objects": landed, "bytes": total_bytes, "ddl": ddl_target}
 
 
@@ -171,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=("land", "stage", "run", "counts"))
     parser.add_argument("--ns", default="demo")
-    parser.add_argument("--catalog", default=pipeline.DEFAULT_CATALOG)
+    parser.add_argument("--catalog", default=os.environ.get("OW_TP_CATALOG", pipeline.DEFAULT_CATALOG))
     parser.add_argument("--source-kind", default=pipeline.DEFAULT_SOURCE_KIND, choices=("s3", "sqs", "dynamodb"))
     parser.add_argument("--skip-ddl", action="store_true")
     parser.add_argument(
@@ -183,6 +184,11 @@ def main(argv: list[str] | None = None) -> int:
         "bare flag means <catalog>.bronze.analytics_daily_stage",
     )
     args = parser.parse_args(argv)
+    pipeline.validate_ns(args.ns)
+    pipeline.validate_identifier(args.catalog, "catalog")
+    # dbx builds volume paths from its own module-level catalog, so --catalog has to reach it
+    # or `land` would write into ow_tp while `run` read the chosen catalog.
+    dbx.CATALOG = args.catalog
 
     if args.command == "land":
         result = land(args.ns, args.catalog)
