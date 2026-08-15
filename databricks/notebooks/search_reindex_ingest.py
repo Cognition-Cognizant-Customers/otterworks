@@ -66,8 +66,11 @@ if simulate_source_failure:
 # COMMAND ----------
 
 # The extract manifest is written by scripts/tp_databricks/extract_search_sources.py and
-# carries the per-entity counts this task reconciles the landed data against.
-manifest_text = "".join(row.value for row in spark.read.text(f"{landing_dir}/_manifest.json").collect())
+# carries the per-entity counts this task reconciles the landed data against. Read it
+# directly because Spark's file index ignores underscore-prefixed leaf files.
+manifest_text = dbutils.fs.head(f"{landing_dir}/_manifest.json", 1024 * 1024)
+if len(manifest_text.strip()) < 2:
+    raise ValueError(f"manifest at {landing_dir}/_manifest.json is empty or unexpectedly short")
 manifest = json.loads(manifest_text)
 expected = {entity: int(count) for entity, count in manifest["counts"].items()}
 log("manifest_read", expected=expected, extracted_at=manifest["extracted_at"])
