@@ -62,11 +62,16 @@ def _sliced_cte(ns: str) -> str:
     lit = quote_sql_literal(ns)
     return f"""
     WITH detail AS (
-      SELECT ns, file_name, line_no, raw_line
-      FROM {BRONZE_LINES}
-      WHERE ns = {lit}
-        AND raw_line NOT LIKE 'HDR%'
-        AND raw_line NOT LIKE 'TRL%'
+      SELECT l.ns, l.file_name, l.line_no, l.raw_line
+      FROM {BRONZE_LINES} l
+      INNER JOIN (
+        SELECT DISTINCT ns, file_name
+        FROM {BRONZE_FILES}
+        WHERE ns = {lit}
+      ) m ON m.ns = l.ns AND m.file_name = l.file_name
+      WHERE l.ns = {lit}
+        AND l.raw_line NOT LIKE 'HDR%'
+        AND l.raw_line NOT LIKE 'TRL%'
     ),
     sliced AS (
       SELECT
@@ -115,6 +120,16 @@ def gate_statements(ns: str) -> list[tuple[str, str]]:
         (
             "bronze manifest is present",
             f"SELECT 'no files in manifest' AS problem FROM (SELECT count(*) AS c FROM {BRONZE_FILES} WHERE ns = {lit}) WHERE c = 0",
+        ),
+        (
+            "every bronze line belongs to a manifest file",
+            f"""
+            SELECT l.file_name, count(*) AS orphaned_lines
+            FROM {BRONZE_LINES} l
+            LEFT JOIN {BRONZE_FILES} f ON f.ns = l.ns AND f.file_name = l.file_name
+            WHERE l.ns = {lit} AND f.file_name IS NULL
+            GROUP BY l.file_name
+            """,
         ),
         (
             "every manifest file has bronze lines, exactly one HDR and one TRL",
