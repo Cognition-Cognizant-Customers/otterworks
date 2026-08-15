@@ -305,6 +305,8 @@ def run_checks(args) -> tuple[list[Check], dict]:
         unverified_purges == 0
         and orphans == 0
         and readable == baseline["count"]
+        and baseline["count"] > 0
+        and not baseline["errors"]
         and silver["incomplete_rows"] == 0
         and purged == manifest_deleted
         and (manifest_deleted == 0 or manifest_verified),
