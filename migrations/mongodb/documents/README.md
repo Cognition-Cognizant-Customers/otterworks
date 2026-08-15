@@ -42,9 +42,21 @@ uv run migrations/mongodb/documents/setup_collections.py
 # 2. migrate (idempotent: safe to run repeatedly, same recon numbers)
 uv run migrations/mongodb/documents/migrate.py --ns demo
 
+# 3. recon: recompute counts/checksums/anomalies FROM ATLAS against the manifest,
+#    and prove a rerun changed nothing by diffing against an earlier recon
+uv run migrations/mongodb/documents/recon.py --ns demo --json /tmp/recon_run1.json
+uv run migrations/mongodb/documents/migrate.py --ns demo
+uv run migrations/mongodb/documents/recon.py --ns demo \
+  --compare-json /tmp/recon_run1.json \
+  --report docs/tech-partnerships/recon/mongo-documents-demo.md \
+  --json docs/tech-partnerships/recon/mongo-documents-demo.json
+
 # transformer unit tests (pure, no database needed)
 uv run --no-project --with pytest python -m pytest migrations/mongodb/documents/tests
 ```
+
+The committed evidence lives in `docs/tech-partnerships/recon/`; `recon.py` exits
+non-zero when any check fails.
 
 ## Layout
 
@@ -55,4 +67,5 @@ uv run --no-project --with pytest python -m pytest migrations/mongodb/documents/
 | `transform.py` | pure row → document mapping (gap detection, snapshot routing, NULL `folder_id`) |
 | `load.py` | idempotent `ReplaceOne` upserts by `_id` |
 | `migrate.py` | entrypoint wiring extract → transform → load |
+| `recon.py` | Atlas-side recon: streams the migrated collections, recomputes counts/checksums/anomaly ledger, compares against the manifest and an earlier recon |
 | `tests/` | transformer unit tests, including the planted anomaly cases |
