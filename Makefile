@@ -449,7 +449,6 @@ legacy-sftp-up: ## Start the optional localhost-only SFTP drop fixture
 
 legacy-sftp-down: ## Stop the SFTP drop fixture
 	docker compose -f etl/legacy-extra/docker-compose.sftp.yml down
-
 # --- Databricks lakehouse (tech-partnerships migration target) ---
 # Every object is ow_tp-prefixed and Terraform-managed: the demo workspace is
 # shared, so the prefix is both the isolation boundary and the teardown filter.
@@ -503,6 +502,7 @@ dbx-deploy-notebooks: ## Import the converted pipeline notebooks into /Shared/ow
 dbx-run: ## Run a converted job and wait for it (JOB=<ow_tp_...>, NS=<ns>)
 	@test -n "$(JOB)" || { echo "usage: make dbx-run JOB=ow_tp_<job> NS=<ns>"; exit 1; }
 	@case "$(JOB)" in *[!A-Za-z0-9_-]*|'') echo "JOB must contain only letters, digits, underscores, and hyphens" >&2; exit 1;; esac
+	@case "$(JOB)" in ow_tp_*) ;; *) echo "JOB must be ow_tp-prefixed: the demo workspace is shared and unprefixed jobs belong to someone else" >&2; exit 1;; esac
 	$(if $(NS),$(call validate_ns),)
 	@$(DBX) run-job "$(JOB)" ns=$${NS:-demo}
 
