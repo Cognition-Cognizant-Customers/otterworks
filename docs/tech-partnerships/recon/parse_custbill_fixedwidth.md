@@ -3,6 +3,14 @@
 - Namespace: `ns=demo`
 - Golden legacy output: `/home/ubuntu/tp-golden/custbill/parsed` (regenerated with `make legacy-etl-gen-data NS=demo`, `make legacy-etl-run JOB=sftp_ingest_poll`, `make legacy-etl-run JOB=parse_custbill_fixedwidth`)
 - Converted output: `ow_tp.silver.custbill_records` / `ow_tp.silver.custbill_rejects` / `ow_tp.silver.custbill_file_recon`
+
+## Unverified: landing-volume upload path
+
+The upload path into `/Volumes/ow_tp/bronze/landing` is UNVERIFIED. The demo PAT lacks the
+`files` scope, so every upload attempt fails with `Provided access token does not have
+required scopes: files`. The bronze source reconciled here is the `ow_tp_sftp_ingest` unit's
+`bronze.custbill_files` / `bronze.custbill_lines`. No check was weakened or skipped to
+compensate; this statement covers only the upload leg, which this unit does not exercise.
 - Reproduce: `NS=demo python3 scripts/tp_databricks/recon_parse_custbill.py`
 - Negative controls (quarantine and trailer gate actually failing a run): [parse_custbill_negative_controls.md](parse_custbill_negative_controls.md)
 

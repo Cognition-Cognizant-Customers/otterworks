@@ -127,7 +127,7 @@ def read_golden(
             parts = line.split("|")
             if len(parts) != 6:
                 errors.append(
-                    f"{psv.name} line {index + HDR_LINES}: malformed legacy line: "
+                    f"{psv.name} line {index} (source line {index + HDR_LINES}): malformed legacy line: "
                     f"expected 6 fields, got {len(parts)}: {line!r}"
                 )
                 continue

@@ -92,7 +92,7 @@ Mutation: copies of the two legacy `.psv` files were written to a scratch direct
 directory and committed report were not modified.
 
 ```text
-CUSTBILL_DEMO_001.psv line 2: malformed legacy line: expected 6 fields, got 5: 'C000699637|INITECH SA|2025-03-23|4393.35|USD'
+CUSTBILL_DEMO_001.psv line 1 (source line 2): malformed legacy line: expected 6 fields, got 5: 'C000699637|INITECH SA|2025-03-23|4393.35|USD'
 ```
 
 Exit code `1`; the report was written to `/tmp/recon-golden-malformed-report.md` rather than
