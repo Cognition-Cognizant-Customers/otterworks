@@ -52,9 +52,10 @@ if retention_days <= 0:
     raise ValueError(f"retention_days must be positive, got {retention_days}")
 # The landing root is interpolated into a SQL string literal below, and it also
 # decides what this job is allowed to read: constrain it to a governed volume
-# path made of path-safe characters.
-if not re.fullmatch(r"/Volumes/ow_tp(?:/[A-Za-z0-9_.=-]+)+", source_root):
-    raise ValueError(f"source_path must be a path under /Volumes/ow_tp, got {source_root!r}")
+# path made of path-safe characters, with no traversal segment that would let the
+# prefix be satisfied while pointing somewhere else.
+if not re.fullmatch(r"/Volumes/ow_tp(?:/(?!\.\.?(?:/|$))[A-Za-z0-9_.=-]+)+", source_root):
+    raise ValueError(f"source_path must be a traversal-free path under /Volumes/ow_tp, got {source_root!r}")
 
 # The legacy cutoff is midnight UTC of (execution date - retention_days), compared
 # with a strict `<` against an ISO-8601 string, i.e. exclusive: an event exactly on
