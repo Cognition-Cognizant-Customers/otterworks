@@ -12,6 +12,10 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STACK_DIR="$REPO_ROOT/infrastructure/terraform-tp-aws"
 NS="${1:-${NS:-demo}}"
 export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-east-1}}"
+# the deployed region (provider region beats the ambient one) is authoritative
+if deployed_region="$(terraform -chdir="$STACK_DIR" output -raw aws_region 2>/dev/null)" && [ -n "$deployed_region" ]; then
+  export AWS_DEFAULT_REGION="$deployed_region"
+fi
 
 BUCKET="$(terraform -chdir="$STACK_DIR" output -raw ingest_bucket)"
 LEGACY_ROOT="${OTTERWORKS_LEGACY_ROOT:-/tmp/otterworks-legacy}"

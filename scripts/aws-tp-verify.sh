@@ -15,9 +15,15 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STACK_DIR="$REPO_ROOT/infrastructure/terraform-tp-aws"
 LEGACY_ROOT="${OTTERWORKS_LEGACY_ROOT:-/tmp/otterworks-legacy}"
 export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-east-1}}"
+# The stack's provider region wins over the ambient one, so the deployed region
+# is authoritative for every CLI call below.
+if deployed_region="$(terraform -chdir="$STACK_DIR" output -raw aws_region 2>/dev/null)" && [ -n "$deployed_region" ]; then
+  export AWS_DEFAULT_REGION="$deployed_region"
+fi
 
 NS="${NS:-demo}"
 WAIT=0
+SINCE=""
 while [ $# -gt 0 ]; do
   case "$1" in
   --wait)
@@ -26,6 +32,14 @@ while [ $# -gt 0 ]; do
     ;;
   --wait=*)
     WAIT="${1#*=}"
+    shift
+    ;;
+  --since)
+    SINCE="$2"
+    shift 2
+    ;;
+  --since=*)
+    SINCE="${1#*=}"
     shift
     ;;
   *)
@@ -157,15 +171,34 @@ else
   fails=$((fails + 1))
 fi
 
-# --- no failed executions ---
+# --- no failed executions for THIS run ---
+# list-executions returns the full 90-day history across namespaces, so an old
+# failure (e.g. the deliberate malformed-file beat) must not redden every later
+# run: scope to this namespace's executions started at/after the cutoff.
+if [ -n "$SINCE" ]; then
+  cutoff="$(date -d "$SINCE" +%s)"
+else
+  # oldest landing object for the namespace = when this run's feed arrived
+  oldest="$(aws s3api list-objects-v2 --bucket "$BUCKET" --prefix "landing/$NS/" \
+    --query 'sort_by(Contents,&LastModified)[0].LastModified' --output text 2>/dev/null || true)"
+  if [ -n "$oldest" ] && [ "$oldest" != "None" ]; then
+    cutoff="$(date -d "$oldest" +%s)"
+  else
+    cutoff=0
+  fi
+fi
+
 bad=""
 for status in FAILED TIMED_OUT ABORTED; do
   # a query that could not run must never read as "none failed"
-  if names="$(aws stepfunctions list-executions --state-machine-arn "$SM_ARN" --status-filter "$status" \
-    --query 'executions[].name' --output text 2>&1)"; then
-    [ -n "$names" ] && [ "$names" != "None" ] && bad="$bad $status:$names"
+  if rows="$(aws stepfunctions list-executions --state-machine-arn "$SM_ARN" --status-filter "$status" \
+    --query "executions[?starts_with(name,'$NS-')].[name,startDate]" --output text 2>&1)"; then
+    while read -r name started; do
+      [ -z "$name" ] && continue
+      [ "$(date -d "$started" +%s 2>/dev/null || echo 0)" -ge "$cutoff" ] && bad="$bad $status:$name"
+    done <<<"$rows"
   else
-    bad="$bad $status:QUERY-FAILED($names)"
+    bad="$bad $status:QUERY-FAILED($rows)"
   fi
 done
 if [ -z "$bad" ]; then
