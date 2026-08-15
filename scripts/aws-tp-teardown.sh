@@ -38,11 +38,41 @@ fi
 
 echo
 echo "=== teardown verification: tag scan Project=otterworks-tp ==="
-tagged=$(aws resourcegroupstaggingapi get-resources \
-  --tag-filters Key=Project,Values=otterworks-tp \
-  --query 'ResourceTagMappingList[].ResourceARN' --output text)
+# The tagging index is eventually consistent and keeps returning just-deleted
+# ARNs for a few minutes, so every hit is confirmed against its owning service
+# API before it counts, and the scan is retried while only unconfirmed hits remain.
+still_exists() {
+  case "$1" in
+  arn:aws:lambda:*:event-source-mapping:*)
+    aws lambda get-event-source-mapping --uuid "${1##*:}" >/dev/null 2>&1
+    ;;
+  *) return 0 ;; # anything we cannot probe is treated as present
+  esac
+}
+
+tagged=""
+for attempt in 1 2 3 4 5 6; do
+  index="$(aws resourcegroupstaggingapi get-resources \
+    --tag-filters Key=Project,Values=otterworks-tp \
+    --query 'ResourceTagMappingList[].ResourceARN' --output text)"
+  tagged=""
+  stale=""
+  for arn in $index; do
+    if still_exists "$arn"; then
+      tagged="$tagged $arn"
+    else
+      stale="$stale $arn"
+    fi
+  done
+  [ -n "$tagged" ] && break
+  [ -z "$stale" ] && break
+  echo "  tag index still lists deleted resource(s), waiting (attempt $attempt):$stale"
+  sleep 60
+done
+tagged="${tagged# }"
 if [ -n "$tagged" ]; then
-  echo "LEFTOVER tagged resources:"; printf '%s\n' $tagged
+  echo "LEFTOVER tagged resources:"
+  printf '%s\n' $tagged
 else
   echo "clean: no resources tagged Project=otterworks-tp"
 fi

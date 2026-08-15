@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 import boto3
 
+from custbill import latin1_lines
 from pipeline import PARSED_PREFIX, env, report_key
 
 
@@ -121,8 +122,9 @@ def handler(event, context):
         lines = []
         for key in keys:
             body = client.get_object(Bucket=bucket, Key=key)["Body"].read()
-            # the parser writes PSV as latin-1 bytes, exactly as the legacy chain did
-            lines.extend(body.decode("latin-1").splitlines())
+            # the parser writes PSV as latin-1 bytes and the legacy Perl reader broke
+            # records on "\n" only, so \v/\f/\x85 inside a name must not split a record
+            lines.extend(latin1_lines(body))
         rows = aggregate(lines)
         if _parsed_keys(client, bucket, prefix) == keys:
             break

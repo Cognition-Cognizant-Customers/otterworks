@@ -71,6 +71,11 @@ def _lines(body: str) -> list[str]:
     return lines
 
 
+def latin1_lines(body: str | bytes) -> list[str]:
+    """Split a latin-1 body the way the legacy readers did: on "\\n" only."""
+    return _lines(_text_body(body))
+
+
 def _raw_fields(line: str) -> tuple[str, str, str, str, str, str]:
     return (
         line[0:10],

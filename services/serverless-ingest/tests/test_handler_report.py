@@ -151,6 +151,22 @@ def test_handler_reads_latin1_psv_bytes(monkeypatch):
     assert client.objects[result["report_key"]].endswith(b"USD,INVOICE,1,1.00\n")
 
 
+def test_handler_splits_records_on_newlines_only(monkeypatch):
+    # the parser keeps \v/\f/\x85 inside the name field and the legacy Perl reader
+    # only ever broke on "\n", so such a record must stay one record
+    client = FakeS3(
+        {"parsed/y/CUSTBILL_Y_001.psv": b"C1|NAME\x0bWITH|2025-01-01|1.00|USD|01\n"}
+    )
+    monkeypatch.setattr(handler_report, "_s3", lambda: client)
+
+    result = handler_report.handler({"ns": "y"}, None)
+
+    assert result["rows"] == 1
+    assert client.objects[result["report_key"]] == (
+        b"Currency,RecordType,RecordCount,TotalAmount\nUSD,INVOICE,1,1.00\n"
+    )
+
+
 def test_empty_parsed_prefix_writes_header_only_report(monkeypatch):
     client = FakeS3({})
     monkeypatch.setattr(handler_report, "_s3", lambda: client)
