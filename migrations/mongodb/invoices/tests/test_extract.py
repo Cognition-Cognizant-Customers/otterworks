@@ -73,6 +73,27 @@ def test_header_without_lines_yields_an_empty_group(monkeypatch):
     assert units == [(extract.INVOICE, header("inv-a"), [])]
 
 
+def test_line_with_a_null_invoice_pointer_is_quarantined(monkeypatch):
+    # Oracle sorts NULLs last on ASC, so a pointerless line arrives while
+    # headers are still pending: it must be quarantined, not compared.
+    def _iter_rows(conn, sql, batch_no, arraysize):
+        if sql is extract.HEADER_SQL:
+            yield from [header("inv-a"), header("inv-b")]
+        else:
+            yield from [line("l1", "inv-a"), line("l2", None)]
+
+    monkeypatch.setattr(extract, "_iter_rows", _iter_rows)
+
+    units = list(extract.iter_units(None, BATCH_NO))
+
+    assert [(kind, row.get("LINE_ID") or row["INVOICE_ID"])
+            for kind, row, _ in units] == [
+        (extract.INVOICE, "inv-a"),
+        (extract.ORPHAN_LINE, "l2"),
+        (extract.INVOICE, "inv-b"),
+    ]
+
+
 def test_late_header_for_a_quarantined_line_is_an_error(monkeypatch):
     # Oracle ordered the headers inv-b, inv-a; Python says "inv-a" < "inv-b",
     # so inv-a's line is quarantined before its header shows up.

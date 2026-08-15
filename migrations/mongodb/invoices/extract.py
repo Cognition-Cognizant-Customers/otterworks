@@ -86,7 +86,7 @@ def iter_units(conn, batch_no: int, arraysize: int = 1000) -> Iterator[tuple]:
     line = next(lines, None)
 
     def emit_orphan(row: dict) -> tuple:
-        if row["INVOICE_ID"] in seen_headers:
+        if row["INVOICE_ID"] is not None and row["INVOICE_ID"] in seen_headers:
             raise RuntimeError(
                 "merge-join ordering mismatch: line "
                 f"{row['LINE_ID']} points at already-consumed header "
@@ -96,7 +96,10 @@ def iter_units(conn, batch_no: int, arraysize: int = 1000) -> Iterator[tuple]:
 
     for header in headers:
         invoice_id = header["INVOICE_ID"]
-        while line is not None and line["INVOICE_ID"] < invoice_id:
+        # INVOICE_LINE.INVOICE_ID is nullable: a line with no pointer at all can
+        # never match a header, so it is quarantined instead of being compared.
+        while line is not None and (line["INVOICE_ID"] is None
+                                    or line["INVOICE_ID"] < invoice_id):
             yield emit_orphan(line)
             line = next(lines, None)
         if invoice_id in orphaned_ids:
