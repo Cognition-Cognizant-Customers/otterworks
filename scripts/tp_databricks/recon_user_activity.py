@@ -96,26 +96,39 @@ def table_exists(qualified: str) -> bool:
     return bool(rows)
 
 
+def truncated_baseline(legacy: dict[str, dict]) -> bool:
+    """Whether the captured legacy per-user artefact is the script's capped slice.
+
+    The row count is the only fact that establishes truncation. The report's
+    `trends.peak_active_users` cannot: the legacy script sets it to
+    `max(d["active_users"] for d in daily_summaries)`, the busiest single day's active
+    users, while the artefact holds up to 500 distinct users accumulated over the whole
+    window - so it is smaller than the population on a wide window and can exceed the
+    artefact's row count on a busy day.
+    """
+    return len(legacy) >= LEGACY_SUMMARY_CAP
+
+
 def check_per_user(legacy: dict[str, dict], converted: dict[str, dict],
-                   legacy_total_users: int) -> dict:
+                   legacy_peak_active_users: int) -> dict:
     """Check 1: row-for-row parity on user_id x report_date, exact counts.
 
     The legacy artefact is capped: the script writes only `user_list[:500]` to
-    `user_summaries.jsonl` while reporting the true population in
-    `trends.peak_active_users`. Comparing an uncapped converted side against a capped
-    baseline would fail a correct conversion of any namespace above the cap, so the
-    truncation is detected from the legacy report itself and the comparison is confined
-    to the same top-N ranking the artefact represents, stated in the result rather than
-    applied silently. Nothing is loosened: inside that scope every field is still exact,
-    and if rank N is a tie the converted top-N is not well defined, so the check reports
-    blocked instead of guessing which users the baseline kept.
+    `user_summaries.jsonl`. Comparing an uncapped converted side against a capped
+    baseline would fail a correct conversion of any namespace above the cap, so once the
+    artefact sits at the cap the comparison is confined to the same top-N ranking the
+    artefact represents, stated in the result rather than applied silently. Nothing is
+    loosened: inside that scope every field is still exact, and if rank N is a tie the
+    converted top-N is not well defined, so the check reports blocked instead of guessing
+    which users the baseline kept.
     """
-    truncated = len(legacy) < int(legacy_total_users)
+    truncated = truncated_baseline(legacy)
     ranked_converted = sorted(converted.items(), key=lambda kv: (-kv[1]["events"], kv[0]))
     coverage = {
         "legacy_users_in_baseline": len(legacy),
-        "legacy_total_users_reported": int(legacy_total_users),
         "legacy_artefact_truncated": truncated,
+        # Context only: this is a per-day peak, not the size of the population.
+        "legacy_peak_active_users_reported": int(legacy_peak_active_users),
         "comparison_scope": (
             f"top {len(legacy)} users by events (the legacy artefact's cap of"
             f" {LEGACY_SUMMARY_CAP})"
@@ -123,7 +136,10 @@ def check_per_user(legacy: dict[str, dict], converted: dict[str, dict],
             else "every user on both sides"
         ),
     }
-    if truncated:
+    # A converted side shorter than the capped baseline is the divergence this check
+    # exists to catch, so it falls through to the missing/extra comparison below instead
+    # of being ranked into a top-N that does not exist.
+    if truncated and len(ranked_converted) >= len(legacy):
         boundary = ranked_converted[len(legacy) - 1][1]["events"]
         beyond = ranked_converted[len(legacy):]
         if beyond and beyond[0][1]["events"] == boundary:
@@ -131,8 +147,8 @@ def check_per_user(legacy: dict[str, dict], converted: dict[str, dict],
                 "name": "1. Per-user parity (user_id x report_date, exact counts)",
                 "passed": False,
                 "blocked": (
-                    f"the legacy artefact is capped at {len(legacy)} of"
-                    f" {legacy_total_users} users and rank {len(legacy)} is a tie at"
+                    f"the legacy artefact is capped at {len(legacy)} users and rank"
+                    f" {len(legacy)} is a tie at"
                     f" {boundary} events, so which users the baseline kept is not"
                     " recoverable: parity cannot be asserted for this namespace without"
                     " an uncapped legacy artefact."
@@ -200,7 +216,7 @@ WHERE ns = '{ns}' AND report_date BETWEEN DATE'{report_date}' - INTERVAL {lookba
     legacy_sum = sum(v["events"] for v in legacy.values())
     converted_sum = sum(v["events"] for v in converted.values())
     trend_total = int(legacy_rpt["trends"]["total_events"])
-    truncated = len(legacy) < int(legacy_rpt["trends"]["peak_active_users"])
+    truncated = truncated_baseline(legacy)
     values = {
         "converted per-user sum": converted_sum,
         "legacy report trends.total_events": trend_total,

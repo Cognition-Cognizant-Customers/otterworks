@@ -76,8 +76,8 @@ run — see check 3.
   "converted_users": 50,
   "coverage": {
     "legacy_users_in_baseline": 50,
-    "legacy_total_users_reported": 50,
     "legacy_artefact_truncated": false,
+    "legacy_peak_active_users_reported": 50,
     "comparison_scope": "every user on both sides"
   },
   "missing_users": [],
