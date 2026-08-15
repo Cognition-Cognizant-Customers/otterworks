@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
+import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -527,7 +528,10 @@ def render_report(
 
 def _main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--ns", default="demo")
+    # `make dbx-recon UNIT=sftp_ingest NS=<ns>` passes the namespace in the environment,
+    # not as a flag, so defaulting to "demo" here would silently reconcile — and, via
+    # check 4, re-run the ingest for — a namespace nobody asked about.
+    parser.add_argument("--ns", default=os.environ.get("NS") or "demo")
     parser.add_argument("--golden-root", default=str(GOLDEN_ROOT))
     parser.add_argument("--landing-root", default=LANDING_ROOT)
     parser.add_argument("--no-rerun", action="store_true", help="skip check 4 (the idempotency re-run)")
