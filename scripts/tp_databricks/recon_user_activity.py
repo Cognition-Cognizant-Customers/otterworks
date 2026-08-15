@@ -161,7 +161,11 @@ def check_freshness(ns: str, catalog: str, report_date: str, lookback_days: str)
     """Check 3: stale and missing upstream must refuse, writing no report rows."""
     scenarios = []
     table = f"{catalog}.bronze.user_activity_upstream_fixture"
-    backup = f"{catalog}.bronze.user_activity_upstream_recon_backup"
+    # Namespaced like every other table in this unit: a shared scratch name would let a
+    # run for one namespace overwrite the copy another namespace's interrupted run left
+    # behind. `-` is legal in ns but not in an identifier.
+    backup = (f"{catalog}.bronze.user_activity_upstream_recon_backup_"
+              f"{ns.replace('-', '_')}")
     rows_before = dbx.sql(
         f"SELECT COUNT(*) FROM {catalog}.gold.user_activity_report "
         f"WHERE ns = '{ns}' AND report_date = DATE'{report_date}'"
@@ -203,8 +207,11 @@ def check_freshness(ns: str, catalog: str, report_date: str, lookback_days: str)
     # A leftover backup means exactly that: a previous run died between the delete and
     # the restore, and the scratch table is the only surviving copy. Finish that restore
     # first — replacing it from the (still empty) live table would destroy the fixture.
+    # Counted unfiltered: the table belongs to this namespace by name, so any row in it
+    # is a leftover to be recovered, and an unexpected foreign row must not be silently
+    # skipped and then overwritten.
     leftover = int(dbx.sql(
-        f"SELECT COUNT(*) FROM {backup} WHERE ns = '{ns}'"
+        f"SELECT COUNT(*) FROM {backup}"
     )[0][0]) if table_exists(backup) else 0
     if leftover:
         dbx.sql(f"DELETE FROM {table} WHERE ns = '{ns}'")
@@ -230,7 +237,7 @@ def check_freshness(ns: str, catalog: str, report_date: str, lookback_days: str)
                                  {"max_upstream_lag_days": PARITY_LAG_DAYS}))
     finally:
         dbx.sql(f"DELETE FROM {table} WHERE ns = '{ns}'")
-        dbx.sql(f"INSERT INTO {table} SELECT * FROM {backup}")
+        dbx.sql(f"INSERT INTO {table} SELECT * FROM {backup} WHERE ns = '{ns}'")
     restored = int(dbx.sql(f"SELECT COUNT(*) FROM {table} WHERE ns = '{ns}'")[0][0])
     if restored == saved:
         dbx.sql(f"DROP TABLE IF EXISTS {backup}")
