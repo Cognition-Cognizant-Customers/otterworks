@@ -12,7 +12,7 @@ billing_table = None
 
 
 def _validate_segment(value: str, label: str) -> None:
-    if not isinstance(value, str) or not value or "/" in value or value in {".", ".."}:
+    if not value or "/" in value or value in {".", ".."}:
         raise ValueError(f"{label} must be a single path segment")
 
 
@@ -25,7 +25,7 @@ def _get_billing_table():
 
 def handler(event: dict, context: object) -> dict[str, object]:
     key = event["key"]
-    ns = event["ns"] if "ns" in event and event["ns"] is not None else namespace_from_key(key)
+    ns = event.get("ns") or namespace_from_key(key)
     filename = event["filename"]
     _validate_segment(ns, "namespace")
     _validate_segment(filename, "filename")

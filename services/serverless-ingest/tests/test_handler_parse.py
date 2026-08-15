@@ -110,6 +110,7 @@ def test_handler_uses_normal_namespace_and_filename_segments_unchanged(
     assert s3.puts[0][1] == "parsed/demo/CUSTBILL_SAMPLE_001.psv"
     assert len(table.items) == 5
 
+
 def test_handler_writes_golden_and_one_idempotent_item_per_record(monkeypatch) -> None:
     result, s3, table = invoke(monkeypatch)
 
