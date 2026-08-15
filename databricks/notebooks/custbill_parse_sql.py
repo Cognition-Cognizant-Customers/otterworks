@@ -272,38 +272,22 @@ def publish_statements(ns: str) -> list[tuple[str, str]]:
         (
             "publish silver.custbill_records",
             f"""
-            INSERT INTO {SILVER_RECORDS}
-              (ns, file_name, line_no, record_type, account_id, customer_name,
-               invoice_id, currency, amount, bill_date, parsed_at)
-            REPLACE WHERE ns = {lit}
-            SELECT ns, file_name, line_no, record_type, account_id, customer_name,
-                   invoice_id, currency, amount, bill_date, parsed_at
-            FROM {STAGING_RECORDS}
-            WHERE ns = {lit}
+            INSERT INTO {SILVER_RECORDS} REPLACE WHERE ns = {lit}
+            SELECT * FROM {STAGING_RECORDS} WHERE ns = {lit}
             """,
         ),
         (
             "publish silver.custbill_rejects",
             f"""
-            INSERT INTO {SILVER_REJECTS}
-              (ns, file_name, line_no, raw_line, reject_reason, rejected_at)
-            REPLACE WHERE ns = {lit}
-            SELECT ns, file_name, line_no, raw_line, reject_reason, rejected_at
-            FROM {STAGING_REJECTS}
-            WHERE ns = {lit}
+            INSERT INTO {SILVER_REJECTS} REPLACE WHERE ns = {lit}
+            SELECT * FROM {STAGING_REJECTS} WHERE ns = {lit}
             """,
         ),
         (
             "publish silver.custbill_file_recon",
             f"""
-            INSERT INTO {SILVER_FILE_RECON}
-              (ns, file_name, declared_trailer_count, parsed_count, rejected_count,
-               recon_ok, reconciled_at)
-            REPLACE WHERE ns = {lit}
-            SELECT ns, file_name, declared_trailer_count, parsed_count, rejected_count,
-                   recon_ok, reconciled_at
-            FROM {STAGING_FILE_RECON}
-            WHERE ns = {lit}
+            INSERT INTO {SILVER_FILE_RECON} REPLACE WHERE ns = {lit}
+            SELECT * FROM {STAGING_FILE_RECON} WHERE ns = {lit}
             """,
         ),
     ]
