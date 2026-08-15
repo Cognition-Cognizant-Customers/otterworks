@@ -44,6 +44,7 @@ STATUS_DELIVERED = "DELIVERED"
 STATUS_ATTEMPTING = "DELIVERY_ATTEMPTED_UNCONFIRMED"
 STATUS_UNCONFIRMED = "NOT_DELIVERED_ATTEMPT_UNCONFIRMED"
 STATUS_TRANSPORT_UNAVAILABLE = "NOT_DELIVERED_TRANSPORT_UNAVAILABLE"
+STATUS_INVALID_RECIPIENTS = "NOT_DELIVERED_INVALID_RECIPIENT_CONFIGURATION"
 STATUS_NO_TRANSPORT = "NOT_DELIVERED_NO_TRANSPORT_CONFIGURED"
 STATUS_NO_RECIPIENTS = "NOT_DELIVERED_NO_RECIPIENTS_CONFIGURED"
 
@@ -82,7 +83,7 @@ def ddl_statements(catalog: str = "ow_tp") -> list[str]:
           report_date DATE NOT NULL COMMENT 'Business date of the report run.',
           artifact_path STRING COMMENT 'Volume path of the emitted artifact, NULL when nothing was written.',
           recipient_list STRING COMMENT 'Distribution list resolved from the ow_tp secret scope, never from code.',
-          delivery_status STRING NOT NULL COMMENT 'DELIVERED, DELIVERY_ATTEMPTED_UNCONFIRMED, NOT_DELIVERED_ATTEMPT_UNCONFIRMED, NOT_DELIVERED_TRANSPORT_UNAVAILABLE:<reason>, or NOT_DELIVERED_<reason>.',
+          delivery_status STRING NOT NULL COMMENT 'DELIVERED, DELIVERY_ATTEMPTED_UNCONFIRMED, NOT_DELIVERED_ATTEMPT_UNCONFIRMED, NOT_DELIVERED_TRANSPORT_UNAVAILABLE:<reason>, NOT_DELIVERED_INVALID_RECIPIENT_CONFIGURATION, or NOT_DELIVERED_<reason>.',
           delivered_at TIMESTAMP COMMENT 'Set only when delivery actually happened; NULL otherwise.'
         )
         COMMENT 'Delivery audit the legacy sendmail no-op never produced: what was written, to whom it was addressed, and whether it actually went out.'
@@ -252,8 +253,13 @@ def _run() -> None:
 
     recipients = _secret(scope, dbutils.widgets.get("recipients_secret_key").strip())
     transport = _secret(scope, dbutils.widgets.get("smtp_secret_key").strip())
+    invalid_recipients = False
     if recipients:
-        recipients = _validated_recipients(recipients)
+        try:
+            recipients = _validated_recipients(recipients)
+        except ValueError:
+            invalid_recipients = True
+            recipients = None
     if not recipients:
         status = STATUS_NO_RECIPIENTS
     elif not transport:
@@ -278,7 +284,10 @@ def _run() -> None:
         ):
             spark.sql(statement)
 
-    if existing_row and existing_row["delivery_status"] == STATUS_DELIVERED:
+    if invalid_recipients:
+        write_audit(None, STATUS_INVALID_RECIPIENTS)
+        raise RuntimeError("invalid finance report recipient configuration")
+    elif existing_row and existing_row["delivery_status"] == STATUS_DELIVERED:
         recipients = existing_row["recipient_list"]
         status = STATUS_DELIVERED
     elif existing_row and existing_row["delivery_status"] in (
