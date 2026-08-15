@@ -56,6 +56,9 @@ class Check:
     name: str
     passed: bool | None = None  # None == could not be run (blocked)
     detail: list[str] = field(default_factory=list)
+    # set when the check was blocked by a failure rather than deliberately skipped;
+    # a recon that could not run a check must not exit 0 as if it had.
+    error: str | None = None
 
     @property
     def status(self) -> str:
@@ -369,6 +372,23 @@ def check5_scope(ns: str, landing_root: str) -> Check:
     return check
 
 
+def _contained(number: int, name: str, check_fn, *args) -> Check:
+    """Run one check, turning a crash into a BLOCKED result instead of a traceback.
+
+    The report is the artifact of record, so a warehouse error or a missing landing
+    path must not take the other four checks' evidence with it. BLOCKED is not a
+    pass: it exits 0 only where the run deliberately declined to check (`--no-rerun`),
+    and it says on its face that the check could not be run.
+    """
+    try:
+        return check_fn(*args)
+    except Exception as exc:  # noqa: BLE001 - any failure to run is evidence, not a crash
+        check = Check(number, name)
+        check.error = f"{type(exc).__name__}: {exc}"
+        check.detail.append(f"could not be run: {check.error}")
+        return check
+
+
 def render_report(checks: list[Check], ns: str, golden_root: Path, landing_root: str) -> str:
     verdict = (
         "green" if all(c.passed for c in checks)
@@ -422,11 +442,19 @@ def _main(argv: list[str]) -> int:
 
     golden = load_golden(Path(args.golden_root))
     checks = [
-        check1_manifest(args.ns, golden),
-        check2_lines(args.ns, golden),
-        check3_trailer(args.ns, golden),
-        check4_idempotency(args.ns, args.landing_root, not args.no_rerun, golden),
-        check5_scope(args.ns, args.landing_root),
+        _contained(1, "bronze.custbill_files matches the golden artifacts", check1_manifest, args.ns, golden),
+        _contained(2, "bronze.custbill_lines preserves the raw records", check2_lines, args.ns, golden),
+        _contained(3, "TRL-declared count equals detail lines ingested", check3_trailer, args.ns, golden),
+        _contained(
+            4,
+            "re-running the ingest leaves both tables byte-identical",
+            check4_idempotency,
+            args.ns,
+            args.landing_root,
+            not args.no_rerun,
+            golden,
+        ),
+        _contained(5, "no ow_tp object outside the contract, no unprefixed object", check5_scope, args.ns, args.landing_root),
     ]
 
     for check in checks:
@@ -440,9 +468,11 @@ def _main(argv: list[str]) -> int:
         report_path.write_text(render_report(checks, args.ns, Path(args.golden_root), args.landing_root))
         print(f"report written to {report_path}")
 
-    # A check that could not be run is BLOCKED, not a failure: only `False` fails,
-    # so a deliberate read-only pass (`--no-rerun`) can still exit 0.
-    return 0 if all(check.passed is not False for check in checks) else 1
+    # A deliberate skip (`--no-rerun`) is BLOCKED and still exits 0; a check that
+    # crashed is BLOCKED and exits non-zero, because "could not be run" must never
+    # read as "green".
+    ok = all(check.passed is not False and check.error is None for check in checks)
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
