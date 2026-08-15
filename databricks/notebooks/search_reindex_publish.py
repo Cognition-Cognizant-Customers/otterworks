@@ -57,7 +57,13 @@ def log(event, **fields):
 
 
 def counts_by_entity(sql_text):
-    return {row["entity_type"]: int(row["n"]) for row in spark.sql(sql_text).collect()}
+    counts = {}
+    for row in spark.sql(sql_text).collect():
+        entity_type = row["entity_type"]
+        if entity_type not in ENTITY_TYPES:
+            raise ValueError(f"unsupported entity_type in publish counts: {entity_type!r}")
+        counts[entity_type] = int(row["n"])
+    return counts
 
 
 def write_summary(source_counts, indexed_counts, swap_completed, force_counts_mismatch=False):

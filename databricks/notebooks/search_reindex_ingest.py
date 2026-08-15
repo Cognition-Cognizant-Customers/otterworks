@@ -111,6 +111,9 @@ landed.cache()
 landed_counts = {row["entity_type"]: row["n"] for row in landed.groupBy("entity_type").agg(F.count("*").alias("n")).collect()}
 log("landed_counts", counts=landed_counts)
 
+if sum(expected.values()) == 0:
+    raise ValueError("extract manifest is empty; refusing to replace existing bronze rows")
+
 missing_ids = landed.filter(F.col("entity_id").isNull() | (F.trim(F.col("entity_id")) == "")).count()
 if missing_ids:
     raise ValueError(f"{missing_ids} landed records have no entity_id; refusing to index unidentifiable rows")
@@ -118,6 +121,20 @@ if missing_ids:
 divergent = {e: (landed_counts.get(e, 0), c) for e, c in expected.items() if landed_counts.get(e, 0) != c}
 if divergent:
     raise ValueError(f"landed rows do not match the extract manifest (entity: landed, expected): {divergent}")
+
+bronze_before_counts = {
+    row["entity_type"]: row["n"]
+    for row in spark.sql(
+        f"SELECT entity_type, COUNT(*) AS n FROM {BRONZE_TABLE} WHERE ns = '{ns}' GROUP BY entity_type"
+    ).collect()
+}
+would_erase = {
+    entity: count
+    for entity, count in bronze_before_counts.items()
+    if count > 0 and landed_counts.get(entity, 0) == 0
+}
+if would_erase:
+    raise ValueError(f"extract would erase existing bronze entity types: {would_erase}")
 
 # COMMAND ----------
 
