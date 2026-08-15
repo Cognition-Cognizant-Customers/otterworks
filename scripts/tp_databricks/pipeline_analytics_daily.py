@@ -144,15 +144,24 @@ def land(ns: str, catalog: str) -> dict:
     _clear_landing_events(events_path)
 
     landed, total_bytes = 0, 0
-    with tempfile.TemporaryDirectory() as scratch:
-        for key in keys:
-            body = s3.get_object(Bucket=DATA_LAKE_BUCKET, Key=key)["Body"].read()
-            local = Path(scratch) / Path(key).name
-            local.write_bytes(body)
-            relative = key[len(prefix):]  # YYYY/MM/DD/HH.json.gz
-            dbx.upload(str(local), f"{volume_prefix(ns)}/events/{relative}")
-            landed += 1
-            total_bytes += len(body)
+    try:
+        with tempfile.TemporaryDirectory() as scratch:
+            for key in keys:
+                body = s3.get_object(Bucket=DATA_LAKE_BUCKET, Key=key)["Body"].read()
+                local = Path(scratch) / Path(key).name
+                local.write_bytes(body)
+                relative = key[len(prefix):]  # YYYY/MM/DD/HH.json.gz
+                dbx.upload(str(local), f"{volume_prefix(ns)}/events/{relative}")
+                landed += 1
+                total_bytes += len(body)
+        if landed != len(keys):
+            raise RuntimeError(f"landed {landed} objects but discovered {len(keys)} for ns={ns}")
+    except Exception:
+        try:
+            _clear_landing_events(events_path)
+        except Exception:
+            pass
+        raise
     ddl_target = dbx.upload(str(DDL_FILE), f"{volume_prefix(ns)}/ddl/analytics_daily.sql")
     return {"objects": landed, "bytes": total_bytes, "ddl": ddl_target}
 
@@ -172,11 +181,7 @@ def stage(ns: str, catalog: str) -> dict:
     prefix, keys = _event_objects(ns)
     table = stage_table(catalog)
 
-    for statement in pipeline.ddl_statements(STAGE_DDL_FILE.read_text(encoding="utf-8"), catalog):
-        dbx.sql(statement["sql"])
-    dbx.sql(f"DELETE FROM {table} WHERE ns = '{ns}'")
-
-    staged, batch = 0, []
+    records = []
     for key in keys:
         body = s3.get_object(Bucket=DATA_LAKE_BUCKET, Key=key)["Body"].read()
         payload = gzip.decompress(body) if key.endswith(".gz") else body
@@ -186,22 +191,40 @@ def stage(ns: str, catalog: str) -> dict:
                 continue
             encoded = base64.b64encode(line.encode("utf-8")).decode("ascii")
             encoded_object = base64.b64encode(source_object.encode("utf-8")).decode("ascii")
-            batch.append(
+            records.append(
                 f"('{ns}', CAST(unbase64('{encoded_object}') AS STRING), "
                 f"CAST(unbase64('{encoded}') AS STRING), current_timestamp())"
             )
+
+    expected = len(records)
+    for statement in pipeline.ddl_statements(STAGE_DDL_FILE.read_text(encoding="utf-8"), catalog):
+        dbx.sql(statement["sql"])
+    dbx.sql(f"DELETE FROM {table} WHERE ns = '{ns}'")
+
+    staged, batch = 0, []
+    try:
+        for record in records:
+            batch.append(record)
             if len(batch) >= STAGE_BATCH_ROWS:
                 dbx.sql(f"INSERT INTO {table} VALUES {', '.join(batch)}")
                 staged += len(batch)
                 batch = []
-    if batch:
-        dbx.sql(f"INSERT INTO {table} VALUES {', '.join(batch)}")
-        staged += len(batch)
+        if batch:
+            dbx.sql(f"INSERT INTO {table} VALUES {', '.join(batch)}")
+            staged += len(batch)
 
-    in_table = int(dbx.sql_scalar(f"SELECT count(*) FROM {table} WHERE ns = '{ns}'"))
-    if in_table != staged:
-        raise SystemExit(f"staged {staged} lines but {table} holds {in_table} for ns={ns}")
-    return {"objects": len(keys), "lines": staged, "table": table}
+        if staged != expected:
+            raise RuntimeError(f"staged {staged} lines but discovered {expected} for ns={ns}")
+        in_table = int(dbx.sql_scalar(f"SELECT count(*) FROM {table} WHERE ns = '{ns}'"))
+        if in_table != expected:
+            raise RuntimeError(f"staged {expected} lines but {table} holds {in_table} for ns={ns}")
+    except Exception:
+        try:
+            dbx.sql(f"DELETE FROM {table} WHERE ns = '{ns}'")
+        except Exception:
+            pass
+        raise
+    return {"objects": len(keys), "lines": expected, "table": table}
 
 
 def run(ns: str, catalog: str, source_kind: str, apply_ddl: bool = True, source_table: str | None = None) -> dict:
