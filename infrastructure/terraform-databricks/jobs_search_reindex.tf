@@ -69,6 +69,9 @@ resource "databricks_job" "search_reindex" {
     notebook_task {
       notebook_path = "${databricks_directory.pipelines.path}/search_reindex_ingest"
       source        = "WORKSPACE"
+      base_parameters = {
+        catalog = var.catalog_name
+      }
     }
 
     # Serverless job compute: no cluster block, nothing with an hourly floor.
@@ -88,6 +91,9 @@ resource "databricks_job" "search_reindex" {
     notebook_task {
       notebook_path = "${databricks_directory.pipelines.path}/search_reindex_publish"
       source        = "WORKSPACE"
+      base_parameters = {
+        catalog = var.catalog_name
+      }
     }
 
     # Retryable because build-validate-swap is idempotent per (ns, run_date).
