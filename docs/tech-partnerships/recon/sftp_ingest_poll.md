@@ -1,6 +1,6 @@
 # Recon: `sftp_ingest_poll.ksh` → `ow_tp_sftp_ingest`
 
-- Generated: 2026-08-15T23:03:16+00:00
+- Generated: 2026-08-15T23:10:41+00:00
 - Namespace: `demo`  |  catalog: `ow_tp`  |  landing: `/Volumes/ow_tp/bronze/landing`
 - Golden baseline provenance: artifacts of a real `sftp_ingest_poll.ksh` run (`make legacy-etl-gen-data NS=demo` + `make legacy-etl-run JOB=sftp_ingest_poll`), read byte-for-byte from `/home/ubuntu/tp-golden/custbill/incoming/*.dat.done`
 - Result: **green**
@@ -66,6 +66,29 @@ this unit's throwaway ow_tp_dev_sftp_ingest left behind: none
 other units' ow_tp_dev_* jobs (not this unit's, not judged): ['ow_tp_dev_audit_archive', 'ow_tp_dev_search_reindex']
 catalogs=['ow_tp'] secret_scopes=['ow_tp'] dirs=['/Shared/ow_tp']
 ```
+
+## Scope and caveats
+
+* **Retention is row-only, landing is the archive.** The `retention` task trims rows from
+  `bronze.custbill_files` / `bronze.custbill_lines` past `retention_days`; it never removes the
+  landed drop file. That mirrors the legacy job, which renamed each drop to `*.done` in place and
+  kept it forever — those `.done` files are exactly the golden artifacts hashed above. Landing
+  therefore stays the replay source, and a trimmed file re-ingests on a later run; that is
+  intended, not a leak. Re-ingest cannot duplicate, because the manifest is keyed on
+  `(ns, file_name)` and carries the whole-file `sha256` (see check 4).
+* **`make dbx-upload` is UNVERIFIED.** The demo PAT has no `files` scope, so the documented
+  upload transport could not be exercised:
+
+  ```
+  $ make dbx-upload NS=demo
+  PUT /api/2.0/fs/files/Volumes/ow_tp/bronze/landing/demo/custbill/CUSTBILL_DEMO_001.dat
+  -> 403: {"error_code":403,"message":"Provided access token does not have required scopes: files"}
+  ```
+
+  The inputs the checks above read were landed inside Databricks instead (serverless task writing
+  to the volume). That is a demo workaround, **not** the production transport, and no check was
+  weakened to accommodate it — every assertion still reads what is actually in the volume and in
+  the tables, compared against the golden `.done` artifacts on disk.
 
 Reproduce with:
 
