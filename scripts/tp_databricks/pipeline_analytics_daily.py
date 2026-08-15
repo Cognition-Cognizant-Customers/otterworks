@@ -136,7 +136,11 @@ def stage(ns: str, catalog: str) -> dict:
             if not line.strip():
                 continue
             encoded = base64.b64encode(line.encode("utf-8")).decode("ascii")
-            batch.append(f"('{ns}', '{source_object}', CAST(unbase64('{encoded}') AS STRING), current_timestamp())")
+            encoded_object = base64.b64encode(source_object.encode("utf-8")).decode("ascii")
+            batch.append(
+                f"('{ns}', CAST(unbase64('{encoded_object}') AS STRING), "
+                f"CAST(unbase64('{encoded}') AS STRING), current_timestamp())"
+            )
             if len(batch) >= STAGE_BATCH_ROWS:
                 dbx.sql(f"INSERT INTO {table} VALUES {', '.join(batch)}")
                 staged += len(batch)
@@ -188,7 +192,8 @@ def main(argv: list[str] | None = None) -> int:
     pipeline.validate_identifier(args.catalog, "catalog")
     # dbx builds volume paths from its own module-level catalog, so --catalog has to reach it
     # or `land` would write into ow_tp while `run` read the chosen catalog.
-    dbx.CATALOG = args.catalog
+    os.environ["OW_TP_CATALOG"] = args.catalog
+    dbx.CATALOG = dbx._catalog()
 
     if args.command == "land":
         result = land(args.ns, args.catalog)

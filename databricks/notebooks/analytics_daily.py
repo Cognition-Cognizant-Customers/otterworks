@@ -13,8 +13,9 @@ What replaces it here:
 * the extract is a set-based read of the landing volume (`read_files`), so no credentials
   live in code — the volume and the secret scope `ow_tp` replace `etl/config.ini`;
 * every load is a single atomic `INSERT ... REPLACE WHERE ns = ...`, so re-running a
-  namespace replaces its slice instead of appending (the legacy script had no idempotency)
-  and a failed statement leaves the previous slice intact;
+  namespace replaces its slice instead of appending (the legacy script had no idempotency);
+  an empty extract is rejected before the destructive bronze replacement, and a failed
+  statement leaves the previous slice intact;
 * the aggregate is one `GROUP BY` instead of `df.iterrows()`;
 * nothing is dropped silently: every bronze row lands in either `silver.analytics_events`
   or `silver.analytics_events_rejects` with a reason, and the run asserts
@@ -315,13 +316,22 @@ def run_pipeline(
     sleep: Callable[[float], None] = time.sleep,
     log: Callable[[str], None] = print,
 ) -> dict[str, int]:
-    """Run DDL + the four loads, then assert the run did not lose or duplicate anything."""
+    """Reject empty input before bronze replacement, then run four loads and assert parity."""
     statements: Iterable[dict] = pipeline_statements(catalog, ns, source_glob, source_kind, source_table)
     if apply_ddl:
         validate_identifier(catalog, "catalog")
         for statement in ddl_statements(ddl_text, catalog):
             _execute_with_retry(execute, statement, 1, backoff_s, sleep, log)
         log(f"ddl applied to {catalog}")
+
+    source_relation = _source_relation(source_glob, ns, catalog, source_table)
+    source_count = int(scalar(f"SELECT count(*) FROM {source_relation} WHERE trim(value) <> ''"))
+    if source_count == 0:
+        raise ZeroEventExtract(
+            f"extract produced 0 events for ns={ns} from "
+            f"{source_table or _source_path(source_glob.replace('{catalog}', catalog), ns)}; "
+            "failing before replacing the bronze slice"
+        )
 
     counts: dict[str, int] = {}
     queries = count_queries(catalog, ns)
