@@ -247,11 +247,41 @@ def _snapshot(ns: str) -> dict[str, str]:
     return snapshot
 
 
-def check4_idempotency(ns: str, landing_root: str, rerun: bool) -> Check:
-    """Re-run the identical statement set; both tables must be unchanged."""
+def _landed_files(ns: str, landing_root: str) -> list[str]:
+    """File names the ingest's own source scan sees under the landing path."""
+    ns, _, landing_root = sftp_ingest_sql.validated(ns, CATALOG, landing_root)
+    rows = dbx.sql(
+        "SELECT DISTINCT regexp_extract(_metadata.file_path, '([^/]+)$', 1) AS file_name "
+        f"FROM read_files('{landing_root}/{ns}/custbill/', format => 'text', wholeText => true) "
+        "ORDER BY file_name"
+    )
+    return [row[0] for row in rows]
+
+
+def check4_idempotency(
+    ns: str, landing_root: str, rerun: bool, golden: dict[str, GoldenFile]
+) -> Check:
+    """Re-run the identical statement set; both tables must be unchanged.
+
+    Unchanged tables only mean idempotency if the re-run actually read the drops:
+    over an empty landing path every statement is a no-op and the fingerprints
+    would match trivially, so the inputs are asserted before the comparison.
+    """
     check = Check(4, "re-running the ingest leaves both tables byte-identical")
     if not rerun:
         check.detail.append("skipped (--no-rerun)")
+        return check
+    landed = _landed_files(ns, landing_root)
+    check.detail.append(
+        f"files the re-run reads under {landing_root}/{ns}/custbill/: {landed or 'NONE'} "
+        f"(golden: {sorted(golden)})"
+    )
+    if sorted(landed) != sorted(golden):
+        check.passed = False
+        check.detail.append(
+            "the re-run would not have processed the golden file set, so an unchanged "
+            "fingerprint would prove nothing; not comparing"
+        )
         return check
     before = _snapshot(ns)
     sftp_ingest_sql.run(ns=ns, catalog=CATALOG, landing_root=landing_root, create_tables=False)
@@ -388,7 +418,7 @@ def _main(argv: list[str]) -> int:
         check1_manifest(args.ns, golden),
         check2_lines(args.ns, golden),
         check3_trailer(args.ns, golden),
-        check4_idempotency(args.ns, args.landing_root, rerun=not args.no_rerun),
+        check4_idempotency(args.ns, args.landing_root, not args.no_rerun, golden),
         check5_scope(args.ns, args.landing_root),
     ]
 

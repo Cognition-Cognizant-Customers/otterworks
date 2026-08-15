@@ -1,6 +1,6 @@
 # Recon: `sftp_ingest_poll.ksh` → `ow_tp_sftp_ingest`
 
-- Generated: 2026-08-15T22:42:58+00:00
+- Generated: 2026-08-15T22:47:41+00:00
 - Namespace: `demo`  |  catalog: `ow_tp`  |  landing: `/Volumes/ow_tp/bronze/landing`
 - Golden baseline provenance: artifacts of a real `sftp_ingest_poll.ksh` run (`make legacy-etl-gen-data NS=demo` + `make legacy-etl-run JOB=sftp_ingest_poll`), read byte-for-byte from `/home/ubuntu/tp-golden/custbill/incoming/*.dat.done`
 - Result: **green**
@@ -45,6 +45,7 @@ CUSTBILL_DEMO_002.dat: TRL declared=50 ingested detail lines=50 golden detail li
 ## 4. re-running the ingest leaves both tables byte-identical — PASS
 
 ```
+files the re-run reads under /Volumes/ow_tp/bronze/landing/demo/custbill/: ['CUSTBILL_DEMO_001.dat', 'CUSTBILL_DEMO_002.dat'] (golden: ['CUSTBILL_DEMO_001.dat', 'CUSTBILL_DEMO_002.dat'])
 custbill_files: rows:sha256 before=2:ccd3f02d800f3c58514308fb75dbdd8b13782dd76d28c2b089e604da6c24483d after=2:ccd3f02d800f3c58514308fb75dbdd8b13782dd76d28c2b089e604da6c24483d [unchanged]
 custbill_lines: rows:sha256 before=104:88e7249ece103b7bec93e4964f8b8a39ee429e410e3b09ff180fbf0435b826c0 after=104:88e7249ece103b7bec93e4964f8b8a39ee429e410e3b09ff180fbf0435b826c0 [unchanged]
 ```
