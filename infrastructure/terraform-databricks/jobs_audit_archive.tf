@@ -118,8 +118,11 @@ resource "databricks_job" "audit_archive" {
   }
 
   # Failures were previously discovered by reading /var/log/etl by hand.
+  # A health rule only marks the run as having breached the threshold; the mail
+  # goes out through the matching notification field, so both are wired.
   email_notifications {
-    on_failure = var.audit_archive_alert_emails
+    on_failure                             = var.audit_archive_alert_emails
+    on_duration_warning_threshold_exceeded = var.audit_archive_alert_emails
   }
 
   health {
