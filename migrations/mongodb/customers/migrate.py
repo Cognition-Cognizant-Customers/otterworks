@@ -13,6 +13,7 @@ Atlas afterwards.
 
 import argparse
 import sys
+from contextlib import ExitStack, closing
 from datetime import datetime, timezone
 
 import oracledb
@@ -94,20 +95,20 @@ def main() -> int:
     args = ap.parse_args()
     batch = args.batch_no or config.batch_no(args.ns)
 
-    conn = oracledb.connect(**config.oracle_dsn())
-    client = None if args.dry_run else config.mongo_client()
-    db = None if client is None else client[config.database_name()]
-    try:
+    with ExitStack() as stack:
+        conn = stack.enter_context(closing(oracledb.connect(**config.oracle_dsn())))
+        client = (
+            None
+            if args.dry_run
+            else stack.enter_context(closing(config.mongo_client()))
+        )
+        db = None if client is None else client[config.database_name()]
         if not extract.count_customers(conn, batch):
             raise SystemExit(
                 f"no customers in conversion batch {batch} for ns={args.ns} "
                 f"— seed it first (make oracle-billing-seed NS={args.ns})")
         summary = migrate(conn, db, args.ns, batch, limit=args.limit,
                           dry_run=args.dry_run, size=args.batch_size)
-    finally:
-        conn.close()
-        if client is not None:
-            client.close()
 
     print(f"[migrate] ns={args.ns} batch={batch}"
           f"{' (dry run)' if args.dry_run else ''}")
