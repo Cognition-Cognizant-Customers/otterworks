@@ -28,6 +28,7 @@
 
 import json
 import logging
+import re
 from datetime import date, datetime, timedelta, timezone
 
 dbutils.widgets.text("ns", "demo", "namespace")
@@ -49,6 +50,11 @@ if not (catalog.isidentifier() and catalog.startswith("ow_tp")):
     raise ValueError(f"catalog must be an ow_tp-prefixed identifier in this shared workspace, got {catalog!r}")
 if retention_days <= 0:
     raise ValueError(f"retention_days must be positive, got {retention_days}")
+# The landing root is interpolated into a SQL string literal below, and it also
+# decides what this job is allowed to read: constrain it to a governed volume
+# path made of path-safe characters.
+if not re.fullmatch(r"/Volumes/ow_tp(?:/[A-Za-z0-9_.=-]+)+", source_root):
+    raise ValueError(f"source_path must be a path under /Volumes/ow_tp, got {source_root!r}")
 
 # The legacy cutoff is midnight UTC of (execution date - retention_days), compared
 # with a strict `<` against an ISO-8601 string, i.e. exclusive: an event exactly on
@@ -281,6 +287,31 @@ if deleted_count > purged_before and not verified:
 
 # COMMAND ----------
 
+summary = {
+    "ns": ns,
+    "run_date": run_date.isoformat(),
+    "cutoff_ts": cutoff.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "retention_days": retention_days,
+    "candidate_count": candidate_count,
+    "archived_count": archived_count,
+    "deleted_count": deleted_count,
+    "verified": verified,
+    "newly_archived_this_run": archive_metrics.get("num_inserted_rows"),
+    "newly_ingested_this_run": ingest_metrics.get("num_inserted_rows"),
+}
+log.info("run summary %s", json.dumps(summary))
+
+# Fail before writing the manifest, not after. `deleted_count` is cumulative over
+# the retention window, so on an estate where an earlier verified run already
+# purged rows, an unverified run would offer the manifest (deleted_count > 0,
+# verified = false) -- exactly the combination `deleted_requires_verified`
+# forbids. Writing it first would turn this run summary into an opaque constraint
+# error and record nothing either way; the run's failure is carried by the failed
+# task and its alert instead. The manifest keeps meaning "a verified run purged
+# this many rows from the window", which is also what makes it stable on re-runs.
+if not verified:
+    raise RuntimeError(f"audit archive verification failed: {json.dumps(summary)}")
+
 spark.sql(f"""
 MERGE INTO {GOLD} AS t
 USING (
@@ -298,22 +329,5 @@ ON t.ns = s.ns AND t.run_date = s.run_date
 WHEN MATCHED THEN UPDATE SET *
 WHEN NOT MATCHED THEN INSERT *
 """)
-
-summary = {
-    "ns": ns,
-    "run_date": run_date.isoformat(),
-    "cutoff_ts": cutoff.strftime("%Y-%m-%dT%H:%M:%SZ"),
-    "retention_days": retention_days,
-    "candidate_count": candidate_count,
-    "archived_count": archived_count,
-    "deleted_count": deleted_count,
-    "verified": verified,
-    "newly_archived_this_run": archive_metrics.get("num_inserted_rows"),
-    "newly_ingested_this_run": ingest_metrics.get("num_inserted_rows"),
-}
-log.info("run summary %s", json.dumps(summary))
-
-if not verified:
-    raise RuntimeError(f"audit archive verification failed: {json.dumps(summary)}")
 
 dbutils.notebook.exit(json.dumps(summary))
