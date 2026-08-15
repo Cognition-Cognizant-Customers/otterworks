@@ -200,6 +200,13 @@ def upload(local_path: str, volume_relpath: str) -> str:
 
 def deploy_notebook(local_path: str, name: str) -> str:
     """Import a notebook source file under the demo's workspace directory."""
+    if (
+        not name
+        or name in (".", "..")
+        or "/" in name
+        or "\\" in name
+    ):
+        raise DatabricksError("workspace notebook name must be a single relative path segment")
     with open(local_path, "rb") as handle:
         content = base64.b64encode(handle.read()).decode()
     path = f"{PIPELINE_ROOT}/{name}"
