@@ -29,6 +29,7 @@ Exit codes: 0 = every check PASS, 1 = failures, 2 = config error.
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,6 +45,10 @@ EXPECTED_INDEXES = ("tenant_owner", "folder", "trashed", "storage_s3key_unique")
 REPORT_DIR = REPO_ROOT / "docs" / "tech-partnerships" / "recon"
 
 
+class ConfigError(Exception):
+    """Environment/seed problem — nothing was reconciled, so it is not a failure."""
+
+
 def manifest_path(ns: str) -> Path:
     return REPO_ROOT / "testdata" / "legacy" / "manifests" / f"{ns}.json"
 
@@ -51,7 +56,7 @@ def manifest_path(ns: str) -> Path:
 def load_manifest(ns: str) -> dict:
     path = manifest_path(ns)
     if not path.exists():
-        raise SystemExit(f"manifest not found: {path} (run `make seed-legacy NS={ns}`)")
+        raise ConfigError(f"manifest not found: {path} (run `make seed-legacy NS={ns}`)")
     return json.loads(path.read_text())
 
 
@@ -117,7 +122,7 @@ def reconcile(ns: str) -> dict:
     manifest = load_manifest(ns)
     target = manifest.get("targets", {}).get(MANIFEST_TARGET)
     if target is None:
-        raise SystemExit(f"manifest target {MANIFEST_TARGET} missing from {manifest_path(ns)}")
+        raise ConfigError(f"manifest target {MANIFEST_TARGET} missing from {manifest_path(ns)}")
     orphans_expected = manifest_anomaly(manifest, ORPHAN_KIND, MANIFEST_TARGET)
 
     collection = mongo_collection(ns)
@@ -282,7 +287,15 @@ def main() -> int:
         print("NS must match ^[A-Za-z0-9_]+$", file=sys.stderr)
         return 2
 
-    report = reconcile(args.ns)
+    if not os.getenv("MONGODB_ATLAS_URI"):
+        print("MONGODB_ATLAS_URI is not set", file=sys.stderr)
+        return 2
+
+    try:
+        report = reconcile(args.ns)
+    except ConfigError as error:
+        print(error, file=sys.stderr)
+        return 2
     print(
         tabulate(
             [(c["check"], c["status"], c["detail"]) for c in report["checks"]],
