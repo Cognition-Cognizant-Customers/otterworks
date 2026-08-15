@@ -34,10 +34,12 @@ resource "databricks_job" "parse_custbill" {
     default = "demo"
   }
 
+  # Demo state is per run and per namespace: the namespace is a run parameter,
+  # not a property of the job, so it is deliberately not a tag.
   tags = {
-    namespace = "demo"
-    pipeline  = "custbill"
-    layer     = "silver"
+    demo     = "tech-partnerships"
+    pipeline = "custbill"
+    layer    = "silver"
   }
 
   # Optional chaining is disabled by default so this unit remains plan-safe
