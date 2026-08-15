@@ -9,7 +9,7 @@
 # MAGIC | task | `mode` | what it does |
 # MAGIC |---|---|---|
 # MAGIC | `wait_for_bronze_manifest` | `gate` | bronze manifest handshake; fails the run if the landing is incomplete |
-# MAGIC | `parse` | `parse` | typed parse + quarantine + trailer reconciliation |
+# MAGIC | `parse` | `parse` | stage typed parse, gate it, then publish atomically per table |
 # MAGIC
 # MAGIC What this retires, relative to the legacy script:
 # MAGIC
@@ -22,6 +22,9 @@
 # MAGIC   `units / 100` and a real `DATE`, invalid dates rejected instead of reformatted;
 # MAGIC - trailer count logged and ignored (ETL-0187, 2011) → reconciled in
 # MAGIC   `ow_tp.silver.custbill_file_recon`, and a mismatch **fails the run**;
+# MAGIC - delete-then-insert publication that could expose partial output → staged
+# MAGIC   records, rejects, and recon are gated before namespace-scoped replacement;
+# MAGIC   the three publish statements are not cross-table atomic, so recon is last;
 # MAGIC - `2>/dev/null || true` on every command, a lock file that was never removed, and
 # MAGIC   hostname-selected `/data/otterworks` paths → errors raise, `max_concurrent_runs
 # MAGIC   = 1` provides the mutual exclusion, and the namespace is a job parameter.
@@ -79,7 +82,7 @@ if mode == "gate":
     # The manifest handshake replaces the legacy cron offset (:05 after a */15
     # ingest) and the "compare the file size twice, one second apart" settle
     # check: a half-written landing cannot satisfy it.
-    for statement in bronze_bootstrap_ddl():
+    for statement in ddl_statements():
         spark.sql(statement)
     run_gate("bronze manifest", gate_statements(ns))
 
@@ -91,7 +94,13 @@ elif mode == "parse":
         spark.sql(statement)
         print(f"done: {name}")
 
-    run_gate("trailer reconciliation", recon_gate_statements(ns))
+    run_gate("staged trailer reconciliation", recon_gate_statements(ns, staged=True))
+
+    for name, statement in publish_statements(ns):
+        spark.sql(statement)
+        print(f"done: {name}")
+
+    run_gate("published reconciliation", recon_gate_statements(ns))
 
 else:
     raise ValueError(f"unknown mode {mode!r}: expected 'gate' or 'parse'")

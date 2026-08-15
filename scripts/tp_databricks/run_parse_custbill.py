@@ -60,7 +60,15 @@ def run(ns: str, skip_ddl: bool = False) -> int:
         dbx.sql(statement)
         print(f"  done: {name}")
 
-    print("trailer reconciliation gate")
+    print("staged trailer reconciliation gate")
+    _run_gate("staged recon", custbill_parse_sql.recon_gate_statements(ns, staged=True))
+
+    print("publishing")
+    for name, statement in custbill_parse_sql.publish_statements(ns):
+        dbx.sql(statement)
+        print(f"  done: {name}")
+
+    print("published reconciliation gate")
     _run_gate("recon", custbill_parse_sql.recon_gate_statements(ns))
 
     ns_literal = custbill_parse_sql.quote_sql_literal(ns)

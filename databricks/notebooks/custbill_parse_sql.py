@@ -9,12 +9,17 @@ local driver that executes the same statement set through
                              legacy cron offset (`*/15` ingest vs `5-59/15`
                              parse), any of which returning a non-empty result
                              means the run must fail before touching silver.
-    parse_statements(ns)  -- typed parse into silver.custbill_records, quarantine
-                             into silver.custbill_rejects, trailer reconciliation
-                             into silver.custbill_file_recon.
+    parse_statements(ns)  -- typed parse into namespace-scoped staging tables.
+    publish_statements(ns) -- atomically replace the published namespace from staging.
     recon_gate_statements(ns) -- post-parse assertions; a non-empty result fails
                              the run (the reconciliation ETL-0187 asked for in
                              2011 and the legacy job only ever logged).
+
+The parse stages all three outputs, gates the staged trailer reconciliation, then
+publishes records, rejects, and recon last with one atomic Delta statement each.
+The three publishes are not cross-table atomic: a failure between statements can
+leave a namespace temporarily mixed across the published tables, so recon is
+published last and the residual window is explicit rather than implied away.
 
 Both statement groups are pure strings: no Databricks, no Spark session, so they
 are reviewable and diffable on their own.
@@ -33,6 +38,9 @@ CATALOG = os.environ.get("OW_TP_CATALOG", "ow_tp")
 SILVER_RECORDS = f"{CATALOG}.silver.custbill_records"
 SILVER_REJECTS = f"{CATALOG}.silver.custbill_rejects"
 SILVER_FILE_RECON = f"{CATALOG}.silver.custbill_file_recon"
+STAGING_RECORDS = f"{CATALOG}.silver.custbill_records_staging"
+STAGING_REJECTS = f"{CATALOG}.silver.custbill_rejects_staging"
+STAGING_FILE_RECON = f"{CATALOG}.silver.custbill_file_recon_staging"
 BRONZE_FILES = f"{CATALOG}.bronze.custbill_files"
 BRONZE_LINES = f"{CATALOG}.bronze.custbill_lines"
 
@@ -171,31 +179,26 @@ def gate_statements(ns: str) -> list[tuple[str, str]]:
 
 
 def parse_statements(ns: str) -> list[tuple[str, str]]:
-    """The conversion itself, idempotent per namespace.
-
-    Every write is delete-then-insert scoped to `ns`, so re-running the job
-    leaves the tables identical instead of accumulating rows the way the legacy
-    `.done`-rename plus never-removed lock file did.
-    """
+    """Build the namespace-scoped staging parse, idempotent without touching published rows."""
     lit = quote_sql_literal(ns)
     sliced = _sliced_cte(ns)
     return [
         (
-            "clear silver.custbill_records for this namespace",
-            f"DELETE FROM {SILVER_RECORDS} WHERE ns = {lit}",
+            "clear staged silver.custbill_records for this namespace",
+            f"DELETE FROM {STAGING_RECORDS} WHERE ns = {lit}",
         ),
         (
-            "clear silver.custbill_rejects for this namespace",
-            f"DELETE FROM {SILVER_REJECTS} WHERE ns = {lit}",
+            "clear staged silver.custbill_rejects for this namespace",
+            f"DELETE FROM {STAGING_REJECTS} WHERE ns = {lit}",
         ),
         (
-            "clear silver.custbill_file_recon for this namespace",
-            f"DELETE FROM {SILVER_FILE_RECON} WHERE ns = {lit}",
+            "clear staged silver.custbill_file_recon for this namespace",
+            f"DELETE FROM {STAGING_FILE_RECON} WHERE ns = {lit}",
         ),
         (
-            "typed detail records into silver.custbill_records",
+            "typed detail records into staged silver.custbill_records",
             f"""
-            INSERT INTO {SILVER_RECORDS}
+            INSERT INTO {STAGING_RECORDS}
               (ns, file_name, line_no, record_type, account_id, customer_name,
                invoice_id, currency, amount, bill_date, parsed_at)
             {sliced}
@@ -216,9 +219,9 @@ def parse_statements(ns: str) -> list[tuple[str, str]]:
             """,
         ),
         (
-            "quarantine invalid records in silver.custbill_rejects",
+            "quarantine invalid records in staged silver.custbill_rejects",
             f"""
-            INSERT INTO {SILVER_REJECTS}
+            INSERT INTO {STAGING_REJECTS}
               (ns, file_name, line_no, raw_line, reject_reason, rejected_at)
             {sliced}
             SELECT ns, file_name, line_no, raw_line, reject_reason, current_timestamp()
@@ -227,9 +230,9 @@ def parse_statements(ns: str) -> list[tuple[str, str]]:
             """,
         ),
         (
-            "trailer reconciliation into silver.custbill_file_recon",
+            "trailer reconciliation into staged silver.custbill_file_recon",
             f"""
-            INSERT INTO {SILVER_FILE_RECON}
+            INSERT INTO {STAGING_FILE_RECON}
               (ns, file_name, declared_trailer_count, parsed_count, rejected_count,
                recon_ok, reconciled_at)
             WITH trailer AS (
@@ -240,11 +243,11 @@ def parse_statements(ns: str) -> list[tuple[str, str]]:
             ),
             parsed AS (
               SELECT file_name, count(*) AS parsed_count
-              FROM {SILVER_RECORDS} WHERE ns = {lit} GROUP BY file_name
+              FROM {STAGING_RECORDS} WHERE ns = {lit} GROUP BY file_name
             ),
             rejected AS (
               SELECT file_name, count(*) AS rejected_count
-              FROM {SILVER_REJECTS} WHERE ns = {lit} GROUP BY file_name
+              FROM {STAGING_REJECTS} WHERE ns = {lit} GROUP BY file_name
             )
             SELECT
               t.ns,
@@ -262,15 +265,45 @@ def parse_statements(ns: str) -> list[tuple[str, str]]:
     ]
 
 
-def recon_gate_statements(ns: str) -> list[tuple[str, str]]:
-    """Post-parse assertions. A non-empty result must fail the run."""
+def publish_statements(ns: str) -> list[tuple[str, str]]:
+    """Publish the validated namespace from staging with one replace per table."""
     lit = quote_sql_literal(ns)
+    return [
+        (
+            "publish silver.custbill_records",
+            f"""
+            INSERT INTO {SILVER_RECORDS} REPLACE WHERE ns = {lit}
+            SELECT * FROM {STAGING_RECORDS} WHERE ns = {lit}
+            """,
+        ),
+        (
+            "publish silver.custbill_rejects",
+            f"""
+            INSERT INTO {SILVER_REJECTS} REPLACE WHERE ns = {lit}
+            SELECT * FROM {STAGING_REJECTS} WHERE ns = {lit}
+            """,
+        ),
+        (
+            "publish silver.custbill_file_recon",
+            f"""
+            INSERT INTO {SILVER_FILE_RECON} REPLACE WHERE ns = {lit}
+            SELECT * FROM {STAGING_FILE_RECON} WHERE ns = {lit}
+            """,
+        ),
+    ]
+
+
+def recon_gate_statements(ns: str, staged: bool = False) -> list[tuple[str, str]]:
+    """Trailer and published-output assertions. A non-empty result must fail."""
+    lit = quote_sql_literal(ns)
+    records = STAGING_RECORDS if staged else SILVER_RECORDS
+    file_recon = STAGING_FILE_RECON if staged else SILVER_FILE_RECON
     return [
         (
             "trailer counts reconcile for every file",
             f"""
             SELECT file_name, declared_trailer_count, parsed_count, rejected_count
-            FROM {SILVER_FILE_RECON}
+            FROM {file_recon}
             WHERE ns = {lit} AND (recon_ok IS NOT TRUE)
             """,
         ),
@@ -279,7 +312,7 @@ def recon_gate_statements(ns: str) -> list[tuple[str, str]]:
             f"""
             SELECT f.file_name
             FROM {BRONZE_FILES} f
-            LEFT JOIN {SILVER_FILE_RECON} c ON c.ns = f.ns AND c.file_name = f.file_name
+            LEFT JOIN {file_recon} c ON c.ns = f.ns AND c.file_name = f.file_name
             WHERE f.ns = {lit} AND c.file_name IS NULL
             """,
         ),
@@ -287,7 +320,7 @@ def recon_gate_statements(ns: str) -> list[tuple[str, str]]:
             "no duplicate (file_name, line_no) in silver.custbill_records",
             f"""
             SELECT file_name, line_no, count(*) AS copies
-            FROM {SILVER_RECORDS}
+            FROM {records}
             WHERE ns = {lit}
             GROUP BY file_name, line_no
             HAVING count(*) > 1

@@ -35,13 +35,16 @@ VALID_RECORD_TYPES = ("01", "02")
 SILVER_RECORDS = f"{CATALOG}.silver.custbill_records"
 SILVER_REJECTS = f"{CATALOG}.silver.custbill_rejects"
 SILVER_FILE_RECON = f"{CATALOG}.silver.custbill_file_recon"
+STAGING_RECORDS = f"{CATALOG}.silver.custbill_records_staging"
+STAGING_REJECTS = f"{CATALOG}.silver.custbill_rejects_staging"
+STAGING_FILE_RECON = f"{CATALOG}.silver.custbill_file_recon_staging"
 
 BRONZE_FILES = f"{CATALOG}.bronze.custbill_files"
 BRONZE_LINES = f"{CATALOG}.bronze.custbill_lines"
 
 
 def silver_ddl() -> list[str]:
-    """Idempotent DDL for the three silver tables this unit owns.
+    """Idempotent DDL for the published and staging silver tables this unit owns.
 
     Typed columns replace the legacy string surgery: the implied decimal becomes
     a real DECIMAL(18,2) and the YYYYMMDD field a real DATE, so a record that
@@ -90,6 +93,48 @@ def silver_ddl() -> list[str]:
         )
         USING DELTA
         COMMENT 'Trailer-count reconciliation per file. The legacy job logged the trailer count next to the parsed count and moved on (ETL-0187, requested 2011, never implemented); here a mismatch fails the run.'
+        """,
+        f"""
+        CREATE TABLE IF NOT EXISTS {STAGING_RECORDS} (
+          ns STRING,
+          file_name STRING,
+          line_no INT,
+          record_type STRING,
+          account_id STRING,
+          customer_name STRING,
+          invoice_id STRING,
+          currency STRING,
+          amount DECIMAL(18,2),
+          bill_date DATE,
+          parsed_at TIMESTAMP
+        )
+        USING DELTA
+        COMMENT 'Namespace-scoped staging for typed CUSTBILL records; published only after trailer reconciliation passes.'
+        """,
+        f"""
+        CREATE TABLE IF NOT EXISTS {STAGING_REJECTS} (
+          ns STRING,
+          file_name STRING,
+          line_no INT,
+          raw_line STRING,
+          reject_reason STRING,
+          rejected_at TIMESTAMP
+        )
+        USING DELTA
+        COMMENT 'Namespace-scoped staging for CUSTBILL quarantine rows.'
+        """,
+        f"""
+        CREATE TABLE IF NOT EXISTS {STAGING_FILE_RECON} (
+          ns STRING,
+          file_name STRING,
+          declared_trailer_count BIGINT,
+          parsed_count BIGINT,
+          rejected_count BIGINT,
+          recon_ok BOOLEAN,
+          reconciled_at TIMESTAMP
+        )
+        USING DELTA
+        COMMENT 'Namespace-scoped staging for CUSTBILL trailer reconciliation rows.'
         """,
     ]
 
