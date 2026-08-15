@@ -50,6 +50,12 @@ REJECT_REASONS = ("missing_event_id", "missing_event_type", "invalid_event_ts", 
 # built, so a value carrying a quote or a statement terminator cannot widen that predicate.
 NS_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_]{0,63}$")
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*){0,2}$")
+# `source_glob` and `source_kind` arrive the same way and land in string literals
+# (`read_files('<path>')`, `'<kind>' AS source`), so they are constrained too: the path to
+# volume-safe characters plus the `{catalog}`/`{ns}` placeholders, the kind to the extracts
+# the legacy job had.
+SOURCE_PATH_PATTERN = re.compile(r"^[A-Za-z0-9_./*{}=-]+$")
+SOURCE_KINDS = ("s3", "sqs", "dynamodb")
 
 
 class ZeroEventExtract(RuntimeError):
@@ -75,6 +81,18 @@ def validate_identifier(name: str, what: str = "identifier") -> str:
     if not IDENTIFIER_PATTERN.match(name or ""):
         raise ValueError(f"invalid {what} {name!r}: expected {IDENTIFIER_PATTERN.pattern}")
     return name
+
+
+def validate_source_path(path: str) -> str:
+    if not SOURCE_PATH_PATTERN.match(path or ""):
+        raise ValueError(f"invalid source path {path!r}: expected {SOURCE_PATH_PATTERN.pattern}")
+    return path
+
+
+def validate_source_kind(kind: str) -> str:
+    if kind not in SOURCE_KINDS:
+        raise ValueError(f"invalid source kind {kind!r}: expected one of {SOURCE_KINDS}")
+    return kind
 
 
 def _split_sql(text: str) -> list[str]:
@@ -137,7 +155,7 @@ def _source_relation(source_glob: str, ns: str, catalog: str, source_table: str 
     """
     if source_table:
         return f"(SELECT raw_line AS value FROM {source_table} WHERE ns = '{ns}')"
-    path = _source_path(source_glob.replace("{catalog}", catalog), ns)
+    path = validate_source_path(_source_path(source_glob.replace("{catalog}", catalog), ns))
     return f"read_files('{path}', format => 'text', recursiveFileLookup => true)"
 
 
@@ -151,6 +169,7 @@ def pipeline_statements(
     """The ordered statement set the job runs, as (name, sql, retryable) records."""
     validate_ns(ns)
     validate_identifier(catalog, "catalog")
+    validate_source_kind(source_kind)
     if source_table:
         validate_identifier(source_table, "source table")
     relation = _source_relation(source_glob, ns, catalog, source_table)

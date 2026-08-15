@@ -172,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=("land", "stage", "run", "counts"))
     parser.add_argument("--ns", default="demo")
-    parser.add_argument("--catalog", default=pipeline.DEFAULT_CATALOG)
+    parser.add_argument("--catalog", default=os.environ.get("OW_TP_CATALOG", pipeline.DEFAULT_CATALOG))
     parser.add_argument("--source-kind", default=pipeline.DEFAULT_SOURCE_KIND, choices=("s3", "sqs", "dynamodb"))
     parser.add_argument("--skip-ddl", action="store_true")
     parser.add_argument(
