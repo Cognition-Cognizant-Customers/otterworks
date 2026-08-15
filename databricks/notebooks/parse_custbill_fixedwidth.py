@@ -40,6 +40,18 @@
 
 # COMMAND ----------
 
+import os
+dbutils.widgets.text("ns", "demo", "Demo namespace")
+dbutils.widgets.dropdown("mode", "parse", ["gate", "parse"], "Task mode")
+dbutils.widgets.text("catalog", "ow_tp", "Unity Catalog catalog")
+
+catalog = dbutils.widgets.get("catalog").strip()
+os.environ["OW_TP_CATALOG"] = catalog
+ns = dbutils.widgets.get("ns").strip()
+mode = dbutils.widgets.get("mode").strip()
+
+# COMMAND ----------
+
 # MAGIC %run ./custbill_sql
 
 # COMMAND ----------
@@ -48,16 +60,10 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("ns", "demo", "Demo namespace")
-dbutils.widgets.dropdown("mode", "parse", ["gate", "parse"], "Task mode")
-
-ns = dbutils.widgets.get("ns").strip()
-mode = dbutils.widgets.get("mode").strip()
-
 validate_namespace(ns)
 ns_literal = quote_sql_literal(ns)
 
-print(f"ns={ns} mode={mode}")
+print(f"catalog={catalog} ns={ns} mode={mode}")
 
 # COMMAND ----------
 
