@@ -24,8 +24,17 @@ Positions are 1-based, matching both the copybook and the legacy `cut -c` calls.
 from __future__ import annotations
 
 import os
+import re
 
-CATALOG = os.environ.get("OW_TP_CATALOG", "ow_tp")
+
+def validate_catalog(value: str) -> str:
+    """Validate the Unity Catalog identifier before interpolating table names."""
+    if re.fullmatch(r"ow_tp[a-z0-9_]*", value) is None:
+        raise ValueError(f"invalid catalog {value!r}: expected ^ow_tp[a-z0-9_]*$")
+    return value
+
+
+CATALOG = validate_catalog(os.environ.get("OW_TP_CATALOG", "ow_tp"))
 
 RECORD_LENGTH = 65
 VALID_RECORD_TYPES = ("01", "02")

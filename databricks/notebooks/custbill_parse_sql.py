@@ -34,7 +34,15 @@ from __future__ import annotations
 import os
 import re
 
-CATALOG = os.environ.get("OW_TP_CATALOG", "ow_tp")
+
+def validate_catalog(value: str) -> str:
+    """Validate the Unity Catalog identifier before interpolating table names."""
+    if re.fullmatch(r"ow_tp[a-z0-9_]*", value) is None:
+        raise ValueError(f"invalid catalog {value!r}: expected ^ow_tp[a-z0-9_]*$")
+    return value
+
+
+CATALOG = validate_catalog(os.environ.get("OW_TP_CATALOG", "ow_tp"))
 SILVER_RECORDS = f"{CATALOG}.silver.custbill_records"
 SILVER_REJECTS = f"{CATALOG}.silver.custbill_rejects"
 SILVER_FILE_RECON = f"{CATALOG}.silver.custbill_file_recon"
