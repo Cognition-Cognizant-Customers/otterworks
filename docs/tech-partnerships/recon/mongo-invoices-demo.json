@@ -323,6 +323,12 @@
       "ok": true
     },
     {
+      "actual": 149963,
+      "check": "embedded lines == manifest INVOICE_LINE rows minus the planted orphans",
+      "expected": 149963,
+      "ok": true
+    },
+    {
       "actual": 150000,
       "check": "checksum stream covers every line",
       "expected": 150000,
@@ -330,20 +336,8 @@
     },
     {
       "actual": 5,
-      "check": "invoices with zero lines (migrated, not quarantined)",
-      "expected": 5,
-      "ok": true
-    },
-    {
-      "actual": 5,
       "check": "zero-line invoices carry lines: [] and lineTotal 0.00",
       "expected": 5,
-      "ok": true
-    },
-    {
-      "actual": 268,
-      "check": "invoices with fewer than 3 lines",
-      "expected": 268,
       "ok": true
     },
     {
@@ -375,6 +369,18 @@
       "check": "source-parity checksum == manifest checksum",
       "expected": "88a66751f0b08b476b492105a2efc537",
       "ok": true
+    },
+    {
+      "actual": 5,
+      "check": "invoices with zero lines (migrated, not quarantined)",
+      "expected": 5,
+      "ok": true
+    },
+    {
+      "actual": 268,
+      "check": "invoices with fewer than 3 lines",
+      "expected": 268,
+      "ok": true
     }
   ],
   "checksum": {
@@ -398,14 +404,17 @@
   "database": "ow_tp_demo",
   "expected": {
     "checksum": "88a66751f0b08b476b492105a2efc537",
+    "embeddedLines": 149963,
+    "fanout": {
+      "thinInvoices": 268,
+      "zeroLineInvoices": 5
+    },
     "invoices": 18750,
     "lines": 150000,
-    "orphans": 37,
-    "thinInvoices": 268,
-    "zeroLineInvoices": 5
+    "orphans": 37
   },
   "manifestGeneratedAt": "2026-08-01T00:00:00Z",
   "ns": "demo",
-  "reconciledAt": "2026-08-15T23:24:48Z",
+  "reconciledAt": "2026-08-15T23:31:36Z",
   "verdict": "PASS"
 }

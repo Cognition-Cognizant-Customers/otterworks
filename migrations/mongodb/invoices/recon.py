@@ -33,13 +33,16 @@ HEADER_TARGET = "oracle.OW_BILLING.INVOICE_HEADER"
 LINE_TARGET = "oracle.OW_BILLING.INVOICE_LINE"
 ORPHAN_ANOMALY = "orphaned_rows"
 
-# Fan-out facts for NS=demo, verified against the live Oracle seed: lines are
-# assigned to a uniformly random header, so the per-invoice count is
-# Poisson-like (min 0, max 23) rather than the 3-25 the contract text assumed.
-# A header with no lines is migrated as `lines: []` / `lineCount: 0` — it is not
-# an anomaly and is never quarantined — so recon asserts these counts.
-EXPECTED_ZERO_LINE_INVOICES = 5
-EXPECTED_THIN_INVOICES = 268
+# Fan-out expectations, measured against a live Oracle seed. Lines are assigned
+# to a uniformly random header, so the per-invoice count is Poisson-like (min 0)
+# rather than the 3-25 the contract text assumed, and the thin/empty tail is a
+# function of the namespace's row counts and RNG seed — hence per-NS, not global.
+# A header with no lines is still migrated (`lines: []` / `lineCount: 0`): it is
+# not an anomaly and is never quarantined. A namespace with no measured numbers
+# gets its fan-out reported but not asserted, so recon cannot fail spuriously.
+FANOUT_EXPECTED = {
+    "demo": {"zeroLineInvoices": 5, "thinInvoices": 268},
+}
 THIN_FANOUT_THRESHOLD = 3
 
 # `lineId` is a hex uuid, so the id space partitions cleanly by hex prefix.
@@ -203,14 +206,14 @@ def reconcile(db, ns: str) -> dict:
          counts["lineCountFieldSum"], counts["embeddedLines"]),
         ("embedded + orphaned lines == manifest INVOICE_LINE rows",
          total_lines, expected_lines),
+        ("embedded lines == manifest INVOICE_LINE rows minus the planted orphans",
+         counts["embeddedLines"],
+         expected_lines - expected_orphans
+         if None not in (expected_lines, expected_orphans) else None),
         ("checksum stream covers every line",
          checksum["lines"], total_lines),
-        ("invoices with zero lines (migrated, not quarantined)",
-         counts["zeroLineInvoices"], EXPECTED_ZERO_LINE_INVOICES),
         ("zero-line invoices carry lines: [] and lineTotal 0.00",
-         counts["zeroLineInvoicesWithEmptyArray"], EXPECTED_ZERO_LINE_INVOICES),
-        (f"invoices with fewer than {THIN_FANOUT_THRESHOLD} lines",
-         counts["thinInvoices"], EXPECTED_THIN_INVOICES),
+         counts["zeroLineInvoicesWithEmptyArray"], counts["zeroLineInvoices"]),
         ("orphan documents == planted orphaned_rows anomaly",
          counts["orphanedLines"], expected_orphans),
         ("every planted orphan id is in invoice_lines_orphaned",
@@ -222,6 +225,15 @@ def reconcile(db, ns: str) -> dict:
         ("source-parity checksum == manifest checksum",
          checksum["checksum"], expected_checksum),
     ]
+
+    fanout_expected = FANOUT_EXPECTED.get(ns)
+    if fanout_expected is not None:
+        checks += [
+            ("invoices with zero lines (migrated, not quarantined)",
+             counts["zeroLineInvoices"], fanout_expected["zeroLineInvoices"]),
+            (f"invoices with fewer than {THIN_FANOUT_THRESHOLD} lines",
+             counts["thinInvoices"], fanout_expected["thinInvoices"]),
+        ]
 
     results = [{"check": name, "actual": actual, "expected": expected,
                 "ok": actual == expected}
@@ -235,17 +247,37 @@ def reconcile(db, ns: str) -> dict:
         "checksum": checksum,
         "expected": {"invoices": expected_headers, "lines": expected_lines,
                      "orphans": expected_orphans, "checksum": expected_checksum,
-                     "zeroLineInvoices": EXPECTED_ZERO_LINE_INVOICES,
-                     "thinInvoices": EXPECTED_THIN_INVOICES},
+                     "embeddedLines": (expected_lines - expected_orphans
+                                      if None not in (expected_lines,
+                                                      expected_orphans) else None),
+                     "fanout": fanout_expected},
         "checks": results,
         "anomalyLedger": ledger,
         "verdict": "PASS" if all(r["ok"] for r in results) else "FAIL",
     }
 
 
+def _row(label: str, actual, expected, check: dict | None) -> str:
+    """One `## Counts` row, with its verdict taken from the matching check."""
+    if check is None:
+        verdict = "not asserted"
+    else:
+        verdict = "ok" if check["ok"] else "MISMATCH"
+    return f"| {label} | {actual} | {expected} | {verdict} |"
+
+
 def as_markdown(report: dict) -> str:
     counts, checksum = report["counts"], report["checksum"]
     ledger = report["anomalyLedger"]
+    expected = report["expected"]
+    by_check = {check["check"]: check for check in report["checks"]}
+
+    def num(value) -> str:
+        return f"{value:,}" if isinstance(value, int) else str(value)
+
+    thin_check = f"invoices with fewer than {THIN_FANOUT_THRESHOLD} lines"
+    reasons = {row["quarantineReason"] for row in ledger["orphans"]}
+    also_embedded = len(ledger["orphanLinesAlsoEmbedded"])
     out = [
         f"# Recon — `mongo-invoices` (NS=`{report['ns']}`)",
         "",
@@ -260,20 +292,30 @@ def as_markdown(report: dict) -> str:
         "",
         "| Metric | From Atlas | Expected | |",
         "|---|---|---|---|",
-        f"| `invoices` documents | {counts['invoices']:,} | "
-        f"{report['expected']['invoices']:,} | ok |",
-        f"| Embedded lines across all invoices | {counts['embeddedLines']:,} | "
-        "149,963 | ok |",
-        f"| `invoice_lines_orphaned` documents | {counts['orphanedLines']:,} | "
-        f"{report['expected']['orphans']:,} | ok |",
-        f"| Embedded + orphaned lines | {counts['totalLines']:,} | "
-        f"{report['expected']['lines']:,} | ok |",
-        f"| Source-parity checksum | `{checksum['checksum']}` | "
-        f"`{report['expected']['checksum']}` | ok |",
-        f"| Invoices with zero lines | {counts['zeroLineInvoices']} | "
-        f"{EXPECTED_ZERO_LINE_INVOICES} | ok |",
-        f"| Invoices with fewer than {THIN_FANOUT_THRESHOLD} lines | "
-        f"{counts['thinInvoices']} | {EXPECTED_THIN_INVOICES} | ok |",
+        _row("`invoices` documents", num(counts["invoices"]),
+             num(expected["invoices"]),
+             by_check.get("invoices documents == manifest INVOICE_HEADER rows")),
+        _row("Embedded lines across all invoices", num(counts["embeddedLines"]),
+             num(expected["embeddedLines"]),
+             by_check.get("embedded lines == manifest INVOICE_LINE rows minus "
+                          "the planted orphans")),
+        _row("`invoice_lines_orphaned` documents", num(counts["orphanedLines"]),
+             num(expected["orphans"]),
+             by_check.get("orphan documents == planted orphaned_rows anomaly")),
+        _row("Embedded + orphaned lines", num(counts["totalLines"]),
+             num(expected["lines"]),
+             by_check.get("embedded + orphaned lines == manifest "
+                          "INVOICE_LINE rows")),
+        _row("Source-parity checksum", f"`{checksum['checksum']}`",
+             f"`{expected['checksum']}`",
+             by_check.get("source-parity checksum == manifest checksum")),
+        _row("Invoices with zero lines", counts["zeroLineInvoices"],
+             (expected["fanout"] or {}).get("zeroLineInvoices", "—"),
+             by_check.get("invoices with zero lines (migrated, not quarantined)")),
+        _row(f"Invoices with fewer than {THIN_FANOUT_THRESHOLD} lines",
+             counts["thinInvoices"],
+             (expected["fanout"] or {}).get("thinInvoices", "—"),
+             by_check.get(thin_check)),
         "",
         f"Line fan-out per invoice runs {counts['minLinesPerInvoice']}–"
         f"{counts['maxLinesPerInvoice']} (lines are assigned to a uniformly "
@@ -300,11 +342,13 @@ def as_markdown(report: dict) -> str:
         "",
         "## Anomaly ledger — `orphaned_rows` on `oracle.OW_BILLING.INVOICE_LINE`",
         "",
-        f"Manifest plants **{report['expected']['orphans']}**; Atlas holds "
-        f"**{counts['orphanedLines']}** in `invoice_lines_orphaned`, all with "
-        "`quarantine_reason: \"missing_header\"`, none of them also embedded in an "
-        f"invoice, and none of the {len(ledger['danglingInvoiceIds'])} distinct "
-        "`INVOICE_ID`s they point at resolving to a header document.",
+        f"Manifest plants **{expected['orphans']}**; Atlas holds "
+        f"**{counts['orphanedLines']}** in `invoice_lines_orphaned` with "
+        f"quarantine reason(s) {sorted(reasons)}, "
+        f"{also_embedded} of them also embedded in an invoice, and "
+        f"{len(ledger['danglingIdsThatResolve'])} of the "
+        f"{len(ledger['danglingInvoiceIds'])} distinct `INVOICE_ID`s they point "
+        "at resolving to a header document.",
         "",
         "| # | `LINE_ID` | dangling `INVOICE_ID` | `INVOICE_NO` | amount |",
         "|---|---|---|---|---|",
