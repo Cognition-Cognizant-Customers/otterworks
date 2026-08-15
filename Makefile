@@ -491,7 +491,10 @@ mongo-tp-customers-migrate: ## Migrate CUSTOMER_MASTER + EAV into Atlas (idempot
 	DB_PORT=$(ORACLE_BILLING_DB_PORT) $(MONGO_CUSTOMERS_MIGRATE_UV) $(MONGO_CUSTOMERS_DIR)/migrate.py \
 		$(if $(NS),--ns $(NS),) $(if $(LIMIT),--limit $(LIMIT),) $(if $(DRY_RUN),--dry-run,)
 
-MONGO_CUSTOMERS_RECON_REPORT = docs/tech-partnerships/recon/mongo-customers.md
+# NS=demo writes the committed report; any other namespace gets its own file.
+MONGO_CUSTOMERS_RECON_SUFFIX = $(if $(filter-out demo,$(NS)),-$(NS),)
+MONGO_CUSTOMERS_RECON_REPORT = \
+	docs/tech-partnerships/recon/mongo-customers$(MONGO_CUSTOMERS_RECON_SUFFIX).md
 
 mongo-tp-customers-recon: ## Recon Atlas customers against testdata/legacy/manifests/$(NS).json (REPORT= to write markdown)
 	$(MONGO_CUSTOMERS_UV) $(MONGO_CUSTOMERS_DIR)/recon.py $(if $(NS),--ns $(NS),) \

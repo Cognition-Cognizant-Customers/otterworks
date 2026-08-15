@@ -93,11 +93,16 @@ def anomaly_ledger(db, ns: str) -> dict:
                     .sort("_id", 1))
         ids = sorted({d["custId"] for d in docs})
         fields = sorted({d["field"] for d in docs})
-        # the customer document must still exist and keep the raw value
-        preserved = db[config.CUSTOMERS].count_documents(
-            {"_id": {"$in": ids},
-             "$or": [{f"_quarantine.{f}": {"$exists": True}} for f in fields]}
-        ) if ids else 0
+        # every ledger entry's own customer must still exist and keep that
+        # exact field raw, so the check stays exact when one customer has
+        # several quarantined fields of the same kind
+        quarantined = {
+            doc["_id"]: set(doc.get("_quarantine", {}))
+            for doc in db[config.CUSTOMERS].find({"_id": {"$in": ids}},
+                                                 {"_quarantine": 1})
+        }
+        preserved = sum(1 for d in docs
+                        if d["field"] in quarantined.get(d["custId"], ()))
         ledger[kind] = {"count": len(docs), "fields": fields,
                         "cust_ids": ids, "raw_preserved": preserved}
     return ledger

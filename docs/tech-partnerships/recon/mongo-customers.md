@@ -2,7 +2,7 @@
 
 - Target: `ow_tp_demo.customers` / `ow_tp_demo.customers_quarantine`
 - Source of truth: `testdata/legacy/manifests/demo.json` (generated 2026-08-01T00:00:00Z)
-- Recomputed from Atlas at 2026-08-15T23:03:17Z
+- Recomputed from Atlas at 2026-08-15T23:06:50Z
 - Verdict: **PASS** (11/11 checks)
 
 ## Counts and checksum
