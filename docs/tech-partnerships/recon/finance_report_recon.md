@@ -63,11 +63,16 @@
 - ok: every CSV line has 4 fields (parses as CSV, is not a renamed foreign format)
 - ok: artifact body equals the golden report rows (got [('EUR', 'INVOICE', 22, Decimal('101554.41')), ('EUR', 'CREDIT', 6, Decimal('33375.97')), ('GBP', 'INVOICE', 32, Decimal('183113.58')), ('GBP', 'CREDIT', 5, Decimal('28454.59')), ('USD', 'INVOICE', 28, Decimal('130502.15')), ('USD', 'CREDIT', 7, Decimal('33390.44'))])
 
-### 5. Idempotency: re-running replaces gold rows instead of duplicating — **PASS**
+### 5. Idempotency: replaying summary and delivery statements avoids duplicates — **PASS**
 
-- re-executing the job's 2 summary statements against the serverless warehouse
+- re-executing the job's 2 summary statements and delivery statements against the serverless warehouse
 - `DELETE FROM ow_tp.gold.finance_billing_summary WHERE ns = 'd...` -> [['6']]
 - `INSERT INTO ow_tp.gold.finance_billing_summary (ns, currency...` -> [['6', '6']]
 - ok: still 6 gold rows after the re-run (got 6)
-- ok: counts and totals unchanged by the re-run
-- ok: still one delivery row (before 1, after 1)
+- ok: counts and totals unchanged by the summary re-run
+- re-executing the job's 2 delivery statements using the values already stored in the audit row
+- `DELETE FROM ow_tp.gold.finance_report_delivery WHERE ns = 'd...` -> [['1']]
+- `INSERT INTO ow_tp.gold.finance_report_delivery (ns, report_d...` -> [['1', '1']]
+- ok: still exactly one delivery row after replay (got 1)
+- ok: delivery replay preserves the audit values
+- ok: replayed non-delivery remains undelivered (delivered_at=None)

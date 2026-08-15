@@ -301,16 +301,15 @@ def check_4(ns: str, report_date: str, golden: list[tuple[str, str, int, Decimal
 
 
 def check_5(ns: str, report_date: str) -> Check:
-    check = Check(5, "Idempotency: re-running replaces gold rows instead of duplicating")
-    before = gold_rows(ns, report_date)
-    delivery_before = dbx.sql_scalar(
-        f"""SELECT count(*) FROM {CATALOG}.gold.finance_report_delivery
-            WHERE ns = {sql_literal(ns)} AND report_date = DATE '{report_date}'"""
+    check = Check(
+        5,
+        "Idempotency: replaying summary and delivery statements avoids duplicates",
     )
+    before = gold_rows(ns, report_date)
     statements = pipeline.summary_statements(ns, report_date, CATALOG)
     check.note(
-        f"re-executing the job's {len(statements)} summary statements against the "
-        "serverless warehouse"
+        f"re-executing the job's {len(statements)} summary statements and delivery "
+        "statements against the serverless warehouse"
     )
     for index, statement in enumerate(statements):
         try:
@@ -329,16 +328,60 @@ def check_5(ns: str, report_date: str) -> Check:
             return check
         check.note(f"`{' '.join(statement.split())[:60]}...` -> {result}")
     after = gold_rows(ns, report_date)
-    delivery_after = dbx.sql_scalar(
-        f"""SELECT count(*) FROM {CATALOG}.gold.finance_report_delivery
+    check.expect(len(after) == 6, f"still 6 gold rows after the re-run (got {len(after)})")
+    check.expect(after == before, "counts and totals unchanged by the summary re-run")
+
+    delivery_rows = dbx.sql(
+        f"""SELECT artifact_path, recipient_list, delivery_status
+            FROM {CATALOG}.gold.finance_report_delivery
             WHERE ns = {sql_literal(ns)} AND report_date = DATE '{report_date}'"""
     )
-    check.expect(len(after) == 6, f"still 6 gold rows after the re-run (got {len(after)})")
-    check.expect(after == before, "counts and totals unchanged by the re-run")
-    check.expect(
-        int(delivery_after) == int(delivery_before) == 1,
-        f"still one delivery row (before {delivery_before}, after {delivery_after})",
+    if len(delivery_rows) != 1:
+        check.fail(f"expected exactly one delivery row before replay (got {len(delivery_rows)})")
+        return check
+    artifact_path, recipient_list, delivery_status = delivery_rows[0]
+    delivery_statements = pipeline.delivery_statements(
+        ns, report_date, artifact_path, recipient_list, delivery_status, CATALOG
     )
+    check.note(
+        f"re-executing the job's {len(delivery_statements)} delivery statements using "
+        "the values already stored in the audit row"
+    )
+    for index, statement in enumerate(delivery_statements):
+        try:
+            result = dbx.sql(statement)
+        except Exception as error:  # noqa: BLE001 - reported, never swallowed
+            check.block(statement, str(error), "a reachable serverless warehouse")
+            if index:
+                check.note(
+                    "WARNING: the delivery re-run deleted this run's audit row and did not "
+                    f"reinsert it; re-run the job for ns={ns} report_date={report_date} "
+                    f"to repair {CATALOG}.gold.finance_report_delivery"
+                )
+            return check
+        check.note(f"`{' '.join(statement.split())[:60]}...` -> {result}")
+
+    replayed_rows = dbx.sql(
+        f"""SELECT artifact_path, recipient_list, delivery_status, delivered_at
+            FROM {CATALOG}.gold.finance_report_delivery
+            WHERE ns = {sql_literal(ns)} AND report_date = DATE '{report_date}'"""
+    )
+    if not check.expect(
+        len(replayed_rows) == 1,
+        f"still exactly one delivery row after replay (got {len(replayed_rows)})",
+    ):
+        return check
+    replayed_artifact, replayed_recipients, replayed_status, delivered_at = replayed_rows[0]
+    check.expect(
+        (replayed_artifact, replayed_recipients, replayed_status)
+        == (artifact_path, recipient_list, delivery_status),
+        "delivery replay preserves the audit values",
+    )
+    if delivery_status != pipeline.STATUS_DELIVERED:
+        check.expect(
+            delivered_at is None,
+            f"replayed non-delivery remains undelivered (delivered_at={delivered_at!r})",
+        )
     return check
 
 
