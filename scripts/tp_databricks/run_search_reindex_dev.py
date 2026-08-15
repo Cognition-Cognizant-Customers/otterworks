@@ -5,11 +5,11 @@ The real job (`ow_tp_search_reindex`) is defined as code in
 infrastructure/terraform-databricks/jobs_search_reindex.tf and applied by the parent
 session, which owns the shared Terraform state. This helper builds the same two-task
 serverless pipeline under the throwaway name `ow_tp_dev_search_reindex` so the recon
-evidence comes from a real job run of the real notebooks, then removes it again --
-nothing is left behind in the shared workspace.
+evidence comes from a real job run of the real notebooks, then removes it again on every
+run unless `keep=true` is supplied. Nothing is left behind in the shared workspace by default.
 
 Usage:
-    run_search_reindex_dev.py run [ns=demo] [run_date=...] [simulate_source_failure=true] [tasks=publish_index]
+    run_search_reindex_dev.py run [ns=demo] [run_date=...] [simulate_source_failure=true] [tasks=publish_index] [keep=true]
     run_search_reindex_dev.py deploy          # upload notebooks only
     run_search_reindex_dev.py teardown        # delete the throwaway job
 """
@@ -146,34 +146,55 @@ def main(argv: list[str]) -> int:
         return 2
 
     task_keys = tuple(filter(None, params.pop("tasks", "").split(","))) or None
+    keep = params.pop("keep", "false").lower() == "true"
     ns = params.get("ns", "demo")
     if not re.fullmatch(r"[a-z0-9_]+", ns):
         raise SystemExit(f"ns must match [a-z0-9_]+, got {ns!r}")
     deploy()
-    ensure_job(task_keys)
-    run = dbx.run_job(JOB_NAME, params)
-    state = run.get("state", {})
-    summary = {
-        "job": JOB_NAME,
-        "params": params,
-        "tasks_selected": list(task_keys) if task_keys else "all",
-        "run_id": run.get("run_id"),
-        "result_state": state.get("result_state"),
-        "state_message": state.get("state_message"),
-        "url": run.get("run_page_url"),
-        "serving_counts_at_run_end": serving_snapshot(ns),
-        "snapshot_taken_at": datetime.now(timezone.utc).isoformat(),
-        "tasks": [
-            {
-                "task_key": task.get("task_key"),
-                "result_state": task.get("state", {}).get("result_state"),
-                "state_message": task.get("state", {}).get("state_message"),
-            }
-            for task in run.get("tasks", [])
-        ],
-    }
+    summary = None
+    teardown_error = None
+    try:
+        ensure_job(task_keys)
+        run = dbx.run_job(JOB_NAME, params)
+        state = run.get("state", {})
+        summary = {
+            "job": JOB_NAME,
+            "params": params,
+            "tasks_selected": list(task_keys) if task_keys else "all",
+            "run_id": run.get("run_id"),
+            "result_state": state.get("result_state"),
+            "state_message": state.get("state_message"),
+            "url": run.get("run_page_url"),
+            "serving_counts_at_run_end": serving_snapshot(ns),
+            "snapshot_taken_at": datetime.now(timezone.utc).isoformat(),
+            "tasks": [
+                {
+                    "task_key": task.get("task_key"),
+                    "result_state": task.get("state", {}).get("result_state"),
+                    "state_message": task.get("state", {}).get("state_message"),
+                }
+                for task in run.get("tasks", [])
+            ],
+        }
+    finally:
+        job_torn_down = False
+        if not keep:
+            try:
+                job_torn_down = teardown()
+            except Exception as exc:
+                teardown_error = exc
+                print(f"warning: failed to tear down {JOB_NAME}: {exc}", file=sys.stderr)
+        if summary is not None:
+            summary["job_torn_down"] = job_torn_down
+            if teardown_error is not None:
+                summary["teardown_error"] = str(teardown_error)
+
+    if summary is None:
+        raise RuntimeError("run completed without a summary")
     print(json.dumps(summary, indent=2))
-    return 0 if state.get("result_state") == "SUCCESS" else 1
+    if teardown_error is not None:
+        return 1
+    return 0 if summary["result_state"] == "SUCCESS" else 1
 
 
 if __name__ == "__main__":
