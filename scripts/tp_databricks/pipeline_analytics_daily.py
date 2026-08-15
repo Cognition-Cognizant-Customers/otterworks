@@ -67,6 +67,7 @@ def volume_prefix(ns: str) -> str:
 
 
 def stage_table(catalog: str) -> str:
+    pipeline.validate_identifier(catalog, "catalog")
     return f"{catalog}.{STAGE_TABLE_SUFFIX}"
 
 
@@ -119,6 +120,8 @@ def stage(ns: str, catalog: str) -> dict:
     import base64
     import gzip
 
+    pipeline.validate_ns(ns)
+    pipeline.validate_identifier(catalog, "catalog")
     s3 = _s3_client()
     prefix, keys = _event_objects(ns)
     table = stage_table(catalog)
