@@ -97,6 +97,8 @@ elif mode == "parse":
     for statement in ddl_statements():
         spark.sql(statement)
 
+    run_gate("bronze manifest", gate_statements(ns))
+
     for name, statement in parse_statements(ns):
         spark.sql(statement)
         print(f"done: {name}")
