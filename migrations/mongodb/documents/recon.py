@@ -334,7 +334,7 @@ def main() -> int:
     if args.compare_json:
         try:
             previous = json.loads(Path(args.compare_json).read_text())["atlas"]
-        except (OSError, ValueError, KeyError) as exc:
+        except (OSError, ValueError, TypeError, KeyError) as exc:
             print(f"--compare-json {args.compare_json!r} is not a recon JSON: {exc}",
                   file=sys.stderr)
             return 2
