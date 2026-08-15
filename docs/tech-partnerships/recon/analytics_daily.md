@@ -40,7 +40,7 @@ legacy behaviour being retired, captured at /home/ubuntu/tp-golden/python/analyt
 legacy exit code on a zero-event extract: baseline='0' = converted='0'
 unreachable source: run failed as required (DatabricksError: statement failed (FAILED): [TABLE_OR_VIEW_NOT_FOUND] The table or view `ow_tp`.`bronze`.`analytics_daily_stage_missing` cannot be found. Verify the spelling and correctness of the schema and catalog.
 )
-empty source: run failed as required (ZeroEventExtract: extract produced 0 events for ns=recon_probe_demo from ow_tp.bronze.analytics_daily_stage; failing the run instead of writing an empty summary)
+empty source: run failed as required (ZeroEventExtract: extract produced 0 events for ns=recon_probe_demo from ow_tp.bronze.analytics_daily_stage; failing before replacing the bronze slice)
 gold rows written for the failed probe ns recon_probe_demo: baseline=0 = converted=0
 ```
 

@@ -378,7 +378,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     pipeline.validate_ns(args.ns)
     pipeline.validate_identifier(args.catalog, "catalog")
-    dbx.CATALOG = args.catalog
+    os.environ["OW_TP_CATALOG"] = args.catalog
+    dbx.CATALOG = dbx._catalog()
 
     source_table = None if args.from_volume else runner.stage_table(args.catalog)
     transport = args.transport or (
