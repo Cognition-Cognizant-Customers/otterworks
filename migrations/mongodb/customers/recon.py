@@ -30,9 +30,13 @@ EAV_TARGET = "oracle.OW_BILLING.ENTITY_ATTR_VALUE"
 # Attribute accounting the contract fixes for NS=demo: the seeded EAV rows are
 # not unique per (ENTITY_ID, ATTR_NAME), so name-keyed `attributes` cannot hold
 # all 8,333 rows — folded keys + preserved conflicts must account for them.
+# Keyed by (namespace, seeded scale): the fold totals follow the seeded row
+# count (`n_eav = n_cust // 3`), so they are only valid for the scale they were
+# captured at. The scale-free invariant (folded keys + conflicts == manifest EAV
+# rows) is always checked.
 EXPECTED_EAV = {
-    "demo": {"source_rows": 8333, "folded_keys": 8141, "conflicts": 192,
-             "customers_with_attributes": 7075},
+    ("demo", "demo"): {"folded_keys": 8141, "conflicts": 192,
+                       "customers_with_attributes": 7075},
 }
 
 ID_SAMPLE = 10
@@ -123,7 +127,9 @@ def reconcile(db, ns: str, manifest: dict) -> dict:
     expected_customers = targets[CUSTOMER_TARGET]["rows"]
     expected_checksum = targets[CUSTOMER_TARGET]["checksum"]
     expected_eav_rows = targets[EAV_TARGET]["rows"]
-    expected_eav = dict(EXPECTED_EAV.get(ns, {}))
+    scale = (manifest.get("seed_legacy_params", {})
+             .get(EAV_TARGET, {}).get("scale"))
+    expected_eav = dict(EXPECTED_EAV.get((ns, scale), {}))
     expected_eav["source_rows"] = expected_eav_rows
     planted = {a["kind"]: a for a in manifest["planted_anomalies"]
                if a["target"].startswith(CUSTOMER_TARGET)}
@@ -145,6 +151,9 @@ def reconcile(db, ns: str, manifest: dict) -> dict:
             _check(checks, f"EAV {key.replace('_', ' ')}",
                    expected_eav[key], attributes[key],
                    "recomputed from attributes + legacy.attributeConflicts")
+    if len(expected_eav) == 1:
+        print(f"[recon] no pinned fold totals for ns={ns} scale={scale}: "
+              f"checking the source-row invariant only", file=sys.stderr)
     _check(checks, "quarantine ledger documents",
            sum(a["count"] for a in planted.values()),
            db[config.QUARANTINE].count_documents({"_migration.ns": ns}),

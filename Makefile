@@ -559,5 +559,6 @@ MONGO_CUSTOMERS_RECON_REPORT = \
 	docs/tech-partnerships/recon/mongo-customers$(MONGO_CUSTOMERS_RECON_SUFFIX).md
 
 mongo-tp-customers-recon: ## Recon Atlas customers against testdata/legacy/manifests/$(NS).json (REPORT= to write markdown)
+	$(if $(NS),$(call validate_ns),)
 	$(MONGO_CUSTOMERS_UV) $(MONGO_CUSTOMERS_DIR)/recon.py $(if $(NS),--ns $(NS),) \
 		--report $(if $(REPORT),$(REPORT),$(MONGO_CUSTOMERS_RECON_REPORT))
