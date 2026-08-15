@@ -32,7 +32,6 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-GOLDEN = Path("/home/ubuntu/tp-golden/python/storage_cleanup_daily")
 DDL_FILE = REPO / "databricks" / "ddl" / "storage_cleanup_daily.sql"
 NOTEBOOK = REPO / "databricks" / "notebooks" / "storage_cleanup_daily.py"
 TIER_PHRASE = "baseline: legacy output"
@@ -41,6 +40,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dbx  # noqa: E402
 import extract_storage_cleanup as extract  # noqa: E402
 import fixture_storage_cleanup as fixture_builder  # noqa: E402
+
+GOLDEN = fixture_builder.GOLDEN_ROOT
 
 
 def _load_notebook():
@@ -144,14 +145,15 @@ def capture_golden(ns: str) -> None:
 
     s3 = extract._client("s3")
     quarantine = "otterworks-file-quarantine"
-    prefix = f"quarantined/{date.today().isoformat()}/"
+    capture_date = datetime.now(tz=timezone.utc).date().isoformat()
+    prefix = f"quarantined/{capture_date}/"
     keys = []
     for page in s3.get_paginator("list_objects_v2").paginate(Bucket=quarantine, Prefix=prefix):
         for obj in page.get("Contents", []):
             keys.append(obj["Key"][len(prefix) :])
     (GOLDEN / "quarantined_keys.txt").write_text("\n".join(sorted(keys)) + "\n")
 
-    report_key = f"reports/storage-cleanup/{date.today().isoformat()}/report.json"
+    report_key = f"reports/storage-cleanup/{capture_date}/report.json"
     body = s3.get_object(Bucket="otterworks-data-lake", Key=report_key)["Body"].read()
     (GOLDEN / "legacy_report.json").write_bytes(body)
 
@@ -323,8 +325,9 @@ def _reload(ns: str, scenario: str, metadata_limit: int | None):
     namespace, so it restores the same orphan set the golden run acted on.
     """
     fixture_builder.build(ns)
+    objects = extract.list_objects(extract.FILE_STORAGE_BUCKET, ns)
     metadata, complete, claimed_elsewhere = extract.scan_metadata(ns, metadata_limit)
-    objects = extract.list_objects(extract.FILE_STORAGE_BUCKET, ns, claimed_elsewhere)
+    objects = extract.filter_claimed_elsewhere(objects, claimed_elsewhere)
     manifest = {
         "extracted_at": datetime.now(tz=timezone.utc).isoformat(),
         "source_bucket": extract.FILE_STORAGE_BUCKET,
