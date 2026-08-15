@@ -27,7 +27,15 @@ Every statement is scoped to (`ns`, `scenario`) and deletes its own slice before
 writing it, so re-running is idempotent instead of additive.
 """
 
+import re
+
 CATALOG = "ow_tp"
+
+# Parameters reach the SQL as literals, so they are constrained rather than
+# escaped: anything that is not a plain namespace/scenario token or an ISO date
+# is rejected before a statement is built.
+_TOKEN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 DDL_SQL = """
 CREATE TABLE IF NOT EXISTS {catalog}.bronze.storage_objects_raw (
@@ -93,17 +101,18 @@ CREATE TABLE IF NOT EXISTS {catalog}.gold.storage_cleanup_savings (
 # failed read, not a bucket full of orphans.
 _GUARD_CTE = """
 guard AS (
-  SELECT (m.metadata_read_complete
-          AND l.metadata_rows = m.metadata_expected
-          AND l.metadata_rows > 0) AS metadata_read_ok
+  SELECT COALESCE(m.metadata_read_complete
+                  AND l.metadata_rows = m.metadata_expected
+                  AND l.metadata_rows > 0, false) AS metadata_read_ok
   FROM (
-    -- Exactly one row, even if a concurrent extract left more than one behind:
-    -- the guard must never fan the orphan set out by joining against two.
-    SELECT metadata_read_complete, metadata_expected
+    -- Aggregates, so this is exactly one row whatever the manifest holds: two
+    -- rows would fan the orphan set out, zero rows would make the whole
+    -- pipeline silently write nothing. No manifest at all means no verified
+    -- read, which COALESCE turns into metadata_read_ok = false.
+    SELECT max_by(metadata_read_complete, loaded_at) AS metadata_read_complete,
+           max_by(metadata_expected, loaded_at)      AS metadata_expected
     FROM {catalog}.bronze.storage_extract_manifest
     WHERE ns = '{ns}'
-    ORDER BY loaded_at DESC
-    LIMIT 1
   ) m
   CROSS JOIN (
     SELECT COUNT(*) AS metadata_rows
@@ -170,6 +179,12 @@ def _split(sql: str) -> list:
     return [part.strip() for part in sql.split("-- @statement") if part.strip()]
 
 
+def _checked(label: str, value: str, pattern=_TOKEN) -> str:
+    if not pattern.match(value or ""):
+        raise ValueError(f"invalid {label}: {value!r}")
+    return value
+
+
 def ddl_statements(catalog: str = CATALOG) -> list:
     """Idempotent CREATE TABLE statements for this unit's tables."""
     return _split(DDL_SQL.format(catalog=catalog))
@@ -183,6 +198,10 @@ def pipeline_statements(
     catalog: str = CATALOG,
 ) -> list:
     """The set-based orphan detection + savings report, for one namespace slice."""
+    ns = _checked("ns", ns)
+    scenario = _checked("scenario", scenario)
+    catalog = _checked("catalog", catalog)
+    run_date = _checked("run_date", run_date, _ISO_DATE)
     guard_cte = _GUARD_CTE.format(catalog=catalog, ns=ns).strip().rstrip(",")
     sql = PIPELINE_SQL.format(
         catalog=catalog,
@@ -216,10 +235,14 @@ if _in_databricks():  # pragma: no cover -- exercised by the job, not locally
         dbutils.widgets.text(_name, _default)  # noqa: F821
 
     stage = dbutils.widgets.get("stage")  # noqa: F821
-    ns = dbutils.widgets.get("ns")  # noqa: F821
-    scenario = dbutils.widgets.get("scenario") or "nominal"
+    ns = _checked("ns", dbutils.widgets.get("ns"))  # noqa: F821
+    scenario = _checked("scenario", dbutils.widgets.get("scenario") or "nominal")  # noqa: F821
     dry_run = dbutils.widgets.get("dry_run").strip().lower() != "false"  # noqa: F821
-    run_date = dbutils.widgets.get("run_date") or datetime.date.today().isoformat()  # noqa: F821
+    run_date = _checked(  # noqa: F821
+        "run_date",
+        dbutils.widgets.get("run_date") or datetime.date.today().isoformat(),  # noqa: F821
+        _ISO_DATE,
+    )
 
     statements = (
         ddl_statements()

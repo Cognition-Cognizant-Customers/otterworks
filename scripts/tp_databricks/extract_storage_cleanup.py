@@ -40,6 +40,7 @@ ENDPOINT = os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4566")
 REGION = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 DYNAMO_TABLE = "otterworks-file-metadata"
 FILE_STORAGE_BUCKET = "otterworks-file-storage"
+LEGACY_PREFIX = "files/"  # the un-namespaced prefix the legacy script hardcodes
 OUT_ROOT = Path(os.environ.get("TP_EXTRACT_ROOT", "/tmp/ow_tp_extracts"))
 
 
@@ -53,26 +54,28 @@ def _client(service: str):
     )
 
 
-def list_objects(bucket: str) -> list[dict]:
-    """Full object inventory -- no hardcoded prefix filter.
+def list_objects(bucket: str, ns: str) -> list[dict]:
+    """Inventory of everything this namespace owns, under every prefix it uses.
 
-    The legacy script listed only `files/`, so anything stored under another
-    prefix was invisible to it: not reported, never reconciled.
+    Two prefixes, no more: `<ns>/` (namespaced keys, the tenancy boundary in the
+    shared bucket) and the un-namespaced `files/` the legacy script hardcodes.
+    Wider than the legacy walk, which saw only `files/` and never reconciled
+    anything stored elsewhere -- but never wider than the namespace, because an
+    object listed here without a metadata row in *this* namespace is classified
+    as an orphan, and a false positive is a deleted customer file.
     """
     s3 = _client("s3")
-    objects = []
-    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket):
-        for obj in page.get("Contents", []):
-            objects.append(
-                {
+    by_key: dict[str, dict] = {}
+    for prefix in (f"{ns}/", LEGACY_PREFIX):
+        for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                by_key[obj["Key"]] = {
                     "bucket": bucket,
                     "key": obj["Key"],
                     "size_bytes": obj["Size"],
                     "last_modified": obj["LastModified"].astimezone(timezone.utc).isoformat(),
                 }
-            )
-    objects.sort(key=lambda o: o["key"])
-    return objects
+    return [by_key[key] for key in sorted(by_key)]
 
 
 def scan_metadata(ns: str, limit: int | None = None) -> tuple[list[dict], bool]:
@@ -230,7 +233,7 @@ def main(argv: list[str]) -> int:
     )
     args = parser.parse_args(argv)
 
-    objects = list_objects(args.bucket)
+    objects = list_objects(args.bucket, args.ns)
     metadata, complete = scan_metadata(args.ns, args.metadata_limit)
 
     out_dir = OUT_ROOT / args.ns / args.input_dir

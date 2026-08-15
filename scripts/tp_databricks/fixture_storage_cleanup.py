@@ -123,9 +123,10 @@ def ensure_bucket(s3, bucket: str) -> None:
         s3.create_bucket(Bucket=bucket)
 
 
-def empty_bucket(s3, bucket: str) -> int:
+def empty_prefix(s3, bucket: str, prefix: str) -> int:
+    """Delete only what this fixture owns -- the buckets are shared per namespace."""
     deleted = 0
-    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket):
+    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix):
         keys = [{"Key": o["Key"]} for o in page.get("Contents", [])]
         if keys:
             s3.delete_objects(Bucket=bucket, Delete={"Objects": keys})
@@ -137,7 +138,16 @@ def build(ns: str) -> dict:
     s3 = _client("s3")
     for bucket in (FILE_STORAGE_BUCKET, QUARANTINE_BUCKET):
         ensure_bucket(s3, bucket)
-    removed = sum(empty_bucket(s3, b) for b in (FILE_STORAGE_BUCKET, QUARANTINE_BUCKET))
+    # `<ns>/` covers the live keys and the quarantine bucket's namespaced copies;
+    # the planted orphans are deleted by exact key, since they sit under the
+    # un-namespaced `files/` prefix another namespace may also be using.
+    removed = sum(
+        empty_prefix(s3, bucket, f"{ns}/") for bucket in (FILE_STORAGE_BUCKET, QUARANTINE_BUCKET)
+    )
+    stale = [{"Key": o["key"]} for o in planted_orphans(ns)]
+    for bucket in (FILE_STORAGE_BUCKET, QUARANTINE_BUCKET):
+        s3.delete_objects(Bucket=bucket, Delete={"Objects": stale})
+        removed += len(stale)
 
     items = scan_metadata(ns)
     live_keys = sorted({i["storage_key"] for i in items if "/files/" in i["storage_key"]})
