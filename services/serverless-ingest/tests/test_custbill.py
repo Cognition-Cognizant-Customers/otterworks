@@ -101,6 +101,20 @@ def test_amount_coercion_matches_mawk_prefix_rules() -> None:
         assert custbill.parse_line(_record(amount=amount))[3] == expected
 
 
+def test_amount_coercion_normalizes_exact_negative_zero_only() -> None:
+    cases = {
+        "-00000000000": "0.00",
+        "-0.0": "0.00",
+        "-0e5": "0.00",
+        "-0x0": "0.00",
+        "-0.004": "-0.00",
+        "-00000000004": "-0.04",
+    }
+
+    for amount, expected in cases.items():
+        assert custbill.parse_line(_record(amount=amount))[3] == expected
+
+
 def test_amount_leading_blanks_follow_c_locale_not_python_isspace() -> None:
     """strtod skips only ' \\t\\n\\v\\f\\r'; latin-1 blanks like \\xa0 make the amount 0.00."""
     for blank in (" ", "\t", "\v", "\f", "\r"):

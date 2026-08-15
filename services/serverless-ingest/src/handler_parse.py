@@ -5,7 +5,7 @@ from __future__ import annotations
 import boto3
 
 from custbill import parse_body, parse_records, trailer_count
-from pipeline import env, namespace_from_key, parsed_key
+from pipeline import LANDING_PREFIX, env, parsed_key
 
 s3 = boto3.client("s3")
 billing_table = None
@@ -14,6 +14,15 @@ billing_table = None
 def _validate_segment(value: str, label: str) -> None:
     if not value or "/" in value or value in {".", ".."}:
         raise ValueError(f"{label} must be a single path segment")
+
+
+def _source_namespace(key: str) -> str:
+    parts = key.split("/")
+    if len(parts) != 3 or parts[0] != LANDING_PREFIX:
+        raise ValueError("key must be a landing object path")
+    _validate_segment(parts[1], "key namespace")
+    _validate_segment(parts[2], "key filename")
+    return parts[1]
 
 
 def _get_billing_table():
@@ -25,7 +34,11 @@ def _get_billing_table():
 
 def handler(event: dict, context: object) -> dict[str, object]:
     key = event["key"]
-    ns = event.get("ns") or namespace_from_key(key)
+    key_ns = _source_namespace(key)
+    provided_ns = event.get("ns")
+    ns = provided_ns or key_ns
+    if provided_ns and provided_ns != key_ns:
+        raise ValueError("event namespace does not match key namespace")
     filename = event["filename"]
     _validate_segment(ns, "namespace")
     _validate_segment(filename, "filename")

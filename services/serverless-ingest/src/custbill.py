@@ -25,8 +25,10 @@ def _awk_number(value: str) -> float:
     token = match.group(0)
     try:
         if token.lower().lstrip("+-").startswith("0x"):
-            return float.fromhex(token)
-        return float(token)
+            number = float.fromhex(token)
+        else:
+            number = float(token)
+        return 0.0 if number == 0 else number
     except ValueError:
         return 0.0
 

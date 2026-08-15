@@ -101,6 +101,41 @@ def test_handler_rejects_namespace_path_traversal_before_writes(monkeypatch) -> 
     assert table.items == []
 
 
+@pytest.mark.parametrize(
+    "key",
+    [
+        "parsed/other/x.psv",
+        "landing/demo",
+        "landing/demo/file.dat/extra",
+        "landing/../file.dat",
+    ],
+)
+def test_handler_rejects_invalid_source_keys_before_writes(
+    monkeypatch, key: str
+) -> None:
+    payload, s3, table = setup_handler(monkeypatch, key=key)
+
+    with pytest.raises(ValueError):
+        handler_parse.handler(payload, None)
+
+    assert s3.puts == []
+    assert table.items == []
+
+
+def test_handler_rejects_namespace_mismatch_before_writes(monkeypatch) -> None:
+    payload, s3, table = setup_handler(
+        monkeypatch,
+        ns="demo",
+        key="landing/other/CUSTBILL_SAMPLE_001.dat",
+    )
+
+    with pytest.raises(ValueError):
+        handler_parse.handler(payload, None)
+
+    assert s3.puts == []
+    assert table.items == []
+
+
 def test_handler_uses_normal_namespace_and_filename_segments_unchanged(
     monkeypatch,
 ) -> None:
