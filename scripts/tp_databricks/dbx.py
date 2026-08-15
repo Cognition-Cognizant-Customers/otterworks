@@ -157,7 +157,7 @@ def _list_jobs(name: str | None = None) -> list[dict]:
         query = urllib.parse.urlencode(params)
         result = request("GET", f"/api/2.2/jobs/list?{query}")
         jobs.extend(result.get("jobs", []))
-        if not result.get("has_more") or not result.get("next_page_token"):
+        if not result.get("next_page_token"):
             return jobs
         page_token = result["next_page_token"]
 
