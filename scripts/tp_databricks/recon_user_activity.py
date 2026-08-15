@@ -85,6 +85,9 @@ WHERE ns = '{ns}' AND report_date = DATE'{report_date}'
 
 
 FIELDS = ("events", "active_days", "documents_touched", "files_touched")
+# etl/scripts/user_activity_daily.py ships `"user_summaries": user_list[:500]`, so the
+# captured JSONL is the busiest 500 users, not the population.
+LEGACY_SUMMARY_CAP = 500
 
 
 def table_exists(qualified: str) -> bool:
@@ -93,20 +96,66 @@ def table_exists(qualified: str) -> bool:
     return bool(rows)
 
 
-def check_per_user(legacy: dict[str, dict], converted: dict[str, dict]) -> dict:
-    """Check 1: row-for-row parity on user_id x report_date, exact counts."""
-    missing = sorted(set(legacy) - set(converted))
-    extra = sorted(set(converted) - set(legacy))
+def check_per_user(legacy: dict[str, dict], converted: dict[str, dict],
+                   legacy_total_users: int) -> dict:
+    """Check 1: row-for-row parity on user_id x report_date, exact counts.
+
+    The legacy artefact is capped: the script writes only `user_list[:500]` to
+    `user_summaries.jsonl` while reporting the true population in
+    `trends.peak_active_users`. Comparing an uncapped converted side against a capped
+    baseline would fail a correct conversion of any namespace above the cap, so the
+    truncation is detected from the legacy report itself and the comparison is confined
+    to the same top-N ranking the artefact represents, stated in the result rather than
+    applied silently. Nothing is loosened: inside that scope every field is still exact,
+    and if rank N is a tie the converted top-N is not well defined, so the check reports
+    blocked instead of guessing which users the baseline kept.
+    """
+    truncated = len(legacy) < int(legacy_total_users)
+    ranked_converted = sorted(converted.items(), key=lambda kv: (-kv[1]["events"], kv[0]))
+    coverage = {
+        "legacy_users_in_baseline": len(legacy),
+        "legacy_total_users_reported": int(legacy_total_users),
+        "legacy_artefact_truncated": truncated,
+        "comparison_scope": (
+            f"top {len(legacy)} users by events (the legacy artefact's cap of"
+            f" {LEGACY_SUMMARY_CAP})"
+            if truncated
+            else "every user on both sides"
+        ),
+    }
+    if truncated:
+        boundary = ranked_converted[len(legacy) - 1][1]["events"]
+        beyond = ranked_converted[len(legacy):]
+        if beyond and beyond[0][1]["events"] == boundary:
+            return {
+                "name": "1. Per-user parity (user_id x report_date, exact counts)",
+                "passed": False,
+                "blocked": (
+                    f"the legacy artefact is capped at {len(legacy)} of"
+                    f" {legacy_total_users} users and rank {len(legacy)} is a tie at"
+                    f" {boundary} events, so which users the baseline kept is not"
+                    " recoverable: parity cannot be asserted for this namespace without"
+                    " an uncapped legacy artefact."
+                ),
+                "coverage": coverage,
+            }
+        compared = dict(ranked_converted[: len(legacy)])
+    else:
+        compared = converted
+
+    missing = sorted(set(legacy) - set(compared))
+    extra = sorted(set(compared) - set(legacy))
     mismatches = []
-    for user_id in sorted(set(legacy) & set(converted)):
+    for user_id in sorted(set(legacy) & set(compared)):
         diffs = {
-            field: (legacy[user_id][field], converted[user_id][field])
+            field: (legacy[user_id][field], compared[user_id][field])
             for field in FIELDS
-            if legacy[user_id][field] != converted[user_id][field]
+            if legacy[user_id][field] != compared[user_id][field]
         }
         if diffs:
             mismatches.append({"user_id": user_id, "diffs": diffs})
     ranked = sorted(legacy.items(), key=lambda kv: -kv[1]["events"])
+    tail_band = "long tail" if not truncated else f"baseline tail (rank <= {len(legacy)})"
     sample = [
         {"user_id": uid, "band": band, "legacy_events": vals["events"],
          "converted_events": converted.get(uid, {}).get("events"),
@@ -115,7 +164,7 @@ def check_per_user(legacy: dict[str, dict], converted: dict[str, dict]) -> dict:
         # A head sample would hide the tail: the seeded ownership is a power law, so
         # the three biggest and the three smallest owners are both shown.
         for band, (uid, vals) in (
-            [("whale", kv) for kv in ranked[:3]] + [("long tail", kv) for kv in ranked[-3:]]
+            [("whale", kv) for kv in ranked[:3]] + [(tail_band, kv) for kv in ranked[-3:]]
         )
     ]
     return {
@@ -123,6 +172,7 @@ def check_per_user(legacy: dict[str, dict], converted: dict[str, dict]) -> dict:
         "passed": not missing and not extra and not mismatches,
         "legacy_users": len(legacy),
         "converted_users": len(converted),
+        "coverage": coverage,
         "missing_users": missing,
         "unexpected_users": extra,
         "mismatches": mismatches,
@@ -132,7 +182,13 @@ def check_per_user(legacy: dict[str, dict], converted: dict[str, dict]) -> dict:
 
 def check_totals(legacy_rpt: dict, legacy: dict[str, dict], converted: dict[str, dict],
                  ns: str, catalog: str, report_date: str, lookback_days: str) -> dict:
-    """Check 2: per-user sums cross-foot to the upstream aggregate totals."""
+    """Check 2: per-user sums cross-foot to the upstream aggregate totals.
+
+    When the legacy per-user artefact is capped (see `check_per_user`) its subtotal is a
+    subset by construction and is reported as such instead of being cross-footed against
+    the full totals; the legacy report's own `trends.total_events` is uncapped and stays
+    the authoritative legacy side, so nothing is compared against the conversion itself.
+    """
     upstream_total = dbx.sql(
         f"""
 SELECT CAST(SUM(total_events) AS BIGINT)
@@ -144,16 +200,24 @@ WHERE ns = '{ns}' AND report_date BETWEEN DATE'{report_date}' - INTERVAL {lookba
     legacy_sum = sum(v["events"] for v in legacy.values())
     converted_sum = sum(v["events"] for v in converted.values())
     trend_total = int(legacy_rpt["trends"]["total_events"])
+    truncated = len(legacy) < int(legacy_rpt["trends"]["peak_active_users"])
     values = {
-        "legacy per-user sum": legacy_sum,
         "converted per-user sum": converted_sum,
         "legacy report trends.total_events": trend_total,
         "upstream aggregate SUM(total_events)": int(upstream_total),
     }
+    if truncated:
+        extra = {
+            f"legacy per-user sum (capped at {len(legacy)} users, subset by construction)":
+                legacy_sum
+        }
+    else:
+        values["legacy per-user sum"] = legacy_sum
+        extra = {}
     return {
         "name": "2. Totals cross-foot (no rows lost or invented)",
         "passed": len(set(values.values())) == 1,
-        "values": values,
+        "values": {**values, **extra},
     }
 
 
@@ -417,7 +481,7 @@ def main(argv: list[str] | None = None) -> int:
     converted = converted_users(args.ns, args.catalog, report_date)
 
     checks = [
-        check_per_user(legacy, converted),
+        check_per_user(legacy, converted, rpt["trends"]["peak_active_users"]),
         check_totals(rpt, legacy, converted, args.ns, args.catalog, report_date, lookback_days),
         check_freshness(args.ns, args.catalog, report_date, lookback_days),
         check_idempotency(args.ns, args.catalog, report_date, lookback_days),

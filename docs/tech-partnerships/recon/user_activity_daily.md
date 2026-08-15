@@ -74,6 +74,12 @@ run — see check 3.
 {
   "legacy_users": 50,
   "converted_users": 50,
+  "coverage": {
+    "legacy_users_in_baseline": 50,
+    "legacy_total_users_reported": 50,
+    "legacy_artefact_truncated": false,
+    "comparison_scope": "every user on both sides"
+  },
   "missing_users": [],
   "unexpected_users": [],
   "mismatches": [],
@@ -135,10 +141,10 @@ run — see check 3.
 ```json
 {
   "values": {
-    "legacy per-user sum": 5147,
     "converted per-user sum": 5147,
     "legacy report trends.total_events": 5147,
-    "upstream aggregate SUM(total_events)": 5147
+    "upstream aggregate SUM(total_events)": 5147,
+    "legacy per-user sum": 5147
   }
 }
 ```
