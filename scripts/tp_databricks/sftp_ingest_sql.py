@@ -37,9 +37,14 @@ DDL_FILE = (
     / "sftp_ingest_bronze_tables.sql"
 )
 
+DEFAULT_LANDING_ROOT = "/Volumes/ow_tp/bronze/landing"
+
 _NS_RE = re.compile(r"^[a-z0-9][a-z0-9_]{0,30}$")
 _CATALOG_RE = re.compile(r"^ow_tp[a-z0-9_]*$")
-_ROOT_RE = re.compile(r"^/[A-Za-z0-9_./-]+$")
+# A Unity Catalog volume path under an ow_tp* catalog, and nothing else. No `.`
+# anywhere, so `/Volumes/ow_tp/bronze/landing/../../other_catalog/...` cannot pass
+# the gate and read another demo's volume — an absolute-path check alone would.
+_ROOT_RE = re.compile(r"^/Volumes/ow_tp[a-z0-9_]*(/[A-Za-z0-9_-]+)+$")
 
 
 def _validated(ns: str, catalog: str, landing_root: str) -> tuple[str, str, str]:
@@ -53,8 +58,10 @@ def _validated(ns: str, catalog: str, landing_root: str) -> tuple[str, str, str]
         raise ValueError(f"ns {ns!r} must match {_NS_RE.pattern}")
     if not _CATALOG_RE.match(catalog):
         raise ValueError(f"catalog {catalog!r} must match {_CATALOG_RE.pattern} (shared workspace)")
-    if not _ROOT_RE.match(landing_root):
-        raise ValueError(f"landing_root {landing_root!r} must be an absolute path matching {_ROOT_RE.pattern}")
+    if not _ROOT_RE.match(landing_root.rstrip("/")):
+        raise ValueError(
+            f"landing_root {landing_root!r} must be an ow_tp volume path matching {_ROOT_RE.pattern}"
+        )
     return ns, catalog, landing_root.rstrip("/")
 
 
@@ -180,7 +187,7 @@ VALUES (s.ns, s.file_name, s.size_bytes, s.sha256, s.record_count, s.ingested_at
 
 def ddl_statements(catalog: str) -> list[str]:
     """The bronze DDL, read from the same .sql file the job's SQL task runs."""
-    _, catalog, _ = _validated("demo", catalog, "/Volumes")
+    _, catalog, _ = _validated("demo", catalog, DEFAULT_LANDING_ROOT)
     text = DDL_FILE.read_text()
     text = text.replace(":catalog || '.", f"'{catalog}.")  # bind :catalog for direct execution
     return [s.strip() for s in text.split(";") if s.strip() and not _only_comments(s)]
@@ -234,7 +241,7 @@ def _main(argv: list[str]) -> int:
     parser.add_argument("command", choices=["print", "run"])
     parser.add_argument("--ns", default="demo")
     parser.add_argument("--catalog", default="ow_tp")
-    parser.add_argument("--landing-root", default="/Volumes/ow_tp/bronze/landing")
+    parser.add_argument("--landing-root", default=DEFAULT_LANDING_ROOT)
     args = parser.parse_args(argv)
 
     if args.command == "print":
