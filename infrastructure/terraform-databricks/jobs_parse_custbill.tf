@@ -34,6 +34,11 @@ resource "databricks_job" "parse_custbill" {
     default = "demo"
   }
 
+  parameter {
+    name    = "catalog"
+    default = var.catalog_name
+  }
+
   # Demo state is per run and per namespace: the namespace is a run parameter,
   # not a property of the job, so it is deliberately not a tag.
   tags = {
@@ -70,8 +75,9 @@ resource "databricks_job" "parse_custbill" {
     notebook_task {
       notebook_path = "${databricks_directory.pipelines.path}/parse_custbill_fixedwidth"
       base_parameters = {
-        ns   = "{{job.parameters.ns}}"
-        mode = "gate"
+        ns      = "{{job.parameters.ns}}"
+        catalog = "{{job.parameters.catalog}}"
+        mode    = "gate"
       }
     }
   }
@@ -89,8 +95,9 @@ resource "databricks_job" "parse_custbill" {
     notebook_task {
       notebook_path = "${databricks_directory.pipelines.path}/parse_custbill_fixedwidth"
       base_parameters = {
-        ns   = "{{job.parameters.ns}}"
-        mode = "parse"
+        ns      = "{{job.parameters.ns}}"
+        catalog = "{{job.parameters.catalog}}"
+        mode    = "parse"
       }
     }
   }
