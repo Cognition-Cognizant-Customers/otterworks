@@ -93,16 +93,55 @@ def _event_objects(ns: str) -> tuple[str, list[str]]:
     return prefix, sorted(keys)
 
 
-def land(ns: str, catalog: str) -> dict:
-    """Replace the namespace's landing slice with the legacy event objects and DDL."""
-    s3 = _s3_client()
-    prefix, keys = _event_objects(ns)
-    events_path = f"/Volumes/{catalog}/bronze/landing/{volume_prefix(ns)}/events"
+def _clear_landing_events(events_path: str) -> None:
+    """Delete the existing Files API tree below an events directory."""
+    try:
+        listing = dbx.request("GET", f"/api/2.0/fs/directories{urllib.parse.quote(events_path)}")
+    except dbx.DatabricksError as exc:
+        if exc.status == 404:
+            return
+        raise
+
+    entries = listing.get("contents", [])
+    while True:
+        for entry in entries:
+            path = entry["path"]
+            if entry.get("is_directory", entry.get("is_dir", False)):
+                _clear_landing_events(path)
+                try:
+                    dbx.request("DELETE", f"/api/2.0/fs/directories{urllib.parse.quote(path)}")
+                except dbx.DatabricksError as exc:
+                    if exc.status != 404:
+                        raise
+            else:
+                try:
+                    dbx.request("DELETE", f"/api/2.0/fs/files{urllib.parse.quote(path)}")
+                except dbx.DatabricksError as exc:
+                    if exc.status != 404:
+                        raise
+        token = listing.get("next_page_token")
+        if not token:
+            break
+        listing = dbx.request(
+            "GET",
+            f"/api/2.0/fs/directories{urllib.parse.quote(events_path)}"
+            f"?page_token={urllib.parse.quote(token)}",
+        )
+        entries = listing.get("contents", [])
+
     try:
         dbx.request("DELETE", f"/api/2.0/fs/directories{urllib.parse.quote(events_path)}")
     except dbx.DatabricksError as exc:
         if exc.status != 404:
             raise
+
+
+def land(ns: str, catalog: str) -> dict:
+    """Replace the namespace's landing slice with the legacy event objects and DDL."""
+    s3 = _s3_client()
+    prefix, keys = _event_objects(ns)
+    events_path = f"/Volumes/{catalog}/bronze/landing/{volume_prefix(ns)}/events"
+    _clear_landing_events(events_path)
 
     landed, total_bytes = 0, 0
     with tempfile.TemporaryDirectory() as scratch:
