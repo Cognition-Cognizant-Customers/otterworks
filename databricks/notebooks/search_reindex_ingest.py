@@ -21,27 +21,30 @@ from functools import reduce
 from pyspark.sql import functions as F
 from pyspark.sql.types import StringType, StructField, StructType
 
-CATALOG = "ow_tp"
-BRONZE_TABLE = f"{CATALOG}.bronze.search_documents_raw"
-LANDING_ROOT = f"/Volumes/{CATALOG}/bronze/landing"
 FILES = {"document": "documents.ndjson", "file": "files.ndjson"}
 
 dbutils.widgets.text("ns", "demo")
+dbutils.widgets.text("catalog", "ow_tp")
 dbutils.widgets.text("landing_prefix", "search_reindex")
 dbutils.widgets.text("simulate_source_failure", "false")
 
 ns = dbutils.widgets.get("ns").strip()
+catalog = dbutils.widgets.get("catalog").strip()
 landing_prefix = dbutils.widgets.get("landing_prefix").strip().strip("/")
 simulate_source_failure = dbutils.widgets.get("simulate_source_failure").strip().lower() == "true"
 
 if not re.fullmatch(r"[a-z0-9_]+", ns):
     raise ValueError(f"ns must match [a-z0-9_]+, got {ns!r}")
+if not re.fullmatch(r"ow_tp[a-z0-9_]*", catalog):
+    raise ValueError(f"catalog must match ow_tp[a-z0-9_]*, got {catalog!r}")
 if not re.fullmatch(r"[a-z0-9_-]+(/[a-z0-9_-]+)*", landing_prefix):
     raise ValueError(
         "landing_prefix must match [a-z0-9_-]+(/[a-z0-9_-]+)*, "
         f"got {landing_prefix!r}"
     )
 
+BRONZE_TABLE = f"{catalog}.bronze.search_documents_raw"
+LANDING_ROOT = f"/Volumes/{catalog}/bronze/landing"
 landing_dir = f"{LANDING_ROOT}/{ns}/{landing_prefix}"
 
 
