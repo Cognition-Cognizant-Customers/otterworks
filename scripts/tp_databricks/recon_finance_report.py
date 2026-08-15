@@ -209,12 +209,16 @@ def check_3(ns: str, report_date: str) -> Check:
     artifact_path, recipients, status, delivered_at = rows[0]
     check.note(f"status={status} recipients={recipients} artifact={artifact_path}")
     check.expect(
-        status in (
-            pipeline.STATUS_DELIVERED,
-            pipeline.STATUS_ATTEMPTING,
-            pipeline.STATUS_UNCONFIRMED,
-            pipeline.STATUS_NO_TRANSPORT,
-            pipeline.STATUS_NO_RECIPIENTS,
+        (
+            status
+            in (
+                pipeline.STATUS_DELIVERED,
+                pipeline.STATUS_ATTEMPTING,
+                pipeline.STATUS_UNCONFIRMED,
+                pipeline.STATUS_NO_TRANSPORT,
+                pipeline.STATUS_NO_RECIPIENTS,
+            )
+            or status.startswith(pipeline.STATUS_TRANSPORT_UNAVAILABLE + ": ")
         ),
         f"delivery_status is a known value (got {status!r})",
     )
