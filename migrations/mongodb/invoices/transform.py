@@ -225,8 +225,13 @@ def transform_invoice(header: dict, lines: list[dict], status_codes: dict,
     status_cd = as_int(header.get("STATUS_CD"))
     status = status_codes.get(status_cd)
     if status is None:
-        findings.add("unmapped_status_code", invoice_id, status_cd)
-        status = str(status_cd)
+        if status_cd is None:
+            # STATUS_CD is nullable in the legacy estate: a missing status stays
+            # missing rather than becoming an invented status string.
+            findings.add("null_status_code", invoice_id)
+        else:
+            findings.add("unmapped_status_code", invoice_id, status_cd)
+            status = str(status_cd)
 
     embedded, line_total = [], Decimal("0")
     for row in lines:

@@ -237,6 +237,14 @@ def test_unmapped_status_code_falls_back_to_the_raw_code():
     assert findings.counts == {"unmapped_status_code": 1}
 
 
+def test_null_status_code_is_reported_and_never_invented():
+    doc, findings = transform.transform_invoice(
+        header_row(STATUS_CD=None), [], STATUS_CODES, NS, MIGRATED_AT)
+
+    assert doc["status"] is None
+    assert findings.counts == {"null_status_code": 1}
+
+
 def test_dirty_header_date_is_reported_and_left_null():
     doc, findings = transform.transform_invoice(
         header_row(INVOICE_DT="31-FEB-24"), [], STATUS_CODES, NS, MIGRATED_AT)
