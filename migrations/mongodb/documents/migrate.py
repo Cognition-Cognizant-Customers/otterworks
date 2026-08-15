@@ -116,6 +116,10 @@ def main() -> int:
         print("NS must match ^[A-Za-z0-9_]+$", file=sys.stderr)
         return 2
 
+    if args.batch_size < 1:
+        print("--batch-size must be >= 1", file=sys.stderr)
+        return 2
+
     started = time.monotonic()
     stats = migrate(args.ns, args.batch_size)
     log(
