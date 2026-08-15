@@ -90,7 +90,29 @@ def warehouse_id() -> str:
     raise DatabricksError(f"serverless SQL warehouse {WAREHOUSE_NAME!r} not found (never create one)")
 
 
-def sql(statement: str, catalog: str | None = None, schema: str | None = None) -> list[list[str]]:
+def _statement_rows(result: dict) -> list[list[str]]:
+    """Collect all result chunks returned by Statement Execution."""
+    statement_result = result.get("result") or {}
+    rows = list(statement_result.get("data_array") or [])
+    manifest = result.get("manifest") or {}
+    total_chunks = manifest.get("total_chunk_count")
+    next_link = statement_result.get("next_chunk_internal_link")
+    while next_link:
+        chunk = request("GET", next_link)
+        chunk_result = chunk.get("result") or chunk
+        rows.extend(chunk_result.get("data_array") or [])
+        next_link = chunk_result.get("next_chunk_internal_link")
+    if total_chunks is not None and total_chunks > 1 and not statement_result.get("next_chunk_internal_link"):
+        raise DatabricksError("statement result is chunked but did not provide a next chunk link")
+    return rows
+
+
+def sql(
+    statement: str,
+    catalog: str | None = None,
+    schema: str | None = None,
+    timeout_s: int = 1800,
+) -> list[list[str]]:
     """Execute one statement on the serverless warehouse and return its rows."""
     body = {
         "warehouse_id": warehouse_id(),
@@ -104,14 +126,17 @@ def sql(statement: str, catalog: str | None = None, schema: str | None = None) -
         body["schema"] = schema
     result = request("POST", "/api/2.0/sql/statements", body)
     statement_id = result["statement_id"]
+    deadline = time.time() + timeout_s
     while result["status"]["state"] in ("PENDING", "RUNNING"):
+        if time.time() >= deadline:
+            raise DatabricksError(f"statement {statement_id} still running after {timeout_s}s")
         time.sleep(2)
         result = request("GET", f"/api/2.0/sql/statements/{statement_id}")
     state = result["status"]["state"]
     if state != "SUCCEEDED":
         message = result["status"].get("error", {}).get("message", state)
         raise DatabricksError(f"statement failed ({state}): {message}\n  {statement[:400]}")
-    return result.get("result", {}).get("data_array", []) or []
+    return _statement_rows(result)
 
 
 def sql_scalar(statement: str) -> str | None:
