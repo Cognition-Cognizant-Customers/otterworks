@@ -37,9 +37,9 @@ variable "user_activity_upstream_table" {
 }
 
 variable "user_activity_max_upstream_lag_days" {
-  description = "Freshness tolerance: how far behind report_date the upstream aggregate's latest report_date may be before the run is refused."
+  description = "Freshness tolerance: how far behind report_date the upstream aggregate's latest report_date may be before the run is refused. Both jobs are daily, so anything above 1 would re-admit the stale-report failure this conversion exists to remove; it is a variable only so a backfill can widen it deliberately."
   type        = number
-  default     = 30
+  default     = 1
 }
 
 variable "analytics_job_id" {
