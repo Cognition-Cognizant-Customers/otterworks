@@ -175,7 +175,12 @@ def bronze_bootstrap_ddl() -> list[str]:
     ]
 
 
-def ddl_statements(include_bronze_bootstrap: bool = True) -> list[str]:
-    """Every CREATE TABLE this unit needs, safe to re-run."""
+def ddl_statements(include_bronze_bootstrap: bool = False) -> list[str]:
+    """Return idempotent DDL, with parent-sanctioned bronze bootstrap opt-in.
+
+    The bronze column set is the `ow_tp_sftp_ingest` contract verbatim. Bronze
+    bootstrap is a deliberate fallback for the local loader and gate mode, not
+    this unit claiming ownership of the ingest tables.
+    """
     statements = list(bronze_bootstrap_ddl()) if include_bronze_bootstrap else []
     return statements + silver_ddl()
