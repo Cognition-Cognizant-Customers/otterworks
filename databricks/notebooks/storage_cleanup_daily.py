@@ -231,10 +231,12 @@ if _in_databricks():  # pragma: no cover -- exercised by the job, not locally
         ("dry_run", "true"),
         ("scenario", "nominal"),
         ("run_date", ""),
+        ("catalog", CATALOG),
     ):
         dbutils.widgets.text(_name, _default)  # noqa: F821
 
     stage = dbutils.widgets.get("stage")  # noqa: F821
+    catalog = _checked("catalog", dbutils.widgets.get("catalog") or CATALOG)  # noqa: F821
     ns = _checked("ns", dbutils.widgets.get("ns"))  # noqa: F821
     scenario = _checked("scenario", dbutils.widgets.get("scenario") or "nominal")  # noqa: F821
     dry_run = dbutils.widgets.get("dry_run").strip().lower() != "false"  # noqa: F821
@@ -245,9 +247,11 @@ if _in_databricks():  # pragma: no cover -- exercised by the job, not locally
     )
 
     statements = (
-        ddl_statements()
+        ddl_statements(catalog=catalog)
         if stage == "ddl"
-        else pipeline_statements(ns=ns, run_date=run_date, dry_run=dry_run, scenario=scenario)
+        else pipeline_statements(
+            ns=ns, run_date=run_date, dry_run=dry_run, scenario=scenario, catalog=catalog
+        )
     )
     for statement in statements:
         print(statement.splitlines()[0][:110])
@@ -258,7 +262,7 @@ if _in_databricks():  # pragma: no cover -- exercised by the job, not locally
             f"""
             SELECT objects_scanned, metadata_rows, orphan_count, orphan_bytes,
                    quarantined_count, dry_run, metadata_read_ok
-            FROM {CATALOG}.gold.storage_cleanup_savings
+            FROM {catalog}.gold.storage_cleanup_savings
             WHERE ns = '{ns}' AND scenario = '{scenario}' AND run_date = DATE '{run_date}'
             """
         ).collect()[0]
