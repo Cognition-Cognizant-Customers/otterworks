@@ -109,7 +109,11 @@ def load_golden(golden_root: Path) -> dict[str, GoldenFile]:
             name=path.name[: -len(".done")],
             size_bytes=len(payload),
             sha256=hashlib.sha256(payload).hexdigest(),
-            lines=text.rstrip("\n").split("\n"),
+            # Exactly one trailing terminator, mirroring the ingest's `endswith('\n')`
+            # trim: rstrip("\n") would swallow a blank last record the pipeline keeps,
+            # so a file ending in two line breaks would be reported as a mismatch the
+            # pipeline did not cause.
+            lines=(text[:-1] if text.endswith("\n") else text).split("\n"),
         )
     if not golden:
         raise FileNotFoundError(f"no *.dat.done artifacts under {incoming}")
