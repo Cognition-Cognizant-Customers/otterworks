@@ -125,13 +125,13 @@ def check_per_user(legacy: dict[str, dict], converted: dict[str, dict]) -> dict:
 
 
 def check_totals(legacy_rpt: dict, legacy: dict[str, dict], converted: dict[str, dict],
-                 ns: str, catalog: str, report_date: str) -> dict:
+                 ns: str, catalog: str, report_date: str, lookback_days: str) -> dict:
     """Check 2: per-user sums cross-foot to the upstream aggregate totals."""
     upstream_total = dbx.sql(
         f"""
 SELECT CAST(SUM(total_events) AS BIGINT)
 FROM {catalog}.bronze.user_activity_upstream_fixture
-WHERE ns = '{ns}' AND report_date BETWEEN DATE'{report_date}' - INTERVAL 30 DAYS
+WHERE ns = '{ns}' AND report_date BETWEEN DATE'{report_date}' - INTERVAL {lookback_days} DAYS
                                       AND DATE'{report_date}'
 """
     )[0][0]
@@ -151,10 +151,11 @@ WHERE ns = '{ns}' AND report_date BETWEEN DATE'{report_date}' - INTERVAL 30 DAYS
     }
 
 
-def check_freshness(ns: str, catalog: str, report_date: str) -> dict:
+def check_freshness(ns: str, catalog: str, report_date: str, lookback_days: str) -> dict:
     """Check 3: stale and missing upstream must refuse, writing no report rows."""
     scenarios = []
     table = f"{catalog}.bronze.user_activity_upstream_fixture"
+    backup = f"{catalog}.bronze.user_activity_upstream_recon_backup"
     rows_before = dbx.sql(
         f"SELECT COUNT(*) FROM {catalog}.gold.user_activity_report "
         f"WHERE ns = '{ns}' AND report_date = DATE'{report_date}'"
@@ -162,7 +163,7 @@ def check_freshness(ns: str, catalog: str, report_date: str) -> dict:
 
     def attempt(label: str, params: dict[str, str]) -> dict:
         base = {"ns": ns, "catalog": catalog, "report_date": report_date,
-                "source_mode": "table"}
+                "lookback_days": lookback_days, "source_mode": "table"}
         base.update(params)
         try:
             result = run_user_activity.run(base)
@@ -189,34 +190,37 @@ def check_freshness(ns: str, catalog: str, report_date: str) -> dict:
     scenarios.append(attempt("stale upstream, default 1-day tolerance", {}))
 
     # 3b: upstream absent for the namespace entirely (the analytics job never ran).
-    saved = dbx.sql(
-        f"SELECT ns, report_date, active_users, active_documents, active_files, total_events, "
-        f"documents_created, documents_edited, comments_added, files_uploaded, files_shared, "
-        f"files_deleted, bytes_uploaded FROM {table} WHERE ns = '{ns}'"
-    )
+    # The rows are parked in a scratch Delta table rather than in this process's memory,
+    # so an interrupted or failed restore can still be completed afterwards from SQL
+    # instead of losing the shared fixture.
+    dbx.sql(f"CREATE OR REPLACE TABLE {backup} AS "
+            f"SELECT * FROM {table} WHERE ns = '{ns}'")
+    saved = int(dbx.sql(f"SELECT COUNT(*) FROM {backup}")[0][0])
     dbx.sql(f"DELETE FROM {table} WHERE ns = '{ns}'")
     try:
         scenarios.append(attempt("missing upstream (analytics job never ran)",
                                  {"max_upstream_lag_days": PARITY_LAG_DAYS}))
     finally:
-        for row in saved:
-            values = ", ".join(
-                f"'{row[0]}'" if i == 0 else (f"DATE'{row[1]}'" if i == 1 else str(row[i]))
-                for i in range(13)
-            )
-            dbx.sql(f"INSERT INTO {table} VALUES ({values}, CURRENT_TIMESTAMP())")
-    restored = dbx.sql(f"SELECT COUNT(*) FROM {table} WHERE ns = '{ns}'")[0][0]
+        dbx.sql(f"DELETE FROM {table} WHERE ns = '{ns}'")
+        dbx.sql(f"INSERT INTO {table} SELECT * FROM {backup}")
+    restored = int(dbx.sql(f"SELECT COUNT(*) FROM {table} WHERE ns = '{ns}'")[0][0])
+    if restored == saved:
+        dbx.sql(f"DROP TABLE IF EXISTS {backup}")
 
     return {
         "name": "3. Freshness guard refuses stale/missing upstream",
-        "passed": all(s["refused"] and s["report_rows_unchanged"] for s in scenarios),
+        # The restore is part of the check: a scenario that leaves the fixture short is a
+        # failure, not a footnote.
+        "passed": (all(s["refused"] and s["report_rows_unchanged"] for s in scenarios)
+                   and restored == saved),
         "report_rows_before": int(rows_before),
-        "upstream_rows_restored": int(restored),
+        "upstream_rows_saved": saved,
+        "upstream_rows_restored": restored,
         "scenarios": scenarios,
     }
 
 
-def check_idempotency(ns: str, catalog: str, report_date: str) -> dict:
+def check_idempotency(ns: str, catalog: str, report_date: str, lookback_days: str) -> dict:
     """Check 4: a re-run leaves exactly one row per user/date."""
     before = dbx.sql(
         f"SELECT COUNT(*) FROM {catalog}.gold.user_activity_report "
@@ -224,7 +228,8 @@ def check_idempotency(ns: str, catalog: str, report_date: str) -> dict:
     )[0][0]
     run_user_activity.run({
         "ns": ns, "catalog": catalog, "report_date": report_date,
-        "source_mode": "table", "max_upstream_lag_days": PARITY_LAG_DAYS,
+        "lookback_days": lookback_days, "source_mode": "table",
+        "max_upstream_lag_days": PARITY_LAG_DAYS,
     })
     after = dbx.sql(
         f"""
@@ -327,40 +332,54 @@ def main(argv: list[str] | None = None) -> int:
 
     rpt = legacy_report(args.baseline)
     report_date = rpt["report_date"]
+    # Everything below is interpolated into SQL against a shared workspace, and the
+    # report_date comes off disk: validate with the pipeline's own rules before use.
+    cfg = pipeline.build_config({"ns": args.ns, "catalog": args.catalog,
+                                "report_date": report_date,
+                                "lookback_days": str(int(rpt["lookback_days"]))})
+    lookback_days = cfg["lookback_days"]
     legacy = legacy_users(args.baseline)
 
-    # Establish the converted side from a clean, parity-configured run.
+    # Establish the converted side from a clean, parity-configured run, over the window
+    # the captured legacy report actually used.
     run_user_activity.run({
         "ns": args.ns, "catalog": args.catalog, "report_date": report_date,
-        "source_mode": "table", "max_upstream_lag_days": PARITY_LAG_DAYS,
+        "lookback_days": lookback_days, "source_mode": "table",
+        "max_upstream_lag_days": PARITY_LAG_DAYS,
     })
     converted = converted_users(args.ns, args.catalog, report_date)
 
     checks = [
         check_per_user(legacy, converted),
-        check_totals(rpt, legacy, converted, args.ns, args.catalog, report_date),
-        check_freshness(args.ns, args.catalog, report_date),
-        check_idempotency(args.ns, args.catalog, report_date),
+        check_totals(rpt, legacy, converted, args.ns, args.catalog, report_date, lookback_days),
+        check_freshness(args.ns, args.catalog, report_date, lookback_days),
+        check_idempotency(args.ns, args.catalog, report_date, lookback_days),
     ]
-    # Check 5 is the provenance statement rendered above; it is only "passed" because
-    # the baseline directory really holds the legacy run's own output.
-    checks.append({
-        "name": "5. Baseline provenance stated (tier 1, legacy output)",
-        "passed": os.path.exists(os.path.join(args.baseline, "activity_report.json")),
-        "values": {
-            "tier": "baseline: legacy output",
-            "legacy_exit_code": open(  # noqa: SIM115
-                os.path.join(args.baseline, "exit_code.txt"), encoding="utf-8"
-            ).read().strip(),
-            "analytics_daily.py executed": False,
-            "upstream aggregate": "deterministic fixture from the seeded events",
-        },
-    })
-
     with open(os.path.join(args.baseline, "manifest_sha256.txt"), encoding="utf-8") as handle:
         hashes = handle.read()
     with open(os.path.join(args.baseline, "exit_code.txt"), encoding="utf-8") as handle:
         exit_code = handle.read().strip()
+    # The capture writes "exit=<code>"; keep the recorded text in the report and compare
+    # on the code itself.
+    exit_status = exit_code.split("=")[-1].strip()
+
+    # Check 5: tier 1 only holds if the captured legacy run actually succeeded and left
+    # every artefact behind — a baseline from a failed run must not report green.
+    artefacts = {
+        name: os.path.exists(os.path.join(args.baseline, name))
+        for name in ("activity_report.json", "user_summaries.jsonl", "manifest_sha256.txt")
+    }
+    checks.append({
+        "name": "5. Baseline provenance stated (tier 1, legacy output)",
+        "passed": all(artefacts.values()) and exit_status == "0",
+        "values": {
+            "tier": "baseline: legacy output",
+            "legacy_exit_code": exit_code,
+            "baseline_artefacts": artefacts,
+            "analytics_daily.py executed": False,
+            "upstream aggregate": "deterministic fixture from the seeded events",
+        },
+    })
 
     report = {
         "baseline_dir": args.baseline,

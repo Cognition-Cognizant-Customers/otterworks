@@ -136,6 +136,7 @@ run — see check 3.
 ```json
 {
   "report_rows_before": 50,
+  "upstream_rows_saved": 3,
   "upstream_rows_restored": 3,
   "scenarios": [
     {
@@ -186,6 +187,11 @@ run — see check 3.
   "values": {
     "tier": "baseline: legacy output",
     "legacy_exit_code": "exit=0",
+    "baseline_artefacts": {
+      "activity_report.json": true,
+      "user_summaries.jsonl": true,
+      "manifest_sha256.txt": true
+    },
     "analytics_daily.py executed": false,
     "upstream aggregate": "deterministic fixture from the seeded events"
   }
