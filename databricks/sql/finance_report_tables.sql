@@ -3,8 +3,9 @@
 -- its silent sendmail pipe.
 --
 -- The gold table is the system of record; the emitted file is a by-product.
--- Idempotent DDL: the converted job issues the same statements on every run, and
--- scripts/tp_databricks/recon_finance_report.py asserts the live schemas match this file.
+-- These are the DDL statements for the default `ow_tp` catalog. The converted job issues
+-- the same statements with its `catalog` parameter substituted; the recon script compares
+-- data and delivery behavior and does not assert live schema equality against this file.
 
 CREATE TABLE IF NOT EXISTS ow_tp.gold.finance_billing_summary (
   ns STRING NOT NULL COMMENT 'Demo namespace; every run is scoped to one namespace.',
