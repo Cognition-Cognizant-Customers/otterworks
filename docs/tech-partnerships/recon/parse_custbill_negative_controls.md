@@ -130,7 +130,25 @@ The eight bronze, published-silver, and staging tables were then verified back t
 rows for `ns='stagingneg'`. This proves failed staged output is not queryable in published
 silver and the previous good namespace remains intact.
 
-## G. An unreadable trailer count fails the report without a traceback
+## G. An unreadable trailer count fails both the pipeline gate and the report
+
+### Pipeline-side staged gate
+
+Mutation: in throwaway namespace `ns=trlneg2`, the `TRL` line for
+`CUSTBILL_DEMO_001.dat` was changed to the non-numeric value `TRLNOTNUM`. The staged
+reconciliation row contained `declared_trailer_count = NULL` and `recon_ok = NULL`.
+The staged gate predicate `recon_ok IS NOT TRUE` caught that row:
+
+```text
+FAILED: staged recon: trailer counts reconcile for every file failed -> CUSTBILL_DEMO_001.dat | None | 50 | 0
+```
+
+The pipeline exited `1` before any publish statements ran. Published rows were preserved:
+the namespace had 50 published records and `declared 50 | parsed 50 | rejected 0 |
+recon_ok true` before the mutation, and the same values afterward. The eight bronze,
+published-silver, and staging tables were verified back to `0` rows for `ns='trlneg2'`.
+
+### Recon-side report
 
 Mutation: in throwaway namespace `ns=trlneg`, the `TRL` line for
 `CUSTBILL_DEMO_001.dat` was changed to the non-numeric value `TRLNOTNUM`, producing a
