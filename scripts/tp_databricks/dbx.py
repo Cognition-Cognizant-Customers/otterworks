@@ -24,6 +24,7 @@ import base64
 import json
 import os
 import posixpath
+import re
 import sys
 import time
 import urllib.error
@@ -31,7 +32,6 @@ import urllib.parse
 import urllib.request
 
 PREFIX = "ow_tp"
-CATALOG = os.environ.get("OW_TP_CATALOG", PREFIX)
 WAREHOUSE_NAME = os.environ.get("OW_TP_WAREHOUSE", "Serverless Starter Warehouse")
 PIPELINE_ROOT = f"/Shared/{PREFIX}"
 
@@ -41,6 +41,16 @@ class DatabricksError(RuntimeError):
         super().__init__(message)
         self.status = status
         self.error_code = error_code
+
+
+def _catalog() -> str:
+    catalog = os.environ.get("OW_TP_CATALOG", PREFIX)
+    if not re.fullmatch(r"ow_tp[a-z0-9_]*", catalog):
+        raise DatabricksError(f"refusing to use non-ow_tp-prefixed catalog {catalog!r}")
+    return catalog
+
+
+CATALOG = _catalog()
 
 
 def _host() -> str:
