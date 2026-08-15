@@ -244,19 +244,22 @@ def _land_drops(ns: str, source_dir: str, catalog: str = CATALOG) -> list[tuple[
             lines = handle.read().replace("\r\n", "\n").split("\n")
         if lines and lines[-1] == "":
             lines.pop()
-        values = ",".join(
-            "({ns},{name},{line_no},{line},current_timestamp())".format(
-                ns=sql_literal(ns),
-                name=sql_literal(name),
-                line_no=index,
-                line=sql_literal(line),
+        if lines and not any(lines):
+            lines = []
+        if lines:
+            values = ",".join(
+                "({ns},{name},{line_no},{line},current_timestamp())".format(
+                    ns=sql_literal(ns),
+                    name=sql_literal(name),
+                    line_no=index,
+                    line=sql_literal(line),
+                )
+                for index, line in enumerate(lines, start=1)
             )
-            for index, line in enumerate(lines, start=1)
-        )
-        dbx.sql(
-            f"""INSERT INTO {catalog}.bronze.custbill_raw_lines_bootstrap
-                (ns, file_name, line_no, raw_line, ingested_at) VALUES {values}"""
-        )
+            dbx.sql(
+                f"""INSERT INTO {catalog}.bronze.custbill_raw_lines_bootstrap
+                    (ns, file_name, line_no, raw_line, ingested_at) VALUES {values}"""
+            )
         landed.append((name, len(lines)))
     return landed
 

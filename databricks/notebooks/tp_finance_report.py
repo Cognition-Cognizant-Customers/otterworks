@@ -278,6 +278,11 @@ def _deliver(smtp_host: str, recipients: str, artifact_path: str, report_date: s
             filename=artifact_path.rsplit("/", 1)[-1],
         )
     with smtplib.SMTP(host, int(port or 25), timeout=30) as smtp:
+        smtp.ehlo()
+        if not smtp.has_extn("starttls"):
+            raise RuntimeError("SMTP transport does not advertise STARTTLS")
+        smtp.starttls()
+        smtp.ehlo()
         smtp.send_message(message)
     return STATUS_DELIVERED
 
