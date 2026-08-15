@@ -79,7 +79,8 @@ class Check:
         self.lines.append(f"FAIL: {line}")
 
     def block(self, command: str, error: str, missing: str) -> None:
-        self.result = "BLOCKED"
+        if self.result != "FAIL":
+            self.result = "BLOCKED"
         self.lines.append(f"BLOCKED: command `{command}` failed: {error}")
         self.lines.append(f"missing: {missing}")
 
@@ -486,11 +487,16 @@ def main() -> int:
                 lambda: check_3(ns, report_date)),
         guarded(4, "Emitted artifact is a valid file of its extension",
                 lambda: check_4(ns, report_date, golden)),
-        guarded(5, "Idempotency: re-running replaces gold rows instead of duplicating",
+        guarded(5, "Idempotency: replaying summary and delivery statements avoids duplicates",
                 lambda: check_5(ns, report_date)),
     ]
     results = {check.result for check in checks}
-    verdict = "green" if results == {"PASS"} else ("blocked" if "BLOCKED" in results else "partial")
+    if "FAIL" in results:
+        verdict = "partial"
+    elif results == {"PASS"}:
+        verdict = "green"
+    else:
+        verdict = "blocked"
 
     report = render_report(
         ns, report_date, golden_path, golden_raw, golden, converted, checks, verdict
