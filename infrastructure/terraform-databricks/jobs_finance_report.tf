@@ -8,6 +8,7 @@
 variable "finance_report_recipients" {
   description = "Managed finance distribution list, stored in the ow_tp secret scope instead of hardcoded in the report script (the legacy list still pointed at an address that left in 2020)."
   type        = string
+  sensitive   = true
   default     = "finance-reports@otterworks.dev"
 }
 
