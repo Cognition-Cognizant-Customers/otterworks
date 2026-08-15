@@ -59,6 +59,15 @@ def counts_by_entity(sql_text):
 def write_summary(source_counts, indexed_counts, swap_completed):
     """Record one gold row per entity type. Rewritten per (ns, run_date), so reruns don't stack."""
     entities = sorted(set(source_counts) | set(indexed_counts))
+    if not entities:
+        spark.sql(
+            f"""
+            DELETE FROM {SUMMARY_TABLE}
+            WHERE ns = '{ns}' AND run_date = DATE '{run_date}'
+            """
+        )
+        log("summary_cleared", table=SUMMARY_TABLE, swap_completed=swap_completed)
+        return
     values = ", ".join(
         "('{ns}', DATE '{run_date}', '{entity}', {source}, {indexed}, {match}, {swap})".format(
             ns=ns,
@@ -108,7 +117,8 @@ spark.sql(
         try_cast(coalesce(get_json_object(payload, '$.size_bytes'),
                           get_json_object(payload, '$.size')) AS BIGINT)           AS size_bytes,
         get_json_object(payload, '$.owner_id')                                     AS owner_id,
-        from_json(get_json_object(payload, '$.tags'), 'array<string>')             AS tags,
+        coalesce(from_json(get_json_object(payload, '$.tags'), 'array<string>'),
+                 CAST(array() AS array<string>))                                  AS tags,
         try_cast(get_json_object(payload, '$.created_at') AS TIMESTAMP)            AS created_at,
         try_cast(get_json_object(payload, '$.updated_at') AS TIMESTAMP)            AS updated_at,
         row_number() OVER (
@@ -192,7 +202,7 @@ if duplicates:
     post_swap_problems.append(f"{duplicates} duplicated entity ids in the serving index")
 
 if post_swap_problems:
-    write_summary(source_counts, serving_counts, swap_completed=False)
+    write_summary(source_counts, serving_counts, swap_completed=True)
     log("swap_verification_failed", problems=post_swap_problems)
     raise RuntimeError("; ".join(post_swap_problems))
 

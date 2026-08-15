@@ -36,6 +36,11 @@ simulate_source_failure = dbutils.widgets.get("simulate_source_failure").strip()
 
 if not re.fullmatch(r"[a-z0-9_]+", ns):
     raise ValueError(f"ns must match [a-z0-9_]+, got {ns!r}")
+if not re.fullmatch(r"[a-z0-9_-]+(/[a-z0-9_-]+)*", landing_prefix):
+    raise ValueError(
+        "landing_prefix must match [a-z0-9_-]+(/[a-z0-9_-]+)*, "
+        f"got {landing_prefix!r}"
+    )
 
 landing_dir = f"{LANDING_ROOT}/{ns}/{landing_prefix}"
 
