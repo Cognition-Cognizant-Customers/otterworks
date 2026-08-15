@@ -457,12 +457,14 @@ def main(argv: list[str] | None = None) -> int:
     baseline = "blocked"
     provenance: dict = {}
     baseline_established = False
+    setup_succeeded = False
 
     try:
         baseline, provenance = baseline_line(golden_dir)
         baseline_established = True
         legacy = legacy_counts()
         converted = serving_counts(args.ns)
+        setup_succeeded = True
     except Blocked as exc:
         results = blocked_results(str(exc))
 
@@ -472,7 +474,7 @@ def main(argv: list[str] | None = None) -> int:
         except Blocked as exc:
             results[name] = {"passed": False, "blocked": True, "error": str(exc)}
 
-    if baseline_established:
+    if setup_succeeded:
         run_check("check 1 — count parity per entity type", lambda: check_counts(args.ns, legacy, converted))
         for index, entity_type in INDEXES.items():
             run_check(f"check 2 — sample content parity ({entity_type})",
