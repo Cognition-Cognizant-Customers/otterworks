@@ -50,6 +50,35 @@ OWNED_DEV_JOB = "ow_tp_dev_sftp_ingest"  # the throwaway this unit is allowed to
 
 _QUALIFIED_NAME = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*)\b")
 
+# The target of every statement that writes, however it is spelled. A three-part scan
+# alone cannot see `MERGE INTO bronze.other_table` — a write with the catalog implied by
+# the session, which is exactly the unprefixed case this check claims to catch — so the
+# write targets are extracted by keyword and judged whole, not by shape.
+_WRITE_TARGET = re.compile(
+    r"\b(?:MERGE\s+INTO|INSERT\s+INTO|INSERT\s+OVERWRITE(?:\s+TABLE)?|UPDATE|DELETE\s+FROM"
+    r"|CREATE\s+(?:OR\s+REPLACE\s+)?TABLE(?:\s+IF\s+NOT\s+EXISTS)?|REPLACE\s+TABLE"
+    r"|TRUNCATE\s+TABLE|DROP\s+TABLE(?:\s+IF\s+EXISTS)?)\s+"
+    r"(?:IDENTIFIER\(\s*'([^']+)'\s*\)|([A-Za-z_][A-Za-z0-9_.]*))",
+    re.IGNORECASE,
+)
+# `UPDATE SET` inside a MERGE is a clause, not a statement target.
+_NOT_A_TARGET = {"set"}
+
+
+def _write_targets(statement: str) -> set[str]:
+    """Every table this statement writes to, as written.
+
+    `--` comments are removed first: prose about a `CREATE TABLE IF NOT EXISTS` is not a
+    write, and reading one as such would put noise where the verdict is.
+    """
+    code = re.sub(r"--[^\n]*", "", statement)
+    found = set()
+    for identifier, bare in _WRITE_TARGET.findall(code):
+        name = identifier or bare
+        if name.lower() not in _NOT_A_TARGET:
+            found.add(name)
+    return found
+
 
 @dataclass
 class Check:
@@ -336,6 +365,13 @@ def check5_scope(ns: str, landing_root: str) -> Check:
     check.detail.append(f"tables referenced by the statement set: {sorted(referenced) or '[]'}")
     check.detail.append(f"outside the contract: {sorted(unowned) or 'none'}")
     check.detail.append(f"unprefixed: {sorted(unprefixed) or 'none'}")
+    # Written-to tables, judged by name and not by shape: a two-part `schema.table`
+    # target would be invisible to the three-part scan above and is the whole point.
+    written = {name for s in statements for name in _write_targets(s)}
+    written_unowned = written - OWNED_TABLES
+    ok = ok and bool(written) and not written_unowned
+    check.detail.append(f"write targets in the statement set: {sorted(written) or '[]'}")
+    check.detail.append(f"write targets outside the contract: {sorted(written_unowned) or 'none'}")
     # retention SQL addresses its tables through IDENTIFIER(:catalog || ...), so match those
     retention_tables = {f"ow_tp{frag}" for frag in re.findall(r":catalog \|\| '(\.[a-z_.]+)'", retention_sql)}
     retention_unowned = retention_tables - OWNED_TABLES
