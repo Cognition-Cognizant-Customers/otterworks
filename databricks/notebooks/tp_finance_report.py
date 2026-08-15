@@ -142,12 +142,27 @@ def delivery_statements(
     recipients: str | None,
     status: str,
     catalog: str = "ow_tp",
+    delivered_at: object | None = None,
 ) -> list[str]:
     """Write the run's delivery audit row, replacing any previous row for the same run."""
     checked(catalog=catalog, ns=ns, report_date=report_date)
     artifact_sql = "NULL" if artifact_path is None else sql_literal(artifact_path)
     recipients_sql = "NULL" if not recipients else sql_literal(recipients)
-    delivered_sql = "current_timestamp()" if status == STATUS_DELIVERED else "CAST(NULL AS TIMESTAMP)"
+    if delivered_at is not None:
+        timestamp_text = str(delivered_at).replace("T", " ", 1)
+        if not re.fullmatch(
+            r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"
+            r"(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})?",
+            timestamp_text,
+        ):
+            raise ValueError(f"invalid delivered_at timestamp {delivered_at!r}")
+        delivered_sql = f"TIMESTAMP {sql_literal(timestamp_text)}"
+    else:
+        delivered_sql = (
+            "current_timestamp()"
+            if status == STATUS_DELIVERED
+            else "CAST(NULL AS TIMESTAMP)"
+        )
     return [
         f"""
         DELETE FROM {catalog}.gold.finance_report_delivery
