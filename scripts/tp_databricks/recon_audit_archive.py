@@ -132,7 +132,18 @@ def manifest_rows(catalog: str, ns: str, run_date: date) -> list[dict]:
     return [dict(zip(columns, row)) for row in rows]
 
 
+def validated(args) -> None:
+    """Every statement below interpolates these into SQL, so constrain them here."""
+    if not args.ns.isidentifier():
+        raise ValueError(f"--ns must be a bare identifier, got {args.ns!r}")
+    if not args.catalog.startswith("ow_tp") or not args.catalog.isidentifier():
+        raise ValueError(f"--catalog must be an ow_tp* identifier, got {args.catalog!r}")
+    if args.retention_days <= 0:
+        raise ValueError(f"--retention-days must be positive, got {args.retention_days}")
+
+
 def run_checks(args) -> tuple[list[Check], dict]:
+    validated(args)
     catalog, ns = args.catalog, args.ns
     run_date = date.fromisoformat(args.run_date)
     cutoff = cutoff_literal(run_date, args.retention_days)
@@ -281,11 +292,31 @@ def run_checks(args) -> tuple[list[Check], dict]:
         )
 
     # ---- 5. provenance ------------------------------------------------------
+    # Falsifiable: the tier claimed must be backed by artifacts that exist, are
+    # non-empty and describe this run. Tier `blocked` never passes.
+    artifacts = {
+        name: os.path.getsize(os.path.join(args.baseline_dir, name))
+        if os.path.exists(os.path.join(args.baseline_dir, name)) else None
+        for name in ("audit_events.jsonl.gz", "report.json", "legacy_stdout.txt")
+    }
+    legacy_policy = baseline["report"].get("retention_policy", {})
+    describes_this_run = (
+        str(legacy_policy.get("retention_days")) == str(args.retention_days)
+        and legacy_policy.get("cutoff_date", "").startswith(cutoff[:10])
+    )
     checks[4].record(
-        args.baseline_tier in BASELINE_TIERS,
+        args.baseline_tier != "blocked"
+        and all(size for size in artifacts.values())
+        and baseline["count"] > 0
+        and baseline["unique"] == baseline["count"]
+        and describes_this_run,
         tier=BASELINE_TIERS.get(args.baseline_tier, "unknown"),
+        baseline_artifact_bytes=artifacts,
         legacy_stdout=os.path.join(args.baseline_dir, "legacy_stdout.txt"),
         legacy_archive_artifact_sha256=baseline["artifact_sha256"],
+        legacy_events_in_artifact=baseline["count"],
+        legacy_retention_policy=legacy_policy,
+        artifacts_describe_this_run=describes_this_run,
     )
 
     context = {
