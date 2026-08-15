@@ -90,6 +90,25 @@ log.info(
 def scalar(statement: str):
     return spark.sql(statement).collect()[0][0]
 
+
+# Delta only accepts a CHECK constraint through ALTER TABLE ADD CONSTRAINT, which
+# has no IF NOT EXISTS form, so the DDL task cannot own this without dropping the
+# constraint on every weekly run and leaving the manifest unprotected in between.
+# Add it here instead -- only when absent, never dropped, and before any manifest
+# row is written, so there is no window in which a purge could be recorded
+# without a verified archive.
+MANIFEST_CHECK = "deleted_requires_verified"
+
+if not any(
+    row[0] == f"delta.constraints.{MANIFEST_CHECK}"
+    for row in spark.sql(f"SHOW TBLPROPERTIES {GOLD}").collect()
+):
+    log.info("adding %s constraint to %s", MANIFEST_CHECK, GOLD)
+    spark.sql(
+        f"ALTER TABLE {GOLD} ADD CONSTRAINT {MANIFEST_CHECK} "
+        "CHECK (deleted_count = 0 OR verified)"
+    )
+
 # COMMAND ----------
 
 # MAGIC %md
