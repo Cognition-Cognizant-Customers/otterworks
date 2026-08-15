@@ -68,6 +68,15 @@ FIELD_MAP = {
     },
 }
 SAMPLE_SIZE = 50
+CHECK_NAMES = (
+    "check 1 — count parity per entity type",
+    "check 2 — sample content parity (document)",
+    "check 2 — sample content parity (file)",
+    "check 3a — gold summary flags",
+    "check 3b — forced source failure leaves the index intact",
+    "check 4 — rerun idempotency",
+    "check 5 — baseline provenance",
+)
 
 
 class Blocked(RuntimeError):
@@ -400,7 +409,14 @@ def render(ns: str, baseline: str, provenance: dict, results: dict, transport: s
         f"# Recon: ow_tp_search_reindex vs etl/scripts/search_reindex_weekly.py (ns={ns})",
         "",
         f"- result: **{status}**",
-        f"- legacy run: exit {provenance['exit_code']}, stdout captured at `{provenance['stdout_path']}`",
+    ]
+    if provenance:
+        lines.append(
+            f"- legacy run: exit {provenance['exit_code']}, stdout captured at `{provenance['stdout_path']}`"
+        )
+    else:
+        lines.append("- legacy run: unavailable; baseline provenance could not be established")
+    lines += [
         "- golden output: the MeiliSearch `documents` / `files` indexes built by the legacy run on this machine",
         f"- converted output: `{SERVING_TABLE}` / `{SUMMARY_TABLE}`",
         "",
@@ -412,6 +428,13 @@ def render(ns: str, baseline: str, provenance: dict, results: dict, transport: s
                   json.dumps({k: v for k, v in result.items() if k != "passed"}, indent=2, default=str),
                   "```", ""]
     return "\n".join(lines)
+
+
+def blocked_results(error: str) -> dict[str, dict]:
+    return {
+        name: {"passed": False, "blocked": True, "error": error}
+        for name in CHECK_NAMES
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -429,13 +452,19 @@ def main(argv: list[str] | None = None) -> int:
     if not re.fullmatch(r"[a-z0-9_]+", args.ns):
         raise SystemExit(f"ns must match [a-z0-9_]+, got {args.ns!r}")
 
-    golden_dir = Path(args.golden_dir)
-    baseline, provenance = baseline_line(golden_dir)
-
-    legacy = legacy_counts()
-    converted = serving_counts(args.ns)
-
     results: dict[str, dict] = {}
+    golden_dir = Path(args.golden_dir)
+    baseline = "blocked"
+    provenance: dict = {}
+    baseline_established = False
+
+    try:
+        baseline, provenance = baseline_line(golden_dir)
+        baseline_established = True
+        legacy = legacy_counts()
+        converted = serving_counts(args.ns)
+    except Blocked as exc:
+        results = blocked_results(str(exc))
 
     def run_check(name: str, fn):
         try:
@@ -443,16 +472,17 @@ def main(argv: list[str] | None = None) -> int:
         except Blocked as exc:
             results[name] = {"passed": False, "blocked": True, "error": str(exc)}
 
-    run_check("check 1 — count parity per entity type", lambda: check_counts(args.ns, legacy, converted))
-    for index, entity_type in INDEXES.items():
-        run_check(f"check 2 — sample content parity ({entity_type})",
-                  lambda index=index, entity_type=entity_type: check_sample(args.ns, index, entity_type))
-    run_check("check 3a — gold summary flags", lambda: check_summary(args.ns))
-    run_check("check 3b — forced source failure leaves the index intact",
-              lambda: check_forced_failure(golden_dir, legacy, serving_counts(args.ns)))
-    run_check("check 4 — rerun idempotency",
-              lambda: check_rerun(golden_dir, args.ns, legacy))
-    results["check 5 — baseline provenance"] = {"passed": True, "baseline": baseline, **provenance}
+    if baseline_established:
+        run_check("check 1 — count parity per entity type", lambda: check_counts(args.ns, legacy, converted))
+        for index, entity_type in INDEXES.items():
+            run_check(f"check 2 — sample content parity ({entity_type})",
+                      lambda index=index, entity_type=entity_type: check_sample(args.ns, index, entity_type))
+        run_check("check 3a — gold summary flags", lambda: check_summary(args.ns))
+        run_check("check 3b — forced source failure leaves the index intact",
+                  lambda: check_forced_failure(golden_dir, legacy, serving_counts(args.ns)))
+        run_check("check 4 — rerun idempotency",
+                  lambda: check_rerun(golden_dir, args.ns, legacy))
+        results["check 5 — baseline provenance"] = {"passed": True, "baseline": baseline, **provenance}
 
     report = render(args.ns, baseline, provenance, results, args.transport)
     report_path = Path(args.report)
