@@ -52,8 +52,11 @@ locals {
   user_activity_notebook = "${databricks_directory.pipelines.path}/user_activity_daily"
 
   user_activity_base_parameters = {
-    ns                     = var.user_activity_ns
-    report_date            = "" # empty: the run's UTC date, as the legacy cron used
+    ns = var.user_activity_ns
+    # The run's UTC start date, resolved once for the whole run: both tasks (and any
+    # retry of either) then gate and publish the same date. Letting each task resolve
+    # "today" itself would re-admit a clock race across midnight.
+    report_date            = "{{job.start_time.iso_date}}"
     lookback_days          = tostring(var.user_activity_lookback_days)
     upstream_summary_table = "${var.catalog_name}.${var.user_activity_upstream_table}"
     max_upstream_lag_days  = tostring(var.user_activity_max_upstream_lag_days)
@@ -87,7 +90,7 @@ resource "databricks_job" "user_activity" {
 
   parameter {
     name    = "report_date"
-    default = ""
+    default = "{{job.start_time.iso_date}}"
   }
 
   # Optional first hop: trigger the upstream analytics job so ordering is a real
