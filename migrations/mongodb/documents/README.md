@@ -38,4 +38,21 @@ line, never written to a file).
 ```bash
 # 1. workload infra (idempotent; --drop for a clean slate)
 uv run migrations/mongodb/documents/setup_collections.py
+
+# 2. migrate (idempotent: safe to run repeatedly, same recon numbers)
+uv run migrations/mongodb/documents/migrate.py --ns demo
+
+# transformer unit tests (pure, no database needed)
+uv run --no-project --with pytest python -m pytest migrations/mongodb/documents/tests
 ```
+
+## Layout
+
+| File | Role |
+|---|---|
+| `mongo_common.py` | Atlas connection, owned collection names, bridge to `testdata/legacy/legacy_common.py` |
+| `extract.py` | server-side cursor over `documents`, batched with each batch's versions/snapshots; separate stream for orphaned snapshots |
+| `transform.py` | pure row → document mapping (gap detection, snapshot routing, NULL `folder_id`) |
+| `load.py` | idempotent `ReplaceOne` upserts by `_id` |
+| `migrate.py` | entrypoint wiring extract → transform → load |
+| `tests/` | transformer unit tests, including the planted anomaly cases |
