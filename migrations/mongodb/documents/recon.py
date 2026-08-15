@@ -330,15 +330,20 @@ def main() -> int:
               file=sys.stderr)
         return 2
 
+    previous = None
+    if args.compare_json:
+        try:
+            previous = json.loads(Path(args.compare_json).read_text())["atlas"]
+        except (OSError, ValueError, KeyError) as exc:
+            print(f"--compare-json {args.compare_json!r} is not a recon JSON: {exc}",
+                  file=sys.stderr)
+            return 2
+
     client = atlas_client()
     try:
         atlas = scan_atlas(atlas_db(client), args.ns)
     finally:
         client.close()
-
-    previous = None
-    if args.compare_json:
-        previous = json.loads(Path(args.compare_json).read_text())["atlas"]
 
     results = reconcile(args.ns, manifest, atlas, previous)
     print(tabulate(results, headers=["check", "status", "detail"], tablefmt="github"))
