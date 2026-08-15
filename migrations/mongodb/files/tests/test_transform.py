@@ -32,6 +32,16 @@ def item(**overrides) -> dict:
     return {**base, **overrides}
 
 
+def test_missing_folder_id_maps_to_null():
+    """`folder_id` is sparse in DynamoDB — a file at the root has no attribute."""
+    source = item()
+    del source["folder_id"]
+
+    document = transform_item(source, "demo", MIGRATED_AT).document
+
+    assert document["folderId"] is None
+
+
 def test_healthy_item_maps_every_field():
     result = transform_item(item(), "demo", MIGRATED_AT)
     document = result.document
