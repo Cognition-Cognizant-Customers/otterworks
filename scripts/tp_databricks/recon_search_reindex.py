@@ -378,6 +378,7 @@ def disclosures(transport: str) -> list[str]:
         "## Disclosures",
         "",
         f"- **Transport**: {TRANSPORT_NOTES[transport]}",
+        "- **Guards not exercised by this corpus**: three defensive paths are reasoned and reviewed but never entered by a run on this data, and none of them contributes to any PASS below -- the empty-extract guard and the erase-an-existing-entity-type guard in `ingest_bronze`, and the shrink-to-zero guard in `publish_index`. They fire only on a degenerate extract, which the seeded fixture does not produce; the checks below all ran on a full 1,933 / 9,461 corpus.",
         "- **Sample selection (check 2)**: ids are drawn from the legacy index itself using "
         "`random.Random(int(sha256('search_reindex_weekly:<ns>:<entity_type>').hexdigest()[:16], 16))` over "
         "the lexicographically sorted id list, 50 per entity type. Fixed seed, fixed ordering, fixed before "
