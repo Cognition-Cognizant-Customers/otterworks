@@ -176,5 +176,9 @@ resource "databricks_job" "sftp_ingest" {
     pause_status           = "PAUSED"
   }
 
-  timeout_seconds = 3600
+  # Matched to the shared driver's client-side wait deadline (dbx.run_job's
+  # timeout_s = 1800): a server timeout longer than the client's turns a slow but
+  # healthy run into a reported failure. A drop directory ingests in seconds, so
+  # this is headroom either way.
+  timeout_seconds = 1800
 }
