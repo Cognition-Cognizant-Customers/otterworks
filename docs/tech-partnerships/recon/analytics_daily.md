@@ -30,6 +30,7 @@ distinct summary_date count: baseline=0 != converted=3
 exact group equality: baseline=True != converted=False
 total events (dimension-free): baseline=5147 = converted=5147
 per event_type totals: baseline={'quota.warning': 529, 'user.logout': 487, 'file.trashed': 540, 'document.shared': 531, 'document.created': 518, 'file.restored': 496, 'file.uploaded': 483, 'user.login': 481, 'file.downloaded': 546, 'document.updated': 536} = converted={'file.uploaded': 483, 'quota.warning': 529, 'document.created': 518, 'file.downloaded': 546, 'file.trashed': 540, 'user.logout': 487, 'file.restored': 496, 'document.shared': 531, 'document.updated': 536, 'user.login': 481}
+legacy defect signature: hours=['00'], user_ids=['unknown'], summary_dates=[]
 deviation: legacy field-name defect surfaced, converted output correct -- the legacy script reads eventType/timestamp/ownerId while the events carry event_type/occurred_at/user_id, so it collapsed all 5147 events into 10 groups at hour='00'/user_id='unknown' with 0 dates; the converted job attributes them across 240 groups/24 hours/50 users/3 dates. Every dimension the baseline does carry is compared exactly above and matches.
 ```
 

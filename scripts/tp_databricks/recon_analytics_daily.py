@@ -119,6 +119,12 @@ def load_baseline(directory: Path) -> dict:
         "by_type": by_type,
         "users": {user["user_id"]: int(user["total"]) for user in users},
         "hours": sorted({hour for hour, _ in by_hour_type}),
+        "dates": sorted({
+            date
+            for user in users
+            for date in [user.get("summary_date")]
+            if date is not None
+        }),
         "exit_code": exit_code,
         "stdout": (directory / "stdout.txt").read_text(encoding="utf-8"),
         "zero_event": zero_event,
@@ -205,7 +211,7 @@ def check_2(baseline: dict, converted: dict) -> Check:
     check.record("group count at (hour, event_type)", len(baseline_groups), len(converted_groups), must_match=False)
     check.record("distinct hours", baseline["hours"], sorted({hour for hour, _ in converted_groups}), must_match=False)
     check.record("distinct user_id count", len(baseline["users"]), converted["users"], must_match=False)
-    check.record("distinct summary_date count", 0, converted["dates"], must_match=False)
+    check.record("distinct summary_date count", len(baseline["dates"]), converted["dates"], must_match=False)
     check.record("exact group equality", True, exact)
     # The dimensions the baseline actually carries, compared exactly and never in place of
     # the group comparison above.
@@ -213,10 +219,19 @@ def check_2(baseline: dict, converted: dict) -> Check:
         "total events (dimension-free)", baseline["total_events"], sum(converted["by_type"].values())
     )
     comparable &= check.record("per event_type totals", baseline["by_type"], converted["by_type"])
+    legacy_signature = (
+        baseline["hours"] == ["00"]
+        and set(baseline["users"]) == {"unknown"}
+        and baseline["dates"] == []
+    )
+    check.note(
+        f"legacy defect signature: hours={baseline['hours']}, "
+        f"user_ids={sorted(baseline['users'])}, summary_dates={baseline['dates']}"
+    )
 
     if exact:
         check.resolve(True)
-    elif comparable:
+    elif comparable and legacy_signature:
         # The hour/user/date divergence is the legacy field-name defect: the 2014 script reads
         # eventType/timestamp/ownerId while the events carry event_type/occurred_at/user_id, so
         # it collapsed every event into hour='00'/user='unknown' with no dates. Matching it
@@ -225,7 +240,7 @@ def check_2(baseline: dict, converted: dict) -> Check:
             "legacy field-name defect surfaced, converted output correct -- the legacy script reads "
             "eventType/timestamp/ownerId while the events carry event_type/occurred_at/user_id, so it "
             f"collapsed all {baseline['total_events']} events into {len(baseline_groups)} groups at "
-            f"hour='00'/user_id='unknown' with 0 dates; the converted job attributes them across "
+            f"hour='00'/user_id='unknown' with {len(baseline['dates'])} dates; the converted job attributes them across "
             f"{len(converted_groups)} groups/{converted['hours']} hours/{converted['users']} users/"
             f"{converted['dates']} dates. Every dimension the baseline does carry is compared exactly "
             "above and matches."
