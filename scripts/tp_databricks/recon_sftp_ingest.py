@@ -45,6 +45,7 @@ CATALOG = "ow_tp"
 # workspace belongs to another unit or to the parent, and is out of bounds.
 OWNED_TABLES = {"ow_tp.bronze.custbill_files", "ow_tp.bronze.custbill_lines"}
 OWNED_JOB = "ow_tp_sftp_ingest"
+OWNED_DEV_JOB = "ow_tp_dev_sftp_ingest"  # the throwaway this unit is allowed to create
 
 _QUALIFIED_NAME = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*)\b")
 
@@ -313,10 +314,14 @@ def check5_scope(ns: str) -> Check:
     )
 
     found = dbx.inventory()
-    strays = [name for name in found["jobs"] if name.startswith("ow_tp_dev_")]
+    # Only this unit's own throwaway job is a verdict-affecting stray. Other units'
+    # ow_tp_dev_* jobs are reported but not judged here — they are not ours to delete.
+    strays = [name for name in found["jobs"] if name == OWNED_DEV_JOB]
+    others = [name for name in found["jobs"] if name.startswith("ow_tp_dev_") and name != OWNED_DEV_JOB]
     ok = ok and not strays
     check.detail.append(f"ow_tp jobs in the workspace: {sorted(found['jobs']) or 'none (1/3 not applied yet)'}")
-    check.detail.append(f"throwaway ow_tp_dev_* jobs left behind: {strays or 'none'}")
+    check.detail.append(f"this unit's throwaway {OWNED_DEV_JOB} left behind: {strays or 'none'}")
+    check.detail.append(f"other units' ow_tp_dev_* jobs (not this unit's, not judged): {sorted(others) or 'none'}")
     check.detail.append(f"catalogs={found['catalogs']} secret_scopes={found['secret_scopes']} dirs={found['directories']}")
     check.passed = ok
     return check
