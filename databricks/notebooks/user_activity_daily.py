@@ -68,6 +68,9 @@ class UpstreamNotFresh(RuntimeError):
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TABLE_RE = re.compile(r"^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+){1,2}$")
 IDENT_RE = re.compile(r"^[A-Za-z0-9_]+$")
+# Volume paths reach SQL string literals (read_files), so they are restricted to the
+# characters a landing path actually needs — no quote, no backslash, no `..`.
+PATH_RE = re.compile(r"^(/[A-Za-z0-9_=.-]+)+$")
 STAGES = ("freshness_gate", "pipeline")
 ON_STALE = ("fail", "mark")
 
@@ -87,6 +90,12 @@ def build_config(params: dict[str, str] | None = None) -> dict[str, str]:
     cfg["max_upstream_lag_days"] = str(int(cfg["max_upstream_lag_days"]))
     if not cfg["landing_root"]:
         cfg["landing_root"] = f"/Volumes/{cfg['catalog']}/bronze/landing"
+    # The landing root must stay inside this catalog's own volumes: a path elsewhere would
+    # read another unit's or another demo's data under the job's identity.
+    if not cfg["landing_root"].startswith(f"/Volumes/{cfg['catalog']}/"):
+        raise ValueError(
+            f"landing_root must be under /Volumes/{cfg['catalog']}/: {cfg['landing_root']!r}"
+        )
     # Every parameter below is interpolated into SQL, so each is constrained to a shape
     # that cannot carry a quote or a second statement out of a job/widget parameter.
     for key in ("upstream_summary_table", "landed_events_table"):
@@ -108,6 +117,9 @@ def build_config(params: dict[str, str] | None = None) -> dict[str, str]:
     cfg["events_root"] = f"{cfg['unit_root']}/events"
     if not cfg["ddl_path"]:
         cfg["ddl_path"] = f"{cfg['unit_root']}/ddl/user_activity_tables.sql"
+    for key in ("landing_root", "unit_root", "events_root", "ddl_path"):
+        if ".." in cfg[key] or not PATH_RE.match(str(cfg[key])):
+            raise ValueError(f"{key} is not a plain absolute volume path: {cfg[key]!r}")
     # SQL expression for the report date: the parameter, or the run's UTC date.
     cfg["report_date_expr"] = (
         f"DATE'{cfg['report_date']}'" if cfg["report_date"] else "CURRENT_DATE()"
@@ -436,23 +448,37 @@ def main(runner, params: dict[str, str], ddl_sql: str | None = None) -> dict:
         runner.execute(run_log_statement(cfg, stage, upstream_date, True, status, detail, 0))
         return {"stage": stage, "upstream_fresh": True, "status": status, "detail": detail, "rows_written": 0}
 
-    for statement in bronze_statements(cfg) + silver_statements(cfg):
-        runner.execute(statement)
-    for statement in gold_statements(cfg, upstream_date, True):
-        runner.execute(statement)
+    # A failure anywhere below leaves the run log without a verdict and, worse, could
+    # leave a report the pipeline itself rejected published for downstream readers. Any
+    # exception therefore unpublishes this (ns, report_date) slice and records why.
+    try:
+        for statement in bronze_statements(cfg) + silver_statements(cfg):
+            runner.execute(statement)
+        for statement in gold_statements(cfg, upstream_date, True):
+            runner.execute(statement)
 
-    verified = runner.row(verification_probe(cfg))
-    if int(verified["gold_rows"]) == 0:
-        raise RuntimeError("gold write produced no rows: refusing to report success")
-    if int(verified["gold_rows"]) != int(verified["gold_users"]):
-        raise RuntimeError(
-            f"gold is not one row per user: {verified['gold_rows']} rows for {verified['gold_users']} users"
+        verified = runner.row(verification_probe(cfg))
+        if int(verified["gold_rows"]) == 0:
+            raise RuntimeError("gold write produced no rows: refusing to report success")
+        if int(verified["gold_rows"]) != int(verified["gold_users"]):
+            raise RuntimeError(
+                f"gold is not one row per user: {verified['gold_rows']} rows for {verified['gold_users']} users"
+            )
+        if int(verified["gold_events"]) > int(verified["upstream_total_events"]):
+            raise RuntimeError(
+                f"gold events {verified['gold_events']} exceed upstream total_events "
+                f"{verified['upstream_total_events']}: report cannot invent activity"
+            )
+    except Exception as exc:
+        runner.execute(
+            f"DELETE FROM {cfg['catalog']}.gold.user_activity_report "
+            f"WHERE ns = '{cfg['ns']}' AND report_date = {cfg['report_date_expr']}"
         )
-    if int(verified["gold_events"]) > int(verified["upstream_total_events"]):
-        raise RuntimeError(
-            f"gold events {verified['gold_events']} exceed upstream total_events "
-            f"{verified['upstream_total_events']}: report cannot invent activity"
-        )
+        runner.execute(run_log_statement(
+            cfg, stage, upstream_date, True, "failed_verification",
+            f"{type(exc).__name__}: {exc}; unverified report slice deleted", 0,
+        ))
+        raise
     detail = f"{detail}; verified {json.dumps(verified, default=str)}"
     runner.execute(run_log_statement(cfg, stage, upstream_date, True, "ok", detail, int(verified["gold_rows"])))
     print(f"[user_activity] wrote {verified['gold_rows']} report rows ({verified['gold_events']} events)")
