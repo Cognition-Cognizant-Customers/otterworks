@@ -29,6 +29,10 @@ make mongo-tp-customers-migrate NS=demo
 # 3. recon against testdata/legacy/manifests/<ns>.json, recomputed from Atlas
 make mongo-tp-customers-recon NS=demo
 
+# 3b. refresh the tracked NS=demo report (only ever writes when REPORT= is given)
+make mongo-tp-customers-recon NS=demo \
+	REPORT=docs/tech-partnerships/recon/mongo-customers.md
+
 # unit tests (pure transformer; no Oracle/Atlas needed)
 make mongo-tp-customers-test
 ```
@@ -44,6 +48,7 @@ VM's public IP must be in the Atlas project access list.
 | `transform.py` | pure row → document mapping, no I/O; unit-tested in `test_transform.py` |
 | `load.py` | unordered `ReplaceOne(upsert=True)` batches keyed on deterministic `_id`s |
 | `migrate.py` | driver + per-run counters (`LIMIT=n`, `DRY_RUN=1`) |
+| `recon.py` | recomputes counts/checksum/anomaly ledger from Atlas and compares them to the manifest; writes `docs/tech-partnerships/recon/mongo-customers.md` |
 
 ## Modeling notes
 
@@ -61,4 +66,6 @@ VM's public IP must be in the Atlas project access list.
 - Idempotency: every `_id` is derived from the source (`CUST_ID`, or
   `"<CUST_ID>:<COLUMN>"` for a ledger entry), so a second run upserts over the
   first and recon reports the same numbers. Only `_migration.migratedAt`
-  changes between runs.
+  changes between runs. Verified on NS=demo: the second run reports
+  `customers_upserted: 0` / `customers_matched: 25000` and its recon report is
+  identical to the first apart from the generation timestamp.

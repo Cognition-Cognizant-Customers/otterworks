@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke dbx-init dbx-apply dbx-destroy dbx-inventory dbx-verify-teardown dbx-upload dbx-deploy-notebooks dbx-run dbx-recon aws-tp-plan aws-tp-apply aws-tp-run aws-tp-verify aws-tp-destroy aws-tp-scan mongo-tp-customers-setup mongo-tp-customers-test mongo-tp-customers-migrate
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke dbx-init dbx-apply dbx-destroy dbx-inventory dbx-verify-teardown dbx-upload dbx-deploy-notebooks dbx-run dbx-recon aws-tp-plan aws-tp-apply aws-tp-run aws-tp-verify aws-tp-destroy aws-tp-scan mongo-tp-customers-setup mongo-tp-customers-test mongo-tp-customers-migrate mongo-tp-customers-recon
 
 SHELL := /bin/bash
 
@@ -553,3 +553,11 @@ mongo-tp-customers-migrate: ## Migrate CUSTOMER_MASTER + EAV into Atlas (idempot
 	$(if $(NS),$(call validate_ns),)
 	DB_PORT=$(ORACLE_BILLING_DB_PORT) $(MONGO_CUSTOMERS_MIGRATE_UV) $(MONGO_CUSTOMERS_DIR)/migrate.py \
 		$(if $(NS),--ns $(NS),) $(if $(LIMIT),--limit $(LIMIT),) $(if $(DRY_RUN),--dry-run,)
+
+# The tracked NS=demo report; pass it as REPORT= to refresh it deliberately.
+MONGO_CUSTOMERS_RECON_REPORT = docs/tech-partnerships/recon/mongo-customers.md
+
+mongo-tp-customers-recon: ## Recon Atlas customers against testdata/legacy/manifests/$(NS).json (REPORT=<path> to also write markdown)
+	$(if $(NS),$(call validate_ns),)
+	$(MONGO_CUSTOMERS_UV) $(MONGO_CUSTOMERS_DIR)/recon.py $(if $(NS),--ns $(NS),) \
+		$(if $(REPORT),--report $(REPORT),)
