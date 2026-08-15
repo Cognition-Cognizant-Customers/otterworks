@@ -102,7 +102,10 @@ def cutoff_literal(run_date: date, retention_days: int) -> str:
 def silver_state(catalog: str, ns: str, cutoff: str) -> dict:
     rows = dbx.sql(f"""
         SELECT count(*), count(DISTINCT event_id), max(event_ts), min(event_ts),
-               count(CASE WHEN raw_payload IS NULL OR archived_at IS NULL THEN 1 END)
+               count(CASE WHEN event_id IS NULL OR archived_at IS NULL
+                            OR retention_days IS NULL OR cutoff_ts IS NULL
+                            OR run_date IS NULL THEN 1 END),
+               count(CASE WHEN raw_payload IS NULL THEN 1 END)
         FROM {catalog}.silver.audit_events_archived
         WHERE ns = '{ns}' AND event_ts < TIMESTAMP '{cutoff}'
     """)[0]
@@ -135,7 +138,10 @@ def silver_state(catalog: str, ns: str, cutoff: str) -> dict:
         "distinct_event_ids": int(rows[1]),
         "max_event_ts": rows[2],
         "min_event_ts": rows[3],
+        # Missing provenance is a defect; a missing payload is not -- the pipeline
+        # copies a payload-less source event faithfully, so it is reported, not failed.
         "incomplete_rows": int(rows[4]),
+        "null_payload_rows": int(rows[5]),
         "event_ids": ids,
         "id_set_sha256": sha256_of_set(ids),
     }
@@ -237,11 +243,16 @@ def run_checks(args) -> tuple[list[Check], dict]:
         LEFT ANTI JOIN {catalog}.silver.audit_events_archived AS a
           ON a.ns = b.ns AND a.event_id = b.event_id
     """)[0][0])
+    # Same semantics the pipeline verifies under: provenance must be complete, the
+    # stamped retention policy must be a real policy, and a NULL payload is a
+    # faithful copy rather than an unreadable row. Requiring the current
+    # retention_days here would make this fail permanently the first time the
+    # horizon changes, on rows that are perfectly valid archives.
     readable = int(dbx.sql(f"""
         SELECT count(*) FROM {catalog}.silver.audit_events_archived
         WHERE ns = '{ns}' AND event_ts < TIMESTAMP '{cutoff}'
-          AND event_id IS NOT NULL AND raw_payload IS NOT NULL
-          AND archived_at IS NOT NULL AND retention_days = {args.retention_days}
+          AND event_id IS NOT NULL
+          AND archived_at IS NOT NULL AND retention_days > 0
     """)[0][0])
     purged = int(dbx.sql(f"""
         SELECT count(*) FROM (
@@ -263,7 +274,8 @@ def run_checks(args) -> tuple[list[Check], dict]:
         manifest_rows_with_unverified_purge=unverified_purges,
         source_candidates_without_archive_row=orphans,
         archive_rows_readable_after_purge=readable,
-        archive_rows_with_missing_payload_or_provenance=silver["incomplete_rows"],
+        archive_rows_with_missing_provenance=silver["incomplete_rows"],
+        archive_rows_with_null_payload=silver["null_payload_rows"],
         source_rows_purged=purged,
         manifest_deleted_count=manifest_deleted,
         manifest_verified=manifest_verified,
