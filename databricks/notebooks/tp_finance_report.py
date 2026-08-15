@@ -219,6 +219,8 @@ def _run() -> None:
 
     recipients = _secret(scope, dbutils.widgets.get("recipients_secret_key").strip())
     transport = _secret(scope, dbutils.widgets.get("smtp_secret_key").strip())
+    if recipients:
+        recipients = _validated_recipients(recipients)
     if not recipients:
         status = STATUS_NO_RECIPIENTS
     elif not transport:
@@ -259,12 +261,27 @@ def _secret(scope: str, key: str) -> str | None:
     return value or None
 
 
+def _validated_recipients(recipients: str) -> str:
+    addresses = [address.strip() for address in recipients.split(",")]
+    if any(
+        not address
+        or address.count("@") != 1
+        or any(character.isspace() for character in address)
+        or not address.split("@", 1)[0]
+        or not address.split("@", 1)[1]
+        for address in addresses
+    ):
+        raise ValueError("invalid finance report recipient list")
+    return ",".join(addresses)
+
+
 def _deliver(smtp_host: str, recipients: str, artifact_path: str, report_date: str) -> str:
     """Hand the report to the configured SMTP transport. Failures raise, they do not vanish."""
     import smtplib
     from email.message import EmailMessage
 
     host, _, port = smtp_host.partition(":")
+    recipients = _validated_recipients(recipients)
     message = EmailMessage()
     message["To"] = recipients
     message["From"] = "ow-tp-finance-report@otterworks.dev"
