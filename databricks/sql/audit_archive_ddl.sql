@@ -56,11 +56,18 @@ CREATE TABLE IF NOT EXISTS ow_tp.gold.audit_archive_manifest (
 )
 COMMENT 'Retention manifest: deleted_count > 0 is only legal when verified is true.';
 
--- The ordering the legacy job lacked, enforced by the table rather than by
--- reviewer discipline: nothing can be recorded as purged from the source
--- unless the archive copy was verified first.
-ALTER TABLE ow_tp.gold.audit_archive_manifest
-  DROP CONSTRAINT IF EXISTS deleted_requires_verified;
-
-ALTER TABLE ow_tp.gold.audit_archive_manifest
-  ADD CONSTRAINT deleted_requires_verified CHECK (deleted_count = 0 OR verified);
+-- The ordering the legacy job lacked is enforced by the table rather than by
+-- reviewer discipline: nothing can be recorded as purged from the source unless
+-- the archive copy was verified first, i.e.
+--
+--     CONSTRAINT deleted_requires_verified CHECK (deleted_count = 0 OR verified)
+--
+-- It is deliberately NOT managed here. Delta only accepts a CHECK constraint via
+-- ALTER TABLE ADD CONSTRAINT, which has no IF NOT EXISTS form and fails on an
+-- estate that already carries it, so a SQL file with no control flow can only
+-- stay re-runnable by dropping the constraint first -- leaving the manifest
+-- unprotected between the two statements, permanently so if the re-add fails.
+-- Instead the pipeline (databricks/notebooks/ow_tp_audit_archive.py) adds the
+-- constraint when `delta.constraints.deleted_requires_verified` is absent and
+-- never drops it, which runs before any manifest row is written and cannot leave
+-- a window where a purge could be recorded unverified.
