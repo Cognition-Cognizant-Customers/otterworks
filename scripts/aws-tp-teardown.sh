@@ -38,51 +38,87 @@ fi
 
 echo
 echo "=== teardown verification: tag scan Project=otterworks-tp ==="
-# The tagging index is eventually consistent and keeps returning just-deleted
-# ARNs for a few minutes, so every hit is confirmed against its owning service
-# API before it counts, and the scan is retried while only unconfirmed hits remain.
-# Only an explicit not-found clears an ARN: a probe that fails for any other
-# reason (denied, throttled, expired credentials) must read as present, never as
-# "clean", exactly like the name scan below.
-still_exists() {
-  local err
-  case "$1" in
+# The tagging index is eventually consistent for every service, not just Lambda,
+# so each hit is classified against its owning service API: "present" (a real
+# leftover), "absent" (a stale index entry) or "unknown" (the probe itself failed
+# or the ARN shape has no probe). Only an explicit not-found clears an ARN, and an
+# unknown never reads as clean — teardown waits for the index and then fails
+# closed, exactly like the name scan below.
+probe_state() {
+  local arn="$1" name err out
+  case "$arn" in
   arn:aws:lambda:*:event-source-mapping:*)
-    err="$(aws lambda get-event-source-mapping --uuid "${1##*:}" 2>&1 >/dev/null)" && return 0
-    case "$err" in
-    *ResourceNotFoundException*) return 1 ;;
-    *)
-      echo "  probe of $1 failed, treating it as present: $err" >&2
-      return 0
-      ;;
-    esac
+    err="$(aws lambda get-event-source-mapping --uuid "${arn##*:}" 2>&1 >/dev/null)" || : ;;
+  arn:aws:lambda:*:function:*)
+    err="$(aws lambda get-function --function-name "${arn##*:}" 2>&1 >/dev/null)" || : ;;
+  arn:aws:s3:::*)
+    err="$(aws s3api head-bucket --bucket "${arn##*:}" 2>&1 >/dev/null)" || : ;;
+  arn:aws:sqs:*)
+    err="$(aws sqs get-queue-url --queue-name "${arn##*:}" 2>&1 >/dev/null)" || : ;;
+  arn:aws:dynamodb:*:table/*)
+    err="$(aws dynamodb describe-table --table-name "${arn##*/}" 2>&1 >/dev/null)" || : ;;
+  arn:aws:states:*:stateMachine:*)
+    err="$(aws stepfunctions describe-state-machine --state-machine-arn "$arn" 2>&1 >/dev/null)" || : ;;
+  arn:aws:events:*:rule/*)
+    err="$(aws events describe-rule --name "${arn##*/}" 2>&1 >/dev/null)" || : ;;
+  arn:aws:iam::*:role/*)
+    err="$(aws iam get-role --role-name "${arn##*/}" 2>&1 >/dev/null)" || : ;;
+  arn:aws:logs:*:log-group:*)
+    name="${arn#*:log-group:}"
+    name="${name%:\*}"
+    if out="$(aws logs describe-log-groups --log-group-name-prefix "$name" \
+      --query "logGroups[?logGroupName=='$name'].logGroupName" --output text 2>&1)"; then
+      [ -n "$out" ] && echo present || echo absent
+    else
+      echo "  probe of $arn failed: $out" >&2
+      echo unknown
+    fi
+    return
     ;;
-  *) return 0 ;; # anything we cannot probe is treated as present
+  *)
+    echo unknown
+    return
+    ;;
+  esac
+  if [ -z "$err" ]; then
+    echo present
+    return
+  fi
+  case "$err" in
+  *ResourceNotFoundException* | *NoSuchEntity* | *NonExistentQueue* | *NoSuchBucket* | \
+    *StateMachineDoesNotExist* | *ResourceNotFound* | *Not\ Found*)
+    echo absent
+    ;;
+  *)
+    echo "  probe of $arn failed: $err" >&2
+    echo unknown
+    ;;
   esac
 }
 
-tagged=""
+present=""
+unknown=""
 for attempt in 1 2 3 4 5 6; do
   index="$(aws resourcegroupstaggingapi get-resources \
     --tag-filters Key=Project,Values=otterworks-tp \
     --query 'ResourceTagMappingList[].ResourceARN' --output text)"
-  tagged=""
-  stale=""
+  present=""
+  unknown=""
   for arn in $index; do
-    if still_exists "$arn"; then
-      tagged="$tagged $arn"
-    else
-      stale="$stale $arn"
-    fi
+    case "$(probe_state "$arn")" in
+    present) present="$present $arn" ;;
+    unknown) unknown="$unknown $arn" ;;
+    esac
   done
-  [ -n "$tagged" ] && break
-  [ -z "$stale" ] && break
-  echo "  tag index still lists deleted resource(s), waiting (attempt $attempt):$stale"
+  # a confirmed leftover is final; otherwise keep waiting out the index lag
+  [ -n "$present" ] && break
+  [ -z "$unknown" ] && break
+  echo "  tag index lists resource(s) not confirmed gone, waiting (attempt $attempt):$unknown"
   sleep 60
 done
-tagged="${tagged# }"
+tagged="${present# }${unknown}"
 if [ -n "$tagged" ]; then
-  echo "LEFTOVER tagged resources:"
+  echo "LEFTOVER tagged resources (unconfirmed hits count as leftovers):"
   printf '%s\n' $tagged
 else
   echo "clean: no resources tagged Project=otterworks-tp"
