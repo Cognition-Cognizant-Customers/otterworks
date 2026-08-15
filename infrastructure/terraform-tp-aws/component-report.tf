@@ -49,6 +49,11 @@ resource "aws_lambda_function" "report" {
   environment {
     variables = local.lambda_env
   }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.report_lambda_basic,
+    aws_cloudwatch_log_group.report_lambda,
+  ]
 }
 
 resource "aws_cloudwatch_log_group" "report_lambda" {

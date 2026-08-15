@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from functools import lru_cache
 import os
+import re
 from zoneinfo import ZoneInfo
 
 import boto3
@@ -18,24 +19,28 @@ def _s3():
     return boto3.client("s3")
 
 
+_PERL_NUMBER = re.compile(r"\s*[+-]?(?:\d+\.?\d*(?:[eE][+-]?\d+)?|\.\d+(?:[eE][+-]?\d+)?)")
+
+
+def _perl_number(value: str) -> float:
+    """Coerce like Perl's numeric context: leading numeric prefix, else 0."""
+    match = _PERL_NUMBER.match(value)
+    return float(match.group()) if match else 0.0
+
+
 def aggregate(psv_lines: Iterable[str]) -> list[dict]:
     """Aggregate parsed records by currency and record type."""
     totals: dict[str, float] = {}
     counts: dict[str, int] = {}
 
     for line in psv_lines:
-        if not line.strip():
-            continue
+        # legacy `($cust,$name,$dt,$amt,$ccy,$rt) = split(/\|/)`: surplus fields are
+        # dropped, missing ones are undef (""), and a bad record never aborts the run
         fields = line.split("|")
-        if len(fields) != 6:
-            raise ValueError(f"expected 6 PSV fields, got {len(fields)}")
-        cust, _name, _date, amount, currency, record_type = fields
+        cust, _name, _date, amount, currency, record_type = (fields + [""] * 6)[:6]
         if not cust:
             continue
-        try:
-            value = float(amount)
-        except ValueError as exc:
-            raise ValueError(f"invalid amount {amount!r}") from exc
+        value = _perl_number(amount)
 
         key = f"{currency}|{record_type}"
         totals[key] = totals.get(key, 0.0) + value
@@ -96,10 +101,11 @@ def handler(event, context):
     lines = []
     for key in sorted(keys):
         body = client.get_object(Bucket=bucket, Key=key)["Body"].read()
-        lines.extend(body.decode("utf-8").splitlines())
+        # the parser writes PSV as latin-1 bytes, exactly as the legacy chain did
+        lines.extend(body.decode("latin-1").splitlines())
 
     rows = aggregate(lines)
-    report_bytes = render_csv(rows).encode("utf-8")
+    report_bytes = render_csv(rows).encode("latin-1")
     stamp = report_stamp()
     csv_key = report_key(ns, f"finance_billing_{stamp}.csv")
     xls_key = report_key(ns, f"finance_billing_{stamp}.xls")

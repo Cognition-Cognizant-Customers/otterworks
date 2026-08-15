@@ -16,13 +16,13 @@ def _validate_segment(value: str, label: str) -> None:
         raise ValueError(f"{label} must be a single path segment")
 
 
-def _source_namespace(key: str) -> str:
+def _source_parts(key: str) -> tuple[str, str]:
     parts = key.split("/")
     if len(parts) != 3 or parts[0] != LANDING_PREFIX:
         raise ValueError("key must be a landing object path")
     _validate_segment(parts[1], "key namespace")
     _validate_segment(parts[2], "key filename")
-    return parts[1]
+    return parts[1], parts[2]
 
 
 def _get_billing_table():
@@ -34,12 +34,16 @@ def _get_billing_table():
 
 def handler(event: dict, context: object) -> dict[str, object]:
     key = event["key"]
-    key_ns = _source_namespace(key)
+    key_ns, key_filename = _source_parts(key)
     provided_ns = event.get("ns")
     ns = provided_ns or key_ns
     if provided_ns and provided_ns != key_ns:
         raise ValueError("event namespace does not match key namespace")
-    filename = event["filename"]
+    # the output key and the DynamoDB sort keys are derived from the filename, so an
+    # event that names a different file than the one it reads must not be honoured
+    filename = event.get("filename") or key_filename
+    if filename != key_filename:
+        raise ValueError("event filename does not match key filename")
     _validate_segment(ns, "namespace")
     _validate_segment(filename, "filename")
     output_filename = filename[:-4] + ".psv" if filename.endswith(".dat") else filename

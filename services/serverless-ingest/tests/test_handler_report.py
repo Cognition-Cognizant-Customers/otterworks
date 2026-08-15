@@ -100,16 +100,48 @@ def test_aggregate_row_order_and_record_type_labels():
     assert gbp_unknown["total"] == pytest.approx(1235.55)
 
 
-def test_aggregate_skips_blank_and_headerless_records():
-    lines = ["", "   ", "|OTTER|2025-01-01|1.00|USD|01"] + _psv_lines()
+def test_aggregate_skips_records_with_an_empty_customer():
+    # legacy `next if ($cust eq "")` — an empty line splits to one empty field
+    lines = ["", "|OTTER|2025-01-01|1.00|USD|01"] + _psv_lines()
     assert handler_report.aggregate(lines) == handler_report.aggregate(_psv_lines())
 
 
-def test_aggregate_rejects_malformed_records():
-    with pytest.raises(ValueError):
-        handler_report.aggregate(["C000000001|OTTER LTD|2025-01-01|12.00"])
-    with pytest.raises(ValueError):
-        handler_report.aggregate(["C000000001|OTTER LTD|2025-01-01|NOTANUMBER|USD|01"])
+def test_aggregate_tolerates_malformed_records_like_the_legacy_perl():
+    # expectations produced by running etl/legacy-extra/jobs/finance_excel_report.pl
+    # over exactly these records:
+    #   Currency,RecordType,RecordCount,TotalAmount
+    #   34.00,UNKNOWN(USD),1,2025.00
+    #   GBP,CREDIT,1,5.50
+    #   USD,INVOICE,1,0.00
+    #   ,UNKNOWN(),2,12.00
+    rows = handler_report.aggregate(
+        [
+            "C000000001|OTTER LTD|2025-01-01|12.00",  # short: ccy/rt undef
+            "C000000002|PIPE|NAME|2025-01-02|34.00|USD|01",  # embedded pipe: fields shift
+            "C000000003|X|2025-01-03|NOTANUMBER|USD|01",  # non-numeric amount -> 0
+            "C000000004|X|2025-01-04|5.5abc|GBP|02",  # numeric prefix wins
+            "   ",  # non-empty cust, everything else undef
+        ]
+    )
+    assert [
+        (r["currency"], r["record_type"], r["count"], round(r["total"], 2)) for r in rows
+    ] == [
+        ("34.00", "UNKNOWN(USD)", 1, 2025.00),
+        ("GBP", "CREDIT", 1, 5.50),
+        ("USD", "INVOICE", 1, 0.00),
+        ("", "UNKNOWN()", 2, 12.00),
+    ]
+
+
+def test_handler_reads_latin1_psv_bytes(monkeypatch):
+    # the parser writes latin-1 bytes (non-UTF-8 names round-trip), so decoding as
+    # UTF-8 here would fail the whole namespace's report
+    client = FakeS3({"parsed/x/CUSTBILL_X_001.psv": b"C1|OTTER\xa0LTD|2025-01-01|1.00|USD|01\n"})
+    monkeypatch.setattr(handler_report, "_s3", lambda: client)
+
+    result = handler_report.handler({"ns": "x"}, None)
+
+    assert client.objects[result["report_key"]].endswith(b"USD,INVOICE,1,1.00\n")
 
 
 def test_empty_parsed_prefix_writes_header_only_report(monkeypatch):
