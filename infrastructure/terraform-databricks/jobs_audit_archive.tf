@@ -81,8 +81,14 @@ resource "databricks_job" "audit_archive" {
     default = "/Volumes/${var.catalog_name}/bronze/landing"
   }
 
+  # Retried because the file is `CREATE TABLE IF NOT EXISTS` only: a re-run
+  # reconciles the same schema, so a serverless warehouse hiccup costs a retry
+  # instead of the week's retention run.
   task {
-    task_key = "create_tables"
+    task_key                  = "create_tables"
+    max_retries               = 2
+    min_retry_interval_millis = 60000
+    retry_on_timeout          = false
 
     sql_task {
       warehouse_id = data.databricks_sql_warehouse.serverless.id
