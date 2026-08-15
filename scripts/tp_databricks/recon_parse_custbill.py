@@ -86,12 +86,14 @@ class Check:
         self.ok = True
         self.details: list[str] = []
         self.blocked_reason: str | None = None
+        self.failed = False
 
     def note(self, line: str) -> None:
         self.details.append(line)
 
     def fail(self, line: str) -> None:
         self.ok = False
+        self.failed = True
         self.details.append(line)
 
     def blocked(self, command: str, error: str) -> None:
@@ -100,9 +102,11 @@ class Check:
 
     @property
     def status(self) -> str:
+        if self.failed:
+            return "FAIL"
         if self.blocked_reason:
             return "BLOCKED"
-        return "PASS" if self.ok else "FAIL"
+        return "PASS"
 
 
 def _sha256(path: Path) -> str:
@@ -434,7 +438,7 @@ def check_idempotency(ns: str, converted, converted_error=None) -> Check:
 
 def render_report(ns: str, golden_dir: Path, checks: list[Check]) -> str:
     verdict = "green" if all(c.ok for c in checks) else (
-        "blocked" if any(c.blocked_reason for c in checks) else "red"
+        "red" if any(c.failed for c in checks) else "blocked"
     )
     lines = [
         "# Recon: `parse_custbill_fixedwidth.sh` -> `ow_tp_parse_custbill`",
