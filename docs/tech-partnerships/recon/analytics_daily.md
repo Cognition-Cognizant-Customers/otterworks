@@ -34,8 +34,8 @@ per event_type totals: baseline={'quota.warning': 529, 'user.logout': 487, 'file
 ## 3. Retry deficiency retired: a failing/empty source fails the run — **PASS**
 
 ```text
-legacy behaviour being retired, captured at /home/ubuntu/tp-golden/python/analytics_daily/zero_event (legacy run with its sources removed): [2026-08-15 22:56:28] ERROR: Too many SQS failures, giving up / [2026-08-15 22:56:28] Extracted 0 events from SQS -> exit 1
-legacy exit code on a zero-event extract: baseline='0' != converted='1'
+legacy behaviour being retired, captured at /home/ubuntu/tp-golden/python/analytics_daily/zero_event (legacy run with its sources removed): [2026-08-15 23:00:21] ERROR: Too many SQS failures, giving up / [2026-08-15 23:00:21] Extracted 0 events from SQS / [2026-08-15 23:00:21] Extracted 0 events from DynamoDB for 2026-08-15 / [2026-08-15 23:00:21] WARNING: No events found, exiting -> exit 0
+legacy exit code on a zero-event extract: baseline='0' = converted='0'
 unreachable source: run failed as required (DatabricksError: statement failed (FAILED): [TABLE_OR_VIEW_NOT_FOUND] The table or view `ow_tp`.`bronze`.`analytics_daily_stage_missing` cannot be found. Verify the spelling and correctness of the schema and catalog.
 )
 empty source: run failed as required (ZeroEventExtract: extract produced 0 events for ns=recon_probe_demo from ow_tp.bronze.analytics_daily_stage; failing the run instead of writing an empty summary)
