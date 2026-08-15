@@ -31,9 +31,9 @@ variable "user_activity_lookback_days" {
 }
 
 variable "user_activity_upstream_table" {
-  description = "Upstream analytics aggregate the report reads: the analytics unit's gold table, replacing the legacy analytics_daily_summary PostgreSQL table."
+  description = "Upstream analytics aggregate the report reads, as catalog-relative schema.table: the analytics unit's gold table, replacing the legacy analytics_daily_summary PostgreSQL table. Qualified with var.catalog_name so a non-default catalog stays consistent."
   type        = string
-  default     = "ow_tp.gold.analytics_daily_summary"
+  default     = "gold.analytics_daily_summary"
 }
 
 variable "user_activity_max_upstream_lag_days" {
@@ -55,7 +55,7 @@ locals {
     ns                     = var.user_activity_ns
     report_date            = "" # empty: the run's UTC date, as the legacy cron used
     lookback_days          = tostring(var.user_activity_lookback_days)
-    upstream_summary_table = var.user_activity_upstream_table
+    upstream_summary_table = "${var.catalog_name}.${var.user_activity_upstream_table}"
     max_upstream_lag_days  = tostring(var.user_activity_max_upstream_lag_days)
     catalog                = var.catalog_name
   }

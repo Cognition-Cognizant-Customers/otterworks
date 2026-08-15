@@ -8,8 +8,13 @@
 -- Single source of truth for the DDL: the notebook applies this same file from
 -- the landing volume (parameter ddl_path), and scripts/tp_databricks/recon_user_activity.py
 -- applies it from the repo. It is never duplicated inline.
+--
+-- Table names are catalog-relative (schema.table) so the file follows whichever
+-- catalog the caller sets (`catalog_name` in Terraform, `USE CATALOG` / the SQL
+-- API's catalog field here); it never hardcodes one catalog while the job writes
+-- to another.
 
-CREATE TABLE IF NOT EXISTS ow_tp.bronze.user_activity_raw (
+CREATE TABLE IF NOT EXISTS bronze.user_activity_raw (
   ns            STRING  COMMENT 'demo namespace; the isolation boundary for per-run state',
   user_id       STRING  COMMENT "user the metric belongs to; '*' on the all-users rows sourced from the analytics aggregate",
   activity_date DATE    COMMENT 'date the metric was measured on',
@@ -22,7 +27,7 @@ USING DELTA
 PARTITIONED BY (ns)
 COMMENT 'Per-user source rows for the daily activity report: the per-user event data plus the upstream analytics aggregate the legacy script consumed blindly.';
 
-CREATE TABLE IF NOT EXISTS ow_tp.silver.user_activity_daily (
+CREATE TABLE IF NOT EXISTS silver.user_activity_daily (
   ns                STRING    COMMENT 'demo namespace',
   user_id           STRING    COMMENT 'user',
   activity_date     DATE      COMMENT 'activity date',
@@ -38,7 +43,7 @@ USING DELTA
 PARTITIONED BY (ns)
 COMMENT 'One typed row per (ns, user_id, activity_date), replacing the legacy pandas in-memory aggregation.';
 
-CREATE TABLE IF NOT EXISTS ow_tp.gold.user_activity_report (
+CREATE TABLE IF NOT EXISTS gold.user_activity_report (
   ns                    STRING    COMMENT 'demo namespace',
   report_date           DATE      COMMENT 'report date; the legacy ds',
   user_id               STRING    COMMENT 'user',
@@ -58,7 +63,7 @@ COMMENT 'The report the legacy job shipped to admin-service, plus the upstream-f
 -- Run-level audit trail: replaces the legacy print() logging and the silent
 -- `except: pass`, and records the freshness verdict for every run, including
 -- refused ones.
-CREATE TABLE IF NOT EXISTS ow_tp.gold.user_activity_run_log (
+CREATE TABLE IF NOT EXISTS gold.user_activity_run_log (
   ns                    STRING    COMMENT 'demo namespace',
   run_ts                TIMESTAMP COMMENT 'run start',
   report_date           DATE      COMMENT 'report date the run targeted',
