@@ -9,7 +9,7 @@
 # MAGIC |---|---|
 # MAGIC | Row-by-row `%tot`/`%cnt` accumulation in Perl over `parsed/*.psv` | one `GROUP BY` against `ow_tp.silver.custbill_records` |
 # MAGIC | CSV renamed to `.xls` | a real CSV, written with a `.csv` extension; the gold table is the system of record |
-# MAGIC | `sendmail -t` pipe that no-ops when the binary is missing | delivery is attempted only if a transport is configured, with a durable pre-send attempt audit and a post-acceptance delivery confirmation in `ow_tp.gold.finance_report_delivery` |
+# MAGIC | `sendmail -t` pipe that no-ops when the binary is missing | delivery is attempted only if a transport is configured, with setup failures recorded as definite non-delivery, a durable pre-send attempt audit, and a post-acceptance delivery confirmation in `ow_tp.gold.finance_report_delivery` |
 # MAGIC | Recipients hardcoded (`jake@…`, gone since 2020) | distribution list read from the `ow_tp` secret scope |
 # MAGIC | Hostname `if`-blocks choosing `/data/otterworks` vs `/data2/otterworks_uat` | job parameters + Unity Catalog volume paths |
 # MAGIC | Lock file checked, never removed | `max_concurrent_runs = 1` plus delete-and-insert idempotency per `(ns, report_date)` |
@@ -43,6 +43,7 @@ _PATTERNS = {
 STATUS_DELIVERED = "DELIVERED"
 STATUS_ATTEMPTING = "DELIVERY_ATTEMPTED_UNCONFIRMED"
 STATUS_UNCONFIRMED = "NOT_DELIVERED_ATTEMPT_UNCONFIRMED"
+STATUS_TRANSPORT_UNAVAILABLE = "NOT_DELIVERED_TRANSPORT_UNAVAILABLE"
 STATUS_NO_TRANSPORT = "NOT_DELIVERED_NO_TRANSPORT_CONFIGURED"
 STATUS_NO_RECIPIENTS = "NOT_DELIVERED_NO_RECIPIENTS_CONFIGURED"
 
@@ -81,7 +82,7 @@ def ddl_statements(catalog: str = "ow_tp") -> list[str]:
           report_date DATE NOT NULL COMMENT 'Business date of the report run.',
           artifact_path STRING COMMENT 'Volume path of the emitted artifact, NULL when nothing was written.',
           recipient_list STRING COMMENT 'Distribution list resolved from the ow_tp secret scope, never from code.',
-          delivery_status STRING NOT NULL COMMENT 'DELIVERED, DELIVERY_ATTEMPTED_UNCONFIRMED, NOT_DELIVERED_ATTEMPT_UNCONFIRMED, or NOT_DELIVERED_<reason>.',
+          delivery_status STRING NOT NULL COMMENT 'DELIVERED, DELIVERY_ATTEMPTED_UNCONFIRMED, NOT_DELIVERED_ATTEMPT_UNCONFIRMED, NOT_DELIVERED_TRANSPORT_UNAVAILABLE:<reason>, or NOT_DELIVERED_<reason>.',
           delivered_at TIMESTAMP COMMENT 'Set only when delivery actually happened; NULL otherwise.'
         )
         COMMENT 'Delivery audit the legacy sendmail no-op never produced: what was written, to whom it was addressed, and whether it actually went out.'
@@ -278,8 +279,17 @@ def _run() -> None:
             f"report_date={report_date!r}; human confirmation is required before retrying"
         )
     elif recipients and transport:
+        try:
+            smtp, message = _prepare_delivery(transport, recipients, artifact_path, report_date)
+        except Exception as error:  # noqa: BLE001 - setup failure is recorded and raised
+            status = f"{STATUS_TRANSPORT_UNAVAILABLE}: {error}"
+            write_audit(recipients, status)
+            raise RuntimeError(
+                f"finance report transport setup failed for ns={ns!r}, "
+                f"report_date={report_date!r}: {error}"
+            ) from error
         write_audit(recipients, STATUS_ATTEMPTING)
-        status = _deliver(transport, recipients, artifact_path, report_date)
+        status = _deliver(smtp, message)
         write_audit(recipients, status)
     else:
         write_audit(recipients, status)
@@ -326,9 +336,12 @@ def _validated_recipients(recipients: str) -> str:
     return ",".join(addresses)
 
 
-def _deliver(smtp_host: str, recipients: str, artifact_path: str, report_date: str) -> str:
-    """Hand the report to the configured SMTP transport. Failures raise, they do not vanish."""
+def _prepare_delivery(
+    smtp_host: str, recipients: str, artifact_path: str, report_date: str
+) -> tuple[object, object]:
+    """Set up a verified SMTP transport and message before recording an attempt."""
     import smtplib
+    import ssl
     from email.message import EmailMessage
 
     host, _, port = smtp_host.partition(":")
@@ -345,13 +358,28 @@ def _deliver(smtp_host: str, recipients: str, artifact_path: str, report_date: s
             subtype="csv",
             filename=artifact_path.rsplit("/", 1)[-1],
         )
-    with smtplib.SMTP(host, int(port or 25), timeout=30) as smtp:
+    smtp = smtplib.SMTP(host, int(port or 25), timeout=30)
+    try:
         smtp.ehlo()
         if not smtp.has_extn("starttls"):
             raise RuntimeError("SMTP transport does not advertise STARTTLS")
-        smtp.starttls()
+        smtp.starttls(context=ssl.create_default_context())
         smtp.ehlo()
+    except Exception:
+        try:
+            smtp.quit()
+        except Exception:
+            pass
+        raise
+    return smtp, message
+
+
+def _deliver(smtp: object, message: object) -> str:
+    """Hand the prepared report to SMTP; failures remain genuinely unconfirmed."""
+    try:
         smtp.send_message(message)
+    finally:
+        smtp.quit()
     return STATUS_DELIVERED
 
 
