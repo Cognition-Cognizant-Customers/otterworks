@@ -304,6 +304,14 @@ def check5_scope(ns: str) -> Check:
         f"{other_unit_tables or 'none'}"
     )
 
+    namespaces = [row[0] for row in dbx.sql(
+        f"SELECT DISTINCT ns FROM {CATALOG}.bronze.custbill_lines ORDER BY ns"
+    )]
+    check.detail.append(
+        f"namespaces present in bronze.custbill_lines: {namespaces} "
+        f"(this unit only ever writes ns='{ns}'; other namespaces are other runs')"
+    )
+
     found = dbx.inventory()
     strays = [name for name in found["jobs"] if name.startswith("ow_tp_dev_")]
     ok = ok and not strays
@@ -361,6 +369,10 @@ def _main(argv: list[str]) -> int:
     parser.add_argument("--report", help="write the markdown report to this path")
     args = parser.parse_args(argv)
 
+    # The recon builds SQL text too, so its `ns` goes through the same gate the
+    # statement module applies rather than being trusted from the command line.
+    sftp_ingest_sql.validated(args.ns, CATALOG, args.landing_root)
+
     golden = load_golden(Path(args.golden_root))
     checks = [
         check1_manifest(args.ns, golden),
@@ -381,7 +393,9 @@ def _main(argv: list[str]) -> int:
         report_path.write_text(render_report(checks, args.ns, Path(args.golden_root), args.landing_root))
         print(f"report written to {report_path}")
 
-    return 0 if all(check.passed for check in checks) else 1
+    # A check that could not be run is BLOCKED, not a failure: only `False` fails,
+    # so a deliberate read-only pass (`--no-rerun`) can still exit 0.
+    return 0 if all(check.passed is not False for check in checks) else 1
 
 
 if __name__ == "__main__":
