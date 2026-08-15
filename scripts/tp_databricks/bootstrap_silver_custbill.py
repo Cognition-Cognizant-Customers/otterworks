@@ -69,6 +69,7 @@ def ddl_statements(catalog: str = CATALOG) -> list[str]:
           record_type STRING NOT NULL,
           account_id STRING NOT NULL,
           invoice_id STRING,
+          customer_name STRING,
           currency STRING NOT NULL,
           amount DECIMAL(18,2) NOT NULL,
           bill_date DATE NOT NULL,
@@ -130,6 +131,7 @@ def _validated_cte(ns: str, catalog: str) -> str:
               ELSE 'DETAIL'
             END AS rec_kind,
             rtrim(substring(line, 1, 10)) AS account_id,
+            rtrim(substring(line, 11, 30)) AS customer_name,
             substring(line, 41, 8) AS bill_date_raw,
             substring(line, 49, 12) AS amount_raw,
             rtrim(substring(line, 61, 3)) AS currency,
@@ -164,8 +166,8 @@ def parse_statements(ns: str, catalog: str = CATALOG) -> list[str]:
         f"DELETE FROM {catalog}.silver.custbill_file_recon WHERE ns = {sql_literal(ns)}",
         f"""
         INSERT INTO {catalog}.silver.custbill_records
-          (ns, file_name, line_no, record_type, account_id, invoice_id, currency, amount,
-           bill_date, parsed_at)
+          (ns, file_name, line_no, record_type, account_id, invoice_id, customer_name,
+           currency, amount, bill_date, parsed_at)
         {validated}
         SELECT
           {sql_literal(ns)},
@@ -174,6 +176,7 @@ def parse_statements(ns: str, catalog: str = CATALOG) -> list[str]:
           record_type,
           account_id,
           CAST(NULL AS STRING) AS invoice_id,
+          customer_name,
           currency,
           CAST(amount_raw AS DECIMAL(20,0)) / 100 AS amount,
           bill_date,
