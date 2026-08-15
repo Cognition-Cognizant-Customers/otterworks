@@ -85,6 +85,21 @@ raising a traceback. Check 1 names both raw legacy values as unparseable and com
 directly with the converted typed values, so corrupt legacy output is visible as a parity
 mismatch rather than being coerced, skipped, or mistaken for a conversion failure.
 
+## E. Malformed legacy lines fail the report, not the process
+
+Mutation: copies of the two legacy `.psv` files were written to a scratch directory under
+`/tmp`; one data line was changed from six pipe-separated fields to five. The real golden
+directory and committed report were not modified.
+
+```text
+CUSTBILL_DEMO_001.psv line 2: malformed legacy line: expected 6 fields, got 5: 'C000699637|INITECH SA|2025-03-23|4393.35|USD'
+```
+
+Exit code `1`; the report was written to `/tmp/recon-golden-malformed-report.md` rather than
+raising a traceback. Check 0 records the file, line number, expected field count, actual
+field count, and raw content; row parity also fails because the malformed legacy record is
+not silently padded or treated as a valid six-field row.
+
 ## Note on the shared workspace
 
 During the session an extra bronze line (`line_no = 999`, `raw_line` `STALE TAIL RECORD`)

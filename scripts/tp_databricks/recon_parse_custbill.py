@@ -109,7 +109,9 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def read_golden(golden_dir: Path, ns: str) -> dict[tuple[str, int], dict[str, object]]:
+def read_golden(
+    golden_dir: Path, ns: str
+) -> tuple[dict[tuple[str, int], dict[str, object]], list[str]]:
     """Parse the legacy pipe-delimited output into keyed, typed rows.
 
     The legacy writer emits `account|name|YYYY-MM-DD|amount|currency|type`; the
@@ -117,13 +119,18 @@ def read_golden(golden_dir: Path, ns: str) -> dict[tuple[str, int], dict[str, ob
     up as a field mismatch rather than being normalised away.
     """
     rows: dict[tuple[str, int], dict[str, object]] = {}
+    errors: list[str] = []
     for psv in sorted(golden_dir.glob(f"CUSTBILL_{ns.upper()}_*.psv")):
         stem = psv.stem
         data_lines = [line for line in psv.read_text().splitlines() if line.strip()]
         for index, line in enumerate(data_lines, start=1):
             parts = line.split("|")
             if len(parts) != 6:
-                raise ValueError(f"{psv.name}:{index}: expected 6 fields, got {len(parts)}: {line!r}")
+                errors.append(
+                    f"{psv.name} line {index + HDR_LINES}: malformed legacy line: "
+                    f"expected 6 fields, got {len(parts)}: {line!r}"
+                )
+                continue
             account_id, customer_name, bill_date, amount, currency, record_type = parts
             try:
                 typed_bill_date: object = date.fromisoformat(bill_date)
@@ -141,7 +148,7 @@ def read_golden(golden_dir: Path, ns: str) -> dict[tuple[str, int], dict[str, ob
                 "currency": currency,
                 "record_type": record_type,
             }
-    return rows
+    return rows, errors
 
 
 def read_converted(
@@ -443,9 +450,12 @@ def main() -> int:
     args.ns = custbill_parse_sql.validate_namespace(args.ns)
 
     golden_dir = Path(args.golden)
-    golden = read_golden(golden_dir, args.ns)
+    golden, golden_errors = read_golden(golden_dir, args.ns)
     converted, converted_error = read_converted(args.ns)
-    checks = [check_baseline(args.ns, golden_dir)]
+    baseline_check = check_baseline(args.ns, golden_dir)
+    for error in golden_errors:
+        baseline_check.fail(error)
+    checks = [baseline_check]
     checks.append(check_row_parity(golden, converted, converted_error))
     checks.append(check_subtotals(args.ns, golden, converted, converted_error))
     expected_files = len({stem for stem, _line_no in golden})
