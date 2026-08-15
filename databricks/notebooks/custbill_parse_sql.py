@@ -237,7 +237,7 @@ def parse_statements(ns: str) -> list[tuple[str, str]]:
                recon_ok, reconciled_at)
             WITH trailer AS (
               SELECT ns, file_name,
-                     CAST(regexp_extract(raw_line, '^TRL([0-9]+)', 1) AS BIGINT) AS declared_trailer_count
+                     try_cast(regexp_extract(raw_line, '^TRL([0-9]+)', 1) AS BIGINT) AS declared_trailer_count
               FROM {BRONZE_LINES}
               WHERE ns = {lit} AND raw_line LIKE 'TRL%'
             ),
