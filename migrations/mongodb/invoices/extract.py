@@ -51,12 +51,6 @@ def fetch_codes(conn, code_type: str) -> dict[int, str]:
         return {int(val): desc for val, desc in cur}
 
 
-def count_rows(conn, table: str, batch_no: int) -> int:
-    with conn.cursor() as cur:
-        cur.execute(f"SELECT COUNT(*) FROM {table} WHERE batch_no = :1", [batch_no])
-        return int(cur.fetchone()[0])
-
-
 def _iter_rows(conn, sql: str, batch_no: int, arraysize: int) -> Iterator[dict]:
     """Yield dict rows from a server-side cursor, `arraysize` rows per round trip."""
     cur = conn.cursor()
@@ -78,14 +72,17 @@ def _iter_rows(conn, sql: str, batch_no: int, arraysize: int) -> Iterator[dict]:
 def iter_units(conn, batch_no: int, arraysize: int = 1000) -> Iterator[tuple]:
     """Yield `(INVOICE, header, lines)` and `(ORPHAN_LINE, line, None)` in one pass.
 
-    Both cursors are ordered by `INVOICE_ID` and advanced together. Header ids
-    already consumed are tracked so a collation mismatch between Oracle's
-    `ORDER BY` and Python's comparison surfaces as an error instead of
-    silently inflating the orphan count.
+    Both cursors are ordered by `INVOICE_ID` and advanced together, which is
+    only correct while Oracle's `ORDER BY` collation agrees with Python's `<`.
+    Both directions of a disagreement are checked — a line pointing at an
+    already-consumed header, and a header arriving after its lines were
+    quarantined — so a skew fails loudly instead of silently inflating the
+    orphan count the recon contract asserts on.
     """
     headers = _iter_rows(conn, HEADER_SQL, batch_no, arraysize)
     lines = _iter_rows(conn, LINE_SQL, batch_no, arraysize)
     seen_headers: set[str] = set()
+    orphaned_ids: set[str] = set()  # bounded by the orphan count, not the feed
     line = next(lines, None)
 
     def emit_orphan(row: dict) -> tuple:
@@ -94,6 +91,7 @@ def iter_units(conn, batch_no: int, arraysize: int = 1000) -> Iterator[tuple]:
                 "merge-join ordering mismatch: line "
                 f"{row['LINE_ID']} points at already-consumed header "
                 f"{row['INVOICE_ID']}")
+        orphaned_ids.add(row["INVOICE_ID"])
         return (ORPHAN_LINE, row, None)
 
     for header in headers:
@@ -101,6 +99,10 @@ def iter_units(conn, batch_no: int, arraysize: int = 1000) -> Iterator[tuple]:
         while line is not None and line["INVOICE_ID"] < invoice_id:
             yield emit_orphan(line)
             line = next(lines, None)
+        if invoice_id in orphaned_ids:
+            raise RuntimeError(
+                "merge-join ordering mismatch: header "
+                f"{invoice_id} arrived after its lines were quarantined")
         group = []
         while line is not None and line["INVOICE_ID"] == invoice_id:
             group.append(line)

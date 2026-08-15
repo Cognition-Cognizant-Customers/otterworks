@@ -280,3 +280,16 @@ def test_findings_merge_counts_and_caps_samples():
     assert total.as_dict()["orphaned_rows"]["count"] == 5
     assert total.as_dict()["orphaned_rows"]["sample"] == [{"id": "line-0"},
                                                           {"id": "line-1"}]
+
+
+def test_findings_keeps_falsy_offending_values():
+    findings = transform.Findings()
+    findings.add("unmapped_status_code", "inv-1", 0)
+    findings.add("unparseable_service_period", "line-1", "")
+    findings.add("no_detail", "line-2")
+
+    samples = findings.as_dict()
+    assert samples["unmapped_status_code"]["sample"] == [{"id": "inv-1", "detail": 0}]
+    assert samples["unparseable_service_period"]["sample"] == [
+        {"id": "line-1", "detail": ""}]
+    assert samples["no_detail"]["sample"] == [{"id": "line-2"}]

@@ -73,7 +73,22 @@ def test_header_without_lines_yields_an_empty_group(monkeypatch):
     assert units == [(extract.INVOICE, header("inv-a"), [])]
 
 
-def test_ordering_mismatch_is_an_error_not_a_silent_orphan(monkeypatch):
+def test_late_header_for_a_quarantined_line_is_an_error(monkeypatch):
+    # Oracle ordered the headers inv-b, inv-a; Python says "inv-a" < "inv-b",
+    # so inv-a's line is quarantined before its header shows up.
+    def _iter_rows(conn, sql, batch_no, arraysize):
+        if sql is extract.HEADER_SQL:
+            yield from [header("inv-b"), header("inv-a")]
+        else:
+            yield from [line("l1", "inv-a"), line("l2", "inv-b")]
+
+    monkeypatch.setattr(extract, "_iter_rows", _iter_rows)
+
+    with pytest.raises(RuntimeError, match="ordering mismatch"):
+        list(extract.iter_units(None, BATCH_NO))
+
+
+def test_line_pointing_at_a_consumed_header_is_an_error(monkeypatch):
     def _iter_rows(conn, sql, batch_no, arraysize):
         if sql is extract.HEADER_SQL:
             yield from [header("inv-a"), header("inv-b")]

@@ -38,7 +38,8 @@ class Findings:
         self.counts[kind] = self.counts.get(kind, 0) + 1
         sample = self.samples.setdefault(kind, [])
         if len(sample) < self._sample_size:
-            sample.append({"id": ident, "detail": detail} if detail else {"id": ident})
+            sample.append({"id": ident, "detail": detail}
+                          if detail is not None else {"id": ident})
 
     def merge(self, other: "Findings") -> None:
         for kind, count in other.counts.items():
