@@ -323,8 +323,8 @@ def _reload(ns: str, scenario: str, metadata_limit: int | None):
     namespace, so it restores the same orphan set the golden run acted on.
     """
     fixture_builder.build(ns)
-    objects = extract.list_objects(extract.FILE_STORAGE_BUCKET, ns)
-    metadata, complete = extract.scan_metadata(ns, metadata_limit)
+    metadata, complete, claimed_elsewhere = extract.scan_metadata(ns, metadata_limit)
+    objects = extract.list_objects(extract.FILE_STORAGE_BUCKET, ns, claimed_elsewhere)
     manifest = {
         "extracted_at": datetime.now(tz=timezone.utc).isoformat(),
         "source_bucket": extract.FILE_STORAGE_BUCKET,
