@@ -1,3 +1,9 @@
+# ------------------------------------------------------------------------------
+# Report component: finance report Lambda replacing finance_excel_report.pl and
+# Step Functions orchestration replacing run_all.sh's sleep-based sequencing.
+# References other components only through deterministic local.lambda_arns values.
+# ------------------------------------------------------------------------------
+
 resource "aws_iam_role" "report_lambda" {
   name               = "${local.lambda_names["report"]}-role"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
@@ -164,7 +170,7 @@ resource "aws_sfn_state_machine" "pipeline" {
   })
 
   logging_configuration {
-    log_destination        = aws_cloudwatch_log_group.pipeline.arn
+    log_destination        = "${aws_cloudwatch_log_group.pipeline.arn}:*"
     level                  = "ERROR"
     include_execution_data = true
   }
