@@ -35,6 +35,7 @@ import json
 import os
 import sys
 import tempfile
+import urllib.parse
 from pathlib import Path
 from types import ModuleType
 
@@ -93,9 +94,15 @@ def _event_objects(ns: str) -> tuple[str, list[str]]:
 
 
 def land(ns: str, catalog: str) -> dict:
-    """Copy the legacy event objects and the DDL into the landing volume."""
+    """Replace the namespace's landing slice with the legacy event objects and DDL."""
     s3 = _s3_client()
     prefix, keys = _event_objects(ns)
+    events_path = f"/Volumes/{catalog}/bronze/landing/{volume_prefix(ns)}/events"
+    try:
+        dbx.request("DELETE", f"/api/2.0/fs/directories{urllib.parse.quote(events_path)}")
+    except dbx.DatabricksError as exc:
+        if exc.status != 404:
+            raise
 
     landed, total_bytes = 0, 0
     with tempfile.TemporaryDirectory() as scratch:
