@@ -91,7 +91,9 @@ summary = spark.sql(
     f"""
     SELECT f.file_name, f.size_bytes, f.sha256, f.record_count, count(l.line_no) AS lines_ingested
     FROM {catalog}.bronze.custbill_files f
-    JOIN {catalog}.bronze.custbill_lines l ON l.ns = f.ns AND l.file_name = f.file_name
+    -- LEFT: a manifest row whose lines are all missing must show up as 0 and fail the
+    -- reconciliation below, not disappear from it.
+    LEFT JOIN {catalog}.bronze.custbill_lines l ON l.ns = f.ns AND l.file_name = f.file_name
     WHERE f.ns = '{ns}'
     GROUP BY f.file_name, f.size_bytes, f.sha256, f.record_count
     ORDER BY f.file_name
