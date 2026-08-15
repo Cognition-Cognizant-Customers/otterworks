@@ -302,6 +302,7 @@
         "quarantineReason": "missing_header"
       }
     ],
+    "orphansWithoutPointer": [],
     "unexpectedQuarantineReasons": [],
     "unplantedOrphans": []
   },
@@ -373,6 +374,12 @@
       "ok": true
     },
     {
+      "actual": 0,
+      "check": "every line carries an amount (the checksum covers all of them)",
+      "expected": 0,
+      "ok": true
+    },
+    {
       "actual": "88a66751f0b08b476b492105a2efc537",
       "check": "source-parity checksum == manifest checksum",
       "expected": "88a66751f0b08b476b492105a2efc537",
@@ -394,7 +401,8 @@
   "checksum": {
     "amountTotal": "1855870025.91",
     "checksum": "88a66751f0b08b476b492105a2efc537",
-    "lines": 150000
+    "lines": 150000,
+    "linesWithoutAmount": []
   },
   "counts": {
     "embeddedLines": 149963,
@@ -423,6 +431,6 @@
   },
   "manifestGeneratedAt": "2026-08-01T00:00:00Z",
   "ns": "demo",
-  "reconciledAt": "2026-08-15T23:38:52Z",
+  "reconciledAt": "2026-08-15T23:46:33Z",
   "verdict": "PASS"
 }

@@ -178,38 +178,67 @@ def fanout(invoices) -> dict:
     }
 
 
+def as_decimal(value: Decimal128 | None) -> Decimal | None:
+    """Line amounts are `NOT NULL` in the estate, but recon reports rather than crashes."""
+    return None if value is None else value.to_decimal()
+
+
+def amount_str(amount: Decimal | None) -> str:
+    return "—" if amount is None else f"{amount:.2f}"
+
+
+def split_pointers(orphans: list[dict]) -> tuple[list[str], list[str]]:
+    """Quarantined lines carrying no `INVOICE_ID`, and the distinct ids the rest point at.
+
+    `INVOICE_LINE.INVOICE_ID` is nullable and such a line is quarantined too: it
+    points at nothing, so it is reported on its own rather than sorted in among
+    the dangling pointers (where a `None` would abort the whole recon).
+    """
+    return ([row["lineId"] for row in orphans
+             if row["danglingInvoiceId"] is None],
+            sorted({row["danglingInvoiceId"] for row in orphans
+                    if row["danglingInvoiceId"] is not None}))
+
+
 def atlas_checksum(db) -> dict:
     """Manifest-shaped ordered md5 over every line Atlas holds."""
     digest = hashlib.md5()
     lines = 0
     previous = None
     total = Decimal("0")
+    # a line with no amount cannot contribute a digest term; it is counted and
+    # asserted on instead, so the checksum mismatch comes with its explanation
+    without_amount = []
     for row in iter_lines(db):
-        line_id, amount = row["lineId"], row["amount"].to_decimal()
+        line_id, amount = row["lineId"], as_decimal(row.get("amount"))
         if previous is not None and line_id < previous:
             raise RuntimeError(f"line stream out of order at {line_id}")
         previous = line_id
+        lines += 1
+        if amount is None:
+            without_amount.append(line_id)
+            continue
         digest.update(f"{line_id}:{amount:.2f}\n".encode())
         total += amount
-        lines += 1
     return {"checksum": digest.hexdigest(), "lines": lines,
-            "amountTotal": f"{total:.2f}"}
+            "amountTotal": f"{total:.2f}",
+            "linesWithoutAmount": without_amount}
 
 
 def orphan_ledger(db, ns: str) -> dict:
     """Every quarantined line with the header id it points at, and the proof it dangles."""
     orphans = sorted(
         ({"lineId": doc["lineId"],
-          "danglingInvoiceId": doc["raw"]["INVOICE_ID"],
+          "danglingInvoiceId": doc["raw"].get("INVOICE_ID"),
           "invoiceNo": doc["raw"].get("INVOICE_NO"),
-          "amount": f"{doc['amount'].to_decimal():.2f}",
+          "amount": amount_str(as_decimal(doc.get("amount"))),
           "quarantineReason": doc["quarantine_reason"]}
          for doc in db[atlas.ORPHANED_LINES].find(
              {}, ["lineId", "amount", "quarantine_reason",
                   "raw.INVOICE_ID", "raw.INVOICE_NO"])),
         key=lambda row: row["lineId"])
 
-    dangling = sorted({row["danglingInvoiceId"] for row in orphans})
+    without_pointer, dangling = split_pointers(orphans)
     resolvable = sorted(
         doc["_id"] for doc in db[atlas.INVOICES].find(
             {"_id": {"$in": dangling}}, ["_id"]))
@@ -218,6 +247,7 @@ def orphan_ledger(db, ns: str) -> dict:
             {"lines.lineId": {"$in": [row["lineId"] for row in orphans]}}, ["_id"]))
     return {
         "orphans": orphans,
+        "orphansWithoutPointer": without_pointer,
         "danglingInvoiceIds": dangling,
         "danglingIdsThatResolve": resolvable,
         "orphanLinesAlsoEmbedded": embedded,
@@ -266,6 +296,8 @@ def reconcile(db, ns: str) -> dict:
          len(ledger["danglingIdsThatResolve"]), 0),
         ("no orphan line is also embedded in an invoice",
          len(ledger["orphanLinesAlsoEmbedded"]), 0),
+        ("every line carries an amount (the checksum covers all of them)",
+         len(checksum["linesWithoutAmount"]), 0),
         ("source-parity checksum == manifest checksum",
          checksum["checksum"], expected_checksum),
     ]
@@ -391,7 +423,9 @@ def as_markdown(report: dict) -> str:
         f"**{counts['orphanedLines']}** in `invoice_lines_orphaned` with "
         f"quarantine reason(s) {reasons}, {unplanted} of them failing the planted "
         "`<NS>-GHOST-<i>` id recipe, "
-        f"{also_embedded} of them also embedded in an invoice, and "
+        f"{also_embedded} of them also embedded in an invoice, "
+        f"{len(ledger['orphansWithoutPointer'])} carrying no `INVOICE_ID` at all, "
+        "and "
         f"{len(ledger['danglingIdsThatResolve'])} of the "
         f"{len(ledger['danglingInvoiceIds'])} distinct `INVOICE_ID`s they point "
         "at resolving to a header document.",

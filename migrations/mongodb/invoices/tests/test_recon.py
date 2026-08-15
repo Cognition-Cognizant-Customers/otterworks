@@ -5,6 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from bson.decimal128 import Decimal128  # noqa: E402
+
 import recon  # noqa: E402
 
 
@@ -48,6 +50,23 @@ def test_orphan_with_the_right_count_but_the_wrong_ids_is_flagged():
     assert flagged[1]["why"] == "invoiceNo is not a planted ghost"
 
 
+def test_orphan_with_no_invoice_pointer_at_all_is_reported_not_sorted():
+    # INVOICE_LINE.INVOICE_ID is nullable and such a line is quarantined too
+    rows = [planted(7), planted(8) | {"danglingInvoiceId": None}]
+
+    without_pointer, dangling = recon.split_pointers(rows)
+
+    assert without_pointer == [planted(8)["lineId"]]
+    assert dangling == [planted(7)["danglingInvoiceId"]]
+    assert recon.unplanted_orphans(rows, "demo")[0]["lineId"] == \
+        planted(8)["lineId"]
+
+
+def test_amount_str_renders_a_missing_amount_instead_of_raising():
+    assert recon.amount_str(recon.as_decimal(None)) == "—"
+    assert recon.amount_str(recon.as_decimal(Decimal128("1339.4"))) == "1339.40"
+
+
 def report(**overrides) -> dict:
     doc = {
         "ns": "demo",
@@ -67,6 +86,7 @@ def report(**overrides) -> dict:
                           "danglingInvoiceIds": [planted(7)["danglingInvoiceId"]],
                           "danglingIdsThatResolve": [],
                           "orphanLinesAlsoEmbedded": [],
+                          "orphansWithoutPointer": [],
                           "unplantedOrphans": [],
                           "unexpectedQuarantineReasons": []},
         "verdict": "PASS",
