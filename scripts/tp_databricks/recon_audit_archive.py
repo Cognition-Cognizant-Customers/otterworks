@@ -85,8 +85,11 @@ def read_baseline(baseline_dir: str) -> dict:
         "event_ids": event_ids,
         "count": len(event_ids),
         "unique": len(set(event_ids)),
-        "min_ts": min(timestamps),
-        "max_ts": max(timestamps),
+        # An empty artifact is the vacuous baseline this whole exercise exists to
+        # avoid, so it must reach check 5 as a FAIL with a written report rather
+        # than dying here on min() of an empty sequence.
+        "min_ts": min(timestamps) if timestamps else None,
+        "max_ts": max(timestamps) if timestamps else None,
         "id_set_sha256": sha256_of_set(event_ids),
         "report": report,
     }
