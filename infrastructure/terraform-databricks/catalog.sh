@@ -23,6 +23,7 @@ drop) statement="DROP CATALOG IF EXISTS \`${catalog}\` CASCADE" ;;
     ;;
 esac
 
+poll_deadline=$((SECONDS + 1800))
 set +e
 response=$(curl -sS --fail-with-body -X POST "${DATABRICKS_HOST%/}/api/2.0/sql/statements" \
     -H "Authorization: Bearer ${DATABRICKS_TOKEN}" \
@@ -44,6 +45,10 @@ fi
 
 state=$(printf '%s' "$response" | jq -r '.status.state // empty')
 while [[ "$state" == "PENDING" || "$state" == "RUNNING" ]]; do
+    if ((SECONDS >= poll_deadline)); then
+        echo "catalog $action timed out after 1800s (statement $statement_id)" >&2
+        exit 1
+    fi
     sleep 2
     set +e
     response=$(curl -sS --fail-with-body \
