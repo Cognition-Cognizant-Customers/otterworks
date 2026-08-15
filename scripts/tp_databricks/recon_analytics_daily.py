@@ -128,6 +128,7 @@ def load_baseline(directory: Path) -> dict:
     return {
         "summary": summary,
         "total_events": int(summary["total_events"]),
+        "active_users": int(summary["active_users"]),
         "by_hour_type": by_hour_type,
         "by_type": by_type,
         "users": {user["user_id"]: int(user["total"]) for user in users},
@@ -219,8 +220,11 @@ def check_2(baseline: dict, converted: dict) -> Check:
     check.note(LEGACY_ATTRIBUTION_NOTE)
     check.record("group count at (hour, event_type)", len(baseline_groups), len(converted_groups), must_match=False)
     check.record("distinct hours", baseline["hours"], sorted({hour for hour, _ in converted_groups}), must_match=False)
-    check.record("distinct user_id count", len(baseline["users"]), converted["users"], must_match=False)
+    check.record("distinct user_id count", baseline["active_users"], converted["users"], must_match=False)
     check.record("distinct summary_date count", len(baseline["dates"]), converted["dates"], must_match=False)
+    check.note(
+        f"legacy top-100 user sample for the defect signature: {sorted(baseline['users'])}"
+    )
     check.note(
         f"legacy artifact date-bearing fields: {baseline['date_fields']} "
         "(event dates are absent; the run date exists only in the ds S3 partition)"
@@ -239,7 +243,7 @@ def check_2(baseline: dict, converted: dict) -> Check:
     )
     check.note(
         f"legacy defect signature: hours={baseline['hours']}, "
-        f"user_ids={sorted(baseline['users'])}, date_fields={baseline['date_fields']}"
+        f"user_ids={sorted(baseline['users'])} (top-100 sample), date_fields={baseline['date_fields']}"
     )
 
     if exact:

@@ -25,13 +25,14 @@ reject reasons: none
 legacy aggregate carries no summary_date/document_id, one synthetic hour bucket '00' and a single user_id 'unknown'
 group count at (hour, event_type): baseline=10 != converted=240
 distinct hours: baseline=['00'] != converted=['00', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23']
-distinct user_id count: baseline=1 != converted=50
+distinct user_id count: baseline=0 != converted=50
 distinct summary_date count: baseline=0 != converted=3
+legacy top-100 user sample for the defect signature: ['unknown']
 legacy artifact date-bearing fields: [] (event dates are absent; the run date exists only in the ds S3 partition)
 exact group equality: baseline=True != converted=False
 total events (dimension-free): baseline=5147 = converted=5147
 per event_type totals: baseline={'quota.warning': 529, 'user.logout': 487, 'file.trashed': 540, 'document.shared': 531, 'document.created': 518, 'file.restored': 496, 'file.uploaded': 483, 'user.login': 481, 'file.downloaded': 546, 'document.updated': 536} = converted={'file.uploaded': 483, 'quota.warning': 529, 'document.created': 518, 'file.downloaded': 546, 'file.trashed': 540, 'user.logout': 487, 'file.restored': 496, 'document.shared': 531, 'document.updated': 536, 'user.login': 481}
-legacy defect signature: hours=['00'], user_ids=['unknown'], date_fields=[]
+legacy defect signature: hours=['00'], user_ids=['unknown'] (top-100 sample), date_fields=[]
 deviation: legacy field-name defect surfaced, converted output correct -- the legacy script reads timestamp and resolves users from ownerId/editedBy/authorId/deletedBy/userId while the events carry occurred_at/user_id, so it collapsed all 5147 events into 10 groups at hour='00'/user_id='unknown' with no event date dimension; the converted job attributes them across 240 groups/24 hours/50 users/3 dates. Every dimension the baseline does carry is compared exactly above and matches.
 ```
 
