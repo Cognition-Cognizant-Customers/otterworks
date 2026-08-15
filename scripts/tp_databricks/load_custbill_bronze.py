@@ -43,10 +43,16 @@ def _sql_literal(value: str) -> str:
 
 
 def source_files(source_dir: Path, ns: str) -> list[Path]:
-    """Legacy landing files for this namespace, `.done`-renamed or not."""
+    """Legacy landing files, preferring the completed `.done` copy."""
     pattern = f"CUSTBILL_{ns.upper()}_*.dat"
-    files = sorted(source_dir.glob(pattern)) + sorted(source_dir.glob(pattern + ".done"))
-    return [f for f in files if f.is_file()]
+    selected: dict[str, Path] = {}
+    for path in sorted(source_dir.glob(pattern)) + sorted(source_dir.glob(pattern + ".done")):
+        if not path.is_file():
+            continue
+        file_name = path.name[: -len(".done")] if path.name.endswith(".done") else path.name
+        if file_name not in selected or path.name.endswith(".done"):
+            selected[file_name] = path
+    return [selected[file_name] for file_name in sorted(selected)]
 
 
 def file_manifest(path: Path) -> dict[str, object]:

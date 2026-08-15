@@ -26,7 +26,9 @@ CURRENCY 61-63, REC-TYPE 64-65. Detail records are 65 characters.
 
 from __future__ import annotations
 
-CATALOG = "ow_tp"
+import os
+
+CATALOG = os.environ.get("OW_TP_CATALOG", "ow_tp")
 SILVER_RECORDS = f"{CATALOG}.silver.custbill_records"
 SILVER_REJECTS = f"{CATALOG}.silver.custbill_rejects"
 SILVER_FILE_RECON = f"{CATALOG}.silver.custbill_file_recon"

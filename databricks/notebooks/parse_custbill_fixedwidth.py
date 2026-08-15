@@ -45,13 +45,15 @@
 
 # COMMAND ----------
 
+import re
+
 dbutils.widgets.text("ns", "demo", "Demo namespace")
 dbutils.widgets.dropdown("mode", "parse", ["gate", "parse"], "Task mode")
 
 ns = dbutils.widgets.get("ns").strip()
 mode = dbutils.widgets.get("mode").strip()
 
-if not ns.isidentifier() and not ns.replace("_", "").isalnum():
+if re.fullmatch(r"[A-Za-z0-9_]+", ns) is None:
     raise ValueError(f"invalid namespace {ns!r}: expected [A-Za-z0-9_]+")
 
 print(f"ns={ns} mode={mode}")
