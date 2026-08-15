@@ -136,6 +136,7 @@ run — see check 3.
 ```json
 {
   "report_rows_before": 50,
+  "upstream_rows_recovered_from_leftover_backup": 0,
   "upstream_rows_saved": 3,
   "upstream_rows_restored": 3,
   "scenarios": [

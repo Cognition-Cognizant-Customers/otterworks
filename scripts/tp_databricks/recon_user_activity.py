@@ -87,6 +87,12 @@ WHERE ns = '{ns}' AND report_date = DATE'{report_date}'
 FIELDS = ("events", "active_days", "documents_touched", "files_touched")
 
 
+def table_exists(qualified: str) -> bool:
+    catalog, schema, name = qualified.split(".")
+    rows = dbx.sql(f"SHOW TABLES IN {catalog}.{schema} LIKE '{name}'")
+    return bool(rows)
+
+
 def check_per_user(legacy: dict[str, dict], converted: dict[str, dict]) -> dict:
     """Check 1: row-for-row parity on user_id x report_date, exact counts."""
     missing = sorted(set(legacy) - set(converted))
@@ -193,9 +199,31 @@ def check_freshness(ns: str, catalog: str, report_date: str, lookback_days: str)
     # The rows are parked in a scratch Delta table rather than in this process's memory,
     # so an interrupted or failed restore can still be completed afterwards from SQL
     # instead of losing the shared fixture.
+    #
+    # A leftover backup means exactly that: a previous run died between the delete and
+    # the restore, and the scratch table is the only surviving copy. Finish that restore
+    # first — replacing it from the (still empty) live table would destroy the fixture.
+    leftover = int(dbx.sql(
+        f"SELECT COUNT(*) FROM {backup} WHERE ns = '{ns}'"
+    )[0][0]) if table_exists(backup) else 0
+    if leftover:
+        dbx.sql(f"DELETE FROM {table} WHERE ns = '{ns}'")
+        dbx.sql(f"INSERT INTO {table} SELECT * FROM {backup} WHERE ns = '{ns}'")
     dbx.sql(f"CREATE OR REPLACE TABLE {backup} AS "
             f"SELECT * FROM {table} WHERE ns = '{ns}'")
     saved = int(dbx.sql(f"SELECT COUNT(*) FROM {backup}")[0][0])
+    if not saved:
+        # Nothing to delete and nothing to restore: the scenario would "refuse" for the
+        # wrong reason and a zero-row restore would satisfy the count check trivially.
+        return {
+            "name": "3. Freshness guard refuses stale/missing upstream",
+            "passed": False,
+            "blocked": f"{table} holds no rows for ns={ns}: the missing-upstream scenario "
+                       f"cannot be distinguished from an already-empty fixture. Re-land it "
+                       f"with land_user_activity.py --upstream-only and re-run.",
+            "report_rows_before": int(rows_before),
+            "scenarios": scenarios,
+        }
     dbx.sql(f"DELETE FROM {table} WHERE ns = '{ns}'")
     try:
         scenarios.append(attempt("missing upstream (analytics job never ran)",
@@ -214,6 +242,7 @@ def check_freshness(ns: str, catalog: str, report_date: str, lookback_days: str)
         "passed": (all(s["refused"] and s["report_rows_unchanged"] for s in scenarios)
                    and restored == saved),
         "report_rows_before": int(rows_before),
+        "upstream_rows_recovered_from_leftover_backup": leftover,
         "upstream_rows_saved": saved,
         "upstream_rows_restored": restored,
         "scenarios": scenarios,
@@ -395,7 +424,9 @@ def main(argv: list[str] | None = None) -> int:
     }
     text = render(report)
     if args.out:
-        os.makedirs(os.path.dirname(args.out), exist_ok=True)
+        out_dir = os.path.dirname(args.out)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
         with open(args.out, "w", encoding="utf-8") as handle:
             handle.write(text)
         print(f"wrote {args.out}")
