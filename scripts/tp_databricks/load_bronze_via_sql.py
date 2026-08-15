@@ -35,7 +35,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dbx  # noqa: E402
 
 BRONZE_TABLE = f"{dbx.CATALOG}.bronze.search_documents_raw"
-SCRATCH_TABLE = f"{dbx.CATALOG}.bronze.search_documents_raw_load_scratch"
 FILES = ("documents.ndjson", "files.ndjson")
 ENTITY_TYPES = {"document", "file"}
 NS_PATTERN = re.compile(r"[a-z0-9_]+")
@@ -76,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not re.fullmatch(r"[a-z0-9_]+", args.ns):
         raise SystemExit(f"--ns must match [a-z0-9_]+, got {args.ns!r}")
+    scratch_table = f"{dbx.CATALOG}.bronze.search_documents_raw_load_{args.ns}"
 
     extract_dir = Path(args.extract_dir)
     manifest = json.loads((extract_dir / "_manifest.json").read_text())
@@ -104,18 +104,18 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"extract files {landed} do not match the manifest {expected}")
 
     dbx.sql(
-        f"CREATE OR REPLACE TABLE {SCRATCH_TABLE} USING DELTA AS "
+        f"CREATE OR REPLACE TABLE {scratch_table} USING DELTA AS "
         f"SELECT * FROM {BRONZE_TABLE} WHERE 1 = 0"
     )
     try:
         for start in range(0, len(envelopes), args.batch_size):
             batch = envelopes[start:start + args.batch_size]
             values = ",\n".join(row_literal(envelope) for envelope in batch)
-            dbx.sql(f"INSERT INTO {SCRATCH_TABLE} VALUES\n{values}")
+            dbx.sql(f"INSERT INTO {scratch_table} VALUES\n{values}")
             print(f"inserted {start + len(batch)}/{len(envelopes)} rows", flush=True)
 
         rows = dbx.sql(
-            f"SELECT entity_type, COUNT(*), COUNT(DISTINCT entity_id) FROM {SCRATCH_TABLE} "
+            f"SELECT entity_type, COUNT(*), COUNT(DISTINCT entity_id) FROM {scratch_table} "
             f"WHERE ns = '{args.ns}' GROUP BY entity_type ORDER BY entity_type"
         )
         loaded = {row[0]: {"rows": int(row[1]), "distinct_entity_ids": int(row[2])} for row in rows}
@@ -129,7 +129,7 @@ def main(argv: list[str] | None = None) -> int:
             f"""
             INSERT INTO {BRONZE_TABLE}
             REPLACE WHERE ns = '{args.ns}'
-            SELECT * FROM {SCRATCH_TABLE} WHERE ns = '{args.ns}'
+            SELECT * FROM {scratch_table} WHERE ns = '{args.ns}'
             """
         )
         rows = dbx.sql(
@@ -146,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         return 0
     finally:
-        dbx.sql(f"DROP TABLE IF EXISTS {SCRATCH_TABLE}")
+        dbx.sql(f"DROP TABLE IF EXISTS {scratch_table}")
 
 
 if __name__ == "__main__":
