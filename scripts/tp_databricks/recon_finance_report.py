@@ -304,8 +304,21 @@ def check_5(ns: str, report_date: str) -> Check:
         f"re-executing the job's {len(statements)} summary statements against the "
         "serverless warehouse"
     )
-    for statement in statements:
-        result = dbx.sql(statement)
+    for index, statement in enumerate(statements):
+        try:
+            result = dbx.sql(statement)
+        except Exception as error:  # noqa: BLE001 - reported, never swallowed
+            check.block(statement, str(error), "a reachable serverless warehouse")
+            if index:
+                # The statements are DELETE then INSERT: a failure between them leaves the
+                # run's rows deleted, so say so instead of leaving a half-applied table
+                # behind a bare error.
+                check.note(
+                    "WARNING: the re-run deleted this run's gold rows and did not reinsert "
+                    f"them; re-run the job for ns={ns} report_date={report_date} to repair "
+                    f"{CATALOG}.gold.finance_billing_summary"
+                )
+            return check
         check.note(f"`{' '.join(statement.split())[:60]}...` -> {result}")
     after = gold_rows(ns, report_date)
     delivery_after = dbx.sql_scalar(
@@ -319,6 +332,24 @@ def check_5(ns: str, report_date: str) -> Check:
         f"still one delivery row (before {delivery_before}, after {delivery_after})",
     )
     return check
+
+
+def guarded(number: int, title: str, run) -> Check:
+    """Run a check, turning an unrunnable warehouse call into BLOCKED rather than a crash.
+
+    The report is the deliverable: a check that could not execute has to end up in it, with
+    the failing statement and the error, and must never be mistaken for a pass.
+    """
+    try:
+        return run()
+    except (dbx.DatabricksError, OSError) as error:  # OSError covers DNS/connection failures
+        check = Check(number, title)
+        check.block(
+            f"the warehouse queries of check {number}",
+            str(error),
+            "a reachable serverless warehouse and read access to the ow_tp tables",
+        )
+        return check
 
 
 def render_report(
@@ -383,13 +414,22 @@ def main() -> int:
     if not DATE_RE.match(report_date):
         raise SystemExit(f"golden artifact {golden_path} does not carry a YYYYMMDD stamp")
 
-    converted = gold_rows(ns, report_date)
+    try:
+        converted = gold_rows(ns, report_date)
+    except (dbx.DatabricksError, OSError) as error:
+        print(f"gold rows unavailable: {error}", file=sys.stderr)
+        converted = []
     checks = [
-        check_1(ns, report_date, golden),
-        check_2(ns, report_date),
-        check_3(ns, report_date),
-        check_4(ns, report_date, golden),
-        check_5(ns, report_date),
+        guarded(1, "Row-level parity with the golden legacy report (exact decimals)",
+                lambda: check_1(ns, report_date, golden)),
+        guarded(2, "Cross-foot: 100 records and gold totals equal silver recomputed",
+                lambda: check_2(ns, report_date)),
+        guarded(3, "Delivery audit row tells the truth about delivery",
+                lambda: check_3(ns, report_date)),
+        guarded(4, "Emitted artifact is a valid file of its extension",
+                lambda: check_4(ns, report_date, golden)),
+        guarded(5, "Idempotency: re-running replaces gold rows instead of duplicating",
+                lambda: check_5(ns, report_date)),
     ]
     results = {check.result for check in checks}
     verdict = "green" if results == {"PASS"} else ("blocked" if "BLOCKED" in results else "partial")
