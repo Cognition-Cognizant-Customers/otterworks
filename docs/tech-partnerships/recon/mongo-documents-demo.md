@@ -9,21 +9,21 @@ Verdict: **PASS** (13/13 checks passed)
 
 ## Counts and checksums
 
-| check                                                       | status   | detail                                                                                                  |
-|-------------------------------------------------------------|----------|---------------------------------------------------------------------------------------------------------|
-| postgres.otterworks_demo.documents rows                     | PASS     | atlas=2000 manifest=2000                                                                                |
-| postgres.otterworks_demo.documents checksum                 | PASS     | atlas=e70001cf6110014dab6e1d80adb40285 manifest=e70001cf6110014dab6e1d80adb40285                        |
-| postgres.otterworks_demo.document_versions rows             | PASS     | atlas=13876 manifest=13876                                                                              |
-| postgres.otterworks_demo.document_versions checksum         | PASS     | atlas=13bc033b2780a0569d7f2217e85d7303 manifest=13bc033b2780a0569d7f2217e85d7303                        |
-| postgres.otterworks_demo.document_snapshots rows            | PASS     | atlas=390 manifest=390                                                                                  |
-| postgres.otterworks_demo.document_snapshots checksum        | PASS     | atlas=abe69084205723d6ad79e825b8c752dd manifest=abe69084205723d6ad79e825b8c752dd                        |
-| anomaly version_gaps                                        | PASS     | atlas=10 manifest=10                                                                                    |
-| version_gaps are real inconsistencies                       | PASS     | 10/10 gaps carry missing version numbers or a declared/present disagreement                             |
-| anomaly orphaned_snapshots                                  | PASS     | atlas=6 manifest=6                                                                                      |
-| orphaned_snapshots quarantined, not dropped                 | PASS     | ow_tp_demo.document_snapshots_orphaned: 6 with quarantine_reason='missing_document'                     |
-| every record carries valid _migration                       | PASS     | 0 documents with wrong sourceTable/migratedAt, 0 records in the owned collections with no _migration.ns |
-| every migrated snapshot is referenced by its document       | PASS     | unreferenced=0                                                                                          |
-| idempotent rerun: Atlas state identical to the previous run | PASS     | every count, checksum and anomaly id matches the earlier recon                                          |
+| check                                                       | status   | detail                                                                                                   |
+|-------------------------------------------------------------|----------|----------------------------------------------------------------------------------------------------------|
+| postgres.otterworks_demo.documents rows                     | PASS     | atlas=2000 manifest=2000                                                                                 |
+| postgres.otterworks_demo.documents checksum                 | PASS     | atlas=e70001cf6110014dab6e1d80adb40285 manifest=e70001cf6110014dab6e1d80adb40285                         |
+| postgres.otterworks_demo.document_versions rows             | PASS     | atlas=13876 manifest=13876                                                                               |
+| postgres.otterworks_demo.document_versions checksum         | PASS     | atlas=13bc033b2780a0569d7f2217e85d7303 manifest=13bc033b2780a0569d7f2217e85d7303                         |
+| postgres.otterworks_demo.document_snapshots rows            | PASS     | atlas=390 manifest=390                                                                                   |
+| postgres.otterworks_demo.document_snapshots checksum        | PASS     | atlas=abe69084205723d6ad79e825b8c752dd manifest=abe69084205723d6ad79e825b8c752dd                         |
+| anomaly version_gaps                                        | PASS     | atlas=10 manifest=10                                                                                     |
+| version_gaps are real inconsistencies                       | PASS     | 10/10 gaps carry missing version numbers or a declared/present disagreement                              |
+| anomaly orphaned_snapshots                                  | PASS     | atlas=6 manifest=6                                                                                       |
+| orphaned_snapshots quarantined, not dropped                 | PASS     | ow_tp_demo.document_snapshots_orphaned: 6 with quarantine_reason='missing_document'                      |
+| every record carries valid _migration                       | PASS     | 0 records with wrong ns/sourceTable/migratedAt, 0 records in the owned collections with no _migration.ns |
+| every migrated snapshot is referenced by its document       | PASS     | unreferenced=0                                                                                           |
+| idempotent rerun: Atlas state identical to the previous run | PASS     | every count, checksum and anomaly id matches the earlier recon                                           |
 
 ## Atlas totals
 

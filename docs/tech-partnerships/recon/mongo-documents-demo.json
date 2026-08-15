@@ -4,7 +4,6 @@
     "document_versions_checksum": "13bc033b2780a0569d7f2217e85d7303",
     "documents": 2000,
     "documents_checksum": "e70001cf6110014dab6e1d80adb40285",
-    "documents_with_bad_migration_meta": [],
     "embedded_versions": 13876,
     "orphaned_snapshots": [
       {
@@ -38,6 +37,7 @@
         "snapshotId": "e61553f8-e4ea-4caf-b7d7-863fa9547358"
       }
     ],
+    "records_with_bad_migration_meta": [],
     "records_without_migration_ns": 0,
     "snapshots_migrated": 384,
     "snapshots_not_referenced": 0,
@@ -179,7 +179,7 @@
     },
     {
       "check": "every record carries valid _migration",
-      "detail": "0 documents with wrong sourceTable/migratedAt, 0 records in the owned collections with no _migration.ns",
+      "detail": "0 records with wrong ns/sourceTable/migratedAt, 0 records in the owned collections with no _migration.ns",
       "status": "PASS"
     },
     {
@@ -194,5 +194,5 @@
     }
   ],
   "namespace": "demo",
-  "reconciled_at": "2026-08-15T23:13:13Z"
+  "reconciled_at": "2026-08-15T23:18:06Z"
 }

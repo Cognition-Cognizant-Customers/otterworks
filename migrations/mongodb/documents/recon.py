@@ -42,6 +42,7 @@ from mongo_common import (
     COLL_SNAPSHOTS_ORPHANED,
     QUARANTINE_MISSING_DOCUMENT,
     SOURCE_TABLE_DOCUMENTS,
+    SOURCE_TABLE_SNAPSHOTS,
     Checksum,
     atlas_client,
     atlas_db,
@@ -79,7 +80,14 @@ def scan_atlas(db, ns: str) -> dict:
     orphans: list[dict] = []
     bad_migration_meta: list[str] = []
     missing_snapshot_refs = 0
-    expected_source = source_table(ns, SOURCE_TABLE_DOCUMENTS)
+    documents_source = source_table(ns, SOURCE_TABLE_DOCUMENTS)
+    snapshots_source = source_table(ns, SOURCE_TABLE_SNAPSHOTS)
+
+    def meta_ok(record: dict, expected_source: str) -> bool:
+        meta = record.get("_migration") or {}
+        return (meta.get("ns") == ns
+                and meta.get("sourceTable") == expected_source
+                and isinstance(meta.get("migratedAt"), datetime))
 
     cursor = db[COLL_DOCUMENTS].find(
         scope,
@@ -104,9 +112,7 @@ def scan_atlas(db, ns: str) -> dict:
                 "present": gap["present"],
             })
         snapshot_refs.update(doc.get("snapshotIds", []))
-        meta = doc.get("_migration") or {}
-        if meta.get("ns") != ns or meta.get("sourceTable") != expected_source \
-                or not isinstance(meta.get("migratedAt"), datetime):
+        if not meta_ok(doc, documents_source):
             bad_migration_meta.append(doc["_id"])
 
     # the scoped cursors above cannot see a record whose `_migration.ns` is absent,
@@ -118,19 +124,25 @@ def scan_atlas(db, ns: str) -> dict:
 
     migrated_snapshots = 0
     for snap in db[COLL_SNAPSHOTS].find(
-        scope, projection={"documentId": 1}, batch_size=BATCH_SIZE
+        scope,
+        projection={"documentId": 1, "_migration": 1},
+        batch_size=BATCH_SIZE,
     ):
         snap_ck.add(f"{snap['_id']}|{snap['documentId']}")
         migrated_snapshots += 1
+        if not meta_ok(snap, snapshots_source):
+            bad_migration_meta.append(snap["_id"])
         if snap["_id"] not in snapshot_refs:
             missing_snapshot_refs += 1
 
     for snap in db[COLL_SNAPSHOTS_ORPHANED].find(
         scope,
-        projection={"documentId": 1, "quarantine_reason": 1},
+        projection={"documentId": 1, "quarantine_reason": 1, "_migration": 1},
         batch_size=BATCH_SIZE,
     ):
         snap_ck.add(f"{snap['_id']}|{snap['documentId']}")
+        if not meta_ok(snap, snapshots_source):
+            bad_migration_meta.append(snap["_id"])
         orphans.append({
             "snapshotId": snap["_id"],
             "documentId": snap["documentId"],
@@ -148,7 +160,7 @@ def scan_atlas(db, ns: str) -> dict:
         "document_snapshots_checksum": snap_ck.hexdigest(),
         "version_gaps": sorted(version_gaps, key=lambda g: g["documentId"]),
         "orphaned_snapshots": sorted(orphans, key=lambda o: o["snapshotId"]),
-        "documents_with_bad_migration_meta": sorted(bad_migration_meta),
+        "records_with_bad_migration_meta": sorted(bad_migration_meta),
         "records_without_migration_ns": untagged,
         "snapshots_not_referenced": missing_snapshot_refs,
     }
@@ -208,11 +220,11 @@ def reconcile(
           f"{ATLAS_DB}.{COLL_SNAPSHOTS_ORPHANED}: {len(orphans)} "
           f"with quarantine_reason={QUARANTINE_MISSING_DOCUMENT!r}")
 
-    bad_meta = atlas["documents_with_bad_migration_meta"]
+    bad_meta = atlas["records_with_bad_migration_meta"]
     untagged = atlas["records_without_migration_ns"]
     check("every record carries valid _migration",
           not bad_meta and untagged == 0,
-          f"{len(bad_meta)} documents with wrong sourceTable/migratedAt, "
+          f"{len(bad_meta)} records with wrong ns/sourceTable/migratedAt, "
           f"{untagged} records in the owned collections with no _migration.ns")
     check("every migrated snapshot is referenced by its document",
           atlas["snapshots_not_referenced"] == 0,
