@@ -164,6 +164,41 @@ CUSTBILL_DEMO_001.dat: unreadable TRL record: declared trailer count is NULL (pa
 There was no traceback. All eight bronze, published-silver, and staging tables were
 verified back to `0` rows for `ns='trlneg'` afterwards.
 
+## H. An empty golden directory is blocked, not reported as a match
+
+Mutation: recon was pointed at the empty scratch directory `/tmp/empty-golden`, which
+contains no files matching `CUSTBILL_DEMO_*.psv`.
+
+The report was written to `/tmp/empty-golden-report.md` and exited `1`. The
+golden-dependent checks were all blocked:
+
+```text
+| 1. Row-level parity: every field of every row, keyed on (file, line_no) | **BLOCKED** |
+| 2. Per-file subtotals per record type and currency, exact to the cent | **BLOCKED** |
+| 4. Quarantine justified: nothing the legacy output contains is rejected | **BLOCKED** |
+Blocked: `golden output` -> no rows loaded from /tmp/empty-golden using CUSTBILL_DEMO_*.psv
+```
+
+The report result was `red` because the empty baseline is not an evaluable success.
+The committed report and `ns=demo` were restored and left untouched.
+
+## I. An untypeable converted value is reported as a converted-side mismatch
+
+The shared published table rejected an attempt to set `bill_date = NULL` in throwaway
+namespace `ns=convnull` with:
+
+```text
+[DELTA_NOT_NULL_CONSTRAINT_VIOLATED] NOT NULL constraint violated for column: bill_date.
+```
+
+The namespace was cleaned back to zero rows in all eight tables. The converted-reader
+path was then exercised with the same nullable-row shape in an isolated report harness.
+It wrote `/tmp/converted-null-report.md` with no traceback and rendered the mismatch as:
+
+```text
+CUSTBILL_CONVNULL_001 line 2 bill_date: legacy datetime.date(2025, 3, 23) != converted unparseable converted bill_date None
+```
+
 ## Note on the shared workspace
 
 During the session an extra bronze line (`line_no = 999`, `raw_line` `STALE TAIL RECORD`)

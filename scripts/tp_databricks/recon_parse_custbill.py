@@ -27,7 +27,7 @@ import hashlib
 import os
 import sys
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -174,11 +174,19 @@ def read_converted(
     rows: dict[tuple[str, int], dict[str, object]] = {}
     for file_name, line_no, account, name, bill_date, amount, currency, rec_type in result:
         stem = file_name[: -len(".dat")] if file_name.endswith(".dat") else file_name
+        try:
+            typed_bill_date: object = date.fromisoformat(bill_date)
+        except (TypeError, ValueError):
+            typed_bill_date = bill_date
+        try:
+            typed_amount: object = Decimal(amount)
+        except (InvalidOperation, TypeError, ValueError):
+            typed_amount = amount
         rows[(stem, int(line_no))] = {
             "account_id": account,
             "customer_name": name,
-            "bill_date": date.fromisoformat(bill_date),
-            "amount": Decimal(amount),
+            "bill_date": typed_bill_date,
+            "amount": typed_amount,
             "currency": currency,
             "record_type": rec_type,
         }
@@ -200,6 +208,22 @@ def _display_legacy_value(field: str, value: object) -> str:
     if field in {"bill_date", "amount"} and isinstance(value, str):
         return f"unparseable legacy {field} {value!r}"
     return repr(value)
+
+
+def _display_converted_value(field: str, value: object) -> str:
+    if field in {"bill_date", "amount"} and (value is None or isinstance(value, str)):
+        return f"unparseable converted {field} {value!r}"
+    return repr(value)
+
+
+def _block_empty_golden(check: Check, golden_dir: Path, ns: str, golden) -> bool:
+    if golden:
+        return False
+    check.blocked(
+        "golden output",
+        f"no rows loaded from {golden_dir} using CUSTBILL_{ns.upper()}_*.psv",
+    )
+    return True
 
 
 def check_baseline(ns: str, golden_dir: Path) -> Check:
@@ -228,8 +252,10 @@ def check_baseline(ns: str, golden_dir: Path) -> Check:
     return check
 
 
-def check_row_parity(golden, converted, converted_error=None) -> Check:
+def check_row_parity(golden, converted, converted_error=None, *, golden_dir: Path, ns: str) -> Check:
     check = Check("1", "Row-level parity: every field of every row, keyed on (file, line_no)")
+    if _block_empty_golden(check, golden_dir, ns, golden):
+        return check
     if converted_error:
         check.blocked(*converted_error)
         return check
@@ -248,15 +274,20 @@ def check_row_parity(golden, converted, converted_error=None) -> Check:
                 mismatches += 1
                 check.fail(
                     f"{key[0]} line {key[1]} {field}: "
-                    f"legacy {_display_legacy_value(field, want)} != converted {got!r}"
+                    f"legacy {_display_legacy_value(field, want)} != "
+                    f"converted {_display_converted_value(field, got)}"
                 )
     if not missing and not extra and not mismatches:
         check.note(f"all {len(golden)} rows match on all {len(FIELDS)} fields")
     return check
 
 
-def check_subtotals(ns: str, golden, converted, converted_error=None) -> Check:
+def check_subtotals(
+    ns: str, golden, converted, converted_error=None, *, golden_dir: Path
+) -> Check:
     check = Check("2", "Per-file subtotals per record type and currency, exact to the cent")
+    if _block_empty_golden(check, golden_dir, ns, golden):
+        return check
     if converted_error:
         check.blocked(*converted_error)
         return check
@@ -332,8 +363,10 @@ def check_file_recon(ns: str, expected_files: int) -> Check:
     return check
 
 
-def check_quarantine(ns: str, golden) -> Check:
+def check_quarantine(ns: str, golden, *, golden_dir: Path) -> Check:
     check = Check("4", "Quarantine justified: nothing the legacy output contains is rejected")
+    if _block_empty_golden(check, golden_dir, ns, golden):
+        return check
     exists_statement = f"SHOW TABLES IN {custbill_sql.CATALOG}.silver LIKE 'custbill_rejects'"
     try:
         exists = dbx.sql(exists_statement)
@@ -503,11 +536,15 @@ def main() -> int:
     for error in golden_errors:
         baseline_check.fail(error)
     checks = [baseline_check]
-    checks.append(check_row_parity(golden, converted, converted_error))
-    checks.append(check_subtotals(args.ns, golden, converted, converted_error))
+    checks.append(
+        check_row_parity(golden, converted, converted_error, golden_dir=golden_dir, ns=args.ns)
+    )
+    checks.append(
+        check_subtotals(args.ns, golden, converted, converted_error, golden_dir=golden_dir)
+    )
     expected_files = len({stem for stem, _line_no in golden})
     checks.append(check_file_recon(args.ns, expected_files))
-    checks.append(check_quarantine(args.ns, golden))
+    checks.append(check_quarantine(args.ns, golden, golden_dir=golden_dir))
     if not args.skip_idempotency:
         checks.append(check_idempotency(args.ns, converted, converted_error))
 
