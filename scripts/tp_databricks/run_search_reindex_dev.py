@@ -17,13 +17,16 @@ Usage:
 from __future__ import annotations
 
 import json
+import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dbx  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+SERVING_TABLE = f"{dbx.CATALOG}.silver.search_index_documents"
 NOTEBOOKS = {
     "search_reindex_ingest": REPO_ROOT / "databricks/notebooks/search_reindex_ingest.py",
     "search_reindex_publish": REPO_ROOT / "databricks/notebooks/search_reindex_publish.py",
@@ -89,6 +92,19 @@ def job_settings(task_keys: tuple[str, ...] | None = None) -> dict:
     return settings
 
 
+def serving_snapshot(ns: str) -> dict[str, int]:
+    """Serving row counts per entity type, read immediately after the run finished.
+
+    Recorded in the run artifact so recon can compare a count taken at run time against a
+    later live read. Reading both sides at report time would make idempotency hold by
+    construction and could never detect drift.
+    """
+    rows = dbx.sql(
+        f"SELECT entity_type, COUNT(*) FROM {SERVING_TABLE} WHERE ns = '{ns}' GROUP BY entity_type"
+    )
+    return {row[0]: int(row[1]) for row in rows}
+
+
 def existing_job_id() -> int | None:
     try:
         return dbx.job_id(JOB_NAME)
@@ -127,6 +143,9 @@ def main(argv: list[str]) -> int:
         return 2
 
     task_keys = tuple(filter(None, params.pop("tasks", "").split(","))) or None
+    ns = params.get("ns", "demo")
+    if not re.fullmatch(r"[a-z0-9_]+", ns):
+        raise SystemExit(f"ns must match [a-z0-9_]+, got {ns!r}")
     deploy()
     ensure_job(task_keys)
     run = dbx.run_job(JOB_NAME, params)
@@ -139,6 +158,8 @@ def main(argv: list[str]) -> int:
         "result_state": state.get("result_state"),
         "state_message": state.get("state_message"),
         "url": run.get("run_page_url"),
+        "serving_counts_at_run_end": serving_snapshot(ns),
+        "snapshot_taken_at": datetime.now(timezone.utc).isoformat(),
         "tasks": [
             {
                 "task_key": task.get("task_key"),

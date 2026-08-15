@@ -117,12 +117,12 @@ def paginate(url: str, page_param: str, size_param: str, page_size: int, keys: t
         page += 1
 
 
-def entity_id_of(record: dict, id_keys: tuple[str, ...]) -> str:
+def entity_id_of(record: dict, id_keys: tuple[str, ...], entity_type: str = "unknown") -> str:
     for key in id_keys:
         value = record.get(key)
         if value not in (None, ""):
             return str(value)
-    raise RuntimeError(f"source record has no id in {id_keys}: {json.dumps(record)[:300]}")
+    raise RuntimeError(f"source record of type {entity_type!r} has no id in keys {id_keys!r}")
 
 
 def write_ndjson(path: Path, ns: str, entity_type: str, records, id_keys: tuple[str, ...], extracted_at: str) -> int:
@@ -132,7 +132,7 @@ def write_ndjson(path: Path, ns: str, entity_type: str, records, id_keys: tuple[
             envelope = {
                 "ns": ns,
                 "entity_type": entity_type,
-                "entity_id": entity_id_of(record, id_keys),
+                "entity_id": entity_id_of(record, id_keys, entity_type),
                 "extracted_at": extracted_at,
                 "payload": json.dumps(record, sort_keys=True),
             }
@@ -168,6 +168,7 @@ def main(argv: list[str] | None = None) -> int:
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir.chmod(0o700)
     extracted_at = datetime.now(timezone.utc).isoformat()
     _log(logging.INFO, "extract_started", ns=args.ns, page_size=page_size, extracted_at=extracted_at)
 
