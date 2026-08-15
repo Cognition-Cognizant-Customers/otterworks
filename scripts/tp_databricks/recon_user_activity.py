@@ -207,15 +207,28 @@ def check_freshness(ns: str, catalog: str, report_date: str, lookback_days: str)
     # A leftover backup means exactly that: a previous run died between the delete and
     # the restore, and the scratch table is the only surviving copy. Finish that restore
     # first — replacing it from the (still empty) live table would destroy the fixture.
-    # Counted unfiltered: the table belongs to this namespace by name, so any row in it
-    # is a leftover to be recovered, and an unexpected foreign row must not be silently
-    # skipped and then overwritten.
-    leftover = int(dbx.sql(
-        f"SELECT COUNT(*) FROM {backup}"
-    )[0][0]) if table_exists(backup) else 0
+    # The table belongs to this namespace by name, so every row in it is a leftover of
+    # this namespace's own interrupted run and is restored unfiltered. A foreign row means
+    # the table is not what it claims to be: refuse rather than delete a live slice that
+    # the recovery would not put back.
+    leftover, foreign = 0, 0
+    if table_exists(backup):
+        counts = dbx.sql(
+            f"SELECT COUNT(*), COUNT_IF(ns <> '{ns}') FROM {backup}"
+        )[0]
+        leftover, foreign = int(counts[0]), int(counts[1] or 0)
+    if foreign:
+        return {
+            "name": "3. Freshness guard refuses stale/missing upstream",
+            "passed": False,
+            "blocked": f"{backup} holds {foreign} row(s) for another namespace: refusing to "
+                       f"touch the live fixture until it is inspected and dropped by hand.",
+            "report_rows_before": int(rows_before),
+            "scenarios": scenarios,
+        }
     if leftover:
         dbx.sql(f"DELETE FROM {table} WHERE ns = '{ns}'")
-        dbx.sql(f"INSERT INTO {table} SELECT * FROM {backup} WHERE ns = '{ns}'")
+        dbx.sql(f"INSERT INTO {table} SELECT * FROM {backup}")
     dbx.sql(f"CREATE OR REPLACE TABLE {backup} AS "
             f"SELECT * FROM {table} WHERE ns = '{ns}'")
     saved = int(dbx.sql(f"SELECT COUNT(*) FROM {backup}")[0][0])
@@ -237,7 +250,7 @@ def check_freshness(ns: str, catalog: str, report_date: str, lookback_days: str)
                                  {"max_upstream_lag_days": PARITY_LAG_DAYS}))
     finally:
         dbx.sql(f"DELETE FROM {table} WHERE ns = '{ns}'")
-        dbx.sql(f"INSERT INTO {table} SELECT * FROM {backup} WHERE ns = '{ns}'")
+        dbx.sql(f"INSERT INTO {table} SELECT * FROM {backup}")
     restored = int(dbx.sql(f"SELECT COUNT(*) FROM {table} WHERE ns = '{ns}'")[0][0])
     if restored == saved:
         dbx.sql(f"DROP TABLE IF EXISTS {backup}")
@@ -337,10 +350,28 @@ def render(report: dict) -> str:
         "the statements reconciled here are the statements the job runs. No cluster was",
         "created and no throwaway job was left behind.",
         "",
-        f"Inputs were landed by `land_user_activity.py` into `{report['catalog']}.bronze`"
-        " (`source_mode=table`:",
-        "this workspace's token has no `files` scope, so `/Volumes` writes return",
-        "`403 ... required scopes: files`; the aggregation is identical either way).",
+        "### The documented volume upload path is UNVERIFIED",
+        "",
+        "The production transport for this unit is the landing volume"
+        f" `/Volumes/{report['catalog']}/bronze/landing`, read set-based by the notebook's",
+        "`read_files()` (`source_mode=volume`), and that path is **unverified here**: the demo"
+        " PAT lacks the `files` scope, so every",
+        "`dbx.py upload` to the volume is refused with exactly",
+        "",
+        "```",
+        "HTTP Error 403: Forbidden",
+        "Provided access token does not have required scopes: files",
+        "```",
+        "",
+        "The evidence below was therefore produced with the in-Databricks fallback:"
+        f" `land_user_activity.py` landed the inputs into `{report['catalog']}.bronze"
+        ".user_activity_events_landed` and the notebook read them with `source_mode=table`.",
+        "That table is a workaround for a token limitation, **not** the production transport,"
+        " and it is not presented as one; the volume wiring is unchanged and remains the",
+        "job's default. No check was loosened to compensate — the aggregation, the freshness"
+        " guard and every comparison below are identical in both modes; only the two lines",
+        "that read the landed events differ. Proving the volume leg needs a token with the"
+        " `files` scope.",
         "",
         f"Parity was reproduced with `max_upstream_lag_days={PARITY_LAG_DAYS}`, matching the",
         "legacy behaviour: the baseline was captured with `ds=2026-08-15` over seeded events",

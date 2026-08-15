@@ -44,9 +44,21 @@ job task's notebook `main()` against the existing `Serverless Starter Warehouse`
 the statements reconciled here are the statements the job runs. No cluster was
 created and no throwaway job was left behind.
 
-Inputs were landed by `land_user_activity.py` into `ow_tp.bronze` (`source_mode=table`:
-this workspace's token has no `files` scope, so `/Volumes` writes return
-`403 ... required scopes: files`; the aggregation is identical either way).
+### The documented volume upload path is UNVERIFIED
+
+The production transport for this unit is the landing volume `/Volumes/ow_tp/bronze/landing`, read set-based by the notebook's
+`read_files()` (`source_mode=volume`), and that path is **unverified here**: the demo PAT lacks the `files` scope, so every
+`dbx.py upload` to the volume is refused with exactly
+
+```
+HTTP Error 403: Forbidden
+Provided access token does not have required scopes: files
+```
+
+The evidence below was therefore produced with the in-Databricks fallback: `land_user_activity.py` landed the inputs into `ow_tp.bronze.user_activity_events_landed` and the notebook read them with `source_mode=table`.
+That table is a workaround for a token limitation, **not** the production transport, and it is not presented as one; the volume wiring is unchanged and remains the
+job's default. No check was loosened to compensate — the aggregation, the freshness guard and every comparison below are identical in both modes; only the two lines
+that read the landed events differ. Proving the volume leg needs a token with the `files` scope.
 
 Parity was reproduced with `max_upstream_lag_days=30`, matching the
 legacy behaviour: the baseline was captured with `ds=2026-08-15` over seeded events
