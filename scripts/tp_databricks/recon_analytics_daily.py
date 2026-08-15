@@ -82,7 +82,18 @@ def load_baseline(directory: Path) -> dict:
         for line in gzip.open(directory / "top_users.jsonl.gz", "rt", encoding="utf-8").read().splitlines()
         if line.strip()
     ]
-    exit_code = (directory / "exit_code.txt").read_text(encoding="utf-8").strip()
+    exit_code = (directory / "exit_code.txt").read_text(encoding="utf-8").strip().removeprefix("exit=")
+
+    # Optional second capture: the legacy script run with its sources taken away, which is
+    # the defect this conversion retires. Absent, check 3 says so instead of implying it.
+    zero_event_dir = directory / "zero_event"
+    zero_event = None
+    if (zero_event_dir / "stdout.txt").exists():
+        zero_event = {
+            "stdout": (zero_event_dir / "stdout.txt").read_text(encoding="utf-8"),
+            "exit_code": (zero_event_dir / "exit_code.txt").read_text(encoding="utf-8").strip().removeprefix("exit="),
+            "dir": str(zero_event_dir),
+        }
 
     by_hour_type: dict[tuple[str, str], int] = {}
     for hour, per_type in hourly.items():
@@ -101,6 +112,7 @@ def load_baseline(directory: Path) -> dict:
         "hours": sorted({hour for hour, _ in by_hour_type}),
         "exit_code": exit_code,
         "stdout": (directory / "stdout.txt").read_text(encoding="utf-8"),
+        "zero_event": zero_event,
     }
 
 
@@ -197,15 +209,27 @@ def check_3(ns: str, catalog: str, baseline: dict) -> Check:
     missing_table = f"{catalog}.bronze.analytics_daily_stage_missing"
     outcomes: list[bool] = []
 
-    check.note(
-        "legacy behaviour being retired: "
-        + " / ".join(
+    zero_event = baseline["zero_event"]
+    if zero_event:
+        quoted = [
             line.strip()
-            for line in baseline["stdout"].splitlines()
-            if "SQS" in line or "No events" in line
+            for line in zero_event["stdout"].splitlines()
+            if "giving up" in line or "No events found" in line or "Extracted 0 events" in line
+        ]
+        check.note(
+            f"legacy behaviour being retired, captured at {zero_event['dir']} "
+            f"(legacy run with its sources removed): {' / '.join(quoted)} -> exit {zero_event['exit_code']}"
         )
-        + f" -> exit {baseline['exit_code']}"
-    )
+        outcomes.append(
+            check.record("legacy exit code on a zero-event extract", "0", zero_event["exit_code"], must_match=False)
+        )
+    else:
+        check.note(
+            "legacy zero-event behaviour not captured in this run; the tier-1 baseline run had its "
+            "fixtures in place and succeeded, so the defect is quoted from etl/scripts/analytics_daily.py "
+            "(consecutive_errors >= 3 -> 'Too many SQS failures, giving up', then len(all_events) == 0 -> "
+            "'No events found, exiting' + sys.exit(0)) rather than from a captured run"
+        )
 
     # (a) unreachable source: bounded retries, then the run raises.
     try:

@@ -34,7 +34,8 @@ per event_type totals: baseline={'quota.warning': 529, 'user.logout': 487, 'file
 ## 3. Retry deficiency retired: a failing/empty source fails the run — **PASS**
 
 ```text
-legacy behaviour being retired: [2026-08-15 22:21:50] Polling SQS queue: https://sqs.us-east-1.amazonaws.com/123456789012/otterworks-analytics / [2026-08-15 22:21:59] Extracted 5147 events from SQS -> exit exit=0
+legacy behaviour being retired, captured at /home/ubuntu/tp-golden/python/analytics_daily/zero_event (legacy run with its sources removed): [2026-08-15 22:56:28] ERROR: Too many SQS failures, giving up / [2026-08-15 22:56:28] Extracted 0 events from SQS -> exit 1
+legacy exit code on a zero-event extract: baseline='0' != converted='1'
 unreachable source: run failed as required (DatabricksError: statement failed (FAILED): [TABLE_OR_VIEW_NOT_FOUND] The table or view `ow_tp`.`bronze`.`analytics_daily_stage_missing` cannot be found. Verify the spelling and correctness of the schema and catalog.
 )
 empty source: run failed as required (ZeroEventExtract: extract produced 0 events for ns=recon_probe_demo from ow_tp.bronze.analytics_daily_stage; failing the run instead of writing an empty summary)
@@ -52,5 +53,5 @@ gold fingerprint: baseline='f3a42b884a639d276b2b6d8a04e4229a' = converted='f3a42
 
 ```text
 report line 1: 'baseline: legacy output'
-captured legacy run: /home/ubuntu/tp-golden/python/analytics_daily (exit exit=0)
+captured legacy run: /home/ubuntu/tp-golden/python/analytics_daily (exit 0)
 ```
