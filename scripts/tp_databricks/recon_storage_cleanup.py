@@ -127,6 +127,22 @@ def capture_golden(ns: str) -> None:
     env.setdefault("AWS_SECRET_ACCESS_KEY", "test")
     env.setdefault("AWS_DEFAULT_REGION", extract.REGION)
     GOLDEN.mkdir(parents=True, exist_ok=True)
+    capture_date = datetime.now(tz=timezone.utc).date().isoformat()
+    prefix = f"quarantined/{capture_date}/"
+    quarantine = "otterworks-file-quarantine"
+    s3 = extract._client("s3")
+
+    def quarantine_keys() -> set[str]:
+        keys = set()
+        for page in s3.get_paginator("list_objects_v2").paginate(Bucket=quarantine, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                keys.add(obj["Key"][len(prefix) :])
+        return keys
+
+    pre_existing = quarantine_keys()
+    (GOLDEN / "quarantined_preexisting_keys.txt").write_text(
+        "\n".join(sorted(pre_existing)) + ("\n" if pre_existing else "")
+    )
 
     proc = subprocess.run(
         [sys.executable, str(REPO / "etl" / "scripts" / "storage_cleanup_daily.py")],
@@ -143,15 +159,10 @@ def capture_golden(ns: str) -> None:
             + (proc.stdout + proc.stderr)[-2000:]
         )
 
-    s3 = extract._client("s3")
-    quarantine = "otterworks-file-quarantine"
-    capture_date = datetime.now(tz=timezone.utc).date().isoformat()
-    prefix = f"quarantined/{capture_date}/"
-    keys = []
-    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=quarantine, Prefix=prefix):
-        for obj in page.get("Contents", []):
-            keys.append(obj["Key"][len(prefix) :])
-    (GOLDEN / "quarantined_keys.txt").write_text("\n".join(sorted(keys)) + "\n")
+    captured = quarantine_keys() - pre_existing
+    (GOLDEN / "quarantined_keys.txt").write_text(
+        "\n".join(sorted(captured)) + ("\n" if captured else "")
+    )
 
     report_key = f"reports/storage-cleanup/{capture_date}/report.json"
     body = s3.get_object(Bucket="otterworks-data-lake", Key=report_key)["Body"].read()
@@ -364,8 +375,8 @@ def write_report(path: Path, ns: str, run_date: str, checks: list, fixture: dict
         "",
         "- `make infra-up` plus the documented workaround for the occupied host port 5432:",
         "  Postgres runs in container `otterworks-postgres-alt` on 55432 (`DB_PORT=55432`).",
-        "- `make seed-legacy NS=demo` and `make seed-legacy-validate NS=demo` (15/15 checks).",
-        "- `scripts/tp_databricks/fixture_storage_cleanup.py build --ns demo`: creates the missing",
+        f"- `make seed-legacy NS={ns}` and `make seed-legacy-validate NS={ns}` (15/15 checks).",
+        f"- `scripts/tp_databricks/fixture_storage_cleanup.py build --ns {ns}`: creates the missing",
         f"  `{fixture['buckets']['file_storage']}` and `{fixture['buckets']['quarantine']}` buckets,",
         f"  writes {fixture['live_objects_written']} live objects from the seeded metadata keys, and",
         f"  plants {fixture['planted_orphan_count']} objects with no metadata row",
@@ -373,6 +384,8 @@ def write_report(path: Path, ns: str, run_date: str, checks: list, fixture: dict
         "- Then the **unedited** `etl/scripts/storage_cleanup_daily.py` was run (nothing under `etl/`",
         "  was modified) and what it moved into the quarantine bucket is the golden orphan set:",
         f"  `{GOLDEN}/legacy_stdout.txt`, `legacy_report.json`, `quarantined_keys.txt`.",
+        f"- Quarantine keys already present under `quarantined/<capture-date>/` before this run: "
+        f"{len((GOLDEN / 'quarantined_preexisting_keys.txt').read_text().split()) if (GOLDEN / 'quarantined_preexisting_keys.txt').exists() else 0}.",
         "",
         "Legacy run, for the record:",
         "",
@@ -425,10 +438,10 @@ def write_report(path: Path, ns: str, run_date: str, checks: list, fixture: dict
         "## Reproducing",
         "",
         "```bash",
-        "make infra-up && make seed-legacy NS=demo && make seed-legacy-validate NS=demo",
-        "python3 scripts/tp_databricks/fixture_storage_cleanup.py build --ns demo",
-        "python3 scripts/tp_databricks/extract_storage_cleanup.py --ns demo --load --scenario nominal",
-        f"python3 scripts/tp_databricks/recon_storage_cleanup.py --ns demo --run-date {run_date} \\",
+        f"make infra-up && make seed-legacy NS={ns} && make seed-legacy-validate NS={ns}",
+        f"python3 scripts/tp_databricks/fixture_storage_cleanup.py build --ns {ns}",
+        f"python3 scripts/tp_databricks/extract_storage_cleanup.py --ns {ns} --load --scenario nominal",
+        f"python3 scripts/tp_databricks/recon_storage_cleanup.py --ns {ns} --run-date {run_date} \\",
         "    --capture-golden",
         "```",
         "",

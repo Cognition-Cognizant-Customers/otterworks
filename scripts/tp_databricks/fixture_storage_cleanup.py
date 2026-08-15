@@ -24,6 +24,9 @@ The fixture is rebuilt from scratch for this namespace on every run: its
 namespaced live objects, planted orphan objects, and quarantine copies whose
 source keys are this fixture's planted orphans are deleted first. Other
 namespaces' objects and unrelated quarantine objects are left alone.
+The planted set uses the shared `files/` prefix, so one LocalStack estate must
+serve one namespace at a time; a leak from another namespace's fixture surfaces
+as a check-1 set-equality failure rather than a silent pass.
 
     fixture_storage_cleanup.py build --ns demo
     fixture_storage_cleanup.py show  --ns demo
@@ -75,7 +78,8 @@ def scan_metadata(ns: str) -> list[dict]:
     items: list[dict] = []
     kwargs: dict = {
         "TableName": DYNAMO_TABLE,
-        "ProjectionExpression": "id, s3_key, size_bytes, created_at, ns",
+        "ProjectionExpression": "id, s3_key, size_bytes, created_at, #n",
+        "ExpressionAttributeNames": {"#n": "ns"},
     }
     while True:
         page = dynamodb.scan(**kwargs)

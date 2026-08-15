@@ -180,7 +180,7 @@ def _split(sql: str) -> list:
 
 
 def _checked(label: str, value: str, pattern=_TOKEN) -> str:
-    if not pattern.match(value or ""):
+    if not pattern.fullmatch(value or ""):
         raise ValueError(f"invalid {label}: {value!r}")
     return value
 
