@@ -69,9 +69,10 @@ job definition, both stated so the evidence is not read as more than it is:
   deployed with `scripts/tp_databricks/dbx.py deploy-notebook` and driven by a
   throwaway job `ow_tp_dev_audit_archive` carrying the same parameters and the
   same notebook task as the Terraform definition. It was deleted afterwards and
-  `dbx.py inventory` no longer lists it, so no stray job is left behind (the
-  inventory does show another unit's `ow_tp_dev_search_reindex`, which is not
-  ours to touch). The
+  `dbx.py inventory` no longer lists it, so no stray job is left behind. (An
+  earlier inventory during this session also listed another unit's
+  `ow_tp_dev_search_reindex`; it is gone from the final inventory, removed by
+  its own owner -- this unit never touched it.) The
   job's `create_tables` task -- a `sql_task` over the same
   `databricks/sql/audit_archive_ddl.sql` -- was therefore not exercised as a
   task. The identical statements were applied through the serverless SQL
