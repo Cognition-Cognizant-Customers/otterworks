@@ -103,6 +103,13 @@ resource "databricks_job" "user_activity" {
 
       run_job_task {
         job_id = var.analytics_job_id
+        # The run's own ns and date are forwarded: the gate below reads the upstream
+        # table filtered by them, so an upstream refreshed under its own defaults
+        # would leave a non-default namespace refused as if it had never run.
+        job_parameters = {
+          ns          = "{{job.parameters.ns}}"
+          report_date = "{{job.parameters.report_date}}"
+        }
       }
     }
   }
