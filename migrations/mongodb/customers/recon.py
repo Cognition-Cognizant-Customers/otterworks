@@ -42,8 +42,13 @@ def load_manifest(ns: str) -> dict:
     path = MANIFEST_DIR / f"{ns}.json"
     if not path.exists():
         raise SystemExit(f"manifest not found: {path} "
-                         f"(run `make seed-legacy NS={ns}` first)")
-    return json.loads(path.read_text())
+                         f"(run `make oracle-billing-seed NS={ns}` first)")
+    manifest = json.loads(path.read_text())
+    targets = manifest.get("targets", {})
+    if CUSTOMER_TARGET not in targets or EAV_TARGET not in targets:
+        raise SystemExit(f"{path} has no oracle.* targets "
+                         f"(run `make oracle-billing-seed NS={ns}` first)")
+    return manifest
 
 
 def atlas_checksum(collection, ns: str):
