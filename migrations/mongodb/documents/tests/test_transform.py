@@ -108,6 +108,8 @@ def test_gap_at_the_end_of_the_series_is_reported():
     [
         (7, [1, 2, 3, 5, 6, 7], {"missing": [4], "expected": 7, "present": 6}),
         (5, [1, 2, 3, 4, 5], None),
+        # counts agree but a revision is missing and an unexpected one is present
+        (3, [1, 2, 4], {"missing": [3], "expected": 3, "present": 3}),
         (5, [2, 4], {"missing": [1, 3, 5], "expected": 5, "present": 2}),
         (2, [], {"missing": [1, 2], "expected": 2, "present": 0}),
     ],

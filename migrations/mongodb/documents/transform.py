@@ -43,14 +43,15 @@ def transform_version(row: dict) -> dict:
 def version_gap(declared_version: int, present_numbers: list[int]) -> dict | None:
     """Describe the missing versions of a document, or None when consistent.
 
-    A gap is declared exactly when the source's declared version count differs
-    from the number of version rows present; `missing` enumerates the version
-    numbers in 1..declaredVersion that have no row.
+    A gap is any version number in 1..declaredVersion that has no row, or a
+    version count that disagrees with the declared version — the decision is
+    made on the enumerated numbers, not on counts alone, so a document missing
+    one revision while carrying an unexpected extra one is still flagged.
     """
     present = sorted(set(present_numbers))
-    if declared_version == len(present):
-        return None
     missing = [v for v in range(1, declared_version + 1) if v not in set(present)]
+    if not missing and declared_version == len(present):
+        return None
     return {"missing": missing, "expected": declared_version, "present": len(present)}
 
 
