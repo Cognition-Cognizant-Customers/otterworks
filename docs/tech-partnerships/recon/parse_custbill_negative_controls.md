@@ -47,6 +47,28 @@ Exit code `1`. Recon row: `declared_trailer_count = 50`, `parsed_count = 49`,
 This is ETL-0187 (2011): the legacy job computed the same comparison, logged it, and
 exited `0` regardless.
 
+## C. Lines from an unmanifested file fail the run
+
+Mutation: one bronze line inserted for `CUSTBILL_ORPHAN_999.dat`, a file with no row in
+`ow_tp.bronze.custbill_files`. This is what a half-landed file looks like mid-ingest: its
+lines are already in bronze, its manifest row is not there yet.
+
+```text
+FAILED: gate: every bronze line belongs to a manifest file failed -> CUSTBILL_ORPHAN_999.dat | 1
+```
+
+Exit code `1`, before anything is written to silver. The other four bronze gates all drive
+from the manifest and left-join the lines, so they can only catch a manifest row whose
+lines are missing or miscounted; this one covers the opposite direction. The parse also
+inner-joins the manifest, so even invoked on its own it cannot consume a line whose file
+is not registered — but the gate failing the run, rather than the parse quietly skipping
+the line, is the deliberate choice: silently dropping records is how the legacy job lost
+them.
+
+Run in throwaway namespace `ns=orphanneg`, built by copying one `ns=demo` manifest row and
+its lines; `ns=demo` untouched, and all five tables verified back to 0 rows for
+`ns='orphanneg'` afterwards.
+
 ## Note on the shared workspace
 
 During the session an extra bronze line (`line_no = 999`, `raw_line` `STALE TAIL RECORD`)
