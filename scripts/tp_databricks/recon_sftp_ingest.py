@@ -389,7 +389,73 @@ def _contained(number: int, name: str, check_fn, *args) -> Check:
         return check
 
 
-def render_report(checks: list[Check], ns: str, golden_root: Path, landing_root: str) -> str:
+@dataclass
+class UploadProbe:
+    """What the documented `make dbx-upload` transport did on this run."""
+
+    target: str
+    verified: bool
+    error: str | None = None
+
+
+def probe_upload(ns: str, golden: dict[str, GoldenFile], golden_root: Path) -> UploadProbe:
+    """Attempt the documented upload transport and report what actually happened.
+
+    The report is evidence, so its caveat about `make dbx-upload` has to be an
+    observation rather than a remembered fact: a token that later gains the `files`
+    scope must flip this to verified without anyone editing prose. The bytes sent are
+    the golden artifact itself, to the path the job reads, so a success is the real
+    transport doing its real job, and it is idempotent (identical content).
+    """
+    name = sorted(golden)[0]
+    local = golden_root / "incoming" / f"{name}.done"
+    relpath = f"{ns}/custbill/{name}"
+    try:
+        target = dbx.upload(str(local), relpath)
+        return UploadProbe(target=target, verified=True)
+    except Exception as exc:  # noqa: BLE001 - the failure text *is* the evidence
+        return UploadProbe(
+            target=f"/Volumes/{CATALOG}/bronze/landing/{relpath}",
+            verified=False,
+            error=f"{type(exc).__name__}: {exc}",
+        )
+
+
+def _upload_caveat(ns: str, upload: UploadProbe) -> list[str]:
+    """Report the upload transport as observed by `probe_upload` on this run."""
+    if upload.verified:
+        return [
+            "* **`make dbx-upload` is VERIFIED.** The documented upload transport was exercised on this",
+            "  run: the golden artifact was PUT to the path the job reads, and the checks above then read",
+            "  it back out of the volume.",
+            "",
+            "  ```",
+            f"  $ make dbx-upload NS={ns}",
+            f"  -> {upload.target}",
+            "  ```",
+            "",
+        ]
+    return [
+        "* **`make dbx-upload` is UNVERIFIED.** The documented upload transport was attempted on this run",
+        "  and refused:",
+        "",
+        "  ```",
+        f"  $ make dbx-upload NS={ns}",
+        f"  PUT /api/2.0/fs/files{upload.target}",
+        f"  -> {upload.error}",
+        "  ```",
+        "",
+        "  The inputs the checks above read were landed inside Databricks instead (serverless task writing",
+        "  to the volume). That is a demo workaround, **not** the production transport, and no check was",
+        "  weakened to accommodate it — every assertion still reads what is actually in the volume and in",
+        "  the tables, compared against the golden `.done` artifacts on disk.",
+        "",
+    ]
+
+
+def render_report(
+    checks: list[Check], ns: str, golden_root: Path, landing_root: str, upload: UploadProbe
+) -> str:
     verdict = (
         "green" if all(c.passed for c in checks)
         else "blocked" if any(c.passed is None for c in checks) and not any(c.passed is False for c in checks)
@@ -424,20 +490,7 @@ def render_report(checks: list[Check], ns: str, golden_root: Path, landing_root:
         "  therefore stays the replay source, and a trimmed file re-ingests on a later run; that is",
         "  intended, not a leak. Re-ingest cannot duplicate, because the manifest is keyed on",
         "  `(ns, file_name)` and carries the whole-file `sha256` (see check 4).",
-        "* **`make dbx-upload` is UNVERIFIED.** The demo PAT has no `files` scope, so the documented",
-        "  upload transport could not be exercised:",
-        "",
-        "  ```",
-        "  $ make dbx-upload NS=" + ns,
-        "  PUT /api/2.0/fs/files/Volumes/ow_tp/bronze/landing/" + ns + "/custbill/CUSTBILL_DEMO_001.dat",
-        '  -> 403: {"error_code":403,"message":"Provided access token does not have required scopes: files"}',
-        "  ```",
-        "",
-        "  The inputs the checks above read were landed inside Databricks instead (serverless task writing",
-        "  to the volume). That is a demo workaround, **not** the production transport, and no check was",
-        "  weakened to accommodate it — every assertion still reads what is actually in the volume and in",
-        "  the tables, compared against the golden `.done` artifacts on disk.",
-        "",
+        *_upload_caveat(ns, upload),
         "Reproduce with:",
         "",
         "```bash",
@@ -464,6 +517,13 @@ def _main(argv: list[str]) -> int:
     sftp_ingest_sql.validated(args.ns, CATALOG, args.landing_root)
 
     golden = load_golden(Path(args.golden_root))
+    # Probed before the checks, so a working transport lands the golden bytes the
+    # checks then read, and a refused one is recorded verbatim rather than assumed.
+    upload = probe_upload(args.ns, golden, Path(args.golden_root))
+    print(
+        f"[{'VERIFIED' if upload.verified else 'UNVERIFIED'}] upload transport "
+        f"{upload.target}: {upload.error or 'ok'}"
+    )
     checks = [
         _contained(1, "bronze.custbill_files matches the golden artifacts", check1_manifest, args.ns, golden),
         _contained(2, "bronze.custbill_lines preserves the raw records", check2_lines, args.ns, golden),
@@ -488,7 +548,9 @@ def _main(argv: list[str]) -> int:
     if args.report:
         report_path = Path(args.report)
         report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(render_report(checks, args.ns, Path(args.golden_root), args.landing_root))
+        report_path.write_text(
+            render_report(checks, args.ns, Path(args.golden_root), args.landing_root, upload)
+        )
         print(f"report written to {report_path}")
 
     # A deliberate skip (`--no-rerun`) is BLOCKED and still exits 0; a check that

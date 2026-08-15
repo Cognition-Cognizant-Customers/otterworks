@@ -1,6 +1,6 @@
 # Recon: `sftp_ingest_poll.ksh` → `ow_tp_sftp_ingest`
 
-- Generated: 2026-08-15T23:10:41+00:00
+- Generated: 2026-08-15T23:16:15+00:00
 - Namespace: `demo`  |  catalog: `ow_tp`  |  landing: `/Volumes/ow_tp/bronze/landing`
 - Golden baseline provenance: artifacts of a real `sftp_ingest_poll.ksh` run (`make legacy-etl-gen-data NS=demo` + `make legacy-etl-run JOB=sftp_ingest_poll`), read byte-for-byte from `/home/ubuntu/tp-golden/custbill/incoming/*.dat.done`
 - Result: **green**
@@ -59,11 +59,11 @@ outside the contract: none
 unprefixed: none
 retention SQL targets: ['ow_tp.bronze.custbill_files', 'ow_tp.bronze.custbill_lines'] outside=none
 contracted tables present: ['ow_tp.bronze.custbill_files', 'ow_tp.bronze.custbill_lines'] missing=none
-other ow_tp tables in the catalog (other units', not written by this unit per (a)): ['ow_tp.bronze.analytics_daily_stage', 'ow_tp.bronze.analytics_events_raw', 'ow_tp.bronze.audit_events_raw', 'ow_tp.bronze.custbill_raw_lines_bootstrap', 'ow_tp.bronze.file_metadata_raw', 'ow_tp.bronze.search_documents_raw', 'ow_tp.bronze.storage_extract_manifest', 'ow_tp.bronze.storage_objects_raw', 'ow_tp.bronze.user_activity_events_landed', 'ow_tp.bronze.user_activity_raw', 'ow_tp.bronze.user_activity_upstream_fixture', 'ow_tp.gold.analytics_daily_summary', 'ow_tp.gold.audit_archive_manifest', 'ow_tp.gold.finance_billing_summary', 'ow_tp.gold.finance_report_delivery', 'ow_tp.gold.search_reindex_summary', 'ow_tp.gold.storage_cleanup_savings', 'ow_tp.gold.user_activity_report', 'ow_tp.gold.user_activity_run_log', 'ow_tp.silver.analytics_events', 'ow_tp.silver.analytics_events_rejects', 'ow_tp.silver.audit_events_archived', 'ow_tp.silver.custbill_file_recon', 'ow_tp.silver.custbill_records', 'ow_tp.silver.custbill_rejects', 'ow_tp.silver.search_index_documents', 'ow_tp.silver.search_index_documents_staging', 'ow_tp.silver.storage_orphans', 'ow_tp.silver.user_activity_daily']
+other ow_tp tables in the catalog (other units', not written by this unit per (a)): ['ow_tp.bronze.analytics_daily_stage', 'ow_tp.bronze.analytics_events_raw', 'ow_tp.bronze.audit_events_raw', 'ow_tp.bronze.custbill_raw_lines_bootstrap', 'ow_tp.bronze.file_metadata_raw', 'ow_tp.bronze.search_documents_raw', 'ow_tp.bronze.storage_extract_manifest', 'ow_tp.bronze.storage_objects_raw', 'ow_tp.bronze.user_activity_events_landed', 'ow_tp.bronze.user_activity_raw', 'ow_tp.bronze.user_activity_upstream_fixture', 'ow_tp.gold.analytics_daily_summary', 'ow_tp.gold.audit_archive_manifest', 'ow_tp.gold.finance_billing_summary', 'ow_tp.gold.finance_report_delivery', 'ow_tp.gold.search_reindex_summary', 'ow_tp.gold.storage_cleanup_savings', 'ow_tp.gold.user_activity_report', 'ow_tp.gold.user_activity_run_log', 'ow_tp.silver.analytics_events', 'ow_tp.silver.analytics_events_rejects', 'ow_tp.silver.audit_events_archived', 'ow_tp.silver.custbill_file_recon', 'ow_tp.silver.custbill_file_recon_staging', 'ow_tp.silver.custbill_records', 'ow_tp.silver.custbill_records_staging', 'ow_tp.silver.custbill_rejects', 'ow_tp.silver.custbill_rejects_staging', 'ow_tp.silver.search_index_documents', 'ow_tp.silver.search_index_documents_staging', 'ow_tp.silver.storage_orphans', 'ow_tp.silver.user_activity_daily']
 namespaces present in bronze.custbill_lines: ['demo'] (this unit only ever writes ns='demo'; other namespaces are other runs')
-ow_tp jobs in the workspace: ['ow_tp_dev_audit_archive', 'ow_tp_dev_search_reindex']
+ow_tp jobs in the workspace: ['ow_tp_dev_search_reindex']
 this unit's throwaway ow_tp_dev_sftp_ingest left behind: none
-other units' ow_tp_dev_* jobs (not this unit's, not judged): ['ow_tp_dev_audit_archive', 'ow_tp_dev_search_reindex']
+other units' ow_tp_dev_* jobs (not this unit's, not judged): ['ow_tp_dev_search_reindex']
 catalogs=['ow_tp'] secret_scopes=['ow_tp'] dirs=['/Shared/ow_tp']
 ```
 
@@ -76,13 +76,13 @@ catalogs=['ow_tp'] secret_scopes=['ow_tp'] dirs=['/Shared/ow_tp']
   therefore stays the replay source, and a trimmed file re-ingests on a later run; that is
   intended, not a leak. Re-ingest cannot duplicate, because the manifest is keyed on
   `(ns, file_name)` and carries the whole-file `sha256` (see check 4).
-* **`make dbx-upload` is UNVERIFIED.** The demo PAT has no `files` scope, so the documented
-  upload transport could not be exercised:
+* **`make dbx-upload` is UNVERIFIED.** The documented upload transport was attempted on this run
+  and refused:
 
   ```
   $ make dbx-upload NS=demo
   PUT /api/2.0/fs/files/Volumes/ow_tp/bronze/landing/demo/custbill/CUSTBILL_DEMO_001.dat
-  -> 403: {"error_code":403,"message":"Provided access token does not have required scopes: files"}
+  -> DatabricksError: PUT /api/2.0/fs/files/Volumes/ow_tp/bronze/landing/demo/custbill/CUSTBILL_DEMO_001.dat?overwrite=true -> 403: {"error_code":403,"message":"Provided access token does not have required scopes: files [ReqId: c7f521ee-a527-4d95-b686-cc8d232153d6]"}
   ```
 
   The inputs the checks above read were landed inside Databricks instead (serverless task writing
