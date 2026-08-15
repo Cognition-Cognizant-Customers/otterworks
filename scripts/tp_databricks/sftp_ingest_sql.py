@@ -39,6 +39,17 @@ DDL_FILE = (
 
 DEFAULT_LANDING_ROOT = "/Volumes/ow_tp/bronze/landing"
 
+
+def default_landing_root(catalog: str) -> str:
+    """The landing volume of `catalog`, so the read side follows the write side.
+
+    `dbx.upload` derives its target from the catalog too, and the job passes a
+    landing_root derived from `var.catalog_name`; a constant here would read one
+    estate's volume while merging into another's tables.
+    """
+    return f"/Volumes/{catalog}/bronze/landing"
+
+
 # `\Z`, not `$`: Python's `$` also matches before a trailing newline, so `$` would
 # let 'demo\n' through a gate whose whole job is to bound what reaches SQL text.
 _NS_RE = re.compile(r"^[a-z0-9][a-z0-9_]{0,30}\Z")
@@ -63,6 +74,13 @@ def _validated(ns: str, catalog: str, landing_root: str) -> tuple[str, str, str]
     if not _ROOT_RE.match(landing_root.rstrip("/")):
         raise ValueError(
             f"landing_root {landing_root!r} must be an ow_tp volume path matching {_ROOT_RE.pattern}"
+        )
+    # The volume read from and the tables written to must belong to the same estate:
+    # crossing them would copy one catalog's drops into another catalog's bronze.
+    if not landing_root.rstrip("/").startswith(f"/Volumes/{catalog}/"):
+        raise ValueError(
+            f"landing_root {landing_root!r} is not a volume of catalog {catalog!r} "
+            f"(expected a path under /Volumes/{catalog}/)"
         )
     return ns, catalog, landing_root.rstrip("/")
 
@@ -246,8 +264,14 @@ def _main(argv: list[str]) -> int:
     parser.add_argument("command", choices=["print", "run"])
     parser.add_argument("--ns", default="demo")
     parser.add_argument("--catalog", default="ow_tp")
-    parser.add_argument("--landing-root", default=DEFAULT_LANDING_ROOT)
+    parser.add_argument(
+        "--landing-root",
+        default=None,
+        help="defaults to the landing volume of --catalog",
+    )
     args = parser.parse_args(argv)
+    if args.landing_root is None:
+        args.landing_root = default_landing_root(args.catalog)
 
     if args.command == "print":
         for statement in [

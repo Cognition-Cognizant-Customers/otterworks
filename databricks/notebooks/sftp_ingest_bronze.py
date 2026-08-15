@@ -37,15 +37,18 @@ import sftp_ingest_sql  # noqa: E402 -- resolved from the deployed workspace dir
 
 dbutils.widgets.text("ns", "demo", "Demo namespace")
 dbutils.widgets.text("catalog", "ow_tp", "Unity Catalog catalog")
-dbutils.widgets.text("landing_root", "/Volumes/ow_tp/bronze/landing", "Landing volume root")
+dbutils.widgets.text("landing_root", "", "Landing volume root (blank = the catalog's landing volume)")
 
 # Job parameters end up inside SQL text, here and in the statement module, so they
 # go through the same gate before anything is built from them: an `ns` carrying a
 # quote must not be able to reach another namespace's objects on a shared workspace.
+# The gate also rejects a landing_root outside the catalog's own volume, so this
+# notebook cannot read one estate's drops into another estate's bronze.
+_catalog = dbutils.widgets.get("catalog")
 ns, catalog, landing_root = sftp_ingest_sql.validated(
     dbutils.widgets.get("ns"),
-    dbutils.widgets.get("catalog"),
-    dbutils.widgets.get("landing_root"),
+    _catalog,
+    dbutils.widgets.get("landing_root") or sftp_ingest_sql.default_landing_root(_catalog),
 )
 print(f"ingesting ns={ns} catalog={catalog} landing_root={landing_root}")
 
