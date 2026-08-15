@@ -50,6 +50,24 @@ if [ ${#legacy_psv[@]} -eq 0 ] || [ ${#legacy_csv[@]} -eq 0 ]; then
   echo "no legacy baseline under $LEGACY_ROOT — run: make legacy-etl-gen-data NS=$NS && make legacy-etl-run NS=$NS" >&2
   exit 2
 fi
+# The legacy Perl job aggregates EVERY CUSTBILL*.psv in $LEGACY_ROOT/parsed
+# regardless of namespace, while the serverless report only aggregates
+# parsed/<ns>/. Comparing the two is only meaningful when the legacy parsed dir
+# holds this namespace alone — refuse rather than emit a bogus mismatch.
+foreign=()
+for f in "$LEGACY_ROOT"/parsed/CUSTBILL_*.psv; do
+  case "$(basename "$f")" in
+  CUSTBILL_"${NS_UPPER}"_*) ;;
+  *) foreign+=("$(basename "$f")") ;;
+  esac
+done
+if [ ${#foreign[@]} -gt 0 ]; then
+  echo "refusing to compare: $LEGACY_ROOT/parsed also holds other namespaces' files (${foreign[*]})." >&2
+  echo "the legacy finance report is not namespace-scoped, so its baseline would mix namespaces." >&2
+  echo "clear it and re-run the legacy chain for NS=$NS only: rm -rf $LEGACY_ROOT && make legacy-etl-gen-data NS=$NS && make legacy-etl-run NS=$NS" >&2
+  exit 2
+fi
+
 # newest report wins (the legacy job stamps by date)
 legacy_report="$(ls -t "${legacy_csv[@]}" | head -1)"
 legacy_records=0
