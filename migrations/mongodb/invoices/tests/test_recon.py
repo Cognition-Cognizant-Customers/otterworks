@@ -62,6 +62,17 @@ def test_orphan_with_no_invoice_pointer_at_all_is_reported_not_sorted():
         planted(8)["lineId"]
 
 
+def test_fanout_expectations_are_keyed_by_the_manifest_scale_not_just_the_ns():
+    seeded = {"seed_legacy_params": {recon.LINE_TARGET: {"scale": "demo"}}}
+
+    assert recon.manifest_scale(seeded) == "demo"
+    assert recon.manifest_scale({}) is None
+    # the measured tail belongs to (demo, demo); the same ns at another scale
+    # has a different tail, so it is reported rather than asserted
+    assert recon.FANOUT_EXPECTED.get(("demo", "demo")) is not None
+    assert recon.FANOUT_EXPECTED.get(("demo", "full")) is None
+
+
 def test_amount_str_renders_a_missing_amount_instead_of_raising():
     assert recon.amount_str(recon.as_decimal(None)) == "—"
     assert recon.amount_str(recon.as_decimal(Decimal128("1339.4"))) == "1339.40"
@@ -70,6 +81,7 @@ def test_amount_str_renders_a_missing_amount_instead_of_raising():
 def report(**overrides) -> dict:
     doc = {
         "ns": "demo",
+        "scale": "demo",
         "database": "ow_tp_demo",
         "reconciledAt": "2026-01-01T00:00:00Z",
         "manifestGeneratedAt": "2026-01-01T00:00:00Z",

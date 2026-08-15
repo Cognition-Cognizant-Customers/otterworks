@@ -431,6 +431,7 @@
   },
   "manifestGeneratedAt": "2026-08-01T00:00:00Z",
   "ns": "demo",
-  "reconciledAt": "2026-08-15T23:46:33Z",
+  "reconciledAt": "2026-08-15T23:53:15Z",
+  "scale": "demo",
   "verdict": "PASS"
 }

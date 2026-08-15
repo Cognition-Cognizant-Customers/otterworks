@@ -36,13 +36,15 @@ ORPHAN_ANOMALY = "orphaned_rows"
 
 # Fan-out expectations, measured against a live Oracle seed. Lines are assigned
 # to a uniformly random header, so the per-invoice count is Poisson-like (min 0)
-# rather than the 3-25 the contract text assumed, and the thin/empty tail is a
-# function of the namespace's row counts and RNG seed — hence per-NS, not global.
-# A header with no lines is still migrated (`lines: []` / `lineCount: 0`): it is
-# not an anomaly and is never quarantined. A namespace with no measured numbers
-# gets its fan-out reported but not asserted, so recon cannot fail spuriously.
+# rather than the 3-25 the contract text assumed. The empty/thin tail is a
+# function of the row counts (from `--scale`) and the RNG seed (from the
+# namespace), so it is keyed by (ns, scale) — both read from the manifest, never
+# global. A header with no lines is still migrated (`lines: []` /
+# `lineCount: 0`): it is not an anomaly and is never quarantined. An unmeasured
+# (ns, scale) gets its fan-out reported but not asserted, so a healthy run of a
+# differently sized estate cannot fail spuriously.
 FANOUT_EXPECTED = {
-    "demo": {"zeroLineInvoices": 5, "thinInvoices": 268},
+    ("demo", "demo"): {"zeroLineInvoices": 5, "thinInvoices": 268},
 }
 THIN_FANOUT_THRESHOLD = 3
 
@@ -133,6 +135,11 @@ def manifest(ns: str) -> dict:
     if not path.exists():
         raise SystemExit(f"seed manifest not found: {path} (seed the estate first)")
     return json.loads(path.read_text())
+
+
+def manifest_scale(doc: dict) -> str | None:
+    """The `--scale` the invoice tables were seeded at, as recorded by the seeder."""
+    return doc.get("seed_legacy_params", {}).get(LINE_TARGET, {}).get("scale")
 
 
 def manifest_anomaly(doc: dict, kind: str, target: str):
@@ -302,7 +309,7 @@ def reconcile(db, ns: str) -> dict:
          checksum["checksum"], expected_checksum),
     ]
 
-    fanout_expected = FANOUT_EXPECTED.get(ns)
+    fanout_expected = FANOUT_EXPECTED.get((ns, manifest_scale(doc)))
     if fanout_expected is not None:
         checks += [
             ("invoices with zero lines (migrated, not quarantined)",
@@ -316,6 +323,7 @@ def reconcile(db, ns: str) -> dict:
                for name, actual, expected in checks]
     return {
         "ns": ns,
+        "scale": manifest_scale(doc),
         "database": db.name,
         "reconciledAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "manifestGeneratedAt": doc.get("generated_at"),
@@ -360,7 +368,8 @@ def as_markdown(report: dict) -> str:
         "",
         f"**Verdict: {report['verdict']}** — every number below is recomputed from "
         f"Atlas (`{report['database']}`) and compared against the seed manifest "
-        f"`testdata/legacy/manifests/{report['ns']}.json` (generated "
+        f"`testdata/legacy/manifests/{report['ns']}.json` (SCALE="
+        f"`{report['scale']}`, generated "
         f"`{report['manifestGeneratedAt']}`, runtime state, never committed).",
         "",
         f"Reconciled at `{report['reconciledAt']}`.",

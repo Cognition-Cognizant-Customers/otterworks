@@ -1,8 +1,8 @@
 # Recon — `mongo-invoices` (NS=`demo`)
 
-**Verdict: PASS** — every number below is recomputed from Atlas (`ow_tp_demo`) and compared against the seed manifest `testdata/legacy/manifests/demo.json` (generated `2026-08-01T00:00:00Z`, runtime state, never committed).
+**Verdict: PASS** — every number below is recomputed from Atlas (`ow_tp_demo`) and compared against the seed manifest `testdata/legacy/manifests/demo.json` (SCALE=`demo`, generated `2026-08-01T00:00:00Z`, runtime state, never committed).
 
-Reconciled at `2026-08-15T23:46:33Z`.
+Reconciled at `2026-08-15T23:53:15Z`.
 
 ## Counts
 
