@@ -472,7 +472,8 @@ def render(report: dict) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ns", default="demo")
-    parser.add_argument("--catalog", default="ow_tp")
+    # Same reason as the runner: the recon must read the catalog the inputs were landed in.
+    parser.add_argument("--catalog", default=dbx.CATALOG)
     parser.add_argument("--baseline", default="/home/ubuntu/tp-golden/python/user_activity_daily")
     parser.add_argument("--out", default=None, help="write the markdown report here")
     args = parser.parse_args(argv)
