@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import glob
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -34,6 +35,17 @@ import dbx  # noqa: E402
 
 CATALOG = dbx.CATALOG
 LEGACY_ROOT = os.environ.get("OTTERWORKS_LEGACY_ROOT", "/tmp/otterworks-legacy")
+_NS_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def checked_ns(ns: str) -> None:
+    if not _NS_PATTERN.fullmatch(ns):
+        raise ValueError(f"invalid ns {ns!r}: expected {_NS_PATTERN.pattern}")
+
+
+def sql_literal(value: str) -> str:
+    """Render a value as a Spark SQL string literal, escaping backslashes and quotes."""
+    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
 
 def ddl_statements(catalog: str = CATALOG) -> list[str]:
@@ -101,11 +113,12 @@ def _validated_cte(ns: str, catalog: str) -> str:
     line_no is the physical 1-based line number in the drop file, so HDR is line 1 and
     detail records keep the position they arrived in.
     """
+    checked_ns(ns)
     return f"""
         WITH lines AS (
           SELECT file_name, line_no, raw_line AS line
           FROM {catalog}.bronze.custbill_raw_lines_bootstrap
-          WHERE ns = '{ns}' AND length(trim(raw_line)) > 0
+          WHERE ns = {sql_literal(ns)} AND length(trim(raw_line)) > 0
         ),
         parsed AS (
           SELECT
@@ -145,18 +158,19 @@ def _validated_cte(ns: str, catalog: str) -> str:
 
 def parse_statements(ns: str, catalog: str = CATALOG) -> list[str]:
     """Delete-then-insert per namespace: re-running replaces rows instead of duplicating."""
+    checked_ns(ns)
     validated = _validated_cte(ns, catalog)
     return [
-        f"DELETE FROM {catalog}.silver.custbill_records WHERE ns = '{ns}'",
-        f"DELETE FROM {catalog}.silver.custbill_rejects WHERE ns = '{ns}'",
-        f"DELETE FROM {catalog}.silver.custbill_file_recon WHERE ns = '{ns}'",
+        f"DELETE FROM {catalog}.silver.custbill_records WHERE ns = {sql_literal(ns)}",
+        f"DELETE FROM {catalog}.silver.custbill_rejects WHERE ns = {sql_literal(ns)}",
+        f"DELETE FROM {catalog}.silver.custbill_file_recon WHERE ns = {sql_literal(ns)}",
         f"""
         INSERT INTO {catalog}.silver.custbill_records
           (ns, file_name, line_no, record_type, account_id, invoice_id, customer_name,
            currency, amount, bill_date, parsed_at)
         {validated}
         SELECT
-          '{ns}',
+          {sql_literal(ns)},
           file_name,
           line_no,
           record_type,
@@ -174,7 +188,7 @@ def parse_statements(ns: str, catalog: str = CATALOG) -> list[str]:
         INSERT INTO {catalog}.silver.custbill_rejects
           (ns, file_name, line_no, raw_line, reject_reason, rejected_at)
         {validated}
-        SELECT '{ns}', file_name, line_no, line, reject_reason, current_timestamp()
+        SELECT {sql_literal(ns)}, file_name, line_no, line, reject_reason, current_timestamp()
         FROM validated
         WHERE rec_kind = 'DETAIL' AND reject_reason IS NOT NULL
         """,
@@ -193,7 +207,7 @@ def parse_statements(ns: str, catalog: str = CATALOG) -> list[str]:
           GROUP BY file_name
         )
         SELECT
-          '{ns}',
+          {sql_literal(ns)},
           file_name,
           declared_trailer_count,
           parsed_count,
@@ -208,13 +222,22 @@ def parse_statements(ns: str, catalog: str = CATALOG) -> list[str]:
 
 def _land_drops(ns: str, source_dir: str, catalog: str = CATALOG) -> list[tuple[str, int]]:
     """Land each drop file line-for-line into bronze, replacing any previous landing."""
-    paths = sorted(glob.glob(os.path.join(source_dir, "CUSTBILL*.dat"))) or sorted(
-        glob.glob(os.path.join(source_dir, "CUSTBILL*.dat.done"))
-    )
+    checked_ns(ns)
+    paths_by_name = {}
+    for path in glob.glob(os.path.join(source_dir, "CUSTBILL*.dat")) + glob.glob(
+        os.path.join(source_dir, "CUSTBILL*.dat.done")
+    ):
+        name = os.path.basename(path)
+        base_name = name[: -len(".done")] if name.endswith(".done") else name
+        if base_name not in paths_by_name or not name.endswith(".done"):
+            paths_by_name[base_name] = path
+    paths = [paths_by_name[name] for name in sorted(paths_by_name)]
     if not paths:
         raise SystemExit(f"no CUSTBILL*.dat[.done] files under {source_dir}")
 
-    dbx.sql(f"DELETE FROM {catalog}.bronze.custbill_raw_lines_bootstrap WHERE ns = '{ns}'")
+    dbx.sql(
+        f"DELETE FROM {catalog}.bronze.custbill_raw_lines_bootstrap WHERE ns = {sql_literal(ns)}"
+    )
     landed = []
     for path in paths:
         name = os.path.basename(path)
@@ -225,8 +248,11 @@ def _land_drops(ns: str, source_dir: str, catalog: str = CATALOG) -> list[tuple[
         if lines and lines[-1] == "":
             lines.pop()
         values = ",".join(
-            "('{ns}','{name}',{line_no},'{line}',current_timestamp())".format(
-                ns=ns, name=name, line_no=index, line=line.replace("'", "''")
+            "({ns},{name},{line_no},{line},current_timestamp())".format(
+                ns=sql_literal(ns),
+                name=sql_literal(name),
+                line_no=index,
+                line=sql_literal(line),
             )
             for index, line in enumerate(lines, start=1)
         )
@@ -245,6 +271,7 @@ def main() -> int:
     parser.add_argument("--skip-landing", action="store_true")
     args = parser.parse_args()
     ns = args.ns
+    checked_ns(ns)
 
     for statement in ddl_statements():
         dbx.sql(statement)

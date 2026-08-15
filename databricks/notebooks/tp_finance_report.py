@@ -23,7 +23,19 @@
 
 from __future__ import annotations
 
+import re
+
 CSV_HEADER = "Currency,RecordType,RecordCount,TotalAmount"
+
+# Catalog, namespace and business date reach the statements as identifiers or literals that
+# cannot be bound as parameters, so each is validated against a strict pattern before it is
+# interpolated, and every free-text value goes through sql_literal(). Backslash is an escape
+# character in Spark SQL literals, so escaping the quote alone would not contain a value.
+_PATTERNS = {
+    "catalog": re.compile(r"^[A-Za-z0-9_]{1,64}$"),
+    "ns": re.compile(r"^[A-Za-z0-9_-]{1,64}$"),
+    "report_date": re.compile(r"^\d{4}-\d{2}-\d{2}$"),
+}
 
 # Delivery statuses. Only DELIVERED means a transport accepted the report; every other
 # value is an explicit, auditable non-delivery -- the legacy job recorded nothing at all.
@@ -32,8 +44,21 @@ STATUS_NO_TRANSPORT = "NOT_DELIVERED_NO_TRANSPORT_CONFIGURED"
 STATUS_NO_RECIPIENTS = "NOT_DELIVERED_NO_RECIPIENTS_CONFIGURED"
 
 
+def sql_literal(value: str) -> str:
+    """Render a value as a Spark SQL string literal, escaping backslashes and quotes."""
+    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+def checked(**values: str) -> None:
+    """Reject any run parameter that is not the shape its statements assume."""
+    for name, value in values.items():
+        if not _PATTERNS[name].match(value):
+            raise ValueError(f"invalid {name} {value!r}: expected {_PATTERNS[name].pattern}")
+
+
 def ddl_statements(catalog: str = "ow_tp") -> list[str]:
     """Idempotent DDL for the gold tables. Mirrors databricks/sql/finance_report_tables.sql."""
+    checked(catalog=catalog)
     return [
         f"""
         CREATE TABLE IF NOT EXISTS {catalog}.gold.finance_billing_summary (
@@ -72,10 +97,11 @@ def summary_statements(ns: str, report_date: str, catalog: str = "ow_tp") -> lis
     job quarantines it in silver.custbill_rejects, where it is visible, instead of the
     legacy report's silent `UNKNOWN(xx)` row.
     """
+    checked(catalog=catalog, ns=ns, report_date=report_date)
     return [
         f"""
         DELETE FROM {catalog}.gold.finance_billing_summary
-        WHERE ns = '{ns}' AND report_date = DATE '{report_date}'
+        WHERE ns = {sql_literal(ns)} AND report_date = DATE '{report_date}'
         """,
         f"""
         INSERT INTO {catalog}.gold.finance_billing_summary
@@ -89,7 +115,7 @@ def summary_statements(ns: str, report_date: str, catalog: str = "ow_tp") -> lis
           DATE '{report_date}' AS report_date,
           current_timestamp() AS generated_at
         FROM {catalog}.silver.custbill_records
-        WHERE ns = '{ns}' AND record_type IN ('01', '02')
+        WHERE ns = {sql_literal(ns)} AND record_type IN ('01', '02')
         GROUP BY ns, currency, record_type
         """,
     ]
@@ -97,10 +123,11 @@ def summary_statements(ns: str, report_date: str, catalog: str = "ow_tp") -> lis
 
 def summary_select(ns: str, report_date: str, catalog: str = "ow_tp") -> str:
     """The report body, ordered like the legacy `sort keys %tot`: currency, then 01 before 02."""
+    checked(catalog=catalog, ns=ns, report_date=report_date)
     return f"""
         SELECT currency, record_type, record_count, total_amount
         FROM {catalog}.gold.finance_billing_summary
-        WHERE ns = '{ns}' AND report_date = DATE '{report_date}'
+        WHERE ns = {sql_literal(ns)} AND report_date = DATE '{report_date}'
         ORDER BY currency, CASE record_type WHEN 'INVOICE' THEN 0 ELSE 1 END
     """
 
@@ -114,18 +141,20 @@ def delivery_statements(
     catalog: str = "ow_tp",
 ) -> list[str]:
     """Write the run's delivery audit row, replacing any previous row for the same run."""
-    artifact_sql = "NULL" if artifact_path is None else f"'{artifact_path}'"
-    recipients_sql = "NULL" if not recipients else f"'{recipients}'"
+    checked(catalog=catalog, ns=ns, report_date=report_date)
+    artifact_sql = "NULL" if artifact_path is None else sql_literal(artifact_path)
+    recipients_sql = "NULL" if not recipients else sql_literal(recipients)
     delivered_sql = "current_timestamp()" if status == STATUS_DELIVERED else "CAST(NULL AS TIMESTAMP)"
     return [
         f"""
         DELETE FROM {catalog}.gold.finance_report_delivery
-        WHERE ns = '{ns}' AND report_date = DATE '{report_date}'
+        WHERE ns = {sql_literal(ns)} AND report_date = DATE '{report_date}'
         """,
         f"""
         INSERT INTO {catalog}.gold.finance_report_delivery
           (ns, report_date, artifact_path, recipient_list, delivery_status, delivered_at)
-        VALUES ('{ns}', DATE '{report_date}', {artifact_sql}, {recipients_sql}, '{status}', {delivered_sql})
+        VALUES ({sql_literal(ns)}, DATE '{report_date}', {artifact_sql}, {recipients_sql},
+                {sql_literal(status)}, {delivered_sql})
         """,
     ]
 
@@ -199,12 +228,20 @@ def _run() -> None:
 
 
 def _secret(scope: str, key: str) -> str | None:
-    """Read a managed config value from the secret scope; absent keys are not an error."""
+    """Read a managed config value from the secret scope; absent keys are not an error.
+
+    Only "this key is not configured" is tolerated. An unreadable scope or an API error
+    raises: recording it as NOT_DELIVERED_NO_..._CONFIGURED would be the legacy job's silent
+    non-delivery wearing an audit row.
+    """
     if not key:
         return None
     try:
         value = dbutils.secrets.get(scope=scope, key=key).strip()
-    except Exception:
+    except Exception as exc:
+        detail = str(exc)
+        if "RESOURCE_DOES_NOT_EXIST" not in detail and "does not exist" not in detail:
+            raise
         return None
     return value or None
 

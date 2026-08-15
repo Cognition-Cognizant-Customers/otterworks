@@ -6,6 +6,9 @@
 -- stand the tables up with a schema-validated parse of copybook CBCUST01. When the
 -- parse unit lands, its own DDL and job supersede this bootstrap; the schema here
 -- follows its contract so the finance report keeps reading the same columns.
+-- These are the DDL statements for the default `ow_tp` catalog. The bootstrap job issues
+-- the same statements with its `catalog` parameter substituted; the recon script does
+-- not assert live schema equality against this file.
 
 CREATE TABLE IF NOT EXISTS ow_tp.silver.custbill_records (
   ns STRING NOT NULL COMMENT 'Demo namespace.',
