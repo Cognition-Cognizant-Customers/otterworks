@@ -9,7 +9,7 @@
 # MAGIC |---|---|
 # MAGIC | Row-by-row `%tot`/`%cnt` accumulation in Perl over `parsed/*.psv` | one `GROUP BY` against `ow_tp.silver.custbill_records` |
 # MAGIC | CSV renamed to `.xls` | a real CSV, written with a `.csv` extension; the gold table is the system of record |
-# MAGIC | `sendmail -t` pipe that no-ops when the binary is missing | delivery is attempted only if a transport is configured, and the outcome is recorded in `ow_tp.gold.finance_report_delivery` |
+# MAGIC | `sendmail -t` pipe that no-ops when the binary is missing | delivery is attempted only if a transport is configured, with a durable pre-send attempt audit and a post-acceptance delivery confirmation in `ow_tp.gold.finance_report_delivery` |
 # MAGIC | Recipients hardcoded (`jake@…`, gone since 2020) | distribution list read from the `ow_tp` secret scope |
 # MAGIC | Hostname `if`-blocks choosing `/data/otterworks` vs `/data2/otterworks_uat` | job parameters + Unity Catalog volume paths |
 # MAGIC | Lock file checked, never removed | `max_concurrent_runs = 1` plus delete-and-insert idempotency per `(ns, report_date)` |
@@ -37,9 +37,12 @@ _PATTERNS = {
     "report_date": re.compile(r"^\d{4}-\d{2}-\d{2}$"),
 }
 
-# Delivery statuses. Only DELIVERED means a transport accepted the report; every other
-# value is an explicit, auditable non-delivery -- the legacy job recorded nothing at all.
+# Delivery statuses. DELIVERED means a transport accepted the report; the attempted and
+# unconfirmed values make uncertain sends explicit instead of allowing retries to duplicate
+# a report or silently claiming success.
 STATUS_DELIVERED = "DELIVERED"
+STATUS_ATTEMPTING = "DELIVERY_ATTEMPTED_UNCONFIRMED"
+STATUS_UNCONFIRMED = "NOT_DELIVERED_ATTEMPT_UNCONFIRMED"
 STATUS_NO_TRANSPORT = "NOT_DELIVERED_NO_TRANSPORT_CONFIGURED"
 STATUS_NO_RECIPIENTS = "NOT_DELIVERED_NO_RECIPIENTS_CONFIGURED"
 
@@ -78,7 +81,7 @@ def ddl_statements(catalog: str = "ow_tp") -> list[str]:
           report_date DATE NOT NULL COMMENT 'Business date of the report run.',
           artifact_path STRING COMMENT 'Volume path of the emitted artifact, NULL when nothing was written.',
           recipient_list STRING COMMENT 'Distribution list resolved from the ow_tp secret scope, never from code.',
-          delivery_status STRING NOT NULL COMMENT 'DELIVERED, or NOT_DELIVERED_<reason> when no transport is configured.',
+          delivery_status STRING NOT NULL COMMENT 'DELIVERED, DELIVERY_ATTEMPTED_UNCONFIRMED, NOT_DELIVERED_ATTEMPT_UNCONFIRMED, or NOT_DELIVERED_<reason>.',
           delivered_at TIMESTAMP COMMENT 'Set only when delivery actually happened; NULL otherwise.'
         )
         COMMENT 'Delivery audit the legacy sendmail no-op never produced: what was written, to whom it was addressed, and whether it actually went out.'
@@ -228,10 +231,43 @@ def _run() -> None:
         # and swallowed the failure. Here the absence of a transport is recorded, not hidden.
         status = STATUS_NO_TRANSPORT
     else:
-        status = _deliver(transport, recipients, artifact_path, report_date)
+        status = None
 
-    for statement in delivery_statements(ns, report_date, artifact_path, recipients, status, catalog):
-        spark.sql(statement)
+    existing = spark.sql(
+        f"""
+        SELECT recipient_list, delivery_status, delivered_at
+        FROM {catalog}.gold.finance_report_delivery
+        WHERE ns = {sql_literal(ns)} AND report_date = DATE '{report_date}'
+        """
+    ).collect()
+    existing_row = existing[0] if existing else None
+
+    def write_audit(audit_recipients: str | None, audit_status: str) -> None:
+        for statement in delivery_statements(
+            ns, report_date, artifact_path, audit_recipients, audit_status, catalog
+        ):
+            spark.sql(statement)
+
+    if existing_row and existing_row["delivery_status"] == STATUS_DELIVERED:
+        recipients = existing_row["recipient_list"]
+        status = STATUS_DELIVERED
+    elif existing_row and existing_row["delivery_status"] in (
+        STATUS_ATTEMPTING,
+        STATUS_UNCONFIRMED,
+    ):
+        recipients = existing_row["recipient_list"] or recipients
+        status = STATUS_UNCONFIRMED
+        write_audit(recipients, status)
+        raise RuntimeError(
+            f"delivery status is {STATUS_UNCONFIRMED} for ns={ns!r}, "
+            f"report_date={report_date!r}; human confirmation is required before retrying"
+        )
+    elif recipients and transport:
+        write_audit(recipients, STATUS_ATTEMPTING)
+        status = _deliver(transport, recipients, artifact_path, report_date)
+        write_audit(recipients, status)
+    else:
+        write_audit(recipients, status)
 
     print(f"finance report ns={ns} report_date={report_date} rows={len(rows)}")
     recipient_count = sum(1 for address in (recipients or "").split(",") if address.strip())
