@@ -3,7 +3,8 @@
 
 Creates (if absent) the two collections this workload owns in the target
 database and applies their indexes. Re-running is a no-op: collection creation
-tolerates both the client-side pre-check error and the server's `NamespaceExists` (48), and `create_indexes` is idempotent for identical
+tolerates both the client-side pre-check error and the server's
+`NamespaceExists` (48), and `create_indexes` is idempotent for identical
 key/option specs.
 
     make mongo-tp-customers-setup            # apply
