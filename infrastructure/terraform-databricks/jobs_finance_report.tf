@@ -37,13 +37,27 @@ resource "databricks_secret" "finance_report_recipients" {
   string_value = var.finance_report_recipients
 }
 
+locals {
+  finance_report_notebook_source = "${path.module}/../../databricks/notebooks/tp_finance_report.py"
+
+  # Terraform plans this whole directory as one configuration, so a notebook source that
+  # is not on disk yet would abort the apply for the entire shared estate. The job is
+  # declared conditionally on its own source instead, and starts existing the moment the
+  # pipeline code lands -- no operator flag to remember to flip.
+  finance_report_enabled = fileexists(local.finance_report_notebook_source)
+}
+
 resource "databricks_notebook" "finance_report" {
-  source = "${path.module}/../../databricks/notebooks/tp_finance_report.py"
+  count = local.finance_report_enabled ? 1 : 0
+
+  source = local.finance_report_notebook_source
   path   = "${databricks_directory.pipelines.path}/tp_finance_report"
   format = "SOURCE"
 }
 
 resource "databricks_job" "finance_report" {
+  count = local.finance_report_enabled ? 1 : 0
+
   name        = "${var.prefix}_finance_report"
   description = "Gold finance billing summary by currency and record type, aggregated from ow_tp.silver.custbill_records, plus an explicit delivery audit row."
 
@@ -114,7 +128,7 @@ resource "databricks_job" "finance_report" {
     timeout_seconds     = 1800
 
     notebook_task {
-      notebook_path = databricks_notebook.finance_report.path
+      notebook_path = databricks_notebook.finance_report[0].path
       source        = "WORKSPACE"
     }
   }
