@@ -189,10 +189,11 @@ def reconcile(
     else:
         check("anomaly version_gaps", len(gaps) == gap_want,
               f"atlas={len(gaps)} manifest={gap_want}")
-    with_missing = sum(1 for g in gaps if g["missing"])
+    real = sum(1 for g in gaps if g["missing"] or g["expected"] != g["present"])
     check("version_gaps are real inconsistencies",
-          with_missing == len(gaps),
-          f"{with_missing}/{len(gaps)} gaps carry missing version numbers")
+          real == len(gaps),
+          f"{real}/{len(gaps)} gaps carry missing version numbers or a "
+          "declared/present disagreement")
 
     orphan_want = manifest_anomaly(
         manifest, "orphaned_snapshots", f"postgres.{schema}.document_snapshots")

@@ -164,7 +164,7 @@
     },
     {
       "check": "version_gaps are real inconsistencies",
-      "detail": "10/10 gaps carry missing version numbers",
+      "detail": "10/10 gaps carry missing version numbers or a declared/present disagreement",
       "status": "PASS"
     },
     {
@@ -194,5 +194,5 @@
     }
   ],
   "namespace": "demo",
-  "reconciled_at": "2026-08-15T23:09:06Z"
+  "reconciled_at": "2026-08-15T23:13:13Z"
 }
