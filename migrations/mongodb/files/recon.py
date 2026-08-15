@@ -173,7 +173,7 @@ def reconcile(ns: str) -> dict:
         (
             "orphans carry orphanReason",
             all(o["orphanReason"] == "missing_object_marker" for o in scan["orphans"]),
-            f"reasons={sorted({o['orphanReason'] for o in scan['orphans']})}",
+            f"reasons={sorted({str(o['orphanReason']) for o in scan['orphans']})}",
         ),
         (
             "workload indexes present",
