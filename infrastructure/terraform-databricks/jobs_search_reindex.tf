@@ -56,10 +56,10 @@ resource "databricks_job" "search_reindex" {
     default = "search_reindex"
   }
 
-  # Forces the extract stage to fail, to demonstrate that a broken source
-  # leaves the published index intact (contract acceptance check 3).
+  # Forces the source read to fail, to demonstrate that a broken source leaves
+  # the published index intact (contract acceptance check 3).
   parameter {
-    name    = "fail_after_ingest"
+    name    = "simulate_source_failure"
     default = "false"
   }
 
