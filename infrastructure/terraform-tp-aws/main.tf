@@ -160,7 +160,8 @@ resource "aws_sqs_queue_policy" "ingest" {
         Action    = "sqs:SendMessage"
         Resource  = aws_sqs_queue.ingest.arn
         Condition = {
-          ArnEquals = { "aws:SourceArn" = aws_cloudwatch_event_rule.landing.arn }
+          ArnEquals    = { "aws:SourceArn" = aws_cloudwatch_event_rule.landing.arn }
+          StringEquals = { "aws:SourceAccount" = local.account_id }
         }
       }
     ]

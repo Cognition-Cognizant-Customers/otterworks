@@ -12,11 +12,14 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STACK_DIR="$REPO_ROOT/infrastructure/terraform-tp-aws"
 export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-east-1}}"
+export AWS_REGION="$AWS_DEFAULT_REGION"
 # The provider region in the stack wins over the ambient one, so scanning must
 # follow the DEPLOYED region — otherwise teardown could be "proven" against a
 # region the stack was never in.
 if deployed_region="$(terraform -chdir="$STACK_DIR" output -raw aws_region 2>/dev/null)" && [ -n "$deployed_region" ]; then
+  # AWS_REGION outranks AWS_DEFAULT_REGION in the CLI, so both must be pinned
   export AWS_DEFAULT_REGION="$deployed_region"
+  export AWS_REGION="$deployed_region"
 fi
 PREFIX="${TP_NAME_PREFIX:-ow-tp-}"
 

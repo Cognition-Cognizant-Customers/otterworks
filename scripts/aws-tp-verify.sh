@@ -15,10 +15,13 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STACK_DIR="$REPO_ROOT/infrastructure/terraform-tp-aws"
 LEGACY_ROOT="${OTTERWORKS_LEGACY_ROOT:-/tmp/otterworks-legacy}"
 export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-east-1}}"
+export AWS_REGION="$AWS_DEFAULT_REGION"
 # The stack's provider region wins over the ambient one, so the deployed region
 # is authoritative for every CLI call below.
 if deployed_region="$(terraform -chdir="$STACK_DIR" output -raw aws_region 2>/dev/null)" && [ -n "$deployed_region" ]; then
+  # AWS_REGION outranks AWS_DEFAULT_REGION in the CLI, so both must be pinned
   export AWS_DEFAULT_REGION="$deployed_region"
+  export AWS_REGION="$deployed_region"
 fi
 
 NS="${NS:-demo}"
@@ -96,7 +99,9 @@ echo
 
 # --- wait for the event-driven chain to catch up ---
 s3_parsed() { aws s3api list-objects-v2 --bucket "$BUCKET" --prefix "parsed/$NS/" --query 'Contents[].Key' --output text 2>/dev/null || true; }
-s3_report() { aws s3api list-objects-v2 --bucket "$BUCKET" --prefix "reports/$NS/finance_billing_" --query 'sort_by(Contents,&LastModified)[-1].Key' --output text 2>/dev/null || true; }
+# .csv only — the .xls sibling is a byte-identical copy and must not be picked as
+# the report under test
+s3_report() { aws s3api list-objects-v2 --bucket "$BUCKET" --prefix "reports/$NS/finance_billing_" --query 'sort_by(Contents[?ends_with(Key,`.csv`)],&LastModified)[-1].Key' --output text 2>/dev/null || true; }
 
 deadline=$((SECONDS + WAIT))
 while :; do
