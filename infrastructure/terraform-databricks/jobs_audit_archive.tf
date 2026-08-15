@@ -27,9 +27,22 @@ variable "audit_archive_retention_days" {
 
 # Table DDL as code, deployed into the demo's workspace directory so the job's
 # first task can apply it. Idempotent, so every run reconciles the schema.
+#
+# A SQL file task cannot substitute identifiers, so the DDL spells the catalog
+# out. That makes `var.catalog_name` and this file two sources of truth for the
+# same name: with a renamed catalog the DDL would build the tables somewhere the
+# rest of the job never reads. Fail the plan instead of discovering it at
+# runtime -- renaming the catalog means templating the DDL too.
 resource "databricks_workspace_file" "audit_archive_ddl" {
   source = "${path.module}/../../databricks/sql/audit_archive_ddl.sql"
   path   = "${databricks_directory.pipelines.path}/sql/audit_archive_ddl.sql"
+
+  lifecycle {
+    precondition {
+      condition     = var.catalog_name == "ow_tp"
+      error_message = "databricks/sql/audit_archive_ddl.sql names ow_tp.{bronze,silver,gold} literally, so catalog_name=${var.catalog_name} would create the audit-archive tables in a catalog the job does not read. Template the DDL before renaming the catalog."
+    }
+  }
 }
 
 resource "databricks_job" "audit_archive" {
