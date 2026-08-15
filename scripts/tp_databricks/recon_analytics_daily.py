@@ -36,13 +36,13 @@ DEFAULT_BASELINE_DIR = Path(os.environ.get("BASELINE_DIR", "/home/ubuntu/tp-gold
 BASELINE_TIER = "baseline: legacy output"
 PROBE_NS_PREFIX = "recon_probe"
 
-# The legacy script reads camelCase fields (`eventType`, `timestamp`, `ownerId`,
-# `documentId`, `fileId`) from each message; the seeded records carry `event_type`,
-# `occurred_at`, `user_id`, `resource_id`. The legacy run therefore counted every event but
-# attributed none of them: one `"00"` hour bucket and a single `unknown` user. That is a
-# property of the baseline, not of the conversion. Check 2 keeps the exact group comparison
-# and its unequal values, and labels the difference a surfaced legacy deficiency rather than
-# either relaxing the comparison or porting the defect to match it.
+# The legacy script parses the hour from `timestamp` and resolves users from
+# `ownerId`/`editedBy`/`authorId`/`deletedBy`/`userId`; the seeded records carry `occurred_at`
+# and `user_id`. The legacy run therefore counted every event but attributed none of them:
+# one `"00"` hour bucket and a single `unknown` user. That is a property of the baseline, not
+# of the conversion. Check 2 keeps the exact group comparison and its unequal values, and
+# labels the difference a surfaced legacy deficiency rather than either relaxing the comparison
+# or porting the defect to match it.
 LEGACY_ATTRIBUTION_NOTE = (
     "legacy aggregate carries no summary_date/document_id, one synthetic hour bucket "
     "'00' and a single user_id 'unknown'"
@@ -111,6 +111,19 @@ def load_baseline(directory: Path) -> dict:
     by_type: dict[str, int] = {}
     for (_hour, event_type), count in by_hour_type.items():
         by_type[event_type] = by_type.get(event_type, 0) + count
+    artifacts = [summary, *users]
+    date_fields = sorted({
+        field
+        for artifact in artifacts
+        for field in artifact
+        if "date" in field.lower()
+    })
+    dates = sorted({
+        str(artifact[field])
+        for artifact in artifacts
+        for field in date_fields
+        if field in artifact and artifact[field] is not None
+    })
 
     return {
         "summary": summary,
@@ -119,12 +132,8 @@ def load_baseline(directory: Path) -> dict:
         "by_type": by_type,
         "users": {user["user_id"]: int(user["total"]) for user in users},
         "hours": sorted({hour for hour, _ in by_hour_type}),
-        "dates": sorted({
-            date
-            for user in users
-            for date in [user.get("summary_date")]
-            if date is not None
-        }),
+        "date_fields": date_fields,
+        "dates": dates,
         "exit_code": exit_code,
         "stdout": (directory / "stdout.txt").read_text(encoding="utf-8"),
         "zero_event": zero_event,
@@ -212,6 +221,10 @@ def check_2(baseline: dict, converted: dict) -> Check:
     check.record("distinct hours", baseline["hours"], sorted({hour for hour, _ in converted_groups}), must_match=False)
     check.record("distinct user_id count", len(baseline["users"]), converted["users"], must_match=False)
     check.record("distinct summary_date count", len(baseline["dates"]), converted["dates"], must_match=False)
+    check.note(
+        f"legacy artifact date-bearing fields: {baseline['date_fields']} "
+        "(event dates are absent; the run date exists only in the ds S3 partition)"
+    )
     check.record("exact group equality", True, exact)
     # The dimensions the baseline actually carries, compared exactly and never in place of
     # the group comparison above.
@@ -222,25 +235,26 @@ def check_2(baseline: dict, converted: dict) -> Check:
     legacy_signature = (
         baseline["hours"] == ["00"]
         and set(baseline["users"]) == {"unknown"}
-        and baseline["dates"] == []
+        and baseline["date_fields"] == []
     )
     check.note(
         f"legacy defect signature: hours={baseline['hours']}, "
-        f"user_ids={sorted(baseline['users'])}, summary_dates={baseline['dates']}"
+        f"user_ids={sorted(baseline['users'])}, date_fields={baseline['date_fields']}"
     )
 
     if exact:
         check.resolve(True)
     elif comparable and legacy_signature:
-        # The hour/user/date divergence is the legacy field-name defect: the 2014 script reads
-        # eventType/timestamp/ownerId while the events carry event_type/occurred_at/user_id, so
-        # it collapsed every event into hour='00'/user='unknown' with no dates. Matching it
-        # would mean porting the bug, so the difference is recorded as a surfaced deficiency.
+        # The hour/user divergence is the legacy field-name defect: the 2014 script parses
+        # `timestamp` and resolves users from ownerId/editedBy/authorId/deletedBy/userId while
+        # the events carry occurred_at/user_id. Matching it would mean porting the bug, so the
+        # difference is recorded as a surfaced deficiency.
         check.deviate(
             "legacy field-name defect surfaced, converted output correct -- the legacy script reads "
-            "eventType/timestamp/ownerId while the events carry event_type/occurred_at/user_id, so it "
+            "timestamp and resolves users from ownerId/editedBy/authorId/deletedBy/userId while the "
+            "events carry occurred_at/user_id, so it "
             f"collapsed all {baseline['total_events']} events into {len(baseline_groups)} groups at "
-            f"hour='00'/user_id='unknown' with {len(baseline['dates'])} dates; the converted job attributes them across "
+            "hour='00'/user_id='unknown' with no event date dimension; the converted job attributes them across "
             f"{len(converted_groups)} groups/{converted['hours']} hours/{converted['users']} users/"
             f"{converted['dates']} dates. Every dimension the baseline does carry is compared exactly "
             "above and matches."
