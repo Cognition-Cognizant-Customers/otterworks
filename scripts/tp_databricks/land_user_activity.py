@@ -99,22 +99,32 @@ def land_events_to_volume(ns: str, per_date: dict[str, list[dict]]) -> int:
     return total
 
 
+def quote(value: object) -> str:
+    """A SQL string literal for an arbitrary value read out of the data lake.
+
+    The event objects are seeded fixtures, but they are still untrusted input to the
+    statements below: a quote or backslash in any field would otherwise close the
+    literal and let the object's contents run as SQL under the runner's identity.
+    """
+    return "'" + str(value).replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
 def land_events_to_table(ns: str, catalog: str, per_date: dict[str, list[dict]],
                         batch: int = 400) -> int:
     """Fallback ingest for a token without the `files` scope: land into a Delta table."""
     table = f"{catalog}.bronze.user_activity_events_landed"
-    dbx.sql(f"DELETE FROM {table} WHERE ns = '{ns}'")
+    dbx.sql(f"DELETE FROM {table} WHERE ns = {quote(ns)}")
     flat = [event for _, events in sorted(per_date.items()) for event in events]
     for start in range(0, len(flat), batch):
         values = ",\n".join(
-            "('{ns}', '{event_id}', '{event_type}', '{user_id}', '{resource_id}', "
-            "TIMESTAMP'{occurred_at}', CURRENT_TIMESTAMP())".format(
-                ns=ns,
-                event_id=event["event_id"],
-                event_type=event["event_type"],
-                user_id=event["user_id"],
-                resource_id=event.get("resource_id") or "",
-                occurred_at=event["occurred_at"].replace("T", " ").replace("Z", ""),
+            "({ns}, {event_id}, {event_type}, {user_id}, {resource_id}, "
+            "TIMESTAMP{occurred_at}, CURRENT_TIMESTAMP())".format(
+                ns=quote(ns),
+                event_id=quote(event["event_id"]),
+                event_type=quote(event["event_type"]),
+                user_id=quote(event["user_id"]),
+                resource_id=quote(event.get("resource_id") or ""),
+                occurred_at=quote(event["occurred_at"].replace("T", " ").replace("Z", "")),
             )
             for event in flat[start:start + batch]
         )
@@ -187,7 +197,7 @@ def upstream_rows(ns: str, through: str | None) -> list[dict]:
 
 def land_upstream(ns: str, catalog: str, through: str | None, skip: bool) -> int:
     table = f"{catalog}.bronze.user_activity_upstream_fixture"
-    dbx.sql(f"DELETE FROM {table} WHERE ns = '{ns}'")
+    dbx.sql(f"DELETE FROM {table} WHERE ns = {quote(ns)}")
     if skip:
         print(f"  upstream fixture emptied for ns={ns} (simulating an upstream that never ran)")
         return 0
@@ -196,9 +206,9 @@ def land_upstream(ns: str, catalog: str, through: str | None, skip: bool) -> int
         print(f"  no upstream rows available for ns={ns}")
         return 0
     values = ",\n".join(
-        "('{ns}', DATE'{date}', {counts}, CURRENT_TIMESTAMP())".format(
-            ns=ns,
-            date=row["report_date"],
+        "({ns}, DATE{date}, {counts}, CURRENT_TIMESTAMP())".format(
+            ns=quote(ns),
+            date=quote(row["report_date"]),
             counts=", ".join(str(int(row[col] or 0)) for col in UPSTREAM_COLUMNS),
         )
         for row in rows
@@ -218,19 +228,31 @@ def main(argv: list[str] | None = None) -> int:
                         help="land upstream rows only up to this date (late-upstream scenario)")
     parser.add_argument("--no-upstream", action="store_true",
                         help="land no upstream rows at all (upstream-never-ran scenario)")
-    parser.add_argument("--events-only", action="store_true")
+    parser.add_argument("--events-only", action="store_true",
+                        help="land the events and leave the upstream fixture untouched")
+    parser.add_argument("--upstream-only", action="store_true",
+                        help="re-land only the upstream fixture (the freshness scenarios, "
+                             "without re-uploading every event)")
     parser.add_argument("--mode", choices=("auto", "volume", "table"), default="auto",
                         help="event ingest target; auto falls back to the table when the "
                              "workspace token has no `files` scope")
     args = parser.parse_args(argv)
+    if args.events_only and args.upstream_only:
+        parser.error("--events-only and --upstream-only are mutually exclusive")
+    if args.catalog != dbx.CATALOG:
+        # dbx.upload() derives the volume path from its own module-level catalog, so a
+        # divergent --catalog would put the files in one catalog and the tables in another.
+        parser.error(f"--catalog {args.catalog} does not match the driver's catalog "
+                     f"{dbx.CATALOG}; set OW_TP_CATALOG so files and tables agree")
 
     print(f"landing user_activity inputs for ns={args.ns} into {args.catalog}")
     land_ddl(args.ns)
     apply_ddl(args.catalog)
-    if not args.events_only:
+    if not args.upstream_only:
         dates, events, mode = land_events(args.ns, args.catalog, args.bucket, args.mode)
         print(f"  {events} events across {dates} dates (source_mode={mode})")
-    land_upstream(args.ns, args.catalog, args.upstream_through, args.no_upstream)
+    if not args.events_only:
+        land_upstream(args.ns, args.catalog, args.upstream_through, args.no_upstream)
     return 0
 
 
