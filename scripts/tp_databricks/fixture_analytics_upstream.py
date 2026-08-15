@@ -195,9 +195,19 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--db-port", type=int, default=int(os.getenv("DB_PORT", "55432")))
     parser.add_argument("--db-name", default=os.getenv("DB_NAME", "otterworks"))
     parser.add_argument("--db-user", default=os.getenv("DB_USER", "otterworks"))
-    parser.add_argument("--db-password", default=os.getenv("DB_PASSWORD", "otterworks_dev"))
+    # No credential default and no --db-password flag: a value here would sit in source,
+    # in --help and in every process listing. The local fixture's password is in
+    # docker-compose.yml; export it as DB_PASSWORD.
+    parser.add_argument("--db-password-env", default="DB_PASSWORD",
+                        help="env var holding the fixture PostgreSQL password")
     parser.add_argument("--out", help="also write the aggregate as JSON here")
     args = parser.parse_args(argv)
+    db_password = os.getenv(args.db_password_env)
+    if not db_password:
+        print(f"{args.db_password_env} is not set: export the local fixture PostgreSQL "
+              f"password (see docker-compose.yml) before building the fixture",
+              file=sys.stderr)
+        return 2
 
     client = s3_client()
     events = read_events(client, args.ns)
@@ -216,7 +226,7 @@ def main(argv: list[str]) -> int:
 
     conn = psycopg2.connect(
         host=args.db_host, port=args.db_port, dbname=args.db_name,
-        user=args.db_user, password=args.db_password,
+        user=args.db_user, password=db_password,
     )
     try:
         with conn, conn.cursor() as cursor:
