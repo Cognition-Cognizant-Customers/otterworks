@@ -1,78 +1,67 @@
-# MongoDB migration workload contracts (NS=demo, SCALE=demo)
+# Databricks migration contracts (tech-partnerships track)
 
-One contract file per migration workload. Each is the acceptance contract for a
-single child session: source store and schema, target Atlas collection and
-document model, the exact expected counts and checksums from the seed manifest,
-and the planted anomalies that migration must surface.
+One contract per legacy work unit. A contract is the acceptance definition for the
+converted Databricks job: the legacy source, the deficiencies the conversion must
+retire, the target Unity Catalog tables, where the golden legacy output lives, and the
+reconciliation checks that must pass to the cent.
 
-The before-contract is `testdata/legacy/manifests/<ns>.json`, written by the
-deterministic seeders (`make oracle-billing-seed NS=demo`,
-`make seed-legacy NS=demo`). It is a runtime artifact (gitignored); the numbers
-quoted in the contracts are the `NS=demo`, `SCALE=demo` values, which are
-reproducible because the RNG seed derives from the namespace
-(`seed = 714559852`, `generated_at = 2026-08-01T00:00:00Z`).
+## Shared rules (apply to every unit)
 
-## Shared rules for every workload
+- Target estate is parent-owned and already applied: catalog `ow_tp`, schemas
+  `bronze` / `silver` / `gold`, managed volume `/Volumes/ow_tp/bronze/landing`, secret
+  scope `ow_tp`, notebooks under `/Shared/ow_tp`. See
+  `infrastructure/terraform-databricks/README.md`.
+- **Never** apply the shared stack (`main.tf`, `catalog.sh`, `variables.tf`,
+  `versions.tf`, `outputs.tf`) and never `terraform apply`/`destroy` at all — the parent
+  session owns workspace state. Contribute your job as a new file
+  `infrastructure/terraform-databricks/jobs_<unit>.tf` only.
+- Everything created carries the `ow_tp` prefix; jobs are named `ow_tp_<unit>`. This is a
+  shared workspace — never read, write, or delete an unprefixed object, and never create
+  a cluster or any resource with an hourly cost. All compute is the existing serverless
+  SQL warehouse (data source `databricks_sql_warehouse`) or serverless notebook tasks.
+- Demo state is per-run and per-namespace: every job takes an `ns` parameter (`demo` for
+  this run), volume paths are `<ns>/<unit>/...`, and table rows carry `ns`. Branches hold
+  code only — no data, no state files, no secrets.
+- Use `scripts/tp_databricks/dbx.py` for SQL, volume uploads, notebook deploys, and job
+  runs instead of hand-rolling REST calls.
+- Conversions must retire the deficiencies listed in the unit's contract; they are drawn
+  from `etl/ETL_UPGRADE_GUIDE.md` and
+  `etl/legacy-extra/ETL_UPGRADE_GUIDE_ADDENDUM.md`.
+- The legacy scripts under `etl/` are the demo's before-state: **do not edit them**, and
+  do not touch the golden app path (`make up` / `make test`, `services/`, compose files,
+  CI). Every PR must pass `make tp-smoke`.
+- Deliver a stacked PR series, bottom-up mergeable, based off `tech-partnerships`:
+  1. `jobs_<unit>.tf` (+ table DDL for your own tables),
+  2. pipeline code (notebook / job source),
+  3. recon evidence (recon script + committed report).
+  Never one monolithic PR. Never merge to `main`; never merge from
+  `tech-partnerships-solutions` (reference only).
 
-- **Target**: Atlas M0 cluster `otterworks-demo`, database `ow_tp_demo`. The
-  cluster, the migration DB user and the project IP access-list entry are owned
-  by the parent session's Terraform stack under `infrastructure/terraform-atlas/`.
-  A workload never runs that stack and never writes outside its own collections.
-- **Migration code** lives under `migrations/mongodb/<workload>/` as
-  extractor → transformer → loader, parameterized by `NS`, idempotent: rerunning
-  for the same namespace must reproduce identical collection contents, counts and
-  checksums (upsert by deterministic `_id`, never blind insert).
-- **Recon** recomputes counts and checksums *from Atlas* and diffs them against
-  the manifest. A recon run that matches counts but does not enumerate the
-  planted anomalies is a failure, not a pass.
-- **Quarantine**: rows that cannot be faithfully modelled (unparseable dates,
-  malformed CSV lists, orphaned children) are written to a
-  `<collection>_quarantine` collection with the raw source values and a
-  `quarantine_reason`, and are counted in the recon report. Quarantined rows
-  still belong to the source-parity checksum unless a contract says otherwise.
-- **Branching / PRs**: work off `tech-partnerships`, never `main`, never merge or
-  copy from `tech-partnerships-solutions`. Deliver a 3-PR stack (infra/indexes →
-  migration code → recon report + evidence), each PR green on `make tp-smoke`
-  with the golden path (`make up` / `make test`) untouched.
+## Reconciliation honesty rule
 
-## Checksum definitions (must be reproduced exactly)
+Recon compares the converted job's output against the **golden legacy output** captured
+from an actual legacy run — not against itself, and not against numbers copied out of a
+document. If the legacy baseline for your unit cannot be produced (a dependency the
+legacy script needs does not exist locally), you must:
 
-Two different checksum schemes exist in the manifest; use the one that matches
-the target.
+1. try to stand up the missing local fixture so the legacy script can run (see the
+   unit's contract for what is missing and what has already been seeded), then
+2. if it still cannot run, report `recon_result: blocked` with the exact command,
+   the exact error, and what is missing.
 
-**Oracle targets — ordered md5.** `md5` over the concatenation of
-`f"{pk}:{amount}\n"` for every row, fed in **ascending `pk` string order**,
-where `amount` is the 2-decimal string form of the amount column:
+Never synthesize a golden output, never soften a comparison to make it pass, and state
+the provenance of your baseline explicitly in the recon report.
 
-| Manifest target | pk | amount |
+## Units
+
+| Unit | Language / vintage | Contract |
 |---|---|---|
-| `oracle.OW_BILLING.CUSTOMER_MASTER` | `CUST_ID` | `CUR_BAL_AMT` (`f"{v:.2f}"`) |
-| `oracle.OW_BILLING.INVOICE_LINE` | `LINE_ID` | `AMOUNT` (`f"{v:.2f}"`) |
-
-**Postgres / DynamoDB targets — order-independent sum of md5.** Sum the md5
-digests of every line as 128-bit big-endian integers, modulo 2^128, rendered as
-32 lowercase hex chars (see `legacy_common.Checksum`). Line formats:
-
-| Manifest target | Line |
-|---|---|
-| `postgres.otterworks_demo.documents` | `{id}\|{version}\|{word_count}` |
-| `postgres.otterworks_demo.document_versions` | `{document_id}\|{version_number}` |
-| `postgres.otterworks_demo.document_snapshots` | `{id}\|{document_id}` |
-| `dynamodb.file-metadata` | `{id}\|{size_bytes}\|{s3_key}` |
-
-## Source connection details (local before-state, already running)
-
-| Store | Connection |
-|---|---|
-| Oracle `OW_BILLING` | `ow_billing/ow_billing@localhost:52521/FREEPDB1` (PDB `FREEPDB1`) |
-| Postgres | `postgresql://otterworks:otterworks_dev@localhost:5432/otterworks`, schema `otterworks_demo` |
-| DynamoDB (LocalStack) | endpoint `http://localhost:4566`, region `us-east-1`, table `otterworks-file-metadata`, namespace attribute `ns = "demo"` |
-
-## Workloads
-
-| Contract | Source | Atlas collection |
-|---|---|---|
-| `mongo-customers.md` | Oracle `CUSTOMER_MASTER` + `ENTITY_ATTR_VALUE` | `customers` |
-| `mongo-invoices.md` | Oracle `INVOICE_HEADER` + `INVOICE_LINE` | `invoices` |
-| `mongo-documents.md` | Postgres `documents` / `document_versions` / `document_snapshots` | `documents` |
-| `mongo-files.md` | DynamoDB `otterworks-file-metadata` | `files` |
+| `sftp_ingest_poll.ksh` | ksh, 1998 (ported 2014) | [sftp_ingest_poll.md](sftp_ingest_poll.md) |
+| `parse_custbill_fixedwidth.sh` | bash + sed/awk/cut, 2001 | [parse_custbill_fixedwidth.md](parse_custbill_fixedwidth.md) |
+| `finance_excel_report.pl` | Perl (no modules), 2004 | [finance_excel_report.md](finance_excel_report.md) |
+| `analytics_daily.py` | Python, 2014 | [analytics_daily.md](analytics_daily.md) |
+| `audit_archive_weekly.py` | Python, 2014 | [audit_archive_weekly.md](audit_archive_weekly.md) |
+| `search_reindex_weekly.py` | Python, 2014 | [search_reindex_weekly.md](search_reindex_weekly.md) |
+| `storage_cleanup_daily.py` | Python, 2014 | [storage_cleanup_daily.md](storage_cleanup_daily.md) |
+| `user_activity_daily.py` | Python, 2014 | [user_activity_daily.md](user_activity_daily.md) |
+| `run_all.sh` + estate rollup | bash, 2014 | [gold_estate_rollup.md](gold_estate_rollup.md) (second wave) |

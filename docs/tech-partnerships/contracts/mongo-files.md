@@ -1,6 +1,6 @@
 # Contract — `mongo-files`: DynamoDB file metadata → Atlas `files`
 
-Read `README.md` in this directory first: it holds the shared rules, checksum
+Read `mongo-README.md` in this directory first: it holds the shared rules, checksum
 definitions and source connection details that this contract depends on.
 
 ## Source — DynamoDB table `otterworks-file-metadata` (LocalStack)

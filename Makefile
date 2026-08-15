@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke aws-tp-plan aws-tp-apply aws-tp-run aws-tp-verify aws-tp-destroy aws-tp-scan
 
 SHELL := /bin/bash
 
@@ -449,3 +449,27 @@ legacy-sftp-up: ## Start the optional localhost-only SFTP drop fixture
 
 legacy-sftp-down: ## Stop the SFTP drop fixture
 	docker compose -f etl/legacy-extra/docker-compose.sftp.yml down
+
+# --- AWS serverless CUSTBILL pipeline (infrastructure/terraform-tp-aws, tech-partnerships demo) ---
+
+TP_AWS_DIR := infrastructure/terraform-tp-aws
+
+aws-tp-plan: ## Plan the AWS serverless CUSTBILL stack
+	terraform -chdir=$(TP_AWS_DIR) init -input=false
+	terraform -chdir=$(TP_AWS_DIR) plan -input=false
+
+aws-tp-apply: ## Apply the AWS serverless CUSTBILL stack (serverless/on-demand only)
+	terraform -chdir=$(TP_AWS_DIR) init -input=false
+	terraform -chdir=$(TP_AWS_DIR) apply -auto-approve -input=false
+
+aws-tp-run: ## Drop the deterministic CUSTBILL sample files into landing/<ns>/ (NS=<ns>)
+	scripts/aws-tp-run.sh $${NS:-demo}
+
+aws-tp-verify: ## Recon serverless pipeline output against the legacy golden outputs (NS=<ns>)
+	scripts/aws-tp-verify.sh $${NS:-demo} --wait $${WAIT:-180}
+
+aws-tp-destroy: ## Destroy the AWS stack and verify zero Project=otterworks-tp resources remain
+	scripts/aws-tp-teardown.sh
+
+aws-tp-scan: ## Teardown verification only: scan for leftover ow-tp- / tagged resources
+	scripts/aws-tp-teardown.sh --scan-only
