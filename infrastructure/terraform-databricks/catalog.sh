@@ -23,11 +23,18 @@ drop) statement="DROP CATALOG IF EXISTS \`${catalog}\` CASCADE" ;;
     ;;
 esac
 
+set +e
 response=$(curl -sS --fail-with-body -X POST "${DATABRICKS_HOST%/}/api/2.0/sql/statements" \
     -H "Authorization: Bearer ${DATABRICKS_TOKEN}" \
     -H 'Content-Type: application/json' \
     -d "$(printf '{"warehouse_id":"%s","statement":"%s","wait_timeout":"50s","on_wait_timeout":"CONTINUE"}' \
-        "$warehouse" "$statement")")
+        "$warehouse" "$statement")" 2>&1)
+curl_status=$?
+set -e
+if ((curl_status != 0)); then
+    echo "catalog $action request failed (curl $curl_status): $response" >&2
+    exit 1
+fi
 
 statement_id=$(printf '%s' "$response" | jq -r '.statement_id // empty')
 if [[ -z "$statement_id" ]]; then
@@ -38,9 +45,16 @@ fi
 state=$(printf '%s' "$response" | jq -r '.status.state // empty')
 while [[ "$state" == "PENDING" || "$state" == "RUNNING" ]]; do
     sleep 2
+    set +e
     response=$(curl -sS --fail-with-body \
         -H "Authorization: Bearer ${DATABRICKS_TOKEN}" \
-        "${DATABRICKS_HOST%/}/api/2.0/sql/statements/${statement_id}")
+        "${DATABRICKS_HOST%/}/api/2.0/sql/statements/${statement_id}" 2>&1)
+    curl_status=$?
+    set -e
+    if ((curl_status != 0)); then
+        echo "catalog $action polling request failed (curl $curl_status): $response" >&2
+        exit 1
+    fi
     state=$(printf '%s' "$response" | jq -r '.status.state // empty')
 done
 

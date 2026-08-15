@@ -36,7 +36,10 @@ PIPELINE_ROOT = f"/Shared/{PREFIX}"
 
 
 class DatabricksError(RuntimeError):
-    pass
+    def __init__(self, message: str, status: int | None = None, error_code: str | None = None):
+        super().__init__(message)
+        self.status = status
+        self.error_code = error_code
 
 
 def _host() -> str:
@@ -67,7 +70,16 @@ def request(method: str, path: str, body: dict | None = None, raw: bytes | None 
         with urllib.request.urlopen(req) as resp:
             payload = resp.read()
     except urllib.error.HTTPError as exc:  # surface the API message, not just the code
-        raise DatabricksError(f"{method} {path} -> {exc.code}: {exc.read().decode()[:800]}") from exc
+        payload = exc.read().decode()
+        try:
+            error_code = json.loads(payload).get("error_code")
+        except json.JSONDecodeError:
+            error_code = None
+        raise DatabricksError(
+            f"{method} {path} -> {exc.code}: {payload[:800]}",
+            status=exc.code,
+            error_code=error_code,
+        ) from exc
     return json.loads(payload) if payload else {}
 
 
@@ -190,8 +202,11 @@ def inventory() -> dict[str, list[str]]:
     try:
         request("GET", f"/api/2.0/workspace/get-status?path={urllib.parse.quote(PIPELINE_ROOT)}")
         directories = [PIPELINE_ROOT]
-    except DatabricksError:
-        directories = []
+    except DatabricksError as exc:
+        if exc.status == 404 or exc.error_code == "RESOURCE_DOES_NOT_EXIST":
+            directories = []
+        else:
+            raise
     return {"catalogs": catalogs, "jobs": jobs, "secret_scopes": scopes, "directories": directories}
 
 

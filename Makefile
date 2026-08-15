@@ -481,7 +481,7 @@ ifndef NS
 	$(error NS is required, e.g. make dbx-upload NS=demo)
 endif
 	$(call validate_ns)
-	@set -e; shopt -s nullglob; files=( "$(LEGACY_ROOT)"/sftp-drop/upload/*.dat ); \
+	@set -e; shopt -s nullglob nocaseglob; files=( "$(LEGACY_ROOT)"/sftp-drop/upload/CUSTBILL_$(NS)_*.dat ); \
 	if (($${#files[@]} == 0)); then \
 	  echo "dbx-upload: no .dat files found under $(LEGACY_ROOT)/sftp-drop/upload; nothing to upload"; \
 	  exit 0; \
@@ -502,8 +502,12 @@ dbx-deploy-notebooks: ## Import the converted pipeline notebooks into /Shared/ow
 
 dbx-run: ## Run a converted job and wait for it (JOB=<ow_tp_...>, NS=<ns>)
 	@test -n "$(JOB)" || { echo "usage: make dbx-run JOB=ow_tp_<job> NS=<ns>"; exit 1; }
+	@case "$(JOB)" in *[!A-Za-z0-9_-]*|'') echo "JOB must contain only letters, digits, underscores, and hyphens" >&2; exit 1;; esac
+	$(if $(NS),$(call validate_ns),)
 	@$(DBX) run-job "$(JOB)" ns=$${NS:-demo}
 
 dbx-recon: ## Reconcile one converted unit against its legacy golden output (UNIT=<unit>, NS=<ns>)
 	@test -n "$(UNIT)" || { echo "usage: make dbx-recon UNIT=<unit> NS=<ns>"; exit 1; }
+	@case "$(UNIT)" in *[!A-Za-z0-9_-]*|'') echo "UNIT must contain only letters, digits, underscores, and hyphens" >&2; exit 1;; esac
+	$(if $(NS),$(call validate_ns),)
 	$(DBX_ENV) NS=$${NS:-demo} python3 scripts/tp_databricks/recon_$(UNIT).py
