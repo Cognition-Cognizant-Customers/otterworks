@@ -377,10 +377,14 @@ def run_checks(args) -> tuple[list[Check], dict]:
         if os.path.exists(os.path.join(args.baseline_dir, name)) else None
         for name in ("audit_events.jsonl.gz", "report.json", "legacy_stdout.txt")
     }
-    legacy_policy = baseline["report"].get("retention_policy", {})
+    policy_value = report_field(baseline, "retention_policy")
+    legacy_policy = policy_value if isinstance(policy_value, dict) else {}
     describes_this_run = (
-        str(legacy_policy.get("retention_days")) == str(args.retention_days)
-        and legacy_policy.get("cutoff_date", "").startswith(cutoff[:10])
+        str(report_field(baseline, "retention_policy", "retention_days"))
+        == str(args.retention_days)
+        and str(report_field(baseline, "retention_policy", "cutoff_date") or "").startswith(
+            cutoff[:10]
+        )
     )
     checks[4].record(
         args.baseline_tier != "blocked"
