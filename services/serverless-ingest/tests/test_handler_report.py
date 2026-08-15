@@ -221,17 +221,41 @@ def test_handler_ignores_non_psv_objects(fake_s3):
     assert fake_s3.objects[result["report_key"]] == EXPECTED_CSV
 
 
-def test_handler_does_not_clobber_a_report_built_from_more_files(fake_s3):
-    # one execution runs per landed file; a slow run that saw fewer parsed files must
-    # not overwrite the complete report a faster sibling already published
+def test_handler_does_not_clobber_a_report_built_from_more_files(fake_s3, monkeypatch):
+    # one execution runs per landed file; a slow run whose listing lagged behind the
+    # bucket must not overwrite the complete report a faster sibling published
     complete = handler_report.handler({"ns": "demo"}, None)
-    del fake_s3.objects["parsed/demo/CUSTBILL_FIX_002.psv"]
+    real_keys = handler_report._parsed_keys
+    calls = {"n": 0}
+
+    def lagging_keys(client, bucket, prefix):
+        # every aggregation listing lags, every verification listing sees the truth,
+        # so the run exhausts its retries still holding an incomplete aggregate
+        calls["n"] += 1
+        keys = real_keys(client, bucket, prefix)
+        return keys[:1] if calls["n"] % 2 else keys
+
+    monkeypatch.setattr(handler_report, "_parsed_keys", lagging_keys)
 
     partial = handler_report.handler({"ns": "demo"}, None)
 
     assert partial["published"] is False
     assert partial["files_aggregated"] == 1
     assert fake_s3.objects[complete["report_key"]] == EXPECTED_CSV
+
+
+def test_handler_republishes_after_a_parsed_file_is_removed(fake_s3):
+    # the ops beat: once an operator deletes a bad parsed file the report must be
+    # corrected on the next run, not blocked until the date stamp rolls over
+    first = handler_report.handler({"ns": "demo"}, None)
+    assert fake_s3.objects[first["report_key"]] == EXPECTED_CSV
+    del fake_s3.objects["parsed/demo/CUSTBILL_FIX_002.psv"]
+
+    corrected = handler_report.handler({"ns": "demo"}, None)
+
+    assert corrected["published"] is True
+    assert corrected["files_aggregated"] == 1
+    assert fake_s3.objects[corrected["report_key"]] != EXPECTED_CSV
 
 
 def test_handler_reaggregates_when_a_sibling_parse_lands_mid_run(fake_s3, monkeypatch):
@@ -258,6 +282,12 @@ def test_handler_reaggregates_when_a_sibling_parse_lands_mid_run(fake_s3, monkey
 def test_handler_requires_a_namespace(fake_s3):
     with pytest.raises(ValueError):
         handler_report.handler({}, None)
+
+
+@pytest.mark.parametrize("ns", ["../other", "a/b", ".."])
+def test_handler_rejects_a_namespace_that_is_not_one_path_segment(fake_s3, ns):
+    with pytest.raises(ValueError):
+        handler_report.handler({"ns": ns}, None)
 
 
 def test_report_stamp_uses_tz_env_var(monkeypatch):

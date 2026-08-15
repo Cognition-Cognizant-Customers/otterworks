@@ -95,20 +95,13 @@ def _parsed_keys(client, bucket: str, prefix: str) -> list[str]:
     return sorted(keys)
 
 
-def _published_source_count(client, bucket: str, key: str) -> int:
-    """Number of parsed files behind the report already at `key` (0 if none)."""
-    try:
-        head = client.head_object(Bucket=bucket, Key=key)
-    except Exception:  # noqa: BLE001 - any miss/denied head means "nothing to protect"
-        return 0
-    return int(head.get("Metadata", {}).get("source-count", 0) or 0)
-
-
 def handler(event, context):
     """Aggregate every parsed PSV for the event namespace and publish reports."""
     ns = event.get("ns") if event else None
     if not ns:
         raise ValueError("event must include a non-empty ns")
+    if "/" in ns or ns in {".", ".."}:
+        raise ValueError("ns must be a single path segment")
 
     bucket = env("BUCKET")
     prefix = f"{PARSED_PREFIX}/{ns}/"
@@ -126,7 +119,8 @@ def handler(event, context):
             # records on "\n" only, so \v/\f/\x85 inside a name must not split a record
             lines.extend(latin1_lines(body))
         rows = aggregate(lines)
-        if _parsed_keys(client, bucket, prefix) == keys:
+        latest = _parsed_keys(client, bucket, prefix)
+        if latest == keys:
             break
 
     report_bytes = render_csv(rows).encode("latin-1")
@@ -134,8 +128,11 @@ def handler(event, context):
     csv_key = report_key(ns, f"finance_billing_{stamp}.csv")
     xls_key = report_key(ns, f"finance_billing_{stamp}.xls")
 
-    # and never let a slower, less complete run overwrite a published report
-    if _published_source_count(client, bucket, csv_key) > len(keys):
+    # ...and never let a slow run publish an aggregate that is already known to be
+    # incomplete. The check is against the live listing, not the published report's
+    # source count, so a legitimately smaller estate (an operator removing a bad
+    # parsed file) still republishes and corrects the report on the next run.
+    if len(latest) > len(keys):
         return {
             "ns": ns,
             "report_key": csv_key,
