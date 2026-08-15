@@ -176,9 +176,12 @@ def _ingested_lines(ns: str) -> dict[str, list[str]]:
     return lines
 
 
-def check1_manifest(ns: str, golden: dict[str, GoldenFile]) -> Check:
-    """Manifest == golden: same files, same byte counts, same SHA-256."""
+def check1_manifest(ns: str, landing_root: str, golden: dict[str, GoldenFile]) -> Check:
+    """Manifest == golden: same files, byte counts, SHA-256, record counts, origin."""
     check = Check(1, "bronze.custbill_files matches the golden artifacts")
+    # `_metadata.file_path` comes back scheme-qualified; the drop path is what is being
+    # asserted, not the scheme, so it is compared with the prefix stripped.
+    drop = sftp_ingest_sql.drop_path(ns, landing_root)
     manifest = _manifest_rows(ns)
     ok = set(manifest) == set(golden) and len(manifest) == len(golden)
     check.detail.append(f"row count: converted={len(manifest)} golden={len(golden)}")
@@ -193,13 +196,27 @@ def check1_manifest(ns: str, golden: dict[str, GoldenFile]) -> Check:
             continue
         size_ok = int(got["size_bytes"]) == want.size_bytes
         hash_ok = got["sha256"] == want.sha256
-        ok = ok and size_ok and hash_ok
+        # record_count is the manifest's own claim about the file; every other check
+        # reads the lines table or the golden artifact, so if this column drifts nothing
+        # else notices — and the manifest is what downstream units trust.
+        count_ok = int(got["record_count"]) == len(want.lines)
+        origin = re.sub(r"^[a-z0-9]+:", "", got["source_path"])
+        origin_ok = origin == f"{drop}{name}"
+        ok = ok and size_ok and hash_ok and count_ok and origin_ok
         check.detail.append(
             f"{name}: size_bytes converted={got['size_bytes']} golden={want.size_bytes} "
             f"[{'ok' if size_ok else 'MISMATCH'}]"
         )
         check.detail.append(
             f"{name}: sha256 converted={got['sha256']} golden={want.sha256} [{'ok' if hash_ok else 'MISMATCH'}]"
+        )
+        check.detail.append(
+            f"{name}: record_count converted={got['record_count']} golden={len(want.lines)} "
+            f"[{'ok' if count_ok else 'MISMATCH'}]"
+        )
+        check.detail.append(
+            f"{name}: source_path converted={got['source_path']} expected={drop}{name} "
+            f"[{'ok' if origin_ok else 'MISMATCH'}]"
         )
     check.passed = ok
     return check
@@ -624,7 +641,14 @@ def _main(argv: list[str]) -> int:
     upload = probe_upload(args.ns, args.landing_root, not args.no_upload_probe and not args.no_rerun)
     print(f"[upload transport] {upload.target}: {upload.skipped or upload.error or 'VERIFIED'}")
     checks = [
-        _contained(1, "bronze.custbill_files matches the golden artifacts", check1_manifest, args.ns, golden),
+        _contained(
+            1,
+            "bronze.custbill_files matches the golden artifacts",
+            check1_manifest,
+            args.ns,
+            args.landing_root,
+            golden,
+        ),
         _contained(2, "bronze.custbill_lines preserves the raw records", check2_lines, args.ns, golden),
         _contained(3, "TRL-declared count equals detail lines ingested", check3_trailer, args.ns, golden),
         _contained(
