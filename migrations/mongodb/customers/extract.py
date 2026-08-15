@@ -18,6 +18,9 @@ CUSTOMERS_SQL = """
      ORDER BY cust_id
 """
 
+# Oracle rejects more than 1000 expressions in an IN list (ORA-01795).
+IN_LIST_LIMIT = 1000
+
 EAV_SQL_TEMPLATE = """
     SELECT entity_id, attr_name, attr_value, attr_type, created_dt
       FROM entity_attr_value
@@ -39,22 +42,26 @@ def _row_mapper(cur):
 
 
 def _eav_for(conn, cust_ids):
-    """EAV rows for the given customers, grouped by `entity_id`."""
+    """EAV rows for the given customers, grouped by `entity_id`.
+
+    The `IN` list is sub-chunked to `IN_LIST_LIMIT` so the extract chunk size
+    stays free of Oracle's ORA-01795 cap on list expressions.
+    """
     grouped = {cust_id: [] for cust_id in cust_ids}
-    if not cust_ids:
-        return grouped
-    names = [f":c{i}" for i in range(len(cust_ids))]
-    sql = EAV_SQL_TEMPLATE.format(placeholders=", ".join(names))
-    with conn.cursor() as cur:
-        cur.execute(sql, {f"c{i}": cid for i, cid in enumerate(cust_ids)})
-        for entity_id, attr_name, attr_value, attr_type, created_dt in cur:
-            grouped.setdefault(entity_id, []).append({
-                "ENTITY_ID": entity_id,
-                "ATTR_NAME": attr_name,
-                "ATTR_VALUE": attr_value,
-                "ATTR_TYPE": attr_type,
-                "CREATED_DT": created_dt,
-            })
+    for start in range(0, len(cust_ids), IN_LIST_LIMIT):
+        window = cust_ids[start:start + IN_LIST_LIMIT]
+        names = [f":c{i}" for i in range(len(window))]
+        sql = EAV_SQL_TEMPLATE.format(placeholders=", ".join(names))
+        with conn.cursor() as cur:
+            cur.execute(sql, {f"c{i}": cid for i, cid in enumerate(window)})
+            for entity_id, attr_name, attr_value, attr_type, created_dt in cur:
+                grouped.setdefault(entity_id, []).append({
+                    "ENTITY_ID": entity_id,
+                    "ATTR_NAME": attr_name,
+                    "ATTR_VALUE": attr_value,
+                    "ATTR_TYPE": attr_type,
+                    "CREATED_DT": created_dt,
+                })
     return grouped
 
 
