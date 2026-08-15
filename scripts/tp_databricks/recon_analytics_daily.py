@@ -203,7 +203,7 @@ def check_2(baseline: dict, converted: dict) -> Check:
     return check
 
 
-def check_3(ns: str, catalog: str, baseline: dict) -> Check:
+def check_3(ns: str, catalog: str, baseline: dict, source_table: str | None) -> Check:
     check = Check(3, "Retry deficiency retired: a failing/empty source fails the run")
     probe_ns = f"{PROBE_NS_PREFIX}_{ns}"
     missing_table = f"{catalog}.bronze.analytics_daily_stage_missing"
@@ -243,10 +243,12 @@ def check_3(ns: str, catalog: str, baseline: dict) -> Check:
         check.note(f"unreachable source: run failed as required ({type(exc).__name__}: {str(exc)[:200]})")
         outcomes.append(True)
 
-    # (b) reachable but empty source: no zero-event "success".
-    dbx.sql(f"DELETE FROM {runner.stage_table(catalog)} WHERE ns = '{probe_ns}'")
+    # (b) reachable but empty source: no zero-event "success". The probe namespace has no
+    # staged rows and no landed objects, so this is an empty extract either way.
+    if source_table:
+        dbx.sql(f"DELETE FROM {source_table} WHERE ns = '{probe_ns}'")
     try:
-        runner.run(probe_ns, catalog, "s3", apply_ddl=False, source_table=runner.stage_table(catalog))
+        runner.run(probe_ns, catalog, "s3", apply_ddl=False, source_table=source_table)
         check.note("empty source: run SUCCEEDED with zero events -- deficiency NOT retired")
         outcomes.append(False)
     except pipeline.ZeroEventExtract as exc:
@@ -264,11 +266,14 @@ def check_3(ns: str, catalog: str, baseline: dict) -> Check:
     return check
 
 
-def check_4(ns: str, catalog: str, converted: dict) -> Check:
+def check_4(ns: str, catalog: str, converted: dict, source_table: str | None) -> Check:
     check = Check(4, "Idempotency: a re-run replaces, never appends")
     before = dict(converted["counts"])
     fingerprint_before = gold_fingerprint(ns, catalog)
-    runner.run(ns, catalog, "s3", apply_ddl=False, source_table=runner.stage_table(catalog))
+    # The re-run must read whatever the original load read: replaying a volume-loaded slice
+    # from an empty staging table would replace bronze with nothing.
+    check.note(f"re-run source: {source_table or 'landing volume'}")
+    runner.run(ns, catalog, "s3", apply_ddl=False, source_table=source_table)
     after = {key: int(dbx.sql_scalar(query)) for key, query in pipeline.count_queries(catalog, ns).items()}
     passed = check.record("counts", before, after)
     passed &= check.record("gold fingerprint", fingerprint_before, gold_fingerprint(ns, catalog))
@@ -311,27 +316,50 @@ def render(checks: list[Check], ns: str, catalog: str, baseline_dir: Path, conve
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--ns", default=os.environ.get("NS", "demo"))
-    parser.add_argument("--catalog", default=pipeline.DEFAULT_CATALOG)
+    parser.add_argument("--catalog", default=os.environ.get("OW_TP_CATALOG", pipeline.DEFAULT_CATALOG))
     parser.add_argument("--baseline-dir", type=Path, default=DEFAULT_BASELINE_DIR)
     parser.add_argument("--write", action="store_true", help=f"write the report to {REPORT_PATH}")
     parser.add_argument(
-        "--transport",
-        default="SQL staging table `bronze.analytics_daily_stage` (the workspace PAT lacks the `files` scope "
-        "needed to write the landing volume; the extract statement is otherwise identical)",
+        "--from-volume",
+        action="store_true",
+        help="the slice under recon was loaded from the landing volume, not the staging table; "
+        "checks 3 and 4 then replay from the volume too",
     )
+    parser.add_argument("--transport", default=None, help="override the transport line in the report")
     args = parser.parse_args(argv)
+    pipeline.validate_ns(args.ns)
+    pipeline.validate_identifier(args.catalog, "catalog")
+    dbx.CATALOG = args.catalog
+
+    source_table = None if args.from_volume else runner.stage_table(args.catalog)
+    transport = args.transport or (
+        f"landing volume `/Volumes/{args.catalog}/bronze/landing/{args.ns}/analytics_daily/events/`"
+        if args.from_volume
+        else "SQL staging table `bronze.analytics_daily_stage` (the workspace PAT lacks the `files` scope "
+        "needed to write the landing volume; the extract statement is otherwise identical)"
+    )
 
     baseline = load_baseline(args.baseline_dir)
     converted = converted_facts(args.ns, args.catalog)
 
-    checks = [
-        check_1(baseline, converted),
-        check_2(baseline, converted),
-        check_3(args.ns, args.catalog, baseline),
-        check_4(args.ns, args.catalog, converted),
-        check_5(args.baseline_dir, baseline),
+    # A check that cannot execute is reported BLOCKED with its error, so an infrastructure
+    # failure still produces a report instead of a traceback and no evidence at all.
+    definitions = [
+        ("check_1", lambda: check_1(baseline, converted), 1, "Event-count parity, zero silent drops"),
+        ("check_2", lambda: check_2(baseline, converted), 2, "Aggregate parity"),
+        ("check_3", lambda: check_3(args.ns, args.catalog, baseline, source_table), 3, "Retry deficiency retired"),
+        ("check_4", lambda: check_4(args.ns, args.catalog, converted, source_table), 4, "Idempotency"),
+        ("check_5", lambda: check_5(args.baseline_dir, baseline), 5, "Baseline provenance stated verbatim"),
     ]
-    report = render(checks, args.ns, args.catalog, args.baseline_dir, converted, args.transport)
+    checks = []
+    for name, run_check, number, title in definitions:
+        try:
+            checks.append(run_check())
+        except Exception as exc:  # noqa: BLE001 - an unexecutable check is BLOCKED, never green
+            blocked = Check(number, title)
+            blocked.block(f"{name}(ns={args.ns!r}, catalog={args.catalog!r})", f"{type(exc).__name__}: {exc}")
+            checks.append(blocked)
+    report = render(checks, args.ns, args.catalog, args.baseline_dir, converted, transport)
     print(report)
     if args.write:
         REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)

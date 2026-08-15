@@ -45,6 +45,7 @@ gold rows written for the failed probe ns recon_probe_demo: baseline=0 = convert
 ## 4. Idempotency: a re-run replaces, never appends — **PASS**
 
 ```text
+re-run source: ow_tp.bronze.analytics_daily_stage
 counts: baseline={'bronze': 5147, 'silver': 5147, 'rejects': 0, 'gold_rows': 4937, 'gold_events': 5147} = converted={'bronze': 5147, 'silver': 5147, 'rejects': 0, 'gold_rows': 4937, 'gold_events': 5147}
 gold fingerprint: baseline='f3a42b884a639d276b2b6d8a04e4229a' = converted='f3a42b884a639d276b2b6d8a04e4229a'
 ```
