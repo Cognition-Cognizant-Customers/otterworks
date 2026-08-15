@@ -22,11 +22,6 @@ import json
 import re
 from datetime import date, datetime, timezone
 
-CATALOG = "ow_tp"
-BRONZE_TABLE = f"{CATALOG}.bronze.search_documents_raw"
-STAGING_TABLE = f"{CATALOG}.silver.search_index_documents_staging"
-SERVING_TABLE = f"{CATALOG}.silver.search_index_documents"
-SUMMARY_TABLE = f"{CATALOG}.gold.search_reindex_summary"
 ENTITY_TYPES = ("document", "file")
 
 INDEX_COLUMNS = [
@@ -36,16 +31,24 @@ INDEX_COLUMNS = [
 ]
 
 dbutils.widgets.text("ns", "demo")
+dbutils.widgets.text("catalog", "ow_tp")
 dbutils.widgets.text("run_date", "")
 
 ns = dbutils.widgets.get("ns").strip()
+catalog = dbutils.widgets.get("catalog").strip()
 run_date = dbutils.widgets.get("run_date").strip() or date.today().isoformat()
 
 if not re.fullmatch(r"[a-z0-9_]+", ns):
     raise ValueError(f"ns must match [a-z0-9_]+, got {ns!r}")
+if not re.fullmatch(r"ow_tp[a-z0-9_]*", catalog):
+    raise ValueError(f"catalog must match ow_tp[a-z0-9_]*, got {catalog!r}")
 if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", run_date):
     raise ValueError(f"run_date must be YYYY-MM-DD, got {run_date!r}")
 
+BRONZE_TABLE = f"{catalog}.bronze.search_documents_raw"
+STAGING_TABLE = f"{catalog}.silver.search_index_documents_staging"
+SERVING_TABLE = f"{catalog}.silver.search_index_documents"
+SUMMARY_TABLE = f"{catalog}.gold.search_reindex_summary"
 indexed_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat(sep=" ")
 
 
@@ -57,7 +60,7 @@ def counts_by_entity(sql_text):
     return {row["entity_type"]: int(row["n"]) for row in spark.sql(sql_text).collect()}
 
 
-def write_summary(source_counts, indexed_counts, swap_completed):
+def write_summary(source_counts, indexed_counts, swap_completed, force_counts_mismatch=False):
     """Record one gold row per entity type. Rewritten per (ns, run_date), so reruns don't stack."""
     entities = sorted(set(source_counts) | set(indexed_counts))
     if not entities:
@@ -82,7 +85,11 @@ def write_summary(source_counts, indexed_counts, swap_completed):
             entity=entity,
             source=source_counts.get(entity, 0),
             indexed=indexed_counts.get(entity, 0),
-            match="true" if source_counts.get(entity, 0) == indexed_counts.get(entity, 0) else "false",
+            match=(
+                "true"
+                if not force_counts_mismatch and source_counts.get(entity, 0) == indexed_counts.get(entity, 0)
+                else "false"
+            ),
             swap="true" if swap_completed else "false",
         )
         for entity in entities
@@ -158,6 +165,9 @@ staged_counts = counts_by_entity(
     f"SELECT entity_type, COUNT(*) AS n FROM {STAGING_TABLE} WHERE ns = '{ns}' GROUP BY entity_type"
 )
 log("staging_built", table=STAGING_TABLE, source=source_counts, staged=staged_counts)
+published_counts = counts_by_entity(
+    f"SELECT entity_type, COUNT(*) AS n FROM {SERVING_TABLE} WHERE ns = '{ns}' GROUP BY entity_type"
+)
 
 # COMMAND ----------
 
@@ -166,6 +176,13 @@ log("staging_built", table=STAGING_TABLE, source=source_counts, staged=staged_co
 problems = []
 if not staged_counts or sum(staged_counts.values()) == 0:
     problems.append("staging build is empty; refusing to replace a populated serving index")
+shrink_to_zero = {
+    entity: published_counts[entity]
+    for entity in published_counts
+    if published_counts[entity] > 0 and staged_counts.get(entity, 0) == 0
+}
+if shrink_to_zero:
+    problems.append(f"staging would erase previously published entity types: {shrink_to_zero}")
 divergent = {e: {"source": source_counts.get(e, 0), "staged": staged_counts.get(e, 0)}
              for e in set(source_counts) | set(staged_counts)
              if source_counts.get(e, 0) != staged_counts.get(e, 0)}
@@ -209,7 +226,7 @@ if duplicates:
     post_swap_problems.append(f"{duplicates} duplicated entity ids in the serving index")
 
 if post_swap_problems:
-    write_summary(source_counts, serving_counts, swap_completed=True)
+    write_summary(source_counts, serving_counts, swap_completed=True, force_counts_mismatch=True)
     log("swap_verification_failed", problems=post_swap_problems)
     raise RuntimeError("; ".join(post_swap_problems))
 

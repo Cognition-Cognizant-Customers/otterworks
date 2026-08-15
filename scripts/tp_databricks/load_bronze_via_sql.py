@@ -53,13 +53,14 @@ def row_literal(envelope: dict) -> str:
     if entity_type not in ENTITY_TYPES:
         raise ValueError(f"unsupported envelope entity_type {entity_type!r}")
     payload_b64 = base64.b64encode(envelope["payload"].encode()).decode()
-    escape = lambda value: str(value).replace("\\", "\\\\").replace("'", "\\'")
+    entity_id_b64 = base64.b64encode(str(envelope["entity_id"]).encode()).decode()
     return (
-        "('{ns}', '{entity_type}', '{entity_id}', CAST(unbase64('{payload}') AS STRING), "
+        "('{ns}', '{entity_type}', CAST(unbase64('{entity_id}') AS STRING), "
+        "CAST(unbase64('{payload}') AS STRING), "
         "TIMESTAMP '{extracted_at}')".format(
-            ns=escape(ns),
-            entity_type=escape(entity_type),
-            entity_id=escape(envelope["entity_id"]),
+            ns=ns,
+            entity_type=entity_type,
+            entity_id=entity_id_b64,
             payload=payload_b64,
             extracted_at=normalize_timestamp(envelope["extracted_at"]),
         )
