@@ -52,7 +52,7 @@ def sql_literal(value: str) -> str:
 def checked(**values: str) -> None:
     """Reject any run parameter that is not the shape its statements assume."""
     for name, value in values.items():
-        if not _PATTERNS[name].match(value):
+        if not _PATTERNS[name].fullmatch(value):
             raise ValueError(f"invalid {name} {value!r}: expected {_PATTERNS[name].pattern}")
 
 
@@ -191,6 +191,20 @@ def _run() -> None:
     scope = dbutils.widgets.get("secret_scope").strip()
     report_date = dbutils.widgets.get("report_date").strip() or datetime.date.today().isoformat()
 
+    checked(catalog=catalog, ns=ns, report_date=report_date)
+    row_count = spark.sql(
+        f"""
+        SELECT COUNT(*) AS row_count
+        FROM {catalog}.silver.custbill_records
+        WHERE ns = {sql_literal(ns)} AND record_type IN ('01', '02')
+        """
+    ).collect()[0]["row_count"]
+    if not row_count:
+        raise RuntimeError(
+            f"no billing rows in {catalog}.silver.custbill_records for ns={ns!r}: "
+            "the upstream parse job has not produced data for this namespace"
+        )
+
     for statement in ddl_statements(catalog) + summary_statements(ns, report_date, catalog):
         spark.sql(statement)
 
@@ -198,12 +212,6 @@ def _run() -> None:
         (r["currency"], r["record_type"], r["record_count"], f"{r['total_amount']:.2f}")
         for r in spark.sql(summary_select(ns, report_date, catalog)).collect()
     ]
-    if not rows:
-        raise RuntimeError(
-            f"no billing rows in {catalog}.silver.custbill_records for ns={ns!r}: "
-            "the upstream parse job has not produced data for this namespace"
-        )
-
     artifact_path = f"/Volumes/{catalog}/bronze/landing/{artifact_relpath(ns, report_date)}"
     dbutils.fs.mkdirs(artifact_path.rsplit("/", 1)[0])
     with open(artifact_path, "w", encoding="utf-8") as handle:
@@ -224,7 +232,11 @@ def _run() -> None:
         spark.sql(statement)
 
     print(f"finance report ns={ns} report_date={report_date} rows={len(rows)}")
-    print(f"artifact={artifact_path} delivery_status={status} recipients={recipients or '<unset>'}")
+    recipient_count = sum(1 for address in (recipients or "").split(",") if address.strip())
+    print(
+        f"artifact={artifact_path} delivery_status={status} "
+        f"recipients_configured={recipient_count > 0} recipient_count={recipient_count}"
+    )
 
 
 def _secret(scope: str, key: str) -> str | None:
@@ -240,7 +252,8 @@ def _secret(scope: str, key: str) -> str | None:
         value = dbutils.secrets.get(scope=scope, key=key).strip()
     except Exception as exc:
         detail = str(exc)
-        if "RESOURCE_DOES_NOT_EXIST" not in detail and "does not exist" not in detail:
+        missing_key_message = f"Failed to get secret {key} for scope {scope}."
+        if missing_key_message not in detail:
             raise
         return None
     return value or None

@@ -17,7 +17,6 @@ CREATE TABLE IF NOT EXISTS ow_tp.silver.custbill_records (
   record_type STRING NOT NULL COMMENT 'CBCUST01 REC-TYPE: 01 invoice, 02 credit.',
   account_id STRING NOT NULL COMMENT 'CBCUST01 CUST-ID.',
   invoice_id STRING COMMENT 'No invoice number exists in copybook CBCUST01; NULL until a feed provides one.',
-  customer_name STRING COMMENT 'CBCUST01 CUST-NAME, trailing padding trimmed.',
   currency STRING NOT NULL COMMENT 'CBCUST01 CURRENCY.',
   amount DECIMAL(18,2) NOT NULL COMMENT 'CBCUST01 BILL-AMT with the implied decimal applied numerically (value / 100), not by string surgery.',
   bill_date DATE NOT NULL COMMENT 'CBCUST01 BILL-DATE parsed as a real date; unparseable dates are quarantined.',
