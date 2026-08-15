@@ -59,12 +59,12 @@ def silver_ddl() -> list[str]:
           line_no INT COMMENT '1-based line number in the source file (HDR is line 1).',
           record_type STRING COMMENT '01 = invoice, 02 = credit (copybook REC-TYPE).',
           account_id STRING COMMENT 'Copybook CUST-ID, trailing blanks trimmed.',
-          customer_name STRING COMMENT 'Copybook CUST-NAME, trailing blanks trimmed.',
           invoice_id STRING COMMENT 'Reserved: copybook CBCUST01 carries no invoice number, so this is always NULL for this feed.',
           currency STRING COMMENT 'ISO currency code (copybook CURRENCY).',
           amount DECIMAL(18,2) COMMENT 'Copybook BILL-AMT with the implied decimal applied numerically (units/100), not by string insertion.',
           bill_date DATE COMMENT 'Copybook BILL-DATE parsed as a real date; invalid dates are rejected, never reformatted through.',
-          parsed_at TIMESTAMP COMMENT 'When this run wrote the row.'
+          parsed_at TIMESTAMP COMMENT 'When this run wrote the row.',
+          customer_name STRING COMMENT 'Copybook CUST-NAME, trailing blanks trimmed.'
         )
         USING DELTA
         COMMENT 'Typed CUSTBILL detail records, replacing the legacy pipe-delimited .psv produced by three passes of cut/sed/awk.'
@@ -101,12 +101,12 @@ def silver_ddl() -> list[str]:
           line_no INT,
           record_type STRING,
           account_id STRING,
-          customer_name STRING,
           invoice_id STRING,
           currency STRING,
           amount DECIMAL(18,2),
           bill_date DATE,
-          parsed_at TIMESTAMP
+          parsed_at TIMESTAMP,
+          customer_name STRING
         )
         USING DELTA
         COMMENT 'Namespace-scoped staging for typed CUSTBILL records; published only after trailer reconciliation passes.'
