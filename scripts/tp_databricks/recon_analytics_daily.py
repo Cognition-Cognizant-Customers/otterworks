@@ -182,6 +182,9 @@ def gold_fingerprint(ns: str, catalog: str) -> str:
 def check_1(baseline: dict, converted: dict) -> Check:
     check = Check(1, "Event-count parity, zero silent drops")
     counts = converted["counts"]
+    # The contract compares the legacy total against silver. Bronze is recorded next to it so a
+    # non-zero reject population is visible as quarantine rather than looking like loss.
+    check.record("extracted events (bronze)", baseline["total_events"], counts["bronze"], must_match=False)
     passed = check.record("total events", baseline["total_events"], counts["silver"])
     passed &= check.record(
         "silver + rejects vs bronze", counts["bronze"], counts["silver"] + counts["rejects"]
@@ -222,9 +225,11 @@ def check_2(baseline: dict, converted: dict) -> Check:
         check.deviate(
             "legacy field-name defect surfaced, converted output correct -- the legacy script reads "
             "eventType/timestamp/ownerId while the events carry event_type/occurred_at/user_id, so it "
-            "collapsed all 5147 events into 10 groups at hour='00'/user_id='unknown' with 0 dates; the "
-            "converted job attributes them across 240 groups/24 hours/50 users/3 dates. Every dimension "
-            "the baseline does carry is compared exactly above and matches."
+            f"collapsed all {baseline['total_events']} events into {len(baseline_groups)} groups at "
+            f"hour='00'/user_id='unknown' with 0 dates; the converted job attributes them across "
+            f"{len(converted_groups)} groups/{converted['hours']} hours/{converted['users']} users/"
+            f"{converted['dates']} dates. Every dimension the baseline does carry is compared exactly "
+            "above and matches."
         )
     else:
         check.resolve(False)
@@ -283,8 +288,14 @@ def check_3(ns: str, catalog: str, baseline: dict, source_table: str | None) -> 
         check.note(f"empty source: run failed as required (ZeroEventExtract: {str(exc)[:160]})")
         outcomes.append(True)
     except Exception as exc:  # noqa: BLE001
-        check.note(f"empty source: run failed with {type(exc).__name__}: {str(exc)[:200]}")
-        outcomes.append(True)
+        # Only ZeroEventExtract demonstrates the zero-event path. Any other error means this
+        # sub-probe never reached a reachable-but-empty extract, so it proves nothing -- in
+        # volume mode, for instance, the probe namespace has no directory to read at all.
+        check.note(
+            f"empty source: INCONCLUSIVE -- failed before the empty extract with "
+            f"{type(exc).__name__}: {str(exc)[:200]}"
+        )
+        outcomes.append(False)
 
     probe_gold = int(dbx.sql_scalar(
         f"SELECT count(*) FROM {catalog}.gold.analytics_daily_summary WHERE ns = '{probe_ns}'"
@@ -381,8 +392,17 @@ def main(argv: list[str] | None = None) -> int:
         "the source relation is byte-identical, and no check was weakened to accommodate it."
     ).replace("{catalog}", args.catalog)
 
-    baseline = load_baseline(args.baseline_dir)
-    converted = converted_facts(args.ns, args.catalog)
+    # Evidence collection is inside the same guarantee as the checks: if the baseline files or
+    # the warehouse are unavailable there is no comparison to make, so every check is BLOCKED
+    # with the error and the report is still produced.
+    collection_error: str | None = None
+    baseline: dict = {}
+    converted: dict = {"counts": {}}
+    try:
+        baseline = load_baseline(args.baseline_dir)
+        converted = converted_facts(args.ns, args.catalog)
+    except Exception as exc:  # noqa: BLE001 - reported as BLOCKED, never as a pass
+        collection_error = f"{type(exc).__name__}: {exc}"
 
     # A check that cannot execute is reported BLOCKED with its error, so an infrastructure
     # failure still produces a report instead of a traceback and no evidence at all.
@@ -395,6 +415,15 @@ def main(argv: list[str] | None = None) -> int:
     ]
     checks = []
     for name, run_check, number, title in definitions:
+        if collection_error:
+            blocked = Check(number, title)
+            blocked.block(
+                f"load_baseline({str(args.baseline_dir)!r}) / converted_facts(ns={args.ns!r}, "
+                f"catalog={args.catalog!r})",
+                collection_error,
+            )
+            checks.append(blocked)
+            continue
         try:
             checks.append(run_check())
         except Exception as exc:  # noqa: BLE001 - an unexecutable check is BLOCKED, never green

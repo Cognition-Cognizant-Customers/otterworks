@@ -11,6 +11,7 @@ baseline: legacy output
 ## 1. Event-count parity, zero silent drops — **PASS**
 
 ```text
+extracted events (bronze): baseline=5147 = converted=5147
 total events: baseline=5147 = converted=5147
 silver + rejects vs bronze: baseline=5147 = converted=5147
 rejects without a reason: baseline=0 = converted=0
