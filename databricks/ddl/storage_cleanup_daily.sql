@@ -6,6 +6,13 @@
 -- Statements are separated by a line containing only `-- @statement`; the
 -- driver (scripts/tp_databricks/dbx.py) and the job notebook both split on it,
 -- because the SQL Statement Execution API takes one statement per call.
+--
+-- The catalog is qualified literally here only because a .sql file cannot take
+-- a parameter. The parameterised source of truth is `DDL_SQL` in
+-- databricks/notebooks/storage_cleanup_daily.py, which the job runs with the
+-- `catalog` job parameter (default `var.catalog_name`); this file is its
+-- rendering for the default catalog, kept honest by acceptance check 0 in
+-- scripts/tp_databricks/recon_storage_cleanup.py, which fails on any drift.
 
 CREATE TABLE IF NOT EXISTS ow_tp.bronze.storage_objects_raw (
   ns            STRING    COMMENT 'demo namespace this row belongs to',

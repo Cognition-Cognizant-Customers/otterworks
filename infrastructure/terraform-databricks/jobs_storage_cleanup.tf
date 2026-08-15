@@ -56,6 +56,14 @@ resource "databricks_job" "storage_cleanup" {
     default = "nominal"
   }
 
+  # The catalog is the stack's, not the notebook's: `var.catalog_name` is the one
+  # source of truth, so a stack applied with a different ow_tp* catalog does not
+  # need a second edit in the pipeline code.
+  parameter {
+    name    = "catalog"
+    default = var.catalog_name
+  }
+
   task {
     task_key = "create_tables"
 
