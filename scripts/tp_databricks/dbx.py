@@ -107,6 +107,24 @@ def sql_scalar(statement: str) -> str | None:
     return rows[0][0] if rows and rows[0] else None
 
 
+def _list_jobs(name: str | None = None) -> list[dict]:
+    """List all jobs, following the Jobs API pagination token."""
+    jobs = []
+    page_token = None
+    while True:
+        params = {"limit": "100"}
+        if name:
+            params["name"] = name
+        if page_token:
+            params["page_token"] = page_token
+        query = urllib.parse.urlencode(params)
+        result = request("GET", f"/api/2.2/jobs/list?{query}")
+        jobs.extend(result.get("jobs", []))
+        if not result.get("has_more") or not result.get("next_page_token"):
+            return jobs
+        page_token = result["next_page_token"]
+
+
 def upload(local_path: str, volume_relpath: str) -> str:
     """Upload a local file into the landing volume, overwriting in place."""
     target = f"/Volumes/{CATALOG}/bronze/landing/{volume_relpath.lstrip('/')}"
@@ -135,7 +153,7 @@ def deploy_notebook(local_path: str, name: str) -> str:
 
 
 def job_id(name: str) -> int:
-    for job in request("GET", f"/api/2.2/jobs/list?limit=100&name={urllib.parse.quote(name)}").get("jobs", []):
+    for job in _list_jobs(name):
         if job["settings"]["name"] == name:
             return job["job_id"]
     raise DatabricksError(f"job {name!r} not found: apply infrastructure/terraform-databricks first")
@@ -164,10 +182,7 @@ def inventory() -> dict[str, list[str]]:
         c["name"] for c in request("GET", "/api/2.1/unity-catalog/catalogs").get("catalogs", [])
         if c["name"].startswith(PREFIX)
     ]
-    jobs = [
-        j["settings"]["name"] for j in request("GET", "/api/2.2/jobs/list?limit=100").get("jobs", [])
-        if j["settings"]["name"].startswith(PREFIX)
-    ]
+    jobs = [j["settings"]["name"] for j in _list_jobs() if j["settings"]["name"].startswith(PREFIX)]
     scopes = [
         s["name"] for s in request("GET", "/api/2.0/secrets/scopes/list").get("scopes", [])
         if s["name"].startswith(PREFIX)

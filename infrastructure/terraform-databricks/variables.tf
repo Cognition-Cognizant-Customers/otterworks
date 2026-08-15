@@ -4,8 +4,8 @@ variable "prefix" {
   default     = "ow_tp"
 
   validation {
-    condition     = startswith(var.prefix, "ow_tp")
-    error_message = "prefix must start with ow_tp: the shared demo workspace is only safe to tear down by prefix."
+    condition     = can(regex("^ow_tp[a-z0-9_]*$", var.prefix))
+    error_message = "prefix must match ^ow_tp[a-z0-9_]*$: the shared demo workspace is only safe to tear down by prefix."
   }
 }
 
@@ -15,8 +15,8 @@ variable "catalog_name" {
   default     = "ow_tp"
 
   validation {
-    condition     = startswith(var.catalog_name, "ow_tp")
-    error_message = "catalog_name must start with ow_tp."
+    condition     = can(regex("^ow_tp[a-z0-9_]*$", var.catalog_name))
+    error_message = "catalog_name must match ^ow_tp[a-z0-9_]*$."
   }
 }
 

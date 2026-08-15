@@ -481,12 +481,22 @@ ifndef NS
 	$(error NS is required, e.g. make dbx-upload NS=demo)
 endif
 	$(call validate_ns)
-	@set -e; for f in $(LEGACY_ROOT)/sftp-drop/upload/*.dat; do \
+	@set -e; shopt -s nullglob; files=( "$(LEGACY_ROOT)"/sftp-drop/upload/*.dat ); \
+	if (($${#files[@]} == 0)); then \
+	  echo "dbx-upload: no .dat files found under $(LEGACY_ROOT)/sftp-drop/upload; nothing to upload"; \
+	  exit 0; \
+	fi; \
+	for f in "$${files[@]}"; do \
 	  $(DBX) upload "$$f" "$(NS)/custbill/$$(basename $$f)"; \
 	done
 
 dbx-deploy-notebooks: ## Import the converted pipeline notebooks into /Shared/ow_tp
-	@set -e; for f in databricks/notebooks/*.py; do \
+	@set -e; shopt -s nullglob; files=( databricks/notebooks/*.py ); \
+	if (($${#files[@]} == 0)); then \
+	  echo "dbx-deploy-notebooks: no notebooks found under databricks/notebooks; nothing to deploy"; \
+	  exit 0; \
+	fi; \
+	for f in "$${files[@]}"; do \
 	  $(DBX) deploy-notebook "$$f" "$$(basename $$f .py)"; \
 	done
 
