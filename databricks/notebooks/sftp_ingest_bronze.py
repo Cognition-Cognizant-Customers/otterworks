@@ -39,9 +39,14 @@ dbutils.widgets.text("ns", "demo", "Demo namespace")
 dbutils.widgets.text("catalog", "ow_tp", "Unity Catalog catalog")
 dbutils.widgets.text("landing_root", "/Volumes/ow_tp/bronze/landing", "Landing volume root")
 
-ns = dbutils.widgets.get("ns")
-catalog = dbutils.widgets.get("catalog")
-landing_root = dbutils.widgets.get("landing_root")
+# Job parameters end up inside SQL text, here and in the statement module, so they
+# go through the same gate before anything is built from them: an `ns` carrying a
+# quote must not be able to reach another namespace's objects on a shared workspace.
+ns, catalog, landing_root = sftp_ingest_sql.validated(
+    dbutils.widgets.get("ns"),
+    dbutils.widgets.get("catalog"),
+    dbutils.widgets.get("landing_root"),
+)
 print(f"ingesting ns={ns} catalog={catalog} landing_root={landing_root}")
 
 # COMMAND ----------

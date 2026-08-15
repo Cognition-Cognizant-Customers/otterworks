@@ -58,6 +58,11 @@ def _validated(ns: str, catalog: str, landing_root: str) -> tuple[str, str, str]
     return ns, catalog, landing_root.rstrip("/")
 
 
+def validated(ns: str, catalog: str, landing_root: str) -> tuple[str, str, str]:
+    """Public entry point to the same gate, for callers building their own SQL."""
+    return _validated(ns, catalog, landing_root)
+
+
 def _source_cte(ns: str, landing_root: str) -> str:
     """CTEs over the landed files: whole-file bytes, exploded lines, audit, gate.
 
@@ -70,13 +75,17 @@ WITH raw AS (
   SELECT
     _metadata.file_path                                       AS source_path,
     regexp_extract(_metadata.file_path, '([^/]+)$', 1)         AS file_name,
-    value                                                     AS content
+    value                                                     AS content,
+    -- the record body: exactly one trailing line terminator removed, so the last
+    -- record is not mistaken for a 53rd empty one. Not a regex: Java's `$` also
+    -- matches before a final terminator, so '\\n$' would eat a blank last record.
+    CASE WHEN endswith(value, '\\n') THEN left(value, length(value) - 1) ELSE value END AS body
   FROM read_files('{landing_root}/{ns}/custbill/', format => 'text', wholeText => true)
 ),
 lines AS (
   SELECT raw.source_path, raw.file_name, l.pos + 1 AS line_no, l.line AS raw_line
   FROM raw
-  LATERAL VIEW posexplode(split(regexp_replace(raw.content, '\\n$', ''), '\\n')) l AS pos, line
+  LATERAL VIEW posexplode(split(raw.body, '\\n')) l AS pos, line
 ),
 audit AS (
   SELECT
@@ -120,6 +129,26 @@ WHEN MATCHED AND t.raw_line <> s.raw_line THEN UPDATE SET t.raw_line = s.raw_lin
 WHEN NOT MATCHED THEN INSERT (ns, file_name, line_no, raw_line) VALUES (s.ns, s.file_name, s.line_no, s.raw_line)"""
 
 
+def prune_lines(ns: str, catalog: str, landing_root: str) -> str:
+    """Drop tail records left behind when a file is re-delivered *shorter*.
+
+    Without this, the orphaned high `line_no` rows survive the MERGE, the manifest's
+    `record_count` no longer matches the lines present, and the run's own
+    reconciliation then fails on this and every later run. Scoped to this `ns` and to
+    the files in this drop, so other namespaces and previously ingested files are
+    untouched (a `NOT MATCHED BY SOURCE` clause cannot express that: Delta rejects
+    subqueries in a MERGE delete condition).
+    """
+    ns, catalog, landing_root = _validated(ns, catalog, landing_root)
+    cte = _source_cte(ns, landing_root)
+    return f"""DELETE FROM {catalog}.bronze.custbill_lines
+WHERE ns = '{ns}'
+  AND file_name IN (SELECT file_name FROM ({cte}
+SELECT file_name FROM complete))
+  AND concat(file_name, ':', line_no) NOT IN (SELECT concat(file_name, ':', line_no) FROM ({cte}
+SELECT lines.file_name, lines.line_no FROM lines JOIN complete USING (file_name)))"""
+
+
 def merge_files(ns: str, catalog: str, landing_root: str) -> str:
     """The manifest row per file: size, SHA-256, line count, provenance.
 
@@ -135,7 +164,7 @@ USING (
     raw.file_name,
     octet_length(raw.content)                                         AS size_bytes,
     sha2(encode(raw.content, 'utf-8'), 256)                           AS sha256,
-    size(split(regexp_replace(raw.content, '\\n$', ''), '\\n'))         AS record_count,
+    size(split(raw.body, '\\n'))                                      AS record_count,
     current_timestamp()                                               AS ingested_at,
     raw.source_path
   FROM raw
@@ -162,8 +191,16 @@ def _only_comments(statement: str) -> bool:
 
 
 def ingest_statements(ns: str, catalog: str, landing_root: str) -> list[str]:
-    """The two MERGEs, in order. The completeness gate is checked separately."""
-    return [merge_lines(ns, catalog, landing_root), merge_files(ns, catalog, landing_root)]
+    """Lines, prune of any re-delivery leftovers, then the manifest. In this order.
+
+    The completeness gate runs before any of these; a file that fails it is absent
+    from `complete` and therefore invisible to all three statements.
+    """
+    return [
+        merge_lines(ns, catalog, landing_root),
+        prune_lines(ns, catalog, landing_root),
+        merge_files(ns, catalog, landing_root),
+    ]
 
 
 def run(ns: str, catalog: str, landing_root: str, create_tables: bool = True) -> None:
