@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+_C_LOCALE_BLANKS = " \t\n\v\f\r"
 _DECIMAL_PREFIX = re.compile(
     r"[+-]?(?:(?:\d+\.\d*|\.\d+|\d+)(?:[eE][+-]?\d+)?)"
 )
@@ -15,7 +16,7 @@ _HEX_PREFIX = re.compile(
 
 def _awk_number(value: str) -> float:
     """Parse the numeric prefix accepted by mawk's string-to-number coercion."""
-    stripped = value.lstrip()
+    stripped = value.lstrip(_C_LOCALE_BLANKS)
     hex_match = _HEX_PREFIX.match(stripped)
     decimal_match = _DECIMAL_PREFIX.match(stripped)
     match = hex_match or decimal_match
