@@ -45,16 +45,13 @@
 
 # COMMAND ----------
 
-import re
-
 dbutils.widgets.text("ns", "demo", "Demo namespace")
 dbutils.widgets.dropdown("mode", "parse", ["gate", "parse"], "Task mode")
 
 ns = dbutils.widgets.get("ns").strip()
 mode = dbutils.widgets.get("mode").strip()
 
-if re.fullmatch(r"[A-Za-z0-9_]+", ns) is None:
-    raise ValueError(f"invalid namespace {ns!r}: expected [A-Za-z0-9_]+")
+validate_namespace(ns)
 
 print(f"ns={ns} mode={mode}")
 
@@ -82,6 +79,8 @@ if mode == "gate":
     # The manifest handshake replaces the legacy cron offset (:05 after a */15
     # ingest) and the "compare the file size twice, one second apart" settle
     # check: a half-written landing cannot satisfy it.
+    for statement in bronze_bootstrap_ddl():
+        spark.sql(statement)
     run_gate("bronze manifest", gate_statements(ns))
 
 elif mode == "parse":

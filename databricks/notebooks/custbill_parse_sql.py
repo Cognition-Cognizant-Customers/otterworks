@@ -27,6 +27,7 @@ CURRENCY 61-63, REC-TYPE 64-65. Detail records are 65 characters.
 from __future__ import annotations
 
 import os
+import re
 
 CATALOG = os.environ.get("OW_TP_CATALOG", "ow_tp")
 SILVER_RECORDS = f"{CATALOG}.silver.custbill_records"
@@ -36,6 +37,13 @@ BRONZE_FILES = f"{CATALOG}.bronze.custbill_files"
 BRONZE_LINES = f"{CATALOG}.bronze.custbill_lines"
 
 RECORD_LENGTH = 65
+
+
+def validate_namespace(value: str) -> str:
+    """Validate a demo namespace before it is interpolated into SQL."""
+    if re.fullmatch(r"[A-Za-z0-9_]+", value) is None:
+        raise ValueError(f"invalid namespace {value!r}: expected [A-Za-z0-9_]+")
+    return value
 
 
 def _quote(value: str) -> str:

@@ -32,6 +32,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "databricks" / "notebooks"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import custbill_parse_sql  # noqa: E402
 import custbill_sql  # noqa: E402  (same-directory helper, imported after path setup)
 import dbx  # noqa: E402
 
@@ -86,6 +87,7 @@ def upload_to_landing(path: Path, ns: str, manifest: dict[str, object]) -> str:
 
 
 def load(ns: str, source_dir: Path) -> int:
+    ns = custbill_parse_sql.validate_namespace(ns)
     files = source_files(source_dir, ns)
     if not files:
         print(f"no CUSTBILL_{ns.upper()}_*.dat[.done] files under {source_dir}", file=sys.stderr)
@@ -141,10 +143,11 @@ def load(ns: str, source_dir: Path) -> int:
         for m in manifests
         for index, line in enumerate(m["lines"], start=1)
     )
-    dbx.sql(
-        f"INSERT INTO {custbill_sql.BRONZE_LINES} (ns, file_name, line_no, raw_line) "
-        f"VALUES {line_values}"
-    )
+    if line_values:
+        dbx.sql(
+            f"INSERT INTO {custbill_sql.BRONZE_LINES} (ns, file_name, line_no, raw_line) "
+            f"VALUES {line_values}"
+        )
 
     total = sum(len(m["lines"]) for m in manifests)
     print(f"bronze loaded for ns={ns}: {len(manifests)} files, {total} raw lines")
