@@ -46,6 +46,7 @@ def _run_gate(label: str, statements: list[tuple[str, str]]) -> None:
 
 
 def run(ns: str, skip_ddl: bool = False) -> int:
+    ns = custbill_parse_sql.validate_namespace(ns)
     if not skip_ddl:
         print("applying DDL")
         for statement in custbill_sql.ddl_statements():
@@ -62,12 +63,9 @@ def run(ns: str, skip_ddl: bool = False) -> int:
     print("trailer reconciliation gate")
     _run_gate("recon", custbill_parse_sql.recon_gate_statements(ns))
 
-    rows = dbx.sql(
-        f"SELECT count(*) FROM {custbill_sql.SILVER_RECORDS} WHERE ns = '{ns}'"
-    )
-    rejects = dbx.sql(
-        f"SELECT count(*) FROM {custbill_sql.SILVER_REJECTS} WHERE ns = '{ns}'"
-    )
+    ns_literal = custbill_parse_sql._quote(ns)
+    rows = dbx.sql(f"SELECT count(*) FROM {custbill_sql.SILVER_RECORDS} WHERE ns = {ns_literal}")
+    rejects = dbx.sql(f"SELECT count(*) FROM {custbill_sql.SILVER_REJECTS} WHERE ns = {ns_literal}")
     print(f"ns={ns}: {rows[0][0]} parsed records, {rejects[0][0]} quarantined")
     return 0
 
