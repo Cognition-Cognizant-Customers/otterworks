@@ -67,13 +67,19 @@ class UpstreamNotFresh(RuntimeError):
 
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TABLE_RE = re.compile(r"^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+){1,2}$")
+IDENT_RE = re.compile(r"^[A-Za-z0-9_]+$")
+STAGES = ("freshness_gate", "pipeline")
+ON_STALE = ("fail", "mark")
 
 
 def build_config(params: dict[str, str] | None = None) -> dict[str, str]:
     cfg = dict(DEFAULTS)
     cfg.update({k: v for k, v in (params or {}).items() if v is not None})
-    if not str(cfg["catalog"]).startswith("ow_tp"):
-        raise ValueError(f"catalog must be ow_tp-prefixed in this shared workspace: {cfg['catalog']!r}")
+    # The catalog reaches USE CATALOG and every qualified table name, so a bare prefix
+    # check is not enough: it must also be a single identifier and nothing else.
+    if not IDENT_RE.match(str(cfg["catalog"])) or not str(cfg["catalog"]).startswith("ow_tp"):
+        raise ValueError(f"catalog must be an ow_tp-prefixed identifier in this shared "
+                         f"workspace: {cfg['catalog']!r}")
     ns = str(cfg["ns"])
     if not ns.replace("_", "").replace("-", "").isalnum():
         raise ValueError(f"unsafe ns {ns!r}")
@@ -92,6 +98,12 @@ def build_config(params: dict[str, str] | None = None) -> dict[str, str]:
         raise ValueError(f"report_date must be YYYY-MM-DD: {cfg['report_date']!r}")
     if cfg["source_mode"] not in ("volume", "table"):
         raise ValueError(f"source_mode must be volume or table: {cfg['source_mode']!r}")
+    # stage is interpolated into the run-log INSERT and on_stale drives the refusal path;
+    # both come from job/widget parameters, so both are closed sets.
+    if cfg["stage"] not in STAGES:
+        raise ValueError(f"stage must be one of {STAGES}: {cfg['stage']!r}")
+    if cfg["on_stale"] not in ON_STALE:
+        raise ValueError(f"on_stale must be one of {ON_STALE}: {cfg['on_stale']!r}")
     cfg["unit_root"] = f"{cfg['landing_root']}/{ns}/user_activity"
     cfg["events_root"] = f"{cfg['unit_root']}/events"
     if not cfg["ddl_path"]:
@@ -182,7 +194,11 @@ def freshness_probe(cfg: dict[str, str]) -> str:
 SELECT
   (SELECT MAX(report_date) FROM {upstream} u)                       AS upstream_summary_date,
   (SELECT COUNT(*) FROM {upstream} u)                               AS upstream_rows,
-  (SELECT MAX(activity_date) FROM {events} e)                       AS latest_event_date,
+  -- Bounded by the report date: the upstream side is windowed to report_date, so
+  -- comparing it against events landed *after* that date would refuse every backfill
+  -- as stale.
+  (SELECT MAX(activity_date) FROM {events} e
+    WHERE e.activity_date <= {cfg["report_date_expr"]})             AS latest_event_date,
   DATEDIFF({cfg["report_date_expr"]}, (SELECT MAX(report_date) FROM {upstream} u)) AS upstream_lag_days,
   {cfg["report_date_expr"]}                                        AS report_date
 """

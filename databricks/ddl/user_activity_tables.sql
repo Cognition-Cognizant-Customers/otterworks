@@ -5,9 +5,13 @@
 -- repeatedly is a no-op. Demo state is per-namespace, so every table carries ns
 -- and re-running the pipeline replaces only its own (ns, date) partition.
 --
--- Single source of truth for the DDL: the notebook applies this same file from
--- the landing volume (parameter ddl_path), and scripts/tp_databricks/recon_user_activity.py
--- applies it from the repo. It is never duplicated inline.
+-- Single source of truth for the DDL: it is never duplicated inline. The notebook
+-- applies it from the landing volume, at the path its `ddl_path` parameter resolves
+-- to — by default <landing_root>/<ns>/user_activity/ddl/<this file>, derived from the
+-- run's own ns, which is where the unit's landing helper
+-- (scripts/tp_databricks/land_user_activity.py, PR 2/3) uploads it. The job therefore
+-- passes no ddl_path: pinning one would not follow an ns override. The recon script
+-- applies the same file straight from the repo.
 --
 -- Table names are catalog-relative (schema.table) so the file follows whichever
 -- catalog the caller sets (`catalog_name` in Terraform, `USE CATALOG` / the SQL

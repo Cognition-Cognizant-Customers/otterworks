@@ -133,13 +133,24 @@ def land_events_to_table(ns: str, catalog: str, per_date: dict[str, list[dict]],
     return len(flat)
 
 
+def missing_files_scope(exc: dbx.DatabricksError) -> bool:
+    """True only for the token-scope refusal, not for any other upload failure.
+
+    The bare word `files` is useless as a discriminator: every Files API path contains
+    it, so it appears in the message of a 404 or a 500 too. The scope refusal is a 403
+    whose body names the missing scope.
+    """
+    return exc.status == 403 and "required scopes" in str(exc) and "files" in str(exc).split(
+        "required scopes", 1)[1]
+
+
 def land_events(ns: str, catalog: str, bucket: str, mode: str) -> tuple[int, int, str]:
     per_date = read_events(ns, bucket)
     if mode in ("auto", "volume"):
         try:
             return len(per_date), land_events_to_volume(ns, per_date), "volume"
         except dbx.DatabricksError as exc:
-            if mode == "volume" or "files" not in str(exc):
+            if mode == "volume" or not missing_files_scope(exc):
                 raise
             print(f"  volume upload unavailable ({exc.status}: token lacks the `files` scope);"
                   " falling back to table ingest")
@@ -153,7 +164,7 @@ def land_ddl(ns: str) -> None:
         try:
             target = dbx.upload(os.path.join(ddl_dir, name), f"{ns}/user_activity/ddl/{name}")
         except dbx.DatabricksError as exc:
-            if "files" not in str(exc):
+            if not missing_files_scope(exc):
                 raise
             print("  DDL not landed on the volume (token lacks the `files` scope);"
                   " applied from the repo instead")
