@@ -109,7 +109,7 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def read_golden(golden_dir: Path) -> dict[tuple[str, int], dict[str, object]]:
+def read_golden(golden_dir: Path, ns: str) -> dict[tuple[str, int], dict[str, object]]:
     """Parse the legacy pipe-delimited output into keyed, typed rows.
 
     The legacy writer emits `account|name|YYYY-MM-DD|amount|currency|type`; the
@@ -117,7 +117,7 @@ def read_golden(golden_dir: Path) -> dict[tuple[str, int], dict[str, object]]:
     up as a field mismatch rather than being normalised away.
     """
     rows: dict[tuple[str, int], dict[str, object]] = {}
-    for psv in sorted(golden_dir.glob("CUSTBILL_*.psv")):
+    for psv in sorted(golden_dir.glob(f"CUSTBILL_{ns.upper()}_*.psv")):
         stem = psv.stem
         data_lines = [line for line in psv.read_text().splitlines() if line.strip()]
         for index, line in enumerate(data_lines, start=1):
@@ -136,7 +136,9 @@ def read_golden(golden_dir: Path) -> dict[tuple[str, int], dict[str, object]]:
     return rows
 
 
-def read_converted(ns: str) -> dict[tuple[str, int], dict[str, object]]:
+def read_converted(
+    ns: str,
+) -> tuple[dict[tuple[str, int], dict[str, object]], tuple[str, str] | None]:
     """Read the converted rows out of silver, keyed the same way as the golden."""
     ns_literal = custbill_parse_sql.quote_sql_literal(ns)
     statement = f"""
@@ -145,8 +147,13 @@ def read_converted(ns: str) -> dict[tuple[str, int], dict[str, object]]:
         WHERE ns = {ns_literal}
         ORDER BY file_name, line_no
     """
+    try:
+        result = dbx.sql(statement)
+    except dbx.DatabricksError as exc:
+        return {}, (statement, str(exc))
+
     rows: dict[tuple[str, int], dict[str, object]] = {}
-    for file_name, line_no, account, name, bill_date, amount, currency, rec_type in dbx.sql(statement):
+    for file_name, line_no, account, name, bill_date, amount, currency, rec_type in result:
         stem = file_name[: -len(".dat")] if file_name.endswith(".dat") else file_name
         rows[(stem, int(line_no))] = {
             "account_id": account,
@@ -156,7 +163,7 @@ def read_converted(ns: str) -> dict[tuple[str, int], dict[str, object]]:
             "currency": currency,
             "record_type": rec_type,
         }
-    return rows
+    return rows, None
 
 
 def subtotals(rows: dict[tuple[str, int], dict[str, object]]) -> dict[tuple[str, str, str], tuple[int, Decimal]]:
@@ -168,8 +175,14 @@ def subtotals(rows: dict[tuple[str, int], dict[str, object]]) -> dict[tuple[str,
     return agg
 
 
-def check_baseline(golden_dir: Path) -> Check:
+def check_baseline(ns: str, golden_dir: Path) -> Check:
     check = Check("0", "Golden baseline reproduced locally (bytes / data lines / SHA-256)")
+    if ns != "demo":
+        check.blocked(
+            "golden baseline constants",
+            "byte/line/SHA constants were captured from ns=demo, not ns=%s" % ns,
+        )
+        return check
     for name, (want_bytes, want_lines, want_sha) in sorted(GOLDEN_FILES.items()):
         path = golden_dir / name
         if not path.exists():
@@ -188,8 +201,11 @@ def check_baseline(golden_dir: Path) -> Check:
     return check
 
 
-def check_row_parity(golden, converted) -> Check:
+def check_row_parity(golden, converted, converted_error=None) -> Check:
     check = Check("1", "Row-level parity: every field of every row, keyed on (file, line_no)")
+    if converted_error:
+        check.blocked(*converted_error)
+        return check
     check.note(f"golden rows: {len(golden)}; converted rows: {len(converted)}")
     missing = sorted(set(golden) - set(converted))
     extra = sorted(set(converted) - set(golden))
@@ -209,33 +225,47 @@ def check_row_parity(golden, converted) -> Check:
     return check
 
 
-def check_subtotals(golden, converted) -> Check:
+def check_subtotals(ns: str, golden, converted, converted_error=None) -> Check:
     check = Check("2", "Per-file subtotals per record type and currency, exact to the cent")
+    if converted_error:
+        check.blocked(*converted_error)
+        return check
     golden_agg = subtotals(golden)
     converted_agg = subtotals(converted)
-    for key in sorted(set(CONTRACT_SUBTOTALS) | set(golden_agg) | set(converted_agg)):
-        contract = CONTRACT_SUBTOTALS.get(key)
+    keys = set(golden_agg) | set(converted_agg)
+    if ns == "demo":
+        keys |= set(CONTRACT_SUBTOTALS)
+    else:
+        check.blocked(
+            "contract subtotals",
+            "contract subtotal constants were captured from ns=demo, not ns=%s" % ns,
+        )
+    for key in sorted(keys):
+        contract = CONTRACT_SUBTOTALS.get(key) if ns == "demo" else None
         legacy = golden_agg.get(key)
         got = converted_agg.get(key)
         label = f"{key[0]} {key[1]} {key[2]}"
-        if contract == legacy == got:
+        if legacy == got and (ns != "demo" or contract == legacy):
             check.note(f"{label}: {got[0]} / {got[1]}")
         else:
             check.fail(f"{label}: contract {contract}, legacy {legacy}, converted {got}")
     return check
 
 
-def check_file_recon(ns: str) -> Check:
+def check_file_recon(ns: str, expected_files: int) -> Check:
     check = Check("3", "Trailer reconciliation: declared_trailer_count = parsed + rejected, recon_ok")
     ns_literal = custbill_parse_sql.quote_sql_literal(ns)
-    rows = dbx.sql(
-        f"""
+    statement = f"""
         SELECT file_name, declared_trailer_count, parsed_count, rejected_count, recon_ok
         FROM {custbill_sql.SILVER_FILE_RECON}
         WHERE ns = {ns_literal}
         ORDER BY file_name
         """
-    )
+    try:
+        rows = dbx.sql(statement)
+    except dbx.DatabricksError as exc:
+        check.blocked(statement, str(exc))
+        return check
     if not rows:
         check.fail("silver.custbill_file_recon has no rows for this namespace")
     for file_name, declared, parsed, rejected, recon_ok in rows:
@@ -248,29 +278,35 @@ def check_file_recon(ns: str) -> Check:
             check.note(detail)
         else:
             check.fail(detail)
-    if len(rows) != len(GOLDEN_FILES):
-        check.fail(f"expected {len(GOLDEN_FILES)} recon rows, found {len(rows)}")
+    if len(rows) != expected_files:
+        check.fail(f"expected {expected_files} recon rows from namespace-scoped golden files, found {len(rows)}")
     return check
 
 
 def check_quarantine(ns: str, golden) -> Check:
     check = Check("4", "Quarantine justified: nothing the legacy output contains is rejected")
-    exists = dbx.sql(
-        f"SHOW TABLES IN {custbill_sql.CATALOG}.silver LIKE 'custbill_rejects'"
-    )
+    exists_statement = f"SHOW TABLES IN {custbill_sql.CATALOG}.silver LIKE 'custbill_rejects'"
+    try:
+        exists = dbx.sql(exists_statement)
+    except dbx.DatabricksError as exc:
+        check.blocked(exists_statement, str(exc))
+        return check
     if not exists:
         check.fail("silver.custbill_rejects does not exist; the quarantine must be visible even when empty")
         return check
 
     ns_literal = custbill_parse_sql.quote_sql_literal(ns)
-    rows = dbx.sql(
-        f"""
+    statement = f"""
         SELECT file_name, line_no, reject_reason, raw_line
         FROM {custbill_sql.SILVER_REJECTS}
         WHERE ns = {ns_literal}
         ORDER BY file_name, line_no
         """
-    )
+    try:
+        rows = dbx.sql(statement)
+    except dbx.DatabricksError as exc:
+        check.blocked(statement, str(exc))
+        return check
     check.note("silver.custbill_rejects exists (present even when empty)")
     check.note(f"quarantined rows for ns={ns}: {len(rows)}")
     for file_name, line_no, reason, raw_line in rows:
@@ -286,10 +322,17 @@ def check_quarantine(ns: str, golden) -> Check:
     return check
 
 
-def check_idempotency(ns: str, converted) -> Check:
+def check_idempotency(ns: str, converted, converted_error=None) -> Check:
     check = Check("5", "Idempotency: re-running the job leaves counts and totals unchanged")
+    if converted_error:
+        check.blocked(*converted_error)
+        return check
     for name, statement in custbill_parse_sql.gate_statements(ns):
-        offending = dbx.sql(statement)
+        try:
+            offending = dbx.sql(statement)
+        except dbx.DatabricksError as exc:
+            check.blocked(statement, str(exc))
+            return check
         if offending:
             preview = "; ".join(" | ".join(map(str, row)) for row in offending[:5])
             check.fail(f"bronze gate '{name}' returned {len(offending)} offending rows: {preview}")
@@ -299,12 +342,23 @@ def check_idempotency(ns: str, converted) -> Check:
     before_total = sum(row["amount"] for row in converted.values())
     check.note(f"before re-run: {before_rows} rows, total {before_total}")
     for _name, statement in custbill_parse_sql.parse_statements(ns):
-        dbx.sql(statement)
+        try:
+            dbx.sql(statement)
+        except dbx.DatabricksError as exc:
+            check.blocked(statement, str(exc))
+            return check
     for name, statement in custbill_parse_sql.recon_gate_statements(ns):
-        offending = dbx.sql(statement)
+        try:
+            offending = dbx.sql(statement)
+        except dbx.DatabricksError as exc:
+            check.blocked(statement, str(exc))
+            return check
         if offending:
             check.fail(f"post-rerun gate '{name}' returned {len(offending)} offending rows")
-    after = read_converted(ns)
+    after, after_error = read_converted(ns)
+    if after_error:
+        check.blocked(*after_error)
+        return check
     after_total = sum(row["amount"] for row in after.values())
     check.note(f"after re-run: {len(after)} rows, total {after_total}")
     if len(after) != before_rows or after_total != before_total:
@@ -346,8 +400,6 @@ def render_report(ns: str, golden_dir: Path, checks: list[Check]) -> str:
         lines.append("")
         if check.blocked_reason:
             lines.append(f"Blocked: {check.blocked_reason}")
-            lines.append("")
-            continue
         for detail in check.details:
             lines.append(f"- {detail}")
         lines.append("")
@@ -372,15 +424,16 @@ def main() -> int:
     args.ns = custbill_parse_sql.validate_namespace(args.ns)
 
     golden_dir = Path(args.golden)
-    checks = [check_baseline(golden_dir)]
-    golden = read_golden(golden_dir)
-    converted = read_converted(args.ns)
-    checks.append(check_row_parity(golden, converted))
-    checks.append(check_subtotals(golden, converted))
-    checks.append(check_file_recon(args.ns))
+    golden = read_golden(golden_dir, args.ns)
+    converted, converted_error = read_converted(args.ns)
+    checks = [check_baseline(args.ns, golden_dir)]
+    checks.append(check_row_parity(golden, converted, converted_error))
+    checks.append(check_subtotals(args.ns, golden, converted, converted_error))
+    expected_files = len({stem for stem, _line_no in golden})
+    checks.append(check_file_recon(args.ns, expected_files))
     checks.append(check_quarantine(args.ns, golden))
     if not args.skip_idempotency:
-        checks.append(check_idempotency(args.ns, converted))
+        checks.append(check_idempotency(args.ns, converted, converted_error))
 
     report = render_report(args.ns, golden_dir, checks)
     report_path = REPO_ROOT / args.report
