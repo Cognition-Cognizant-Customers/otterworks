@@ -43,6 +43,7 @@ resource "mongodbatlas_database_user" "migrator" {
   username           = local.username
   password           = var.db_password
   auth_database_name = "admin"
+  depends_on         = [mongodbatlas_advanced_cluster.managed]
 
   roles {
     role_name     = "readWrite"
