@@ -136,10 +136,43 @@ def _clear_landing_events(events_path: str) -> None:
             raise
 
 
+def _landing_inventory(events_path: str) -> tuple[int, int]:
+    """Count landed files and bytes independently through the Files API."""
+    try:
+        listing = dbx.request("GET", f"/api/2.0/fs/directories{urllib.parse.quote(events_path)}")
+    except dbx.DatabricksError as exc:
+        if exc.status == 404:
+            return 0, 0
+        raise
+
+    files, total_bytes = 0, 0
+    while True:
+        for entry in listing.get("contents", []):
+            if entry.get("is_directory", entry.get("is_dir", False)):
+                child_files, child_bytes = _landing_inventory(entry["path"])
+                files += child_files
+                total_bytes += child_bytes
+            else:
+                files += 1
+                total_bytes += int(entry.get("file_size", entry.get("size", 0)))
+        token = listing.get("next_page_token")
+        if not token:
+            return files, total_bytes
+        listing = dbx.request(
+            "GET",
+            f"/api/2.0/fs/directories{urllib.parse.quote(events_path)}"
+            f"?page_token={urllib.parse.quote(token)}",
+        )
+
+
 def land(ns: str, catalog: str) -> dict:
     """Replace the namespace's landing slice with the legacy event objects and DDL."""
     s3 = _s3_client()
     prefix, keys = _event_objects(ns)
+    source_bytes = sum(
+        int(s3.head_object(Bucket=DATA_LAKE_BUCKET, Key=key)["ContentLength"])
+        for key in keys
+    )
     events_path = f"/Volumes/{catalog}/bronze/landing/{volume_prefix(ns)}/events"
     _clear_landing_events(events_path)
 
@@ -154,8 +187,12 @@ def land(ns: str, catalog: str) -> dict:
                 dbx.upload(str(local), f"{volume_prefix(ns)}/events/{relative}")
                 landed += 1
                 total_bytes += len(body)
-        if landed != len(keys):
-            raise RuntimeError(f"landed {landed} objects but discovered {len(keys)} for ns={ns}")
+        landed, landed_bytes = _landing_inventory(events_path)
+        if landed != len(keys) or landed_bytes != source_bytes:
+            raise RuntimeError(
+                f"landed inventory objects={landed}, bytes={landed_bytes}; "
+                f"discovered objects={len(keys)}, bytes={source_bytes} for ns={ns}"
+            )
     except Exception:
         try:
             _clear_landing_events(events_path)
@@ -213,8 +250,6 @@ def stage(ns: str, catalog: str) -> dict:
             dbx.sql(f"INSERT INTO {table} VALUES {', '.join(batch)}")
             staged += len(batch)
 
-        if staged != expected:
-            raise RuntimeError(f"staged {staged} lines but discovered {expected} for ns={ns}")
         in_table = int(dbx.sql_scalar(f"SELECT count(*) FROM {table} WHERE ns = '{ns}'"))
         if in_table != expected:
             raise RuntimeError(f"staged {expected} lines but {table} holds {in_table} for ns={ns}")
