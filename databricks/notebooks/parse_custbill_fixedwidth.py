@@ -55,6 +55,7 @@ ns = dbutils.widgets.get("ns").strip()
 mode = dbutils.widgets.get("mode").strip()
 
 validate_namespace(ns)
+ns_literal = quote_sql_literal(ns)
 
 print(f"ns={ns} mode={mode}")
 
@@ -108,13 +109,13 @@ else:
 # COMMAND ----------
 
 if mode == "parse":
-    display(spark.sql(f"SELECT * FROM {SILVER_FILE_RECON} WHERE ns = '{ns}' ORDER BY file_name"))
+    display(spark.sql(f"SELECT * FROM {SILVER_FILE_RECON} WHERE ns = {ns_literal} ORDER BY file_name"))
     display(
         spark.sql(
             f"""
             SELECT file_name, record_type, currency, count(*) AS records, sum(amount) AS amount
             FROM {SILVER_RECORDS}
-            WHERE ns = '{ns}'
+            WHERE ns = {ns_literal}
             GROUP BY file_name, record_type, currency
             ORDER BY file_name, record_type, currency
             """
