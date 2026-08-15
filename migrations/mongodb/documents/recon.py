@@ -67,7 +67,13 @@ def manifest_anomaly(manifest: dict, kind: str, target: str) -> int | None:
 
 
 def scan_atlas(db, ns: str) -> dict:
-    """Fold every migrated collection into counts, checksums and an anomaly ledger."""
+    """Fold this namespace's migrated records into counts, checksums and a ledger.
+
+    Every cursor is scoped by `_migration.ns` so the recon measures only the
+    namespace it reports on — the collections are shared across namespaces, while
+    the manifest it is compared against describes one.
+    """
+    scope = {"_migration.ns": ns}
     doc_ck, ver_ck, snap_ck = Checksum(), Checksum(), Checksum()
     version_gaps: list[dict] = []
     orphans: list[dict] = []
@@ -76,7 +82,7 @@ def scan_atlas(db, ns: str) -> dict:
     expected_source = source_table(ns, SOURCE_TABLE_DOCUMENTS)
 
     cursor = db[COLL_DOCUMENTS].find(
-        {},
+        scope,
         projection={
             "declaredVersion": 1, "wordCount": 1, "versionCount": 1,
             "versions.versionNumber": 1, "versionGap": 1, "snapshotIds": 1,
@@ -105,7 +111,7 @@ def scan_atlas(db, ns: str) -> dict:
 
     migrated_snapshots = 0
     for snap in db[COLL_SNAPSHOTS].find(
-        {}, projection={"documentId": 1}, batch_size=BATCH_SIZE
+        scope, projection={"documentId": 1}, batch_size=BATCH_SIZE
     ):
         snap_ck.add(f"{snap['_id']}|{snap['documentId']}")
         migrated_snapshots += 1
@@ -113,7 +119,9 @@ def scan_atlas(db, ns: str) -> dict:
             missing_snapshot_refs += 1
 
     for snap in db[COLL_SNAPSHOTS_ORPHANED].find(
-        {}, projection={"documentId": 1, "quarantine_reason": 1}, batch_size=BATCH_SIZE
+        scope,
+        projection={"documentId": 1, "quarantine_reason": 1},
+        batch_size=BATCH_SIZE,
     ):
         snap_ck.add(f"{snap['_id']}|{snap['documentId']}")
         orphans.append({
