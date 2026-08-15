@@ -313,8 +313,11 @@ def check_subtotals(
     return check
 
 
-def check_file_recon(ns: str, expected_files: int) -> Check:
+def check_file_recon(
+    ns: str, expected_files: int, *, golden_dir: Path, golden
+) -> Check:
     check = Check("3", "Trailer reconciliation: declared_trailer_count = parsed + rejected, recon_ok")
+    golden_empty = _block_empty_golden(check, golden_dir, ns, golden)
     ns_literal = custbill_parse_sql.quote_sql_literal(ns)
     statement = f"""
         SELECT file_name, declared_trailer_count, parsed_count, rejected_count, recon_ok
@@ -358,7 +361,7 @@ def check_file_recon(ns: str, expected_files: int) -> Check:
             check.note(detail)
         else:
             check.fail(detail)
-    if len(rows) != expected_files:
+    if not golden_empty and len(rows) != expected_files:
         check.fail(f"expected {expected_files} recon rows from namespace-scoped golden files, found {len(rows)}")
     return check
 
@@ -421,8 +424,11 @@ def check_idempotency(ns: str, converted, converted_error=None) -> Check:
             return check
 
     before_rows = len(converted)
-    before_total = sum(row["amount"] for row in converted.values())
-    check.note(f"before re-run: {before_rows} rows, total {before_total}")
+    before_total = _sum_converted_amounts(check, converted, "before re-run")
+    if before_total is not None:
+        check.note(f"before re-run: {before_rows} rows, total {before_total}")
+    else:
+        check.note(f"before re-run: {before_rows} rows, total unavailable")
     for _name, statement in custbill_parse_sql.parse_statements(ns):
         try:
             dbx.sql(statement)
@@ -457,9 +463,17 @@ def check_idempotency(ns: str, converted, converted_error=None) -> Check:
     if after_error:
         check.blocked(*after_error)
         return check
-    after_total = sum(row["amount"] for row in after.values())
-    check.note(f"after re-run: {len(after)} rows, total {after_total}")
-    if len(after) != before_rows or after_total != before_total:
+    after_total = _sum_converted_amounts(check, after, "after re-run")
+    if after_total is not None:
+        check.note(f"after re-run: {len(after)} rows, total {after_total}")
+    else:
+        check.note(f"after re-run: {len(after)} rows, total unavailable")
+    if (
+        len(after) != before_rows
+        or before_total is None
+        or after_total is None
+        or after_total != before_total
+    ):
         check.fail("row count or amount total changed across a re-run")
     differing = [key for key in set(after) | set(converted) if after.get(key) != converted.get(key)]
     if differing:
@@ -467,6 +481,22 @@ def check_idempotency(ns: str, converted, converted_error=None) -> Check:
     else:
         check.note("every row identical field-by-field across the re-run")
     return check
+
+
+def _sum_converted_amounts(check: Check, rows, phase: str) -> Decimal | None:
+    total = Decimal("0.00")
+    invalid = 0
+    for (stem, line_no), row in rows.items():
+        amount = row["amount"]
+        if not isinstance(amount, Decimal):
+            invalid += 1
+            check.fail(
+                f"{phase}: unparseable converted amount at {stem} line {line_no}: "
+                f"{_display_converted_value('amount', amount)}"
+            )
+            continue
+        total += amount
+    return None if invalid else total
 
 
 def render_report(ns: str, golden_dir: Path, checks: list[Check]) -> str:
@@ -543,7 +573,11 @@ def main() -> int:
         check_subtotals(args.ns, golden, converted, converted_error, golden_dir=golden_dir)
     )
     expected_files = len({stem for stem, _line_no in golden})
-    checks.append(check_file_recon(args.ns, expected_files))
+    checks.append(
+        check_file_recon(
+            args.ns, expected_files, golden_dir=golden_dir, golden=golden
+        )
+    )
     checks.append(check_quarantine(args.ns, golden, golden_dir=golden_dir))
     if not args.skip_idempotency:
         checks.append(check_idempotency(args.ns, converted, converted_error))
