@@ -291,10 +291,23 @@ def check_3(ns: str, catalog: str, baseline: dict, source_table: str | None) -> 
         check.note(f"unreachable source: run failed as required ({type(exc).__name__}: {str(exc)[:200]})")
         outcomes.append(True)
 
-    # (b) reachable but empty source: no zero-event "success". The probe namespace has no
-    # staged rows and no landed objects, so this is an empty extract either way.
+    # (b) reachable but empty source: no zero-event "success". In volume mode, first create
+    # and remove a sentinel so the probe directory exists without any source files.
     if source_table:
         dbx.sql(f"DELETE FROM {source_table} WHERE ns = '{probe_ns}'")
+    else:
+        probe_events = f"/Volumes/{catalog}/bronze/landing/{runner.volume_prefix(probe_ns)}/events"
+        sentinel = f"{probe_events}/.recon-empty"
+        setup_command = (
+            f"PUT /api/2.0/fs/files{sentinel} then "
+            f"DELETE /api/2.0/fs/files{sentinel} (create empty probe directory)"
+        )
+        try:
+            dbx.request("PUT", f"/api/2.0/fs/files{sentinel}?overwrite=true", raw=b"")
+            dbx.request("DELETE", f"/api/2.0/fs/files{sentinel}")
+        except Exception as exc:  # noqa: BLE001 - an unexecutable volume probe is blocked
+            check.block(setup_command, f"{type(exc).__name__}: {exc}")
+            return check
     try:
         runner.run(probe_ns, catalog, "s3", apply_ddl=False, source_table=source_table)
         check.note("empty source: run SUCCEEDED with zero events -- deficiency NOT retired")
@@ -306,6 +319,12 @@ def check_3(ns: str, catalog: str, baseline: dict, source_table: str | None) -> 
         # Only ZeroEventExtract demonstrates the zero-event path. Any other error means this
         # sub-probe never reached a reachable-but-empty extract, so it proves nothing -- in
         # volume mode, for instance, the probe namespace has no directory to read at all.
+        if source_table is None:
+            check.block(
+                f"runner.run(ns={probe_ns!r}, catalog={catalog!r}, source_table=None)",
+                f"{type(exc).__name__}: {exc}",
+            )
+            return check
         check.note(
             f"empty source: INCONCLUSIVE -- failed before the empty extract with "
             f"{type(exc).__name__}: {str(exc)[:200]}"
