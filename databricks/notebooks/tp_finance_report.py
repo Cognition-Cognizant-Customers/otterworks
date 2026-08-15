@@ -166,14 +166,28 @@ def delivery_statements(
         )
     return [
         f"""
-        DELETE FROM {catalog}.gold.finance_report_delivery
-        WHERE ns = {sql_literal(ns)} AND report_date = DATE '{report_date}'
-        """,
-        f"""
-        INSERT INTO {catalog}.gold.finance_report_delivery
+        MERGE INTO {catalog}.gold.finance_report_delivery AS target
+        USING (
+          SELECT
+            {sql_literal(ns)} AS ns,
+            DATE '{report_date}' AS report_date,
+            {artifact_sql} AS artifact_path,
+            {recipients_sql} AS recipient_list,
+            {sql_literal(status)} AS delivery_status,
+            {delivered_sql} AS delivered_at
+        ) AS source
+        ON target.ns = source.ns AND target.report_date = source.report_date
+        WHEN MATCHED THEN UPDATE SET
+          artifact_path = source.artifact_path,
+          recipient_list = source.recipient_list,
+          delivery_status = source.delivery_status,
+          delivered_at = source.delivered_at
+        WHEN NOT MATCHED THEN INSERT
           (ns, report_date, artifact_path, recipient_list, delivery_status, delivered_at)
-        VALUES ({sql_literal(ns)}, DATE '{report_date}', {artifact_sql}, {recipients_sql},
-                {sql_literal(status)}, {delivered_sql})
+        VALUES (
+          source.ns, source.report_date, source.artifact_path, source.recipient_list,
+          source.delivery_status, source.delivered_at
+        )
         """,
     ]
 
@@ -377,7 +391,10 @@ def _prepare_delivery(
 def _deliver(smtp: object, message: object) -> str:
     """Hand the prepared report to SMTP; failures remain genuinely unconfirmed."""
     try:
-        smtp.send_message(message)
+        refused = smtp.send_message(message)
+        if refused:
+            refused_addresses = ", ".join(sorted(refused))
+            raise RuntimeError(f"SMTP refused recipients: {refused_addresses}")
     finally:
         smtp.quit()
     return STATUS_DELIVERED
