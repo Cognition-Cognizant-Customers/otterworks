@@ -31,6 +31,7 @@ warehouse, which is what the recon evidence is produced with.
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Callable, Iterable
 
@@ -43,6 +44,12 @@ EVENT_LINE_SCHEMA = "event_id string, event_type string, user_id string, resourc
 # time zone.
 EVENT_TS_FORMAT = "yyyy-MM-dd'T'HH:mm:ss"
 REJECT_REASONS = ("missing_event_id", "missing_event_type", "invalid_event_ts", "duplicate_event_id")
+# `ns`, `catalog` and the staging table arrive as job parameters / CLI arguments and are
+# interpolated into every statement, including `INSERT ... REPLACE WHERE ns = '<ns>'`, which
+# deletes the slice it replaces. They are validated as identifiers before any statement is
+# built, so a value carrying a quote or a statement terminator cannot widen that predicate.
+NS_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_]{0,63}$")
+IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*){0,2}$")
 
 
 class ZeroEventExtract(RuntimeError):
@@ -56,6 +63,18 @@ class ZeroEventExtract(RuntimeError):
 
 class ReconcileError(RuntimeError):
     """Raised when silver + rejects does not account for every bronze row."""
+
+
+def validate_ns(ns: str) -> str:
+    if not NS_PATTERN.match(ns or ""):
+        raise ValueError(f"invalid ns {ns!r}: expected {NS_PATTERN.pattern}")
+    return ns
+
+
+def validate_identifier(name: str, what: str = "identifier") -> str:
+    if not IDENTIFIER_PATTERN.match(name or ""):
+        raise ValueError(f"invalid {what} {name!r}: expected {IDENTIFIER_PATTERN.pattern}")
+    return name
 
 
 def _split_sql(text: str) -> list[str]:
@@ -130,6 +149,10 @@ def pipeline_statements(
     source_table: str | None = None,
 ) -> list[dict]:
     """The ordered statement set the job runs, as (name, sql, retryable) records."""
+    validate_ns(ns)
+    validate_identifier(catalog, "catalog")
+    if source_table:
+        validate_identifier(source_table, "source table")
     relation = _source_relation(source_glob, ns, catalog, source_table)
 
     # Read the extract as text, one line per event, so `raw_payload` is the source record
@@ -224,6 +247,8 @@ GROUP BY ns, date(event_ts), hour(event_ts), user_id, document_id, file_id, even
 
 def count_queries(catalog: str = DEFAULT_CATALOG, ns: str = "demo") -> dict[str, str]:
     """Row counts used by the run's own assertions and by the recon script."""
+    validate_ns(ns)
+    validate_identifier(catalog, "catalog")
     return {
         "bronze": f"SELECT count(*) FROM {catalog}.bronze.analytics_events_raw WHERE ns = '{ns}'",
         "silver": f"SELECT count(*) FROM {catalog}.silver.analytics_events WHERE ns = '{ns}'",
@@ -274,6 +299,7 @@ def run_pipeline(
     """Run DDL + the four loads, then assert the run did not lose or duplicate anything."""
     statements: Iterable[dict] = pipeline_statements(catalog, ns, source_glob, source_kind, source_table)
     if apply_ddl:
+        validate_identifier(catalog, "catalog")
         for statement in ddl_statements(ddl_text, catalog):
             _execute_with_retry(execute, statement, 1, backoff_s, sleep, log)
         log(f"ddl applied to {catalog}")
