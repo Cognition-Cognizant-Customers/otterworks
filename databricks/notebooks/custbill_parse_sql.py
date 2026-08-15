@@ -273,7 +273,10 @@ def publish_statements(ns: str) -> list[tuple[str, str]]:
             "publish silver.custbill_records",
             f"""
             INSERT INTO {SILVER_RECORDS} REPLACE WHERE ns = {lit}
-            SELECT * FROM {STAGING_RECORDS} WHERE ns = {lit}
+            SELECT ns, file_name, line_no, record_type, account_id, invoice_id,
+                   currency, amount, bill_date, parsed_at, customer_name
+            FROM {STAGING_RECORDS}
+            WHERE ns = {lit}
             """,
         ),
         (
