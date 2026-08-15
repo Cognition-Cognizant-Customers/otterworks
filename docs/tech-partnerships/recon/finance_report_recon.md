@@ -45,7 +45,7 @@
 ### 3. Delivery audit row tells the truth about delivery — **PASS**
 
 - ok: exactly one delivery row for the run (got 1)
-- status=NOT_DELIVERED_NO_TRANSPORT_CONFIGURED recipients=finance-reports@otterworks.dev,ap-controller@otterworks.dev artifact=/Volumes/ow_tp/bronze/landing/demo/reports/finance_billing_20260815.csv
+- status=NOT_DELIVERED_NO_TRANSPORT_CONFIGURED recipients_configured=True recipient_count=2 artifact=/Volumes/ow_tp/bronze/landing/demo/reports/finance_billing_20260815.csv
 - ok: delivery_status is a known value (got 'NOT_DELIVERED_NO_TRANSPORT_CONFIGURED')
 - ok: non-delivery is not stamped as delivered (delivered_at=None)
 - ok: the sendmail no-op is recorded as an explicit non-delivery, not as success

@@ -207,7 +207,11 @@ def check_3(ns: str, report_date: str) -> Check:
     if not check.expect(len(rows) == 1, f"exactly one delivery row for the run (got {len(rows)})"):
         return check
     artifact_path, recipients, status, delivered_at = rows[0]
-    check.note(f"status={status} recipients={recipients} artifact={artifact_path}")
+    recipient_count = sum(1 for address in (recipients or "").split(",") if address.strip())
+    check.note(
+        f"status={status} recipients_configured={recipient_count > 0} "
+        f"recipient_count={recipient_count} artifact={artifact_path}"
+    )
     check.expect(
         (
             status
@@ -243,7 +247,7 @@ def check_3(ns: str, report_date: str) -> Check:
             status.startswith("NOT_DELIVERED"),
             "the sendmail no-op is recorded as an explicit non-delivery, not as success",
         )
-    if status == pipeline.STATUS_NO_RECIPIENTS:
+    if status in (pipeline.STATUS_NO_RECIPIENTS, pipeline.STATUS_INVALID_RECIPIENTS):
         check.expect(not recipients, "a run with no configured distribution list records none")
     else:
         check.expect(
