@@ -54,7 +54,7 @@ def _client(service: str):
     )
 
 
-def list_objects(bucket: str, ns: str, claimed_elsewhere: set | None = None) -> list[dict]:
+def list_objects(bucket: str, ns: str) -> list[dict]:
     """Inventory of everything this namespace owns, under every prefix it uses.
 
     Two prefixes, no more: `<ns>/` (namespaced keys, the tenancy boundary in the
@@ -65,20 +65,15 @@ def list_objects(bucket: str, ns: str, claimed_elsewhere: set | None = None) -> 
     as an orphan, and a false positive is a deleted customer file.
 
     Keys under the legacy prefix predate namespacing, so nothing in the key
-    attributes them to a tenant. `claimed_elsewhere` is the set of keys some
-    *other* namespace's metadata references: those are somebody's live file and
-    are dropped from this inventory, which is the one direction the legacy
-    script got right (its DynamoDB scan was namespace-blind, so a key owned by
-    another tenant was never an orphan to it either).
+    attributes them to a tenant. Filtering keys claimed by another namespace
+    happens after the metadata scan, once both sides of the inventory have
+    been observed.
     """
-    claimed_elsewhere = claimed_elsewhere or frozenset()
     s3 = _client("s3")
     by_key: dict[str, dict] = {}
     for prefix in (f"{ns}/", LEGACY_PREFIX):
         for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix):
             for obj in page.get("Contents", []):
-                if prefix == LEGACY_PREFIX and obj["Key"] in claimed_elsewhere:
-                    continue
                 by_key[obj["Key"]] = {
                     "bucket": bucket,
                     "key": obj["Key"],
@@ -88,14 +83,23 @@ def list_objects(bucket: str, ns: str, claimed_elsewhere: set | None = None) -> 
     return [by_key[key] for key in sorted(by_key)]
 
 
+def filter_claimed_elsewhere(objects: list[dict], claimed_elsewhere: set) -> list[dict]:
+    """Drop only legacy-prefix objects claimed by another namespace."""
+    return [
+        obj
+        for obj in objects
+        if not (obj["key"].startswith(LEGACY_PREFIX) and obj["key"] in claimed_elsewhere)
+    ]
+
+
 def scan_metadata(ns: str, limit: int | None = None) -> tuple[list[dict], bool, set]:
     """Metadata items for the namespace, and whether the read completed.
 
     Returns `(items, complete, claimed_elsewhere)`. `complete` is False when the
     scan was cut short -- the distinction the legacy script structurally could
     not make. `claimed_elsewhere` holds the storage keys another namespace's
-    metadata references, which `list_objects` uses to keep another tenant's
-    files out of this run's inventory.
+    metadata references, which `filter_claimed_elsewhere` uses to keep another
+    tenant's files out of this run's inventory.
     """
     dynamodb = _client("dynamodb")
     items: list[dict] = []
@@ -251,11 +255,12 @@ def main(argv: list[str]) -> int:
     )
     args = parser.parse_args(argv)
 
-    # The metadata scan first: it decides both sides of the join, including
-    # which legacy-prefix keys belong to another namespace and so are not this
-    # run's business.
+    # List first, then scan metadata: an object is visible to the join if its
+    # metadata row lands before the second observation, avoiding a read-order
+    # false orphan.
+    objects = list_objects(args.bucket, args.ns)
     metadata, complete, claimed_elsewhere = scan_metadata(args.ns, args.metadata_limit)
-    objects = list_objects(args.bucket, args.ns, claimed_elsewhere)
+    objects = filter_claimed_elsewhere(objects, claimed_elsewhere)
 
     out_dir = OUT_ROOT / args.ns / args.input_dir
     write_jsonl(out_dir / "objects.jsonl", objects)
