@@ -109,8 +109,10 @@ def serving_snapshot(ns: str) -> dict[str, int]:
 def existing_job_id() -> int | None:
     try:
         return dbx.job_id(JOB_NAME)
-    except dbx.DatabricksError:
-        return None
+    except dbx.DatabricksError as exc:
+        if exc.status is None and exc.error_code is None:
+            return None
+        raise
 
 
 def ensure_job(task_keys: tuple[str, ...] | None = None) -> int:
