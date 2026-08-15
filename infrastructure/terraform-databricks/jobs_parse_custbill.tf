@@ -68,7 +68,7 @@ resource "databricks_job" "parse_custbill" {
     # Reusing the parser notebook in gate mode retires the legacy implicit
     # file handoff without introducing a second pipeline implementation.
     notebook_task {
-      notebook_path = "/Shared/ow_tp/parse_custbill_fixedwidth"
+      notebook_path = "${databricks_directory.pipelines.path}/parse_custbill_fixedwidth"
       base_parameters = {
         ns   = "{{job.parameters.ns}}"
         mode = "gate"
@@ -87,7 +87,7 @@ resource "databricks_job" "parse_custbill" {
     # A notebook task with no cluster block uses serverless job compute; this
     # retires the legacy host-specific, implicitly provisioned execution path.
     notebook_task {
-      notebook_path = "/Shared/ow_tp/parse_custbill_fixedwidth"
+      notebook_path = "${databricks_directory.pipelines.path}/parse_custbill_fixedwidth"
       base_parameters = {
         ns   = "{{job.parameters.ns}}"
         mode = "parse"

@@ -49,7 +49,7 @@ def run(ns: str, skip_ddl: bool = False) -> int:
     ns = custbill_parse_sql.validate_namespace(ns)
     if not skip_ddl:
         print("applying DDL")
-        for statement in custbill_sql.ddl_statements():
+        for statement in custbill_sql.ddl_statements(include_bronze_bootstrap=True):
             dbx.sql(statement)
 
     print("bronze manifest gate")

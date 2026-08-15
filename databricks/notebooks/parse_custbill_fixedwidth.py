@@ -82,7 +82,7 @@ if mode == "gate":
     # The manifest handshake replaces the legacy cron offset (:05 after a */15
     # ingest) and the "compare the file size twice, one second apart" settle
     # check: a half-written landing cannot satisfy it.
-    for statement in ddl_statements():
+    for statement in ddl_statements(include_bronze_bootstrap=True):
         spark.sql(statement)
     run_gate("bronze manifest", gate_statements(ns))
 
