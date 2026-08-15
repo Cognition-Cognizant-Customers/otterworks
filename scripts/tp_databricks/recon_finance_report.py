@@ -210,6 +210,8 @@ def check_3(ns: str, report_date: str) -> Check:
     check.expect(
         status in (
             pipeline.STATUS_DELIVERED,
+            pipeline.STATUS_ATTEMPTING,
+            pipeline.STATUS_UNCONFIRMED,
             pipeline.STATUS_NO_TRANSPORT,
             pipeline.STATUS_NO_RECIPIENTS,
         ),
@@ -220,6 +222,12 @@ def check_3(ns: str, report_date: str) -> Check:
             delivered_at is not None,
             "DELIVERED rows carry a delivered_at timestamp",
         )
+    elif status == pipeline.STATUS_ATTEMPTING:
+        check.expect(
+            delivered_at is None,
+            "unconfirmed delivery attempts carry no delivered_at timestamp",
+        )
+        check.note("send attempt is durably recorded before transport acceptance")
     else:
         check.expect(
             delivered_at is None,
