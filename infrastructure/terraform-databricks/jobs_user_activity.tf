@@ -52,11 +52,14 @@ locals {
   user_activity_notebook = "${databricks_directory.pipelines.path}/user_activity_daily"
 
   user_activity_base_parameters = {
-    ns = var.user_activity_ns
-    # The run's UTC start date, resolved once for the whole run: both tasks (and any
-    # retry of either) then gate and publish the same date. Letting each task resolve
-    # "today" itself would re-admit a clock race across midnight.
-    report_date            = "{{job.start_time.iso_date}}"
+    # Both taken from the job parameters, not the Terraform defaults: a run started for
+    # another namespace must be gated and published under that namespace, not silently
+    # overwrite the default one's partitions.
+    ns = "{{job.parameters.ns}}"
+    # The run's UTC start date, resolved once for the whole run by the job parameter's
+    # default: both tasks (and any retry of either) then gate and publish the same date.
+    # Letting each task resolve "today" itself would re-admit a clock race across midnight.
+    report_date            = "{{job.parameters.report_date}}"
     lookback_days          = tostring(var.user_activity_lookback_days)
     upstream_summary_table = "${var.catalog_name}.${var.user_activity_upstream_table}"
     max_upstream_lag_days  = tostring(var.user_activity_max_upstream_lag_days)
