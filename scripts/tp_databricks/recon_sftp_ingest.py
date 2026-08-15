@@ -284,7 +284,12 @@ def check4_idempotency(
         )
         return check
     before = _snapshot(ns)
-    sftp_ingest_sql.run(ns=ns, catalog=CATALOG, landing_root=landing_root, create_tables=False)
+    try:
+        sftp_ingest_sql.run(ns=ns, catalog=CATALOG, landing_root=landing_root, create_tables=False)
+    except Exception as exc:  # noqa: BLE001 - a re-run that refuses to run is a failed check
+        check.passed = False
+        check.detail.append(f"re-run failed: {exc}")
+        return check
     after = _snapshot(ns)
     check.passed = before == after
     for table in sorted(before):
@@ -316,7 +321,9 @@ def check5_scope(ns: str, landing_root: str) -> Check:
     referenced = {name for s in statements for name in _QUALIFIED_NAME.findall(s)}
     unowned = referenced - OWNED_TABLES
     unprefixed = {name for name in referenced if not name.startswith("ow_tp.")}
-    ok = ok and not unowned and not unprefixed
+    # bool(referenced): finding nothing means the scanner no longer understands the SQL
+    # (e.g. it moved to IDENTIFIER(:catalog || ...) binds), not that the scope is clean.
+    ok = ok and bool(referenced) and not unowned and not unprefixed
     check.detail.append(f"tables referenced by the statement set: {sorted(referenced) or '[]'}")
     check.detail.append(f"outside the contract: {sorted(unowned) or 'none'}")
     check.detail.append(f"unprefixed: {sorted(unprefixed) or 'none'}")

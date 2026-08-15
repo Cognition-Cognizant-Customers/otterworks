@@ -1,6 +1,6 @@
 # Recon: `sftp_ingest_poll.ksh` → `ow_tp_sftp_ingest`
 
-- Generated: 2026-08-15T22:47:41+00:00
+- Generated: 2026-08-15T22:52:09+00:00
 - Namespace: `demo`  |  catalog: `ow_tp`  |  landing: `/Volumes/ow_tp/bronze/landing`
 - Golden baseline provenance: artifacts of a real `sftp_ingest_poll.ksh` run (`make legacy-etl-gen-data NS=demo` + `make legacy-etl-run JOB=sftp_ingest_poll`), read byte-for-byte from `/home/ubuntu/tp-golden/custbill/incoming/*.dat.done`
 - Result: **green**
@@ -59,11 +59,11 @@ outside the contract: none
 unprefixed: none
 retention SQL targets: ['ow_tp.bronze.custbill_files', 'ow_tp.bronze.custbill_lines'] outside=none
 contracted tables present: ['ow_tp.bronze.custbill_files', 'ow_tp.bronze.custbill_lines'] missing=none
-other ow_tp tables in the catalog (other units', not written by this unit per (a)): ['ow_tp.bronze.audit_events_raw', 'ow_tp.bronze.custbill_raw_lines_bootstrap', 'ow_tp.bronze.file_metadata_raw', 'ow_tp.bronze.search_documents_raw', 'ow_tp.bronze.storage_extract_manifest', 'ow_tp.bronze.storage_objects_raw', 'ow_tp.bronze.user_activity_events_landed', 'ow_tp.bronze.user_activity_raw', 'ow_tp.bronze.user_activity_upstream_fixture', 'ow_tp.gold.audit_archive_manifest', 'ow_tp.gold.finance_billing_summary', 'ow_tp.gold.finance_report_delivery', 'ow_tp.gold.search_reindex_summary', 'ow_tp.gold.storage_cleanup_savings', 'ow_tp.gold.user_activity_report', 'ow_tp.gold.user_activity_run_log', 'ow_tp.silver.audit_events_archived', 'ow_tp.silver.custbill_file_recon', 'ow_tp.silver.custbill_records', 'ow_tp.silver.custbill_rejects', 'ow_tp.silver.search_index_documents', 'ow_tp.silver.search_index_documents_staging', 'ow_tp.silver.storage_orphans', 'ow_tp.silver.user_activity_daily']
-namespaces present in bronze.custbill_lines: ['demo'] (this unit only ever writes ns='demo'; other namespaces are other runs')
-ow_tp jobs in the workspace: ['ow_tp_dev_search_reindex']
+other ow_tp tables in the catalog (other units', not written by this unit per (a)): ['ow_tp.bronze.analytics_daily_stage', 'ow_tp.bronze.analytics_events_raw', 'ow_tp.bronze.audit_events_raw', 'ow_tp.bronze.custbill_raw_lines_bootstrap', 'ow_tp.bronze.file_metadata_raw', 'ow_tp.bronze.search_documents_raw', 'ow_tp.bronze.storage_extract_manifest', 'ow_tp.bronze.storage_objects_raw', 'ow_tp.bronze.user_activity_events_landed', 'ow_tp.bronze.user_activity_raw', 'ow_tp.bronze.user_activity_upstream_fixture', 'ow_tp.gold.analytics_daily_summary', 'ow_tp.gold.audit_archive_manifest', 'ow_tp.gold.finance_billing_summary', 'ow_tp.gold.finance_report_delivery', 'ow_tp.gold.search_reindex_summary', 'ow_tp.gold.storage_cleanup_savings', 'ow_tp.gold.user_activity_report', 'ow_tp.gold.user_activity_run_log', 'ow_tp.silver.analytics_events', 'ow_tp.silver.analytics_events_rejects', 'ow_tp.silver.audit_events_archived', 'ow_tp.silver.custbill_file_recon', 'ow_tp.silver.custbill_records', 'ow_tp.silver.custbill_rejects', 'ow_tp.silver.search_index_documents', 'ow_tp.silver.search_index_documents_staging', 'ow_tp.silver.storage_orphans', 'ow_tp.silver.user_activity_daily']
+namespaces present in bronze.custbill_lines: ['demo', 'orphanneg'] (this unit only ever writes ns='demo'; other namespaces are other runs')
+ow_tp jobs in the workspace: none (1/3 not applied yet)
 this unit's throwaway ow_tp_dev_sftp_ingest left behind: none
-other units' ow_tp_dev_* jobs (not this unit's, not judged): ['ow_tp_dev_search_reindex']
+other units' ow_tp_dev_* jobs (not this unit's, not judged): none
 catalogs=['ow_tp'] secret_scopes=['ow_tp'] dirs=['/Shared/ow_tp']
 ```
 
