@@ -85,25 +85,31 @@ def migrate(conn, db, ns: str, batch_no: int, limit=None,
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--ns", default=config.namespace())
-    ap.add_argument("--batch-no", type=int, default=config.batch_no())
+    ap.add_argument("--batch-no", type=int,
+                    help="source conversion batch; derived from --ns by default")
     ap.add_argument("--batch-size", type=int, default=config.BATCH_SIZE)
     ap.add_argument("--limit", type=int)
     ap.add_argument("--dry-run", action="store_true",
                     help="transform everything but write nothing to Atlas")
     args = ap.parse_args()
+    batch = args.batch_no or config.batch_no(args.ns)
 
     conn = oracledb.connect(**config.oracle_dsn())
     client = None if args.dry_run else config.mongo_client()
     db = None if client is None else client[config.database_name()]
     try:
-        summary = migrate(conn, db, args.ns, args.batch_no, limit=args.limit,
+        if not extract.count_customers(conn, batch):
+            raise SystemExit(
+                f"no customers in conversion batch {batch} for ns={args.ns} "
+                f"— seed it first (make oracle-billing-seed NS={args.ns})")
+        summary = migrate(conn, db, args.ns, batch, limit=args.limit,
                           dry_run=args.dry_run, size=args.batch_size)
     finally:
         conn.close()
         if client is not None:
             client.close()
 
-    print(f"[migrate] ns={args.ns} batch={args.batch_no}"
+    print(f"[migrate] ns={args.ns} batch={batch}"
           f"{' (dry run)' if args.dry_run else ''}")
     for key, value in summary.items():
         print(f"[migrate]   {key}: {value}")

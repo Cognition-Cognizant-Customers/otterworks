@@ -144,6 +144,13 @@ def test_csv_lists_become_arrays_and_dates_become_bson_dates():
                                                      tzinfo=timezone.utc)}
 
 
+@pytest.mark.parametrize("raw,year", [("04-JUL-11", 2011), ("01-JAN-00", 2000),
+                                      ("01-JAN-49", 2049), ("01-JAN-50", 1950),
+                                      ("01-JAN-99", 1999)])
+def test_two_digit_years_follow_oracle_rr_semantics(raw, year):
+    assert transform.parse_legacy_date(raw).year == year
+
+
 def test_sparse_udf_and_flag_values_only_when_populated():
     legacy = run(row()).doc["legacy"]
 

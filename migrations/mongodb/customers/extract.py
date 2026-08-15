@@ -79,8 +79,11 @@ def count_customers(conn, batch_no: int) -> int:
         return cur.fetchone()[0]
 
 
-def count_customer_eav(conn) -> int:
+def count_customer_eav(conn, batch_no: int) -> int:
+    """EAV rows for the batch's customers only — other namespaces share the table."""
     with conn.cursor() as cur:
         cur.execute("SELECT COUNT(*) FROM entity_attr_value "
-                    "WHERE entity_type = 'CUSTOMER'")
+                    "WHERE entity_type = 'CUSTOMER' AND entity_id IN "
+                    "(SELECT cust_id FROM customer_master "
+                    "  WHERE conversion_batch_no = :batch)", batch=batch_no)
         return cur.fetchone()[0]
