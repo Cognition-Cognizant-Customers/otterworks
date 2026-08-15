@@ -265,17 +265,22 @@ def check4_idempotency(ns: str, landing_root: str, rerun: bool) -> Check:
     return check
 
 
-def check5_scope(ns: str) -> Check:
-    """Nothing outside the two contracted tables is created or touched."""
+def check5_scope(ns: str, landing_root: str) -> Check:
+    """Nothing outside the two contracted tables is created or touched.
+
+    `landing_root` must be the one the run actually used: it is embedded in the
+    statements, so analysing the default here would vet text that was never run.
+    """
     check = Check(5, "no ow_tp object outside the contract, no unprefixed object")
     ok = True
 
     # (a) static: every three-part identifier in the statement set this unit executes.
     statements = [
         *sftp_ingest_sql.ddl_statements(CATALOG),
-        sftp_ingest_sql.incomplete_files_query(ns, CATALOG, LANDING_ROOT),
-        *sftp_ingest_sql.ingest_statements(ns, CATALOG, LANDING_ROOT),
+        sftp_ingest_sql.incomplete_files_query(ns, CATALOG, landing_root),
+        *sftp_ingest_sql.ingest_statements(ns, CATALOG, landing_root),
     ]
+    check.detail.append(f"statements analyzed for landing_root={landing_root}")
     retention = Path(__file__).resolve().parents[2] / "infrastructure" / "terraform-databricks"
     retention_sql = (retention / "sql" / "sftp_ingest_retention.sql").read_text()
     referenced = {name for s in statements for name in _QUALIFIED_NAME.findall(s)}
@@ -384,7 +389,7 @@ def _main(argv: list[str]) -> int:
         check2_lines(args.ns, golden),
         check3_trailer(args.ns, golden),
         check4_idempotency(args.ns, args.landing_root, rerun=not args.no_rerun),
-        check5_scope(args.ns),
+        check5_scope(args.ns, args.landing_root),
     ]
 
     for check in checks:
