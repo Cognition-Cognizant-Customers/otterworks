@@ -217,6 +217,7 @@ def check_3(ns: str, report_date: str) -> Check:
                 pipeline.STATUS_UNCONFIRMED,
                 pipeline.STATUS_NO_TRANSPORT,
                 pipeline.STATUS_NO_RECIPIENTS,
+                pipeline.STATUS_INVALID_RECIPIENTS,
             )
             or status.startswith(pipeline.STATUS_TRANSPORT_UNAVAILABLE + ": ")
         ),
