@@ -55,6 +55,32 @@ print(f"ingesting ns={ns} catalog={catalog} landing_root={landing_root}")
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## What landed
+# MAGIC
+# MAGIC Two conditions the legacy poller reported identically. An existing drop directory
+# MAGIC with nothing new in it is a no-op success, as the legacy poll finding nothing was.
+# MAGIC A drop directory that does not exist is a failure naming `ns` and the path it
+# MAGIC expected: that namespace was never staged, or the transport writes somewhere else,
+# MAGIC and reporting it as "no files today" is the habit this conversion retires.
+
+# COMMAND ----------
+
+try:
+    landed = [r.file_name for r in spark.sql(sftp_ingest_sql.landed_files_query(ns, catalog, landing_root)).collect()]
+except Exception as exc:
+    missing = sftp_ingest_sql.as_missing_drop_path(exc, ns, landing_root)
+    if missing is None:
+        raise
+    raise missing from exc
+
+if not landed:
+    print(f"no files under {sftp_ingest_sql.drop_path(ns, landing_root)}: nothing to ingest (no-op)")
+    dbutils.notebook.exit(f"no-op: no files under {sftp_ingest_sql.drop_path(ns, landing_root)}")
+print(f"landed files: {landed}")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Completeness handshake
 # MAGIC
 # MAGIC A file is ingestable only when it carries exactly one HDR record, exactly one

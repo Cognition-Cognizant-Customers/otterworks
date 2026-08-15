@@ -242,6 +242,54 @@ def ingest_statements(ns: str, catalog: str, landing_root: str) -> list[str]:
     ]
 
 
+class MissingDropPathError(RuntimeError):
+    """The namespace's drop directory does not exist, so the run read nothing."""
+
+
+def drop_path(ns: str, landing_root: str) -> str:
+    """The directory the transport delivers this namespace's CUSTBILL files to."""
+    return f"{landing_root}/{ns}/custbill/"
+
+
+def landed_files_query(ns: str, catalog: str, landing_root: str) -> str:
+    """File names the ingest's own source scan sees, in delivery-name order."""
+    ns, _catalog, landing_root = _validated(ns, catalog, landing_root)
+    return (
+        "SELECT DISTINCT regexp_extract(_metadata.file_path, '([^/]+)$', 1) AS file_name "
+        f"FROM read_files('{drop_path(ns, landing_root)}', format => 'text', wholeText => true) "
+        "ORDER BY file_name"
+    )
+
+
+def as_missing_drop_path(exc: Exception, ns: str, landing_root: str) -> MissingDropPathError | None:
+    """Translate an absent-drop-path failure into one that names ns and the path.
+
+    Two conditions the legacy poller conflated: an existing but empty directory is
+    nothing to do today, while a directory that does not exist means this namespace
+    was never staged (or the transport writes elsewhere) and the run has not
+    succeeded. Only the second is an error, and it should say which path it wanted
+    rather than leaving the operator to decode a source-format error code.
+    """
+    if "CF_PATH_DOES_NOT_EXIST_FOR_READ_FILES" not in str(exc):
+        return None
+    return MissingDropPathError(
+        f"drop path for ns={ns!r} does not exist: {drop_path(ns, landing_root)} — "
+        "the namespace was never staged, or the transport is writing somewhere else. "
+        "An existing but empty drop directory is a no-op; an absent one is not."
+    )
+
+
+def _over_landing(dbx, statement: str, ns: str, landing_root: str) -> list[list[str]]:
+    """Run a statement that reads the drop path, naming the path if it is absent."""
+    try:
+        return dbx.sql(statement)
+    except Exception as exc:
+        missing = as_missing_drop_path(exc, ns, landing_root)
+        if missing is not None:
+            raise missing from exc
+        raise
+
+
 def run(ns: str, catalog: str, landing_root: str, create_tables: bool = True) -> None:
     """Execute the ingest on the serverless SQL warehouse via dbx.py.
 
@@ -254,6 +302,11 @@ def run(ns: str, catalog: str, landing_root: str, create_tables: bool = True) ->
     if create_tables:
         for statement in ddl_statements(catalog):
             dbx.sql(statement)
+
+    landed = _over_landing(dbx, landed_files_query(ns, catalog, landing_root), ns, landing_root)
+    if not landed:
+        print(f"no files under {drop_path(ns, landing_root)}: nothing to ingest (no-op)")
+        return
 
     bad = dbx.sql(incomplete_files_query(ns, catalog, landing_root))
     if bad:
