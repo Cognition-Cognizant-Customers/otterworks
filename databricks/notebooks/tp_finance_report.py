@@ -284,12 +284,11 @@ def _run() -> None:
         ):
             spark.sql(statement)
 
-    if invalid_recipients:
-        write_audit(None, STATUS_INVALID_RECIPIENTS)
-        raise RuntimeError("invalid finance report recipient configuration")
-    elif existing_row and existing_row["delivery_status"] == STATUS_DELIVERED:
+    if existing_row and existing_row["delivery_status"] == STATUS_DELIVERED:
         recipients = existing_row["recipient_list"]
         status = STATUS_DELIVERED
+        if invalid_recipients:
+            raise RuntimeError("invalid finance report recipient configuration")
     elif existing_row and existing_row["delivery_status"] in (
         STATUS_ATTEMPTING,
         STATUS_UNCONFIRMED,
@@ -301,15 +300,21 @@ def _run() -> None:
             f"delivery status is {STATUS_UNCONFIRMED} for ns={ns!r}, "
             f"report_date={report_date!r}; human confirmation is required before retrying"
         )
+    elif invalid_recipients:
+        write_audit(None, STATUS_INVALID_RECIPIENTS)
+        raise RuntimeError("invalid finance report recipient configuration")
     elif recipients and transport:
         try:
             smtp, message = _prepare_delivery(transport, recipients, artifact_path, report_date)
         except Exception as error:  # noqa: BLE001 - setup failure is recorded and raised
-            status = f"{STATUS_TRANSPORT_UNAVAILABLE}: {error}"
+            status = (
+                f"{STATUS_TRANSPORT_UNAVAILABLE}: {type(error).__name__} "
+                "during SMTP transport setup"
+            )
             write_audit(recipients, status)
             raise RuntimeError(
                 f"finance report transport setup failed for ns={ns!r}, "
-                f"report_date={report_date!r}: {error}"
+                f"report_date={report_date!r}"
             ) from error
         write_audit(recipients, STATUS_ATTEMPTING)
         status = _deliver(smtp, message)
@@ -402,8 +407,7 @@ def _deliver(smtp: object, message: object) -> str:
     try:
         refused = smtp.send_message(message)
         if refused:
-            refused_addresses = ", ".join(sorted(refused))
-            raise RuntimeError(f"SMTP refused recipients: {refused_addresses}")
+            raise RuntimeError(f"SMTP refused {len(refused)} recipient(s)")
     finally:
         smtp.quit()
     return STATUS_DELIVERED
