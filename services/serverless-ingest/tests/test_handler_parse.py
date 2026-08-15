@@ -105,6 +105,17 @@ def test_handler_reports_trailer_mismatch_without_changing_bytes(monkeypatch) ->
     assert s3.puts[0][2] == EXPECTED
 
 
+def test_handler_builds_items_from_fixed_width_fields_with_embedded_pipe(monkeypatch) -> None:
+    source = bytearray(SOURCE)
+    name_start = source.index(b"INITECH SA")
+    source[name_start : name_start + 10] = b"NAME|PIPE "
+    source = bytes(source)
+
+    _, _, table = invoke(monkeypatch, source)
+
+    assert table.items[0]["cust_name"] == "NAME|PIPE"
+
+
 def test_handler_derives_missing_namespace_and_passes_malformed_record(monkeypatch) -> None:
     malformed = b"BAD\n" + SOURCE
 

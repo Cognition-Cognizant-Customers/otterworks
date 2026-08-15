@@ -53,28 +53,44 @@ def parse_line(line: str) -> tuple[str, str, str, str, str, str] | None:
     return cust_id, cust_name, bill_date, amount, currency, rec_type
 
 
-def parse_body(body: str | bytes) -> tuple[bytes, int]:
-    """Return legacy-compatible PSV bytes and the number of output records."""
+def _text_body(body: str | bytes) -> str:
     if isinstance(body, bytes):
-        body = body.decode("utf-8")
+        return body.decode("latin-1")
+    return body
 
-    output: list[str] = []
-    for line in body.splitlines():
+
+def _lines(body: str) -> list[str]:
+    if not body:
+        return []
+    lines = body.split("\n")
+    if lines[-1] == "":
+        lines.pop()
+    return lines
+
+
+def parse_records(body: str | bytes) -> list[tuple[str, str, str, str, str, str]]:
+    """Parse all non-header/trailer records in input order."""
+    records = []
+    for line in _lines(_text_body(body)):
         fields = parse_line(line)
         if fields is not None:
-            output.append("|".join(fields))
-    encoded = "".join(f"{line}\n" for line in output).encode("utf-8")
-    return encoded, len(output)
+            records.append(fields)
+    return records
+
+
+def parse_body(body: str | bytes) -> tuple[bytes, int]:
+    """Return legacy-compatible PSV bytes and the number of output records."""
+    records = parse_records(body)
+    output = "".join(f"{'|'.join(fields)}\n" for fields in records)
+    return output.encode("latin-1"), len(records)
 
 
 def trailer_count(body: str | bytes) -> int | None:
     """Extract the first TRL count using the legacy columns and zero stripping."""
-    if isinstance(body, bytes):
-        body = body.decode("utf-8")
-    for line in body.splitlines():
+    for line in _lines(_text_body(body)):
         if line.startswith("TRL"):
             value = line[3:13].lstrip("0")
-            if value.isdigit() and value:
+            if value and all("0" <= char <= "9" for char in value):
                 return int(value)
             return None
     return None

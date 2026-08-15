@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
-import os
-
 import boto3
 
-from custbill import parse_body, trailer_count
+from custbill import parse_body, parse_records, trailer_count
 from pipeline import env, namespace_from_key, parsed_key
 
-s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
-try:
-    billing_table = boto3.resource(
-        "dynamodb", region_name=os.environ.get("AWS_REGION", "us-east-1")
-    ).Table(env("TABLE_NAME"))
-except RuntimeError:
-    billing_table = None
+s3 = boto3.client("s3")
+billing_table = None
+
+
+def _get_billing_table():
+    global billing_table
+    if billing_table is None:
+        billing_table = boto3.resource("dynamodb").Table(env("TABLE_NAME"))
+    return billing_table
 
 
 def handler(event: dict, context: object) -> dict[str, object]:
@@ -26,18 +26,13 @@ def handler(event: dict, context: object) -> dict[str, object]:
 
     source = s3.get_object(Bucket=bucket, Key=key)["Body"].read()
     output, records = parse_body(source)
-    output_key = parsed_key(ns, filename[:-4] + ".psv" if filename.endswith(".dat") else filename)
+    output_filename = filename[:-4] + ".psv" if filename.endswith(".dat") else filename
+    output_key = parsed_key(ns, output_filename)
     s3.put_object(Bucket=bucket, Key=output_key, Body=output)
 
-    table = billing_table
-    if table is None:
-        table = boto3.resource(
-            "dynamodb", region_name=os.environ.get("AWS_REGION", "us-east-1")
-        ).Table(env("TABLE_NAME"))
-    lines = output.decode("utf-8").splitlines()
-    with table.batch_writer() as batch:
-        for line_number, line in enumerate(lines, start=1):
-            cust_id, cust_name, bill_date, amount, currency, rec_type = line.split("|", 5)
+    with _get_billing_table().batch_writer() as batch:
+        for line_number, fields in enumerate(parse_records(source), start=1):
+            cust_id, cust_name, bill_date, amount, currency, rec_type = fields
             batch.put_item(
                 Item={
                     "ns": ns,

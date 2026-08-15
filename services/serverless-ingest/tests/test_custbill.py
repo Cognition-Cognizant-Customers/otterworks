@@ -18,6 +18,36 @@ def test_fixture_is_byte_identical_to_legacy_golden() -> None:
     assert count == 5
 
 
+def test_non_utf8_bytes_round_trip_through_name_field() -> None:
+    source = (
+        b"C000000001"
+        + b"NAME\xa0WITH" + b" " * 21
+        + b"20250102"
+        + b"000000000100"
+        + b"USD01\n"
+    )
+
+    output, count = custbill.parse_body(source)
+
+    assert output == b"C000000001|NAME\xa0WITH|2025-01-02|1.00|USD|01\n"
+    assert count == 1
+
+
+def test_vertical_tab_inside_record_does_not_split_the_record() -> None:
+    source = (
+        b"C000000001"
+        + b"NAME\x0bWITH" + b" " * 21
+        + b"20250102"
+        + b"000000000100"
+        + b"USD01\n"
+    )
+
+    output, count = custbill.parse_body(source)
+
+    assert output == b"C000000001|NAME\x0bWITH|2025-01-02|1.00|USD|01\n"
+    assert count == 1
+
+
 def _record(
     *,
     customer: str = "C000000001",
