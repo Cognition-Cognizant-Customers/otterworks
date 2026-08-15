@@ -67,7 +67,11 @@ def ddl_sql() -> str:
 def run(params: dict[str, str]) -> dict:
     """Execute the notebook pipeline; returns its result dict.
 
-    Missing probe keys are normalised to None because `TO_JSON` omits NULL fields.
+    The freshness probe's nullable columns are normalised to None because `TO_JSON`
+    omits NULL fields. Only that probe is normalised: injecting the same keys into the
+    verification probe would put empty upstream facts into the `ok` run-log row whose
+    own columns are populated — an audit trail contradicting itself. The freshness probe
+    is identified by `upstream_rows`, a COUNT that is never absent.
     """
     cfg_catalog = params.get("catalog") or pipeline.DEFAULTS["catalog"]
     runner = WarehouseRunner(cfg_catalog)
@@ -75,9 +79,10 @@ def run(params: dict[str, str]) -> dict:
 
     def row(statement: str) -> dict:
         payload = original_row(statement)
-        for key in ("upstream_summary_date", "upstream_rows", "latest_event_date",
-                    "upstream_lag_days", "report_date"):
-            payload.setdefault(key, None)
+        if "upstream_rows" in payload:
+            for key in ("upstream_summary_date", "latest_event_date",
+                        "upstream_lag_days", "report_date"):
+                payload.setdefault(key, None)
         return payload
 
     runner.row = row  # type: ignore[method-assign]

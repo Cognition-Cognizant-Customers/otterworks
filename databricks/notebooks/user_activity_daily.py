@@ -103,6 +103,12 @@ def build_config(params: dict[str, str] | None = None) -> dict[str, str]:
             raise ValueError(f"{key} must be schema.table or catalog.schema.table: {cfg[key]!r}")
         if cfg[key].count(".") == 1:
             cfg[key] = f"{cfg['catalog']}.{cfg[key]}"
+        # A three-part name would otherwise escape the catalog restriction above and read
+        # another unit's or another tenant's table under the job's identity.
+        elif cfg[key].split(".")[0] != cfg["catalog"]:
+            raise ValueError(
+                f"{key} must live in catalog {cfg['catalog']}: {cfg[key]!r}"
+            )
     if cfg["report_date"] and not DATE_RE.match(str(cfg["report_date"])):
         raise ValueError(f"report_date must be YYYY-MM-DD: {cfg['report_date']!r}")
     if cfg["source_mode"] not in ("volume", "table"):
@@ -424,8 +430,15 @@ class SparkRunner:
 
 def main(runner, params: dict[str, str], ddl_sql: str | None = None) -> dict:
     cfg = build_config(params)
+    if not cfg["report_date"]:
+        # Resolve the run's date once, as the legacy script's single `ds` did. Left as a
+        # per-statement CURRENT_DATE() a run crossing UTC midnight would clear one day's
+        # slice, publish into the next, and then judge the mixture invalid and delete it.
+        cfg = build_config({**params, "report_date": str(
+            runner.row("SELECT CAST(CURRENT_DATE() AS STRING) AS report_date")["report_date"]
+        )})
     stage = cfg["stage"]
-    print(f"[user_activity] stage={stage} ns={cfg['ns']} report_date={cfg['report_date'] or 'CURRENT_DATE'}")
+    print(f"[user_activity] stage={stage} ns={cfg['ns']} report_date={cfg['report_date']}")
 
     # The DDL is catalog-relative; the caller's catalog decides where it lands.
     runner.execute(f"USE CATALOG {cfg['catalog']}")
