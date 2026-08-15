@@ -12,6 +12,15 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STACK_DIR="$REPO_ROOT/infrastructure/terraform-tp-aws"
 export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-east-1}}"
+export AWS_REGION="$AWS_DEFAULT_REGION"
+# The provider region in the stack wins over the ambient one, so scanning must
+# follow the DEPLOYED region — otherwise teardown could be "proven" against a
+# region the stack was never in.
+if deployed_region="$(terraform -chdir="$STACK_DIR" output -raw aws_region 2>/dev/null)" && [ -n "$deployed_region" ]; then
+  # AWS_REGION outranks AWS_DEFAULT_REGION in the CLI, so both must be pinned
+  export AWS_DEFAULT_REGION="$deployed_region"
+  export AWS_REGION="$deployed_region"
+fi
 PREFIX="${TP_NAME_PREFIX:-ow-tp-}"
 
 if [ "${1:-}" != "--scan-only" ]; then
@@ -38,23 +47,32 @@ fi
 echo
 echo "=== teardown verification: name scan '$PREFIX' per service ==="
 leftovers=""
-add() {
-  if [ -n "${2:-}" ] && [ "${2:-}" != "None" ]; then
-    leftovers="$leftovers\n$1: $2"
-    echo "  $1: $2"
+# A scan that ERRORS must never read as "clean" — an unauthorized or throttled
+# call would otherwise let teardown be declared verified while resources bill on.
+scan() {
+  local label="$1"
+  shift
+  local out status
+  out="$("$@" 2>&1)" && status=0 || status=$?
+  if [ "$status" -ne 0 ]; then
+    leftovers="$leftovers\n$label: SCAN FAILED ($out)"
+    echo "  $label: SCAN FAILED"
+  elif [ -n "$out" ] && [ "$out" != "None" ]; then
+    leftovers="$leftovers\n$label: $out"
+    echo "  $label: $out"
   else
-    echo "  $1: clean"
+    echo "  $label: clean"
   fi
 }
 
-add s3           "$(aws s3api list-buckets --query "Buckets[?starts_with(Name,'$PREFIX')].Name" --output text)"
-add lambda       "$(aws lambda list-functions --query "Functions[?starts_with(FunctionName,'$PREFIX')].FunctionName" --output text)"
-add sqs          "$(aws sqs list-queues --queue-name-prefix "$PREFIX" --query 'QueueUrls[]' --output text)"
-add dynamodb     "$(aws dynamodb list-tables --query "TableNames[?starts_with(@,'$PREFIX')]" --output text)"
-add stepfunctions "$(aws stepfunctions list-state-machines --query "stateMachines[?starts_with(name,'$PREFIX')].name" --output text)"
-add eventbridge  "$(aws events list-rules --name-prefix "$PREFIX" --query 'Rules[].Name' --output text)"
-add iam-roles    "$(aws iam list-roles --query "Roles[?starts_with(RoleName,'$PREFIX')].RoleName" --output text)"
-add log-groups   "$(aws logs describe-log-groups --query "logGroups[?contains(logGroupName,'$PREFIX')].logGroupName" --output text)"
+scan s3 aws s3api list-buckets --query "Buckets[?starts_with(Name,'$PREFIX')].Name" --output text
+scan lambda aws lambda list-functions --query "Functions[?starts_with(FunctionName,'$PREFIX')].FunctionName" --output text
+scan sqs aws sqs list-queues --queue-name-prefix "$PREFIX" --query 'QueueUrls[]' --output text
+scan dynamodb aws dynamodb list-tables --query "TableNames[?starts_with(@,'$PREFIX')]" --output text
+scan stepfunctions aws stepfunctions list-state-machines --query "stateMachines[?starts_with(name,'$PREFIX')].name" --output text
+scan eventbridge aws events list-rules --name-prefix "$PREFIX" --query 'Rules[].Name' --output text
+scan iam-roles aws iam list-roles --query "Roles[?starts_with(RoleName,'$PREFIX')].RoleName" --output text
+scan log-groups aws logs describe-log-groups --query "logGroups[?contains(logGroupName,'$PREFIX')].logGroupName" --output text
 
 echo
 if [ -n "$tagged" ] || [ -n "$leftovers" ]; then

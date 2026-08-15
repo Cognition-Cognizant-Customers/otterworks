@@ -12,15 +12,25 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STACK_DIR="$REPO_ROOT/infrastructure/terraform-tp-aws"
 NS="${1:-${NS:-demo}}"
 export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-east-1}}"
+export AWS_REGION="$AWS_DEFAULT_REGION"
+# the deployed region (provider region beats the ambient one) is authoritative
+if deployed_region="$(terraform -chdir="$STACK_DIR" output -raw aws_region 2>/dev/null)" && [ -n "$deployed_region" ]; then
+  # AWS_REGION outranks AWS_DEFAULT_REGION in the CLI, so both must be pinned
+  export AWS_DEFAULT_REGION="$deployed_region"
+  export AWS_REGION="$deployed_region"
+fi
 
 BUCKET="$(terraform -chdir="$STACK_DIR" output -raw ingest_bucket)"
 LEGACY_ROOT="${OTTERWORKS_LEGACY_ROOT:-/tmp/otterworks-legacy}"
 
 shopt -s nullglob
-files=("$LEGACY_ROOT"/sftp-drop/upload/CUSTBILL_*.dat)
+# gen_sample_data.pl names files CUSTBILL_<UPPER_NS>_<nnn>.dat and never clears
+# other namespaces' files, so filter by namespace or a stale feed leaks into this one.
+NS_UPPER="$(printf '%s' "$NS" | tr '[:lower:]' '[:upper:]')"
+files=("$LEGACY_ROOT"/sftp-drop/upload/CUSTBILL_"${NS_UPPER}"_*.dat)
 if [ ${#files[@]} -eq 0 ]; then
   # the legacy ingest job moves files out of the drop dir and renames them
-  files=("$LEGACY_ROOT"/incoming/CUSTBILL_*.dat "$LEGACY_ROOT"/incoming/CUSTBILL_*.dat.done)
+  files=("$LEGACY_ROOT"/incoming/CUSTBILL_"${NS_UPPER}"_*.dat "$LEGACY_ROOT"/incoming/CUSTBILL_"${NS_UPPER}"_*.dat.done)
 fi
 if [ ${#files[@]} -eq 0 ]; then
   echo "no CUSTBILL input found under $LEGACY_ROOT — run: make legacy-etl-gen-data NS=$NS" >&2

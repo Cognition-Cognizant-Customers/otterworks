@@ -34,7 +34,10 @@ Per-component contracts: `docs/tech-partnerships/contracts/aws-serverless-*.md`.
 ## Usage
 
 ```bash
-export AWS_DEFAULT_REGION=us-east-1
+# the stack's region comes from var.aws_region (default us-east-1); set it with
+# TF_VAR_aws_region, not AWS_DEFAULT_REGION — the helper scripts read the
+# deployed region back out of the stack outputs.
+export TF_VAR_aws_region=us-east-1
 make aws-tp-apply                 # terraform init + apply
 make legacy-etl-gen-data NS=demo  # deterministic CUSTBILL input
 make aws-tp-run NS=demo           # upload the sample files to landing/<ns>/
