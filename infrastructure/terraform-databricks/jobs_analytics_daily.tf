@@ -74,7 +74,7 @@ resource "databricks_job" "analytics_daily" {
 
     # Transient source failures are retried here and inside the notebook; what is never
     # retried into silence is an empty extract -- that fails the run.
-    max_retries              = 2
+    max_retries               = 2
     min_retry_interval_millis = 60000
     retry_on_timeout          = true
   }
