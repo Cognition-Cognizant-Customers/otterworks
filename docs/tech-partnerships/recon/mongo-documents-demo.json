@@ -38,6 +38,7 @@
         "snapshotId": "e61553f8-e4ea-4caf-b7d7-863fa9547358"
       }
     ],
+    "records_without_migration_ns": 0,
     "snapshots_migrated": 384,
     "snapshots_not_referenced": 0,
     "snapshots_orphaned": 6,
@@ -177,8 +178,8 @@
       "status": "PASS"
     },
     {
-      "check": "every document carries _migration",
-      "detail": "0 documents missing/invalid",
+      "check": "every record carries valid _migration",
+      "detail": "0 documents with wrong sourceTable/migratedAt, 0 records in the owned collections with no _migration.ns",
       "status": "PASS"
     },
     {
@@ -193,5 +194,5 @@
     }
   ],
   "namespace": "demo",
-  "reconciled_at": "2026-08-15T23:04:50Z"
+  "reconciled_at": "2026-08-15T23:09:06Z"
 }
