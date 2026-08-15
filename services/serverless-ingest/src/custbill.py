@@ -68,6 +68,17 @@ def _lines(body: str) -> list[str]:
     return lines
 
 
+def _raw_fields(line: str) -> tuple[str, str, str, str, str, str]:
+    return (
+        line[0:10],
+        line[10:40],
+        line[40:48],
+        line[48:60],
+        line[60:63],
+        line[63:65],
+    )
+
+
 def parse_records(body: str | bytes) -> list[tuple[str, str, str, str, str, str]]:
     """Parse all non-header/trailer records in input order."""
     records = []
@@ -78,18 +89,40 @@ def parse_records(body: str | bytes) -> list[tuple[str, str, str, str, str, str]
     return records
 
 
+def _legacy_output_line(line: str) -> str | None:
+    if line.startswith(("HDR", "TRL")):
+        return None
+
+    fields = "|".join(_raw_fields(line)).split("|")
+    for index in (0, 1, 4):
+        fields[index] = fields[index].rstrip(" ")
+    fields[2] = (
+        fields[2][0:4]
+        + "-"
+        + fields[2][4:6]
+        + "-"
+        + fields[2][6:8]
+    )
+    fields[3] = f"{_awk_number(fields[3]) / 100:.2f}"
+    return "|".join(fields)
+
+
 def parse_body(body: str | bytes) -> tuple[bytes, int]:
     """Return legacy-compatible PSV bytes and the number of output records."""
-    records = parse_records(body)
-    output = "".join(f"{'|'.join(fields)}\n" for fields in records)
-    return output.encode("latin-1"), len(records)
+    output_lines = []
+    for line in _lines(_text_body(body)):
+        output_line = _legacy_output_line(line)
+        if output_line is not None:
+            output_lines.append(output_line)
+    output = "".join(f"{line}\n" for line in output_lines)
+    return output.encode("latin-1"), len(output_lines)
 
 
 def trailer_count(body: str | bytes) -> int | None:
     """Extract the first TRL count using the legacy columns and zero stripping."""
     for line in _lines(_text_body(body)):
         if line.startswith("TRL"):
-            value = line[3:13].lstrip("0")
+            value = line[3:13].rstrip(" ")
             if value and all("0" <= char <= "9" for char in value):
                 return int(value)
             return None

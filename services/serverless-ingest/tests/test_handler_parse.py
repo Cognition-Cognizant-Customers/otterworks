@@ -106,14 +106,33 @@ def test_handler_reports_trailer_mismatch_without_changing_bytes(monkeypatch) ->
 
 
 def test_handler_builds_items_from_fixed_width_fields_with_embedded_pipe(monkeypatch) -> None:
-    source = bytearray(SOURCE)
-    name_start = source.index(b"INITECH SA")
-    source[name_start : name_start + 10] = b"NAME|PIPE "
-    source = bytes(source)
+    source = (
+        b"C000000001"
+        + b"NAME|PIPE" + b" " * 21
+        + b"20250102"
+        + b"000000000100"
+        + b"USD01\n"
+        + b"TRL0000000001" + b" " * 52 + b"\n"
+    )
 
-    _, _, table = invoke(monkeypatch, source)
+    _, s3, table = invoke(monkeypatch, source)
 
     assert table.items[0]["cust_name"] == "NAME|PIPE"
+    assert s3.puts[0][2] == (
+        b"C000000001|NAME|PIPE-  -  |202501.02|000000000100|USD|01\n"
+    )
+
+
+def test_handler_accepts_zero_record_trailer(monkeypatch) -> None:
+    source = b"TRL0000000000" + b" " * 52 + b"\n"
+
+    result, s3, table = invoke(monkeypatch, source)
+
+    assert result["records"] == 0
+    assert result["trailer_count"] == 0
+    assert result["trailer_match"] is True
+    assert s3.puts[0][2] == b""
+    assert table.items == []
 
 
 def test_handler_derives_missing_namespace_and_passes_malformed_record(monkeypatch) -> None:

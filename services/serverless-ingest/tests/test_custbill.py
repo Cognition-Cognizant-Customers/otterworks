@@ -33,6 +33,23 @@ def test_non_utf8_bytes_round_trip_through_name_field() -> None:
     assert count == 1
 
 
+def test_embedded_pipe_reproduces_legacy_awk_field_shifting() -> None:
+    source = (
+        b"C000000001"
+        + b"NAME|PIPE" + b" " * 21
+        + b"20250102"
+        + b"000000000100"
+        + b"USD01\n"
+    )
+
+    output, count = custbill.parse_body(source)
+
+    assert output == (
+        b"C000000001|NAME|PIPE-  -  |202501.02|000000000100|USD|01\n"
+    )
+    assert count == 1
+
+
 def test_vertical_tab_inside_record_does_not_split_the_record() -> None:
     source = (
         b"C000000001"
@@ -102,6 +119,6 @@ def test_headers_and_trailers_are_dropped_and_empty_body_is_empty() -> None:
 
 def test_trailer_count_matches_legacy_extraction() -> None:
     assert custbill.trailer_count("TRL0000000005" + " " * 52) == 5
-    assert custbill.trailer_count("TRL0000000000" + " " * 52) is None
+    assert custbill.trailer_count("TRL0000000000" + " " * 52) == 0
     assert custbill.trailer_count("TRLnotnumeric" + " " * 52) is None
     assert custbill.trailer_count("CUST anything\n") is None
