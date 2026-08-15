@@ -363,12 +363,6 @@ def check_5(ns: str, report_date: str) -> Check:
             result = dbx.sql(statement)
         except Exception as error:  # noqa: BLE001 - reported, never swallowed
             check.block(statement, str(error), "a reachable serverless warehouse")
-            if index:
-                check.note(
-                    "WARNING: the delivery re-run deleted this run's audit row and did not "
-                    f"reinsert it; re-run the job for ns={ns} report_date={report_date} "
-                    f"to repair {CATALOG}.gold.finance_report_delivery"
-                )
             return check
         check.note(f"`{' '.join(statement.split())[:60]}...` -> {result}")
 

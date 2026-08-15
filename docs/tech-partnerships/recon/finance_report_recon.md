@@ -70,9 +70,8 @@
 - `INSERT INTO ow_tp.gold.finance_billing_summary (ns, currency...` -> [['6', '6']]
 - ok: still 6 gold rows after the re-run (got 6)
 - ok: counts and totals unchanged by the summary re-run
-- re-executing the job's 2 delivery statements using the values already stored in the audit row
-- `DELETE FROM ow_tp.gold.finance_report_delivery WHERE ns = 'd...` -> [['1']]
-- `INSERT INTO ow_tp.gold.finance_report_delivery (ns, report_d...` -> [['1', '1']]
+- re-executing the job's 1 delivery statements using the values already stored in the audit row
+- `MERGE INTO ow_tp.gold.finance_report_delivery AS target USIN...` -> [['1', '1', '0', '0']]
 - ok: still exactly one delivery row after replay (got 1)
 - ok: delivery replay preserves the audit values
 - ok: delivery replay preserves delivered_at (None)
