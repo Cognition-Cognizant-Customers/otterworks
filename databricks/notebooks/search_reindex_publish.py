@@ -27,6 +27,7 @@ BRONZE_TABLE = f"{CATALOG}.bronze.search_documents_raw"
 STAGING_TABLE = f"{CATALOG}.silver.search_index_documents_staging"
 SERVING_TABLE = f"{CATALOG}.silver.search_index_documents"
 SUMMARY_TABLE = f"{CATALOG}.gold.search_reindex_summary"
+ENTITY_TYPES = ("document", "file")
 
 INDEX_COLUMNS = [
     "ns", "entity_type", "entity_id", "title", "content", "name", "mime_type",
@@ -60,13 +61,19 @@ def write_summary(source_counts, indexed_counts, swap_completed):
     """Record one gold row per entity type. Rewritten per (ns, run_date), so reruns don't stack."""
     entities = sorted(set(source_counts) | set(indexed_counts))
     if not entities:
+        values = ", ".join(
+            f"('{ns}', DATE '{run_date}', '{entity}', 0, 0, false, false)"
+            for entity in ENTITY_TYPES
+        )
         spark.sql(
             f"""
-            DELETE FROM {SUMMARY_TABLE}
-            WHERE ns = '{ns}' AND run_date = DATE '{run_date}'
+            INSERT INTO {SUMMARY_TABLE}
+            REPLACE WHERE ns = '{ns}' AND run_date = DATE '{run_date}'
+            VALUES {values}
             """
         )
-        log("summary_cleared", table=SUMMARY_TABLE, swap_completed=swap_completed)
+        log("summary_written", table=SUMMARY_TABLE, source=source_counts, indexed=indexed_counts,
+            swap_completed=False)
         return
     values = ", ".join(
         "('{ns}', DATE '{run_date}', '{entity}', {source}, {indexed}, {match}, {swap})".format(

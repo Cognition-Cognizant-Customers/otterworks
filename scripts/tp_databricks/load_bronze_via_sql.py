@@ -35,7 +35,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dbx  # noqa: E402
 
 BRONZE_TABLE = f"{dbx.CATALOG}.bronze.search_documents_raw"
+SCRATCH_TABLE = f"{dbx.CATALOG}.bronze.search_documents_raw_load_scratch"
 FILES = ("documents.ndjson", "files.ndjson")
+ENTITY_TYPES = {"document", "file"}
+NS_PATTERN = re.compile(r"[a-z0-9_]+")
 
 
 def normalize_timestamp(value: str) -> str:
@@ -44,14 +47,20 @@ def normalize_timestamp(value: str) -> str:
 
 
 def row_literal(envelope: dict) -> str:
+    ns = envelope["ns"]
+    entity_type = envelope["entity_type"]
+    if not NS_PATTERN.fullmatch(ns):
+        raise ValueError(f"envelope ns must match [a-z0-9_]+, got {ns!r}")
+    if entity_type not in ENTITY_TYPES:
+        raise ValueError(f"unsupported envelope entity_type {entity_type!r}")
     payload_b64 = base64.b64encode(envelope["payload"].encode()).decode()
-    entity_id = envelope["entity_id"].replace("\\", "\\\\").replace("'", "\\'")
+    escape = lambda value: str(value).replace("\\", "\\\\").replace("'", "\\'")
     return (
         "('{ns}', '{entity_type}', '{entity_id}', CAST(unbase64('{payload}') AS STRING), "
         "TIMESTAMP '{extracted_at}')".format(
-            ns=envelope["ns"],
-            entity_type=envelope["entity_type"],
-            entity_id=entity_id,
+            ns=escape(ns),
+            entity_type=escape(entity_type),
+            entity_id=escape(envelope["entity_id"]),
             payload=payload_b64,
             extracted_at=normalize_timestamp(envelope["extracted_at"]),
         )
@@ -83,30 +92,61 @@ def main(argv: list[str] | None = None) -> int:
                 envelopes.append(envelope)
 
     expected = {entity: int(count) for entity, count in manifest["counts"].items()}
+    unexpected = set(expected) - ENTITY_TYPES
+    if unexpected:
+        raise SystemExit(f"manifest contains unsupported entity types: {sorted(unexpected)}")
     landed = {}
     for envelope in envelopes:
+        if envelope["entity_type"] not in ENTITY_TYPES:
+            raise SystemExit(f"unsupported envelope entity_type {envelope['entity_type']!r}")
         landed[envelope["entity_type"]] = landed.get(envelope["entity_type"], 0) + 1
     if landed != expected:
         raise SystemExit(f"extract files {landed} do not match the manifest {expected}")
 
-    # Idempotent per namespace, same guarantee as the notebook's replaceWhere.
-    dbx.sql(f"DELETE FROM {BRONZE_TABLE} WHERE ns = '{args.ns}'")
-    for start in range(0, len(envelopes), args.batch_size):
-        batch = envelopes[start:start + args.batch_size]
-        values = ",\n".join(row_literal(envelope) for envelope in batch)
-        dbx.sql(f"INSERT INTO {BRONZE_TABLE} VALUES\n{values}")
-        print(f"inserted {start + len(batch)}/{len(envelopes)} rows", flush=True)
-
-    rows = dbx.sql(
-        f"SELECT entity_type, COUNT(*), COUNT(DISTINCT entity_id) FROM {BRONZE_TABLE} "
-        f"WHERE ns = '{args.ns}' GROUP BY entity_type ORDER BY entity_type"
+    dbx.sql(
+        f"CREATE OR REPLACE TABLE {SCRATCH_TABLE} USING DELTA AS "
+        f"SELECT * FROM {BRONZE_TABLE} WHERE 1 = 0"
     )
-    loaded = {row[0]: {"rows": int(row[1]), "distinct_entity_ids": int(row[2])} for row in rows}
-    print(json.dumps({"ns": args.ns, "manifest": expected, "bronze": loaded}, indent=2))
-    if {entity: counts["rows"] for entity, counts in loaded.items()} != expected:
-        print("bronze counts do not match the extract manifest", file=sys.stderr)
-        return 1
-    return 0
+    try:
+        for start in range(0, len(envelopes), args.batch_size):
+            batch = envelopes[start:start + args.batch_size]
+            values = ",\n".join(row_literal(envelope) for envelope in batch)
+            dbx.sql(f"INSERT INTO {SCRATCH_TABLE} VALUES\n{values}")
+            print(f"inserted {start + len(batch)}/{len(envelopes)} rows", flush=True)
+
+        rows = dbx.sql(
+            f"SELECT entity_type, COUNT(*), COUNT(DISTINCT entity_id) FROM {SCRATCH_TABLE} "
+            f"WHERE ns = '{args.ns}' GROUP BY entity_type ORDER BY entity_type"
+        )
+        loaded = {row[0]: {"rows": int(row[1]), "distinct_entity_ids": int(row[2])} for row in rows}
+        if (
+            {entity: counts["rows"] for entity, counts in loaded.items()} != expected
+            or any(counts["rows"] != counts["distinct_entity_ids"] for counts in loaded.values())
+        ):
+            raise RuntimeError(f"scratch bronze counts do not match the extract manifest: {loaded}")
+
+        dbx.sql(
+            f"""
+            INSERT INTO {BRONZE_TABLE}
+            REPLACE WHERE ns = '{args.ns}'
+            SELECT * FROM {SCRATCH_TABLE} WHERE ns = '{args.ns}'
+            """
+        )
+        rows = dbx.sql(
+            f"SELECT entity_type, COUNT(*), COUNT(DISTINCT entity_id) FROM {BRONZE_TABLE} "
+            f"WHERE ns = '{args.ns}' GROUP BY entity_type ORDER BY entity_type"
+        )
+        bronze = {row[0]: {"rows": int(row[1]), "distinct_entity_ids": int(row[2])} for row in rows}
+        print(json.dumps({"ns": args.ns, "manifest": expected, "bronze": bronze}, indent=2))
+        if (
+            {entity: counts["rows"] for entity, counts in bronze.items()} != expected
+            or any(counts["rows"] != counts["distinct_entity_ids"] for counts in bronze.values())
+        ):
+            print("bronze counts do not match the extract manifest", file=sys.stderr)
+            return 1
+        return 0
+    finally:
+        dbx.sql(f"DROP TABLE IF EXISTS {SCRATCH_TABLE}")
 
 
 if __name__ == "__main__":
