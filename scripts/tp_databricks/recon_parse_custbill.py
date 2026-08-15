@@ -138,10 +138,11 @@ def read_golden(golden_dir: Path) -> dict[tuple[str, int], dict[str, object]]:
 
 def read_converted(ns: str) -> dict[tuple[str, int], dict[str, object]]:
     """Read the converted rows out of silver, keyed the same way as the golden."""
+    ns_literal = custbill_parse_sql._quote(ns)
     statement = f"""
         SELECT file_name, line_no, account_id, customer_name, bill_date, amount, currency, record_type
         FROM {custbill_sql.SILVER_RECORDS}
-        WHERE ns = '{ns}'
+        WHERE ns = {ns_literal}
         ORDER BY file_name, line_no
     """
     rows: dict[tuple[str, int], dict[str, object]] = {}
@@ -226,11 +227,12 @@ def check_subtotals(golden, converted) -> Check:
 
 def check_file_recon(ns: str) -> Check:
     check = Check("3", "Trailer reconciliation: declared_trailer_count = parsed + rejected, recon_ok")
+    ns_literal = custbill_parse_sql._quote(ns)
     rows = dbx.sql(
         f"""
         SELECT file_name, declared_trailer_count, parsed_count, rejected_count, recon_ok
         FROM {custbill_sql.SILVER_FILE_RECON}
-        WHERE ns = '{ns}'
+        WHERE ns = {ns_literal}
         ORDER BY file_name
         """
     )
@@ -253,21 +255,23 @@ def check_file_recon(ns: str) -> Check:
 
 def check_quarantine(ns: str, golden) -> Check:
     check = Check("4", "Quarantine justified: nothing the legacy output contains is rejected")
-    rows = dbx.sql(
-        f"""
-        SELECT file_name, line_no, reject_reason, raw_line
-        FROM {custbill_sql.SILVER_REJECTS}
-        WHERE ns = '{ns}'
-        ORDER BY file_name, line_no
-        """
-    )
     exists = dbx.sql(
         f"SHOW TABLES IN {custbill_sql.CATALOG}.silver LIKE 'custbill_rejects'"
     )
     if not exists:
         check.fail("silver.custbill_rejects does not exist; the quarantine must be visible even when empty")
-    else:
-        check.note("silver.custbill_rejects exists (present even when empty)")
+        return check
+
+    ns_literal = custbill_parse_sql._quote(ns)
+    rows = dbx.sql(
+        f"""
+        SELECT file_name, line_no, reject_reason, raw_line
+        FROM {custbill_sql.SILVER_REJECTS}
+        WHERE ns = {ns_literal}
+        ORDER BY file_name, line_no
+        """
+    )
+    check.note("silver.custbill_rejects exists (present even when empty)")
     check.note(f"quarantined rows for ns={ns}: {len(rows)}")
     for file_name, line_no, reason, raw_line in rows:
         stem = file_name[: -len(".dat")] if file_name.endswith(".dat") else file_name
@@ -284,6 +288,13 @@ def check_quarantine(ns: str, golden) -> Check:
 
 def check_idempotency(ns: str, converted) -> Check:
     check = Check("5", "Idempotency: re-running the job leaves counts and totals unchanged")
+    for name, statement in custbill_parse_sql.gate_statements(ns):
+        offending = dbx.sql(statement)
+        if offending:
+            preview = "; ".join(" | ".join(map(str, row)) for row in offending[:5])
+            check.fail(f"bronze gate '{name}' returned {len(offending)} offending rows: {preview}")
+            return check
+
     before_rows = len(converted)
     before_total = sum(row["amount"] for row in converted.values())
     check.note(f"before re-run: {before_rows} rows, total {before_total}")
@@ -358,6 +369,7 @@ def main() -> int:
     )
     parser.add_argument("--skip-idempotency", action="store_true")
     args = parser.parse_args()
+    args.ns = custbill_parse_sql.validate_namespace(args.ns)
 
     golden_dir = Path(args.golden)
     checks = [check_baseline(golden_dir)]
