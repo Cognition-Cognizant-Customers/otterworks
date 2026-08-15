@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 
 DEFAULTS = {
     "ns": "demo",
@@ -64,6 +65,10 @@ class UpstreamNotFresh(RuntimeError):
     """Raised when the upstream analytics aggregate cannot be trusted for this run."""
 
 
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+TABLE_RE = re.compile(r"^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+){1,2}$")
+
+
 def build_config(params: dict[str, str] | None = None) -> dict[str, str]:
     cfg = dict(DEFAULTS)
     cfg.update({k: v for k, v in (params or {}).items() if v is not None})
@@ -76,9 +81,15 @@ def build_config(params: dict[str, str] | None = None) -> dict[str, str]:
     cfg["max_upstream_lag_days"] = str(int(cfg["max_upstream_lag_days"]))
     if not cfg["landing_root"]:
         cfg["landing_root"] = f"/Volumes/{cfg['catalog']}/bronze/landing"
+    # Every parameter below is interpolated into SQL, so each is constrained to a shape
+    # that cannot carry a quote or a second statement out of a job/widget parameter.
     for key in ("upstream_summary_table", "landed_events_table"):
+        if not TABLE_RE.match(str(cfg[key])):
+            raise ValueError(f"{key} must be schema.table or catalog.schema.table: {cfg[key]!r}")
         if cfg[key].count(".") == 1:
             cfg[key] = f"{cfg['catalog']}.{cfg[key]}"
+    if cfg["report_date"] and not DATE_RE.match(str(cfg["report_date"])):
+        raise ValueError(f"report_date must be YYYY-MM-DD: {cfg['report_date']!r}")
     if cfg["source_mode"] not in ("volume", "table"):
         raise ValueError(f"source_mode must be volume or table: {cfg['source_mode']!r}")
     cfg["unit_root"] = f"{cfg['landing_root']}/{ns}/user_activity"
