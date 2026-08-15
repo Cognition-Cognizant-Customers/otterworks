@@ -37,8 +37,6 @@ DDL_FILE = (
     / "sftp_ingest_bronze_tables.sql"
 )
 
-DEFAULT_LANDING_ROOT = "/Volumes/ow_tp/bronze/landing"
-
 
 def default_landing_root(catalog: str) -> str:
     """The landing volume of `catalog`, so the read side follows the write side.
@@ -60,6 +58,13 @@ _CATALOG_RE = re.compile(r"^ow_tp[a-z0-9_]*\Z")
 _ROOT_RE = re.compile(r"^/Volumes/ow_tp[a-z0-9_]*(/[A-Za-z0-9_-]+)+\Z")
 
 
+def _validated_catalog(catalog: str) -> str:
+    """Gate a catalog on its own, for statements that touch no landing path."""
+    if not _CATALOG_RE.match(catalog):
+        raise ValueError(f"catalog {catalog!r} must match {_CATALOG_RE.pattern} (shared workspace)")
+    return catalog
+
+
 def _validated(ns: str, catalog: str, landing_root: str) -> tuple[str, str, str]:
     """Reject anything that could not be a namespace / catalog / volume path.
 
@@ -69,8 +74,7 @@ def _validated(ns: str, catalog: str, landing_root: str) -> tuple[str, str, str]
     """
     if not _NS_RE.match(ns):
         raise ValueError(f"ns {ns!r} must match {_NS_RE.pattern}")
-    if not _CATALOG_RE.match(catalog):
-        raise ValueError(f"catalog {catalog!r} must match {_CATALOG_RE.pattern} (shared workspace)")
+    _validated_catalog(catalog)
     if not _ROOT_RE.match(landing_root.rstrip("/")):
         raise ValueError(
             f"landing_root {landing_root!r} must be an ow_tp volume path matching {_ROOT_RE.pattern}"
@@ -107,6 +111,11 @@ WITH raw AS (
     -- record is not mistaken for a 53rd empty one. Not a regex: Java's `$` also
     -- matches before a final terminator, so '\\n$' would eat a blank last record.
     CASE WHEN endswith(value, '\\n') THEN left(value, length(value) - 1) ELSE value END AS body
+  -- An existing-but-empty drop directory is a clean no-op. A directory that does not
+  -- exist fails the run (CF_PATH_DOES_NOT_EXIST_FOR_READ_FILES), deliberately: an
+  -- absent drop path means the namespace was never provisioned or the transport is
+  -- writing somewhere else, and reporting that as "no files today" is exactly the
+  -- `2>/dev/null || true` habit this conversion is retiring.
   FROM read_files('{landing_root}/{ns}/custbill/', format => 'text', wholeText => true)
 ),
 lines AS (
@@ -210,7 +219,7 @@ VALUES (s.ns, s.file_name, s.size_bytes, s.sha256, s.record_count, s.ingested_at
 
 def ddl_statements(catalog: str) -> list[str]:
     """The bronze DDL, read from the same .sql file the job's SQL task runs."""
-    _, catalog, _ = _validated("demo", catalog, DEFAULT_LANDING_ROOT)
+    catalog = _validated_catalog(catalog)
     text = DDL_FILE.read_text()
     text = text.replace(":catalog || '.", f"'{catalog}.")  # bind :catalog for direct execution
     return [s.strip() for s in text.split(";") if s.strip() and not _only_comments(s)]
