@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke dbx-init dbx-apply dbx-destroy dbx-inventory dbx-verify-teardown dbx-upload dbx-deploy-notebooks dbx-run dbx-recon aws-tp-plan aws-tp-apply aws-tp-run aws-tp-verify aws-tp-destroy aws-tp-scan mongo-tp-customers-setup
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke dbx-init dbx-apply dbx-destroy dbx-inventory dbx-verify-teardown dbx-upload dbx-deploy-notebooks dbx-run dbx-recon aws-tp-plan aws-tp-apply aws-tp-run aws-tp-verify aws-tp-destroy aws-tp-scan mongo-tp-customers-setup mongo-tp-customers-test mongo-tp-customers-migrate
 
 SHELL := /bin/bash
 
@@ -541,5 +541,15 @@ aws-tp-scan: ## Teardown verification only: scan for leftover ow-tp- / tagged re
 MONGO_CUSTOMERS_DIR := migrations/mongodb/customers
 MONGO_CUSTOMERS_UV = uv run --no-project --with pymongo==4.10.1
 
+MONGO_CUSTOMERS_MIGRATE_UV = $(MONGO_CUSTOMERS_UV) --with oracledb==2.5.1
+
 mongo-tp-customers-setup: ## Create/verify the customers collections + indexes in Atlas (idempotent; DRY_RUN=1 to plan)
 	$(MONGO_CUSTOMERS_UV) $(MONGO_CUSTOMERS_DIR)/setup_collections.py $(if $(DRY_RUN),--dry-run,)
+
+mongo-tp-customers-test: ## Unit-test the customers transformer (no Oracle/Atlas needed)
+	cd $(MONGO_CUSTOMERS_DIR) && uv run --no-project --with pytest==8.3.3 python -m pytest -q
+
+mongo-tp-customers-migrate: ## Migrate CUSTOMER_MASTER + EAV into Atlas (idempotent; LIMIT=n, DRY_RUN=1)
+	$(if $(NS),$(call validate_ns),)
+	DB_PORT=$(ORACLE_BILLING_DB_PORT) $(MONGO_CUSTOMERS_MIGRATE_UV) $(MONGO_CUSTOMERS_DIR)/migrate.py \
+		$(if $(NS),--ns $(NS),) $(if $(LIMIT),--limit $(LIMIT),) $(if $(DRY_RUN),--dry-run,)

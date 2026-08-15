@@ -35,3 +35,30 @@ make mongo-tp-customers-test
 
 `MONGODB_ATLAS_URI` must be exported (never committed, never printed), and the
 VM's public IP must be in the Atlas project access list.
+
+## Pipeline
+
+| Module | Role |
+|---|---|
+| `extract.py` | batched Oracle reads: `fetchmany` over the batch's `CUSTOMER_MASTER` rows in `_id` order, one bound `IN (...)` EAV lookup per chunk |
+| `transform.py` | pure row → document mapping, no I/O; unit-tested in `test_transform.py` |
+| `load.py` | unordered `ReplaceOne(upsert=True)` batches keyed on deterministic `_id`s |
+| `migrate.py` | driver + per-run counters (`LIMIT=n`, `DRY_RUN=1`) |
+
+## Modeling notes
+
+- Sparse columns are omitted, never stored as `null`; empty repeating-group
+  slots produce no array entry.
+- Anomalies are preserved, never repaired: an unparseable value is kept raw
+  under `_quarantine.<COLUMN>` (parsed field omitted) and gets a
+  `customers_quarantine` ledger document. The customer is still migrated, so
+  document counts and the checksum stay equal to the source.
+- `attributes` is keyed by `ATTR_NAME`, so EAV rows sharing a name for one
+  customer compete for a single slot. The winner is deterministic — greatest
+  `CREATED_DT`, ties broken by the lexicographically greatest `ATTR_VALUE` —
+  and the losing rows are preserved under `legacy.attributeConflicts`, so
+  folded keys + conflict entries account for every source row.
+- Idempotency: every `_id` is derived from the source (`CUST_ID`, or
+  `"<CUST_ID>:<COLUMN>"` for a ledger entry), so a second run upserts over the
+  first and recon reports the same numbers. Only `_migration.migratedAt`
+  changes between runs.
