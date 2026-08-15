@@ -41,10 +41,21 @@ echo "=== teardown verification: tag scan Project=otterworks-tp ==="
 # The tagging index is eventually consistent and keeps returning just-deleted
 # ARNs for a few minutes, so every hit is confirmed against its owning service
 # API before it counts, and the scan is retried while only unconfirmed hits remain.
+# Only an explicit not-found clears an ARN: a probe that fails for any other
+# reason (denied, throttled, expired credentials) must read as present, never as
+# "clean", exactly like the name scan below.
 still_exists() {
+  local err
   case "$1" in
   arn:aws:lambda:*:event-source-mapping:*)
-    aws lambda get-event-source-mapping --uuid "${1##*:}" >/dev/null 2>&1
+    err="$(aws lambda get-event-source-mapping --uuid "${1##*:}" 2>&1 >/dev/null)" && return 0
+    case "$err" in
+    *ResourceNotFoundException*) return 1 ;;
+    *)
+      echo "  probe of $1 failed, treating it as present: $err" >&2
+      return 0
+      ;;
+    esac
     ;;
   *) return 0 ;; # anything we cannot probe is treated as present
   esac
