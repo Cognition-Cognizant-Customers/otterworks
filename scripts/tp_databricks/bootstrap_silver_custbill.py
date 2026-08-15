@@ -290,7 +290,7 @@ def main() -> int:
         f"""
         SELECT file_name, declared_trailer_count, parsed_count, rejected_count, recon_ok
         FROM {CATALOG}.silver.custbill_file_recon
-        WHERE ns = '{ns}' ORDER BY file_name
+        WHERE ns = {sql_literal(ns)} ORDER BY file_name
         """
     )
     for row in recon:
@@ -301,7 +301,7 @@ def main() -> int:
         return 1
 
     total = dbx.sql_scalar(
-        f"SELECT count(*) FROM {CATALOG}.silver.custbill_records WHERE ns = '{ns}'"
+        f"SELECT count(*) FROM {CATALOG}.silver.custbill_records WHERE ns = {sql_literal(ns)}"
     )
     print(f"silver.custbill_records rows for ns={ns}: {total}")
     return 0
