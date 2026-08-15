@@ -23,6 +23,8 @@ from __future__ import annotations
 import base64
 import json
 import os
+import posixpath
+import re
 import sys
 import time
 import urllib.error
@@ -30,7 +32,6 @@ import urllib.parse
 import urllib.request
 
 PREFIX = "ow_tp"
-CATALOG = os.environ.get("OW_TP_CATALOG", PREFIX)
 WAREHOUSE_NAME = os.environ.get("OW_TP_WAREHOUSE", "Serverless Starter Warehouse")
 PIPELINE_ROOT = f"/Shared/{PREFIX}"
 
@@ -40,6 +41,16 @@ class DatabricksError(RuntimeError):
         super().__init__(message)
         self.status = status
         self.error_code = error_code
+
+
+def _catalog() -> str:
+    catalog = os.environ.get("OW_TP_CATALOG", PREFIX)
+    if not re.fullmatch(r"ow_tp[a-z0-9_]*", catalog):
+        raise DatabricksError(f"refusing to use non-ow_tp-prefixed catalog {catalog!r}")
+    return catalog
+
+
+CATALOG = _catalog()
 
 
 def _host() -> str:
@@ -90,7 +101,29 @@ def warehouse_id() -> str:
     raise DatabricksError(f"serverless SQL warehouse {WAREHOUSE_NAME!r} not found (never create one)")
 
 
-def sql(statement: str, catalog: str | None = None, schema: str | None = None) -> list[list[str]]:
+def _statement_rows(result: dict) -> list[list[str]]:
+    """Collect all result chunks returned by Statement Execution."""
+    statement_result = result.get("result") or {}
+    rows = list(statement_result.get("data_array") or [])
+    manifest = result.get("manifest") or {}
+    total_chunks = manifest.get("total_chunk_count")
+    next_link = statement_result.get("next_chunk_internal_link")
+    while next_link:
+        chunk = request("GET", next_link)
+        chunk_result = chunk.get("result") or chunk
+        rows.extend(chunk_result.get("data_array") or [])
+        next_link = chunk_result.get("next_chunk_internal_link")
+    if total_chunks is not None and total_chunks > 1 and not statement_result.get("next_chunk_internal_link"):
+        raise DatabricksError("statement result is chunked but did not provide a next chunk link")
+    return rows
+
+
+def sql(
+    statement: str,
+    catalog: str | None = None,
+    schema: str | None = None,
+    timeout_s: int = 1800,
+) -> list[list[str]]:
     """Execute one statement on the serverless warehouse and return its rows."""
     body = {
         "warehouse_id": warehouse_id(),
@@ -104,14 +137,17 @@ def sql(statement: str, catalog: str | None = None, schema: str | None = None) -
         body["schema"] = schema
     result = request("POST", "/api/2.0/sql/statements", body)
     statement_id = result["statement_id"]
+    deadline = time.time() + timeout_s
     while result["status"]["state"] in ("PENDING", "RUNNING"):
+        if time.time() >= deadline:
+            raise DatabricksError(f"statement {statement_id} still running after {timeout_s}s")
         time.sleep(2)
         result = request("GET", f"/api/2.0/sql/statements/{statement_id}")
     state = result["status"]["state"]
     if state != "SUCCEEDED":
         message = result["status"].get("error", {}).get("message", state)
         raise DatabricksError(f"statement failed ({state}): {message}\n  {statement[:400]}")
-    return result.get("result", {}).get("data_array", []) or []
+    return _statement_rows(result)
 
 
 def sql_scalar(statement: str) -> str | None:
@@ -132,14 +168,20 @@ def _list_jobs(name: str | None = None) -> list[dict]:
         query = urllib.parse.urlencode(params)
         result = request("GET", f"/api/2.2/jobs/list?{query}")
         jobs.extend(result.get("jobs", []))
-        if not result.get("has_more") or not result.get("next_page_token"):
+        if not result.get("next_page_token"):
             return jobs
         page_token = result["next_page_token"]
 
 
 def upload(local_path: str, volume_relpath: str) -> str:
     """Upload a local file into the landing volume, overwriting in place."""
-    target = f"/Volumes/{CATALOG}/bronze/landing/{volume_relpath.lstrip('/')}"
+    if not volume_relpath or volume_relpath.startswith(("/", "\\")) or "\\" in volume_relpath:
+        raise DatabricksError("volume path must be a relative POSIX path under the landing volume")
+    normalized = posixpath.normpath(volume_relpath)
+    if normalized in (".", "..") or normalized.startswith("../"):
+        raise DatabricksError("volume path traversal is not allowed")
+    landing_root = f"/Volumes/{CATALOG}/bronze/landing"
+    target = f"{landing_root}/{normalized}"
     with open(local_path, "rb") as handle:
         payload = handle.read()
     request(
@@ -165,6 +207,8 @@ def deploy_notebook(local_path: str, name: str) -> str:
 
 
 def job_id(name: str) -> int:
+    if not name.startswith(PREFIX):
+        raise DatabricksError(f"refusing to run non-{PREFIX}-prefixed job {name!r}")
     for job in _list_jobs(name):
         if job["settings"]["name"] == name:
             return job["job_id"]
