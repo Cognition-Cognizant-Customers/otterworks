@@ -60,6 +60,13 @@ Modeling rules:
 - `Y`/`N` character flags become booleans; `NULL` means absent.
 - EAV values are typed by `ATTR_TYPE` (`STR`/`NUM`/`DATE`/`BOOL`); an EAV row
   whose `attr_name` collides with a modelled field goes to `attributes` only.
+- The seeded EAV rows are **not** unique per `(ENTITY_ID, ATTR_NAME)`: for this
+  batch 8,333 rows collapse onto 8,141 distinct keys across 187 colliding keys.
+  Because `attributes` is a name-keyed object, the winner must be deterministic:
+  the row with the greatest `CREATED_DT`, tie-broken by the lexicographically
+  greatest `ATTR_VALUE`. Losing rows are **preserved, never dropped** — each one
+  becomes an entry in `legacy.attributeConflicts: [{ name, value, type, createdAt }]`,
+  so 8,141 folded keys + 192 conflict entries account for all 8,333 source rows.
 - Indexes for the workload's own collections belong in PR 1 of the stack:
   at minimum `{ tenantId: 1, status: 1 }`, `{ customerNo: 1 }` (unique),
   and `{ "dates.signup": -1 }`.
@@ -70,7 +77,10 @@ Modeling rules:
 |---|---|
 | `customers` documents | **25,000** |
 | Source-parity checksum over `customers` | **`4f92feef2ad58dbab30e289957931928`** |
-| EAV rows folded into `attributes` | **8,333** (`entity_type='CUSTOMER'` for this batch) |
+| EAV source rows consumed (`ENTITY_TYPE='CUSTOMER'`) | **8,333** |
+| Distinct attribute keys folded into `attributes` | **8,141** |
+| Duplicate-key rows preserved under `legacy.attributeConflicts` | **192** |
+| Customers carrying at least one attribute | **7,075** |
 
 Checksum recomputation from Atlas (ordered md5, see README): sort documents by
 `_id` ascending and feed `f"{_id}:{balances.current:.2f}"` + `"\n"` into a single

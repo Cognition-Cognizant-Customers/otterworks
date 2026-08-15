@@ -81,9 +81,12 @@ Checksum recomputation from Atlas (order-independent sum of md5, see README):
 | `version_gaps` | `postgres.otterworks_demo.document_versions` | **10** |
 | `orphaned_snapshots` | `postgres.otterworks_demo.document_snapshots` | **6** |
 
-- A version gap is a document whose declared `version` count has a missing
-  version row in the middle of the series. Report exactly **10**, with the
-  document ids and the missing version numbers (from `versionGap.missing`).
+- A version gap is a document with fewer version rows than its declared
+  `version` (`declaredVersion != versionCount`); the missing number may be anywhere in `1..declaredVersion`, **including the highest version** — for this
+  seed 8 of the 10 gaps are interior holes and 2 drop the top version, so a
+  detector that only looks for interior holes finds 8 and fails. Report exactly
+  **10**, with the document ids and the missing version numbers (from
+  `versionGap.missing`).
 - Report exactly **6** orphaned snapshots, with snapshot ids and their dangling
   `document_id`s, and show that all 6 landed in
   `document_snapshots_orphaned`.
