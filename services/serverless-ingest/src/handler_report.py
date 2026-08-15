@@ -19,6 +19,8 @@ def _s3():
     return boto3.client("s3")
 
 
+_MAX_AGGREGATION_ATTEMPTS = 3
+
 _PERL_NUMBER = re.compile(r"\s*[+-]?(?:\d+\.?\d*(?:[eE][+-]?\d+)?|\.\d+(?:[eE][+-]?\d+)?)")
 
 
@@ -80,6 +82,27 @@ def report_stamp() -> str:
     return datetime.now(timezone).strftime("%Y%m%d")
 
 
+def _parsed_keys(client, bucket: str, prefix: str) -> list[str]:
+    keys = []
+    paginator = client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        keys.extend(
+            item["Key"]
+            for item in page.get("Contents", [])
+            if item["Key"].endswith(".psv")
+        )
+    return sorted(keys)
+
+
+def _published_source_count(client, bucket: str, key: str) -> int:
+    """Number of parsed files behind the report already at `key` (0 if none)."""
+    try:
+        head = client.head_object(Bucket=bucket, Key=key)
+    except Exception:  # noqa: BLE001 - any miss/denied head means "nothing to protect"
+        return 0
+    return int(head.get("Metadata", {}).get("source-count", 0) or 0)
+
+
 def handler(event, context):
     """Aggregate every parsed PSV for the event namespace and publish reports."""
     ns = event.get("ns") if event else None
@@ -89,28 +112,44 @@ def handler(event, context):
     bucket = env("BUCKET")
     prefix = f"{PARSED_PREFIX}/{ns}/"
     client = _s3()
-    keys = []
-    paginator = client.get_paginator("list_objects_v2")
-    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-        keys.extend(
-            item["Key"]
-            for item in page.get("Contents", [])
-            if item["Key"].endswith(".psv")
-        )
 
-    lines = []
-    for key in sorted(keys):
-        body = client.get_object(Bucket=bucket, Key=key)["Body"].read()
-        # the parser writes PSV as latin-1 bytes, exactly as the legacy chain did
-        lines.extend(body.decode("latin-1").splitlines())
+    # one execution runs per landed file, so concurrent reports race on the single
+    # dated report key: re-read the listing after aggregating and start over if a
+    # sibling parse landed meanwhile, so the aggregate matches a real listing
+    for _ in range(_MAX_AGGREGATION_ATTEMPTS):
+        keys = _parsed_keys(client, bucket, prefix)
+        lines = []
+        for key in keys:
+            body = client.get_object(Bucket=bucket, Key=key)["Body"].read()
+            # the parser writes PSV as latin-1 bytes, exactly as the legacy chain did
+            lines.extend(body.decode("latin-1").splitlines())
+        rows = aggregate(lines)
+        if _parsed_keys(client, bucket, prefix) == keys:
+            break
 
-    rows = aggregate(lines)
     report_bytes = render_csv(rows).encode("latin-1")
     stamp = report_stamp()
     csv_key = report_key(ns, f"finance_billing_{stamp}.csv")
     xls_key = report_key(ns, f"finance_billing_{stamp}.xls")
-    client.put_object(Bucket=bucket, Key=csv_key, Body=report_bytes)
-    client.put_object(Bucket=bucket, Key=xls_key, Body=report_bytes)
+
+    # and never let a slower, less complete run overwrite a published report
+    if _published_source_count(client, bucket, csv_key) > len(keys):
+        return {
+            "ns": ns,
+            "report_key": csv_key,
+            "xls_key": xls_key,
+            "rows": len(rows),
+            "files_aggregated": len(keys),
+            "published": False,
+        }
+
+    metadata = {"source-count": str(len(keys))}
+    client.put_object(
+        Bucket=bucket, Key=csv_key, Body=report_bytes, Metadata=dict(metadata)
+    )
+    client.put_object(
+        Bucket=bucket, Key=xls_key, Body=report_bytes, Metadata=dict(metadata)
+    )
 
     return {
         "ns": ns,
@@ -118,4 +157,5 @@ def handler(event, context):
         "xls_key": xls_key,
         "rows": len(rows),
         "files_aggregated": len(keys),
+        "published": True,
     }

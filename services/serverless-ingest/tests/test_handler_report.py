@@ -24,6 +24,7 @@ class FakeS3:
 
     def __init__(self, objects=None):
         self.objects = dict(objects or {})
+        self.metadata = {}
         self.puts = []
 
     def get_paginator(self, name):
@@ -50,10 +51,16 @@ class FakeS3:
 
         return {"Body": Body(self.objects[Key])}
 
-    def put_object(self, Bucket, Key, Body, **kwargs):
+    def put_object(self, Bucket, Key, Body, Metadata=None, **kwargs):
         self.objects[Key] = Body
+        self.metadata[Key] = dict(Metadata or {})
         self.puts.append((Bucket, Key, Body))
         return {}
+
+    def head_object(self, Bucket, Key):
+        if Key not in self.objects:
+            raise KeyError(Key)
+        return {"Metadata": self.metadata.get(Key, {})}
 
 
 @pytest.fixture(autouse=True)
@@ -165,6 +172,7 @@ def test_handler_writes_report_and_identical_xls_copy(fake_s3):
         "xls_key": f"reports/demo/finance_billing_{stamp}.xls",
         "rows": 6,
         "files_aggregated": 2,
+        "published": True,
     }
     assert fake_s3.objects[result["report_key"]] == EXPECTED_CSV
     assert fake_s3.objects[result["xls_key"]] == EXPECTED_CSV
@@ -195,6 +203,40 @@ def test_handler_ignores_non_psv_objects(fake_s3):
 
     assert result["files_aggregated"] == 2
     assert fake_s3.objects[result["report_key"]] == EXPECTED_CSV
+
+
+def test_handler_does_not_clobber_a_report_built_from_more_files(fake_s3):
+    # one execution runs per landed file; a slow run that saw fewer parsed files must
+    # not overwrite the complete report a faster sibling already published
+    complete = handler_report.handler({"ns": "demo"}, None)
+    del fake_s3.objects["parsed/demo/CUSTBILL_FIX_002.psv"]
+
+    partial = handler_report.handler({"ns": "demo"}, None)
+
+    assert partial["published"] is False
+    assert partial["files_aggregated"] == 1
+    assert fake_s3.objects[complete["report_key"]] == EXPECTED_CSV
+
+
+def test_handler_reaggregates_when_a_sibling_parse_lands_mid_run(fake_s3, monkeypatch):
+    late_key = "parsed/demo/CUSTBILL_FIX_003.psv"
+    late_body = b"C000000099|OTTER LTD|2025-01-01|10.00|USD|01\n"
+    real_keys = handler_report._parsed_keys
+    calls = {"n": 0}
+
+    def racing_keys(client, bucket, prefix):
+        calls["n"] += 1
+        keys = real_keys(client, bucket, prefix)
+        if calls["n"] == 1:  # the late file lands right after the first listing
+            fake_s3.objects[late_key] = late_body
+        return keys
+
+    monkeypatch.setattr(handler_report, "_parsed_keys", racing_keys)
+
+    result = handler_report.handler({"ns": "demo"}, None)
+
+    assert result["files_aggregated"] == 3
+    assert fake_s3.objects[result["report_key"]] != EXPECTED_CSV
 
 
 def test_handler_requires_a_namespace(fake_s3):
