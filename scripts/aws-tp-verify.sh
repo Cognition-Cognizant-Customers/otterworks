@@ -160,9 +160,13 @@ fi
 # --- no failed executions ---
 bad=""
 for status in FAILED TIMED_OUT ABORTED; do
-  names="$(aws stepfunctions list-executions --state-machine-arn "$SM_ARN" --status-filter "$status" \
-    --query 'executions[].name' --output text 2>/dev/null || true)"
-  [ -n "$names" ] && [ "$names" != "None" ] && bad="$bad $status:$names"
+  # a query that could not run must never read as "none failed"
+  if names="$(aws stepfunctions list-executions --state-machine-arn "$SM_ARN" --status-filter "$status" \
+    --query 'executions[].name' --output text 2>&1)"; then
+    [ -n "$names" ] && [ "$names" != "None" ] && bad="$bad $status:$names"
+  else
+    bad="$bad $status:QUERY-FAILED($names)"
+  fi
 done
 if [ -z "$bad" ]; then
   printf '%-42s %-8s %s\n' "step functions executions" PASS "none failed"
