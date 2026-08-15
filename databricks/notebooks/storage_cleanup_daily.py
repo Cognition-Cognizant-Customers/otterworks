@@ -187,6 +187,7 @@ def _checked(label: str, value: str, pattern=_TOKEN) -> str:
 
 def ddl_statements(catalog: str = CATALOG) -> list:
     """Idempotent CREATE TABLE statements for this unit's tables."""
+    catalog = _checked("catalog", catalog)
     return _split(DDL_SQL.format(catalog=catalog))
 
 
