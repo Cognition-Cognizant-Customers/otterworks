@@ -52,10 +52,13 @@ REJECT_REASONS = ("missing_event_id", "missing_event_type", "invalid_event_ts", 
 NS_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_]{0,63}$")
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*){0,2}$")
 # `source_glob` and `source_kind` arrive the same way and land in string literals
-# (`read_files('<path>')`, `'<kind>' AS source`), so they are constrained too: the path to
-# volume-safe characters plus the `{catalog}`/`{ns}` placeholders, the kind to the extracts
-# the legacy job had.
-SOURCE_PATH_PATTERN = re.compile(r"^[A-Za-z0-9_./*{}=-]+$")
+# (`read_files('<path>')`, `'<kind>' AS source`), so they are constrained too: the path must
+# stay below the analytics_daily landing root with no traversal segments, the kind to the
+# extracts the legacy job had.
+SOURCE_PATH_PATTERN = re.compile(
+    r"^/Volumes/(?:\{catalog\}|[A-Za-z_][A-Za-z0-9_]*)/bronze/landing/"
+    r"(?:\{ns\}|[a-z0-9][a-z0-9_]*)/analytics_daily/events(?:/[A-Za-z0-9_.=*{}-]+)*/*$"
+)
 SOURCE_KINDS = ("s3", "sqs", "dynamodb")
 
 
@@ -85,7 +88,9 @@ def validate_identifier(name: str, what: str = "identifier") -> str:
 
 
 def validate_source_path(path: str) -> str:
-    if not SOURCE_PATH_PATTERN.match(path or ""):
+    if not SOURCE_PATH_PATTERN.fullmatch(path or "") or any(
+        segment in {".", ".."} for segment in path.split("/")
+    ):
         raise ValueError(f"invalid source path {path!r}: expected {SOURCE_PATH_PATTERN.pattern}")
     return path
 
@@ -204,17 +209,22 @@ FROM (
 )
 """.strip()
 
+    valid = "event_id IS NOT NULL AND event_id <> '' AND event_type IS NOT NULL AND event_type <> '' AND event_ts IS NOT NULL"
+
     # One classified pass over bronze feeds both silver and the quarantine, so the two are
     # complements by construction: `rn = 1 AND <valid>` goes to silver, everything else is
-    # rejected with a reason.
+    # rejected with a reason. Prefer a usable copy when duplicate event IDs arrive, so an
+    # invalid duplicate cannot hide a valid one.
     classified = f"""
 SELECT
   ns, event_id, event_type, user_id, document_id, file_id, event_ts, source, raw_payload, ingested_at,
-  row_number() OVER (PARTITION BY ns, event_id ORDER BY ingested_at, raw_payload) AS rn
+  row_number() OVER (
+    PARTITION BY ns, event_id
+    ORDER BY CASE WHEN {valid} THEN 0 ELSE 1 END, ingested_at, raw_payload
+  ) AS rn
 FROM {catalog}.bronze.analytics_events_raw
 WHERE ns = '{ns}'
 """.strip()
-    valid = "event_id IS NOT NULL AND event_id <> '' AND event_type IS NOT NULL AND event_type <> '' AND event_ts IS NOT NULL"
 
     silver = f"""
 INSERT INTO {catalog}.silver.analytics_events REPLACE WHERE ns = '{ns}'
