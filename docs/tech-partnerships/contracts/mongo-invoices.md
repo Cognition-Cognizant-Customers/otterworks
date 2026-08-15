@@ -19,9 +19,11 @@ definitions and source connection details that this contract depends on.
 
 ## Target — `ow_tp_demo.invoices` (+ `invoice_lines_orphaned`)
 
-Lines are **embedded** in their header — bounded fan-out (3–25 lines per
-invoice, ~8 average at demo scale), and the app's read pattern is
-"fetch an invoice with its lines", so this is a single-document read:
+Lines are **embedded** in their header — bounded fan-out (0–23 lines per invoice,
+~8 average at demo scale: the seeder assigns each line to a uniformly random
+header, so the distribution is Poisson-like, 268 headers carry fewer than 3 lines
+and 5 carry none at all), and the app's read pattern is "fetch an invoice with its
+lines", so this is a single-document read:
 
 ```js
 {
@@ -57,6 +59,10 @@ Modeling rules:
 - Lines whose `INVOICE_ID` has no header row are **orphans**: they go to
   `invoice_lines_orphaned` with their raw fields plus
   `quarantine_reason: "missing_header"`, never dropped.
+- A header with no matching lines is still migrated: `lines: []`, `lineCount: 0`,
+  `lineTotal: NumberDecimal("0.00")`. It is **not** an anomaly and must not be
+  quarantined — only lines whose `INVOICE_ID` points at a non-existent header are
+  (37 lines over 37 distinct ghost `INVOICE_ID`s).
 - `totalAmount` (header) and `lineTotal` (sum of lines) intentionally disagree in
   the source estate; keep both and do not "fix" either.
 - Indexes (PR 1): `{ customerId: 1, invoiceDate: -1 }`, `{ invoiceNo: 1 }`
@@ -67,6 +73,8 @@ Modeling rules:
 | Metric | Expected |
 |---|---|
 | `invoices` documents | **18,750** |
+| Invoices with zero lines (`lines: []`, `lineCount: 0`, `lineTotal` zero) | **5** |
+| Invoices with fewer than 3 lines | **268** |
 | Embedded lines across all invoices | **149,963** |
 | `invoice_lines_orphaned` documents | **37** |
 | Embedded + orphaned lines | **150,000** |
