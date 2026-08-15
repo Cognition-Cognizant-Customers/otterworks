@@ -295,7 +295,26 @@ def check_file_recon(ns: str, expected_files: int) -> Check:
     if not rows:
         check.fail("silver.custbill_file_recon has no rows for this namespace")
     for file_name, declared, parsed, rejected, recon_ok in rows:
-        declared_i, parsed_i, rejected_i = int(declared), int(parsed), int(rejected)
+        if declared is None:
+            check.fail(
+                f"{file_name}: unreadable TRL record: declared trailer count is NULL "
+                f"(parsed_count={parsed!r}, rejected_count={rejected!r}, recon_ok={recon_ok!r})"
+            )
+            continue
+        if parsed is None or rejected is None:
+            check.fail(
+                f"{file_name}: unreadable reconciliation counts: declared_trailer_count={declared!r}, "
+                f"parsed_count={parsed!r}, rejected_count={rejected!r}, recon_ok={recon_ok!r}"
+            )
+            continue
+        try:
+            declared_i, parsed_i, rejected_i = int(declared), int(parsed), int(rejected)
+        except (TypeError, ValueError):
+            check.fail(
+                f"{file_name}: unreadable reconciliation counts: declared_trailer_count={declared!r}, "
+                f"parsed_count={parsed!r}, rejected_count={rejected!r}, recon_ok={recon_ok!r}"
+            )
+            continue
         detail = (
             f"{file_name}: declared {declared_i} = parsed {parsed_i} + rejected {rejected_i}, "
             f"recon_ok={recon_ok}"

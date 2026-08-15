@@ -130,6 +130,22 @@ The eight bronze, published-silver, and staging tables were then verified back t
 rows for `ns='stagingneg'`. This proves failed staged output is not queryable in published
 silver and the previous good namespace remains intact.
 
+## G. An unreadable trailer count fails the report without a traceback
+
+Mutation: in throwaway namespace `ns=trlneg`, the `TRL` line for
+`CUSTBILL_DEMO_001.dat` was changed to the non-numeric value `TRLNOTNUM`, producing a
+NULL `declared_trailer_count` in the reconciliation row.
+
+The recon report was written to `/tmp/trlneg-null-report.md` and exited `1`. Check 3
+reported the corrupt trailer as a failure:
+
+```text
+CUSTBILL_DEMO_001.dat: unreadable TRL record: declared trailer count is NULL (parsed_count='50', rejected_count='0', recon_ok='false')
+```
+
+There was no traceback. All eight bronze, published-silver, and staging tables were
+verified back to `0` rows for `ns='trlneg'` afterwards.
+
 ## Note on the shared workspace
 
 During the session an extra bronze line (`line_no = 999`, `raw_line` `STALE TAIL RECORD`)
