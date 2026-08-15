@@ -44,7 +44,7 @@ def main(argv: list[str]) -> int:
     for statement in statements(path.read_text()):
         first_line = statement.splitlines()[0][:100]
         print(f"-> {first_line}")
-        dbx.sql(statement)
+        dbx.sql(statement, catalog=dbx.CATALOG)
     print(f"applied {path}")
     return 0
 
