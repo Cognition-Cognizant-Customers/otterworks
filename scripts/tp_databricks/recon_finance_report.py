@@ -23,6 +23,7 @@ import csv
 import glob
 import hashlib
 import os
+import re
 import sys
 from decimal import Decimal
 
@@ -43,6 +44,11 @@ import tp_finance_report as pipeline  # noqa: E402
 
 CATALOG = dbx.CATALOG
 LEGACY_ROOT = os.environ.get("OTTERWORKS_LEGACY_ROOT", "/tmp/otterworks-legacy")
+# The namespace and the business date are interpolated into statements and into a volume
+# path, neither of which can be bound as a parameter, so both are validated up front and the
+# namespace is additionally rendered as an escaped literal (backslash escapes in Spark SQL).
+NS_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 GRID = [
     ("EUR", "INVOICE"),
     ("EUR", "CREDIT"),
@@ -51,6 +57,11 @@ GRID = [
     ("USD", "INVOICE"),
     ("USD", "CREDIT"),
 ]
+
+
+def sql_literal(value: str) -> str:
+    """Render a value as a Spark SQL string literal, escaping backslashes and quotes."""
+    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
 
 class Check:
@@ -115,7 +126,7 @@ def gold_rows(ns: str, report_date: str) -> list[tuple[str, str, int, Decimal]]:
     statement = f"""
         SELECT currency, record_type, record_count, total_amount
         FROM {CATALOG}.gold.finance_billing_summary
-        WHERE ns = '{ns}' AND report_date = DATE '{report_date}'
+        WHERE ns = {sql_literal(ns)} AND report_date = DATE '{report_date}'
         ORDER BY currency, CASE record_type WHEN 'INVOICE' THEN 0 ELSE 1 END
     """
     return [(r[0], r[1], int(r[2]), Decimal(r[3])) for r in dbx.sql(statement)]
@@ -155,7 +166,7 @@ def check_2(ns: str, report_date: str) -> Check:
         dbx.sql_scalar(
             f"""SELECT coalesce(sum(record_count), 0)
                 FROM {CATALOG}.gold.finance_billing_summary
-                WHERE ns = '{ns}' AND report_date = DATE '{report_date}'"""
+                WHERE ns = {sql_literal(ns)} AND report_date = DATE '{report_date}'"""
         )
     )
     check.expect(total_count == 100, f"SUM(record_count) = 100 (got {total_count})")
@@ -167,7 +178,7 @@ def check_2(ns: str, report_date: str) -> Check:
                        CASE record_type WHEN '01' THEN 'INVOICE' WHEN '02' THEN 'CREDIT' END,
                        count(*), sum(amount)
                 FROM {CATALOG}.silver.custbill_records
-                WHERE ns = '{ns}' AND record_type IN ('01', '02')
+                WHERE ns = {sql_literal(ns)} AND record_type IN ('01', '02')
                 GROUP BY currency, record_type"""
         )
     }
@@ -190,7 +201,7 @@ def check_3(ns: str, report_date: str) -> Check:
     rows = dbx.sql(
         f"""SELECT artifact_path, recipient_list, delivery_status, delivered_at
             FROM {CATALOG}.gold.finance_report_delivery
-            WHERE ns = '{ns}' AND report_date = DATE '{report_date}'"""
+            WHERE ns = {sql_literal(ns)} AND report_date = DATE '{report_date}'"""
     )
     if not check.expect(len(rows) == 1, f"exactly one delivery row for the run (got {len(rows)})"):
         return check
@@ -244,7 +255,10 @@ def check_4(ns: str, report_date: str, golden: list[tuple[str, str, int, Decimal
     )
     expected = f"finance_billing_{report_date.replace('-', '')}.csv"
     if not names:
-        check.note("no artifact emitted; the contract makes the file optional")
+        # The job writes the artifact on every successful run and raises when there are no
+        # rows, so an empty directory means the run did not do its job -- not an omission the
+        # contract allows. Passing here would make the whole verdict vacuous.
+        check.fail(f"no artifact emitted in {directory}")
         return check
     if not check.expect(expected in names, f"{expected} present"):
         return check
@@ -261,11 +275,16 @@ def check_4(ns: str, report_date: str, golden: list[tuple[str, str, int, Decimal
         parsed[0] == ["Currency", "RecordType", "RecordCount", "TotalAmount"],
         f"CSV header well formed (got {parsed[0]})",
     )
-    check.expect(
+    if not check.expect(
         all(len(row) == 4 for row in parsed),
         "every CSV line has 4 fields (parses as CSV, is not a renamed foreign format)",
-    )
-    body = [(r[0], r[1], int(r[2]), Decimal(r[3])) for r in parsed[1:]]
+    ):
+        return check
+    try:
+        body = [(r[0], r[1], int(r[2]), Decimal(r[3])) for r in parsed[1:]]
+    except (ValueError, ArithmeticError) as error:
+        check.fail(f"artifact body is not parseable as the report grid: {error}")
+        return check
     check.expect(
         body == golden,
         f"artifact body equals the golden report rows (got {body})",
@@ -278,7 +297,7 @@ def check_5(ns: str, report_date: str) -> Check:
     before = gold_rows(ns, report_date)
     delivery_before = dbx.sql_scalar(
         f"""SELECT count(*) FROM {CATALOG}.gold.finance_report_delivery
-            WHERE ns = '{ns}' AND report_date = DATE '{report_date}'"""
+            WHERE ns = {sql_literal(ns)} AND report_date = DATE '{report_date}'"""
     )
     statements = pipeline.summary_statements(ns, report_date, CATALOG)
     check.note(
@@ -291,7 +310,7 @@ def check_5(ns: str, report_date: str) -> Check:
     after = gold_rows(ns, report_date)
     delivery_after = dbx.sql_scalar(
         f"""SELECT count(*) FROM {CATALOG}.gold.finance_report_delivery
-            WHERE ns = '{ns}' AND report_date = DATE '{report_date}'"""
+            WHERE ns = {sql_literal(ns)} AND report_date = DATE '{report_date}'"""
     )
     check.expect(len(after) == 6, f"still 6 gold rows after the re-run (got {len(after)})")
     check.expect(after == before, "counts and totals unchanged by the re-run")
@@ -353,10 +372,16 @@ def main() -> int:
     parser.add_argument("--report-out", default=None)
     args = parser.parse_args()
     ns = args.ns
+    if not NS_RE.match(ns):
+        raise SystemExit(f"invalid --ns {ns!r}: expected {NS_RE.pattern}")
+    if args.report_date is not None and not DATE_RE.match(args.report_date):
+        raise SystemExit(f"invalid --report-date {args.report_date!r}: expected YYYY-MM-DD")
 
     golden_path, golden_raw, golden = golden_report(ns, args.report_date)
     stem = os.path.basename(golden_path).replace("finance_billing_", "").replace(".csv", "")
     report_date = args.report_date or f"{stem[0:4]}-{stem[4:6]}-{stem[6:8]}"
+    if not DATE_RE.match(report_date):
+        raise SystemExit(f"golden artifact {golden_path} does not carry a YYYYMMDD stamp")
 
     converted = gold_rows(ns, report_date)
     checks = [
