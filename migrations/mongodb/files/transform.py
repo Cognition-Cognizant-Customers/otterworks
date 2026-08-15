@@ -85,7 +85,7 @@ def transform_item(item: dict, ns: str, migrated_at: datetime) -> TransformResul
         "mimeType": item["mime_type"],
         "sizeBytes": to_int64(item["size_bytes"], "size_bytes"),
         "storage": storage,
-        "folderId": item["folder_id"],
+        "folderId": item.get("folder_id"),  # sparse: absent for files at the root
         "ownerId": item["owner_id"],
         "version": int(item["version"]),
         "isTrashed": bool(item["is_trashed"]),
