@@ -373,6 +373,22 @@ def check_idempotency(ns: str, converted, converted_error=None) -> Check:
         except dbx.DatabricksError as exc:
             check.blocked(statement, str(exc))
             return check
+    for name, statement in custbill_parse_sql.recon_gate_statements(ns, staged=True):
+        try:
+            offending = dbx.sql(statement)
+        except dbx.DatabricksError as exc:
+            check.blocked(statement, str(exc))
+            return check
+        if offending:
+            preview = "; ".join(" | ".join(map(str, row)) for row in offending[:5])
+            check.fail(f"staged recon gate '{name}' returned {len(offending)} offending rows: {preview}")
+            return check
+    for _name, statement in custbill_parse_sql.publish_statements(ns):
+        try:
+            dbx.sql(statement)
+        except dbx.DatabricksError as exc:
+            check.blocked(statement, str(exc))
+            return check
     for name, statement in custbill_parse_sql.recon_gate_statements(ns):
         try:
             offending = dbx.sql(statement)
@@ -409,6 +425,14 @@ def render_report(ns: str, golden_dir: Path, checks: list[Check]) -> str:
         f" `make legacy-etl-run JOB=sftp_ingest_poll`, `make legacy-etl-run JOB=parse_custbill_fixedwidth`)",
         f"- Converted output: `{custbill_sql.SILVER_RECORDS}` / `{custbill_sql.SILVER_REJECTS}`"
         f" / `{custbill_sql.SILVER_FILE_RECON}`",
+        "",
+        "## Unverified: landing-volume upload path",
+        "",
+        "The upload path into `/Volumes/ow_tp/bronze/landing` is UNVERIFIED. The demo PAT lacks the",
+        "`files` scope, so every upload attempt fails with `Provided access token does not have",
+        "required scopes: files`. The bronze source reconciled here is the `ow_tp_sftp_ingest` unit's",
+        "`bronze.custbill_files` / `bronze.custbill_lines`. No check was weakened or skipped to",
+        "compensate; this statement covers only the upload leg, which this unit does not exercise.",
         "- Reproduce: `NS=%s python3 scripts/tp_databricks/recon_parse_custbill.py`" % ns,
         "- Negative controls (quarantine and trailer gate actually failing a run):"
         " [parse_custbill_negative_controls.md](parse_custbill_negative_controls.md)",
