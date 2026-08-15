@@ -20,8 +20,10 @@ legacy script has something real to walk:
   out verbatim as the expected answer for reconciliation.
 
 Nothing here touches the seeded stores: metadata items are read, never written.
-The fixture is rebuilt from scratch on every run (objects under the two fixture
-buckets are deleted first), so it is idempotent.
+The fixture is rebuilt from scratch for this namespace on every run: its
+namespaced live objects, planted orphan objects, and quarantine copies whose
+source keys are this fixture's planted orphans are deleted first. Other
+namespaces' objects and unrelated quarantine objects are left alone.
 
     fixture_storage_cleanup.py build --ns demo
     fixture_storage_cleanup.py show  --ns demo
@@ -124,13 +126,13 @@ def ensure_bucket(s3, bucket: str) -> None:
 
 
 def empty_prefix(s3, bucket: str, prefix: str) -> int:
-    """Delete only what this fixture owns -- the buckets are shared per namespace."""
+    """Delete listed objects under this fixture-owned namespace prefix."""
     deleted = 0
     for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix):
         keys = [{"Key": o["Key"]} for o in page.get("Contents", [])]
         if keys:
-            s3.delete_objects(Bucket=bucket, Delete={"Objects": keys})
-            deleted += len(keys)
+            response = s3.delete_objects(Bucket=bucket, Delete={"Objects": keys})
+            deleted += len(response.get("Deleted", []))
     return deleted
 
 
@@ -138,16 +140,46 @@ def build(ns: str) -> dict:
     s3 = _client("s3")
     for bucket in (FILE_STORAGE_BUCKET, QUARANTINE_BUCKET):
         ensure_bucket(s3, bucket)
-    # `<ns>/` covers the live keys and the quarantine bucket's namespaced copies;
-    # the planted orphans are deleted by exact key, since they sit under the
-    # un-namespaced `files/` prefix another namespace may also be using.
+    orphans = planted_orphans(ns)
+    planted_keys = {orphan["key"] for orphan in orphans}
+
+    # `<ns>/` covers the live keys and namespaced copies. The planted orphans
+    # sit under the shared legacy prefix, so remove only their exact keys.
     removed = sum(
         empty_prefix(s3, bucket, f"{ns}/") for bucket in (FILE_STORAGE_BUCKET, QUARANTINE_BUCKET)
     )
-    stale = [{"Key": o["key"]} for o in planted_orphans(ns)]
-    for bucket in (FILE_STORAGE_BUCKET, QUARANTINE_BUCKET):
-        s3.delete_objects(Bucket=bucket, Delete={"Objects": stale})
-        removed += len(stale)
+
+    file_stale = []
+    for page in s3.get_paginator("list_objects_v2").paginate(
+        Bucket=FILE_STORAGE_BUCKET, Prefix=LEGACY_PREFIX
+    ):
+        file_stale.extend(
+            {"Key": obj["Key"]}
+            for obj in page.get("Contents", [])
+            if obj["Key"] in planted_keys
+        )
+    if file_stale:
+        response = s3.delete_objects(
+            Bucket=FILE_STORAGE_BUCKET, Delete={"Objects": file_stale}
+        )
+        removed += len(response.get("Deleted", []))
+
+    # The legacy script appends the source key after its date prefix. Remove
+    # only quarantine copies ending in this namespace's planted source keys.
+    quarantine_stale = []
+    for page in s3.get_paginator("list_objects_v2").paginate(
+        Bucket=QUARANTINE_BUCKET, Prefix="quarantined/"
+    ):
+        quarantine_stale.extend(
+            {"Key": obj["Key"]}
+            for obj in page.get("Contents", [])
+            if any(obj["Key"].endswith(key) for key in planted_keys)
+        )
+    if quarantine_stale:
+        response = s3.delete_objects(
+            Bucket=QUARANTINE_BUCKET, Delete={"Objects": quarantine_stale}
+        )
+        removed += len(response.get("Deleted", []))
 
     items = scan_metadata(ns)
     live_keys = sorted({i["storage_key"] for i in items if "/files/" in i["storage_key"]})
@@ -161,7 +193,6 @@ def build(ns: str) -> dict:
     with ThreadPoolExecutor(max_workers=32) as pool:
         list(pool.map(put_live, live_keys))
 
-    orphans = planted_orphans(ns)
     for orphan in orphans:
         s3.put_object(
             Bucket=FILE_STORAGE_BUCKET,
