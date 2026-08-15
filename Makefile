@@ -550,5 +550,6 @@ mongo-tp-customers-test: ## Unit-test the customers transformer (no Oracle/Atlas
 	cd $(MONGO_CUSTOMERS_DIR) && uv run --no-project --with pytest==8.3.3 python -m pytest -q
 
 mongo-tp-customers-migrate: ## Migrate CUSTOMER_MASTER + EAV into Atlas (idempotent; LIMIT=n, DRY_RUN=1)
+	$(if $(NS),$(call validate_ns),)
 	DB_PORT=$(ORACLE_BILLING_DB_PORT) $(MONGO_CUSTOMERS_MIGRATE_UV) $(MONGO_CUSTOMERS_DIR)/migrate.py \
 		$(if $(NS),--ns $(NS),) $(if $(LIMIT),--limit $(LIMIT),) $(if $(DRY_RUN),--dry-run,)
