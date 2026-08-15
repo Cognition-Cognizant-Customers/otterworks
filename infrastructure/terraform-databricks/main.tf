@@ -25,12 +25,12 @@ resource "terraform_data" "catalog" {
   }
 
   provisioner "local-exec" {
-    command = "${path.module}/catalog.sh create ${self.input.warehouse_id} ${self.input.catalog}"
+    command = "\"${path.module}/catalog.sh\" create \"${self.input.warehouse_id}\" \"${self.input.catalog}\""
   }
 
   provisioner "local-exec" {
     when    = destroy
-    command = "${path.module}/catalog.sh drop ${self.input.warehouse_id} ${self.input.catalog}"
+    command = "\"${path.module}/catalog.sh\" drop \"${self.input.warehouse_id}\" \"${self.input.catalog}\""
   }
 }
 
