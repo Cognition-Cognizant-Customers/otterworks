@@ -54,6 +54,8 @@
 ### 4. Emitted artifact is a valid file of its extension — **PASS**
 
 - /Volumes/ow_tp/bronze/landing/demo/reports: ['finance_billing_20260815.csv']
+- UNVERIFIED: the documented `/Volumes/ow_tp/bronze/landing` upload via `dbx.py upload` could not be verified because the API returned `{"error_code":403,"message":"Provided access token does not have required scopes: files"}`.
+- The in-Databricks landing used for this run is a bootstrap workaround, not the production transport.
 - ok: no .xls artifact (the legacy CSV-renamed-.xls defect is gone)
 - ok: finance_billing_20260815.csv present
 - ok: finance_billing_20260815.csv is not empty (got 7 lines)
@@ -69,4 +71,3 @@
 - ok: still 6 gold rows after the re-run (got 6)
 - ok: counts and totals unchanged by the re-run
 - ok: still one delivery row (before 1, after 1)
-
