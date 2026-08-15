@@ -23,6 +23,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import posixpath
 import sys
 import time
 import urllib.error
@@ -164,7 +165,13 @@ def _list_jobs(name: str | None = None) -> list[dict]:
 
 def upload(local_path: str, volume_relpath: str) -> str:
     """Upload a local file into the landing volume, overwriting in place."""
-    target = f"/Volumes/{CATALOG}/bronze/landing/{volume_relpath.lstrip('/')}"
+    if not volume_relpath or volume_relpath.startswith(("/", "\\")) or "\\" in volume_relpath:
+        raise DatabricksError("volume path must be a relative POSIX path under the landing volume")
+    normalized = posixpath.normpath(volume_relpath)
+    if normalized in (".", "..") or normalized.startswith("../"):
+        raise DatabricksError("volume path traversal is not allowed")
+    landing_root = f"/Volumes/{CATALOG}/bronze/landing"
+    target = f"{landing_root}/{normalized}"
     with open(local_path, "rb") as handle:
         payload = handle.read()
     request(
@@ -190,6 +197,8 @@ def deploy_notebook(local_path: str, name: str) -> str:
 
 
 def job_id(name: str) -> int:
+    if not name.startswith(PREFIX):
+        raise DatabricksError(f"refusing to run non-{PREFIX}-prefixed job {name!r}")
     for job in _list_jobs(name):
         if job["settings"]["name"] == name:
             return job["job_id"]
