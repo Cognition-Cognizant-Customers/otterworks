@@ -450,7 +450,6 @@ legacy-sftp-up: ## Start the optional localhost-only SFTP drop fixture
 legacy-sftp-down: ## Stop the SFTP drop fixture
 	docker compose -f etl/legacy-extra/docker-compose.sftp.yml down
 
-
 # --- Databricks lakehouse (tech-partnerships migration target) ---
 # Every object is ow_tp-prefixed and Terraform-managed: the demo workspace is
 # shared, so the prefix is both the isolation boundary and the teardown filter.
@@ -513,8 +512,6 @@ dbx-recon: ## Reconcile one converted unit against its legacy golden output (UNI
 	$(if $(NS),$(call validate_ns),)
 	$(DBX_ENV) NS=$${NS:-demo} python3 scripts/tp_databricks/recon_$(UNIT).py
 
-
-
 # --- AWS serverless CUSTBILL pipeline (infrastructure/terraform-tp-aws, tech-partnerships demo) ---
 
 TP_AWS_DIR := infrastructure/terraform-tp-aws
@@ -538,4 +535,3 @@ aws-tp-destroy: ## Destroy the AWS stack and verify zero Project=otterworks-tp r
 
 aws-tp-scan: ## Teardown verification only: scan for leftover ow-tp- / tagged resources
 	scripts/aws-tp-teardown.sh --scan-only
-
