@@ -2,7 +2,7 @@
 
 **Verdict: PASS** — every number below is recomputed from Atlas (`ow_tp_demo`) and compared against the seed manifest `testdata/legacy/manifests/demo.json` (generated `2026-08-01T00:00:00Z`, runtime state, never committed).
 
-Reconciled at `2026-08-15T23:31:36Z`.
+Reconciled at `2026-08-15T23:38:52Z`.
 
 ## Counts
 
@@ -31,7 +31,8 @@ Checksum definition: md5 over `"{lineId}:{amount:.2f}\n"` for all 150,000 lines 
 | checksum stream covers every line | `150000` | `150000` | PASS |
 | zero-line invoices carry lines: [] and lineTotal 0.00 | `5` | `5` | PASS |
 | orphan documents == planted orphaned_rows anomaly | `37` | `37` | PASS |
-| every planted orphan id is in invoice_lines_orphaned | `37` | `37` | PASS |
+| every quarantined row is a planted orphan (ids re-derived, not counted) | `0` | `0` | PASS |
+| every quarantined row carries quarantine_reason missing_header | `0` | `0` | PASS |
 | no dangling INVOICE_ID resolves to a header | `0` | `0` | PASS |
 | no orphan line is also embedded in an invoice | `0` | `0` | PASS |
 | source-parity checksum == manifest checksum | `88a66751f0b08b476b492105a2efc537` | `88a66751f0b08b476b492105a2efc537` | PASS |
@@ -40,7 +41,7 @@ Checksum definition: md5 over `"{lineId}:{amount:.2f}\n"` for all 150,000 lines 
 
 ## Anomaly ledger — `orphaned_rows` on `oracle.OW_BILLING.INVOICE_LINE`
 
-Manifest plants **37**; Atlas holds **37** in `invoice_lines_orphaned` with quarantine reason(s) ['missing_header'], 0 of them also embedded in an invoice, and 0 of the 37 distinct `INVOICE_ID`s they point at resolving to a header document.
+Manifest plants **37**; Atlas holds **37** in `invoice_lines_orphaned` with quarantine reason(s) ['missing_header'], 0 of them failing the planted `<NS>-GHOST-<i>` id recipe, 0 of them also embedded in an invoice, and 0 of the 37 distinct `INVOICE_ID`s they point at resolving to a header document.
 
 | # | `LINE_ID` | dangling `INVOICE_ID` | `INVOICE_NO` | amount |
 |---|---|---|---|---|

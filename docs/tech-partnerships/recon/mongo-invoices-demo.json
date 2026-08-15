@@ -301,7 +301,9 @@
         "lineId": "f2053077-7f8a-ea53-b9ed-7c5e2b9fce88",
         "quarantineReason": "missing_header"
       }
-    ]
+    ],
+    "unexpectedQuarantineReasons": [],
+    "unplantedOrphans": []
   },
   "checks": [
     {
@@ -347,9 +349,15 @@
       "ok": true
     },
     {
-      "actual": 37,
-      "check": "every planted orphan id is in invoice_lines_orphaned",
-      "expected": 37,
+      "actual": 0,
+      "check": "every quarantined row is a planted orphan (ids re-derived, not counted)",
+      "expected": 0,
+      "ok": true
+    },
+    {
+      "actual": 0,
+      "check": "every quarantined row carries quarantine_reason missing_header",
+      "expected": 0,
       "ok": true
     },
     {
@@ -415,6 +423,6 @@
   },
   "manifestGeneratedAt": "2026-08-01T00:00:00Z",
   "ns": "demo",
-  "reconciledAt": "2026-08-15T23:31:36Z",
+  "reconciledAt": "2026-08-15T23:38:52Z",
   "verdict": "PASS"
 }

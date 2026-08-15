@@ -21,6 +21,33 @@ def test_buckets_cover_the_whole_id_space_in_ascending_order():
     assert buckets[-1]["$lt"] > "ffffffff"
 
 
+def planted(index: int, ns: str = "demo") -> dict:
+    """A quarantined row shaped exactly the way the seeder plants its orphans."""
+    return {"lineId": recon.seeded_uuid(f"{ns}:line:{index}"),
+            "danglingInvoiceId": recon.seeded_uuid(f"{ns}:ghost-invoice:{index}"),
+            "invoiceNo": f"{ns.upper()}-GHOST-{index:09d}",
+            "amount": "10.00",
+            "quarantineReason": "missing_header"}
+
+
+def test_planted_orphans_are_recognised_by_their_derived_ids():
+    assert recon.unplanted_orphans([planted(0), planted(96153)], "demo") == []
+
+
+def test_orphan_with_the_right_count_but_the_wrong_ids_is_flagged():
+    swapped = planted(7) | {"lineId": recon.seeded_uuid("demo:line:8")}
+    not_a_ghost = planted(9) | {"invoiceNo": "DEMO-000000009"}
+    other_ns = planted(9, ns="stage")
+
+    flagged = recon.unplanted_orphans([planted(7), swapped, not_a_ghost, other_ns],
+                                      "demo")
+
+    assert [row["lineId"] for row in flagged] == [
+        swapped["lineId"], not_a_ghost["lineId"], other_ns["lineId"]]
+    assert flagged[0]["why"] == "ids do not match the planted recipe"
+    assert flagged[1]["why"] == "invoiceNo is not a planted ghost"
+
+
 def report(**overrides) -> dict:
     doc = {
         "ns": "demo",
@@ -36,14 +63,12 @@ def report(**overrides) -> dict:
                      "fanout": {"zeroLineInvoices": 1, "thinInvoices": 1}},
         "checks": [{"check": "invoices documents == manifest INVOICE_HEADER rows",
                     "actual": 2, "expected": 2, "ok": True}],
-        "anomalyLedger": {"orphans": [{"lineId": "l1",
-                                       "danglingInvoiceId": "ghost",
-                                       "invoiceNo": "GHOST-1",
-                                       "amount": "10.00",
-                                       "quarantineReason": "missing_header"}],
-                          "danglingInvoiceIds": ["ghost"],
+        "anomalyLedger": {"orphans": [planted(7)],
+                          "danglingInvoiceIds": [planted(7)["danglingInvoiceId"]],
                           "danglingIdsThatResolve": [],
-                          "orphanLinesAlsoEmbedded": []},
+                          "orphanLinesAlsoEmbedded": [],
+                          "unplantedOrphans": [],
+                          "unexpectedQuarantineReasons": []},
         "verdict": "PASS",
     }
     return doc | overrides

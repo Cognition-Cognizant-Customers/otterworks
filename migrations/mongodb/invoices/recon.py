@@ -19,6 +19,7 @@ Exit status is non-zero if any assertion fails, so this doubles as a gate.
 import argparse
 import hashlib
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -53,6 +54,43 @@ THIN_FANOUT_THRESHOLD = 3
 # buckets are visited in ascending prefix order — which is exactly ascending
 # `lineId` order overall, at bounded memory on both ends.
 PREFIX_WIDTH = 2
+
+# The seeder plants each orphan with a ghost invoice number `<NS>-GHOST-<index>`
+# and derives both ids from that index, so a quarantined row's identity can be
+# re-derived independently of the collection it was read from.
+GHOST_INVOICE_NO = re.compile(r"^(?P<ns>[A-Z0-9_]+)-GHOST-(?P<index>\d+)$")
+QUARANTINE_MISSING_HEADER = "missing_header"
+
+
+def seeded_uuid(value: str) -> str:
+    """The seeder's `md5_uuid`: md5 hex laid out as a uuid."""
+    h = hashlib.md5(value.encode()).hexdigest()
+    return f"{h[0:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}"
+
+
+def unplanted_orphans(orphans: list[dict], ns: str) -> list[dict]:
+    """Quarantined rows whose ids are not the ones the seeder planted.
+
+    The manifest carries only a *count* of planted orphans, so counting the
+    collection twice proves nothing about identity. Each planted orphan is
+    `line_id = md5_uuid("<ns>:line:<i>")` pointing at
+    `md5_uuid("<ns>:ghost-invoice:<i>")` under invoice number
+    `<NS>-GHOST-<i>`; recomputing both ids from that index catches a run that
+    quarantined the wrong rows even when it quarantined the right number.
+    """
+    unplanted = []
+    for row in orphans:
+        match = GHOST_INVOICE_NO.match(row["invoiceNo"] or "")
+        if match is None or match.group("ns") != ns.upper():
+            unplanted.append(row | {"why": "invoiceNo is not a planted ghost"})
+            continue
+        index = int(match.group("index"))
+        expected = {"lineId": seeded_uuid(f"{ns}:line:{index}"),
+                    "danglingInvoiceId": seeded_uuid(f"{ns}:ghost-invoice:{index}")}
+        if any(row[key] != value for key, value in expected.items()):
+            unplanted.append(row | {"why": "ids do not match the planted recipe",
+                                    "expected": expected})
+    return unplanted
 
 
 def _buckets(width: int = PREFIX_WIDTH) -> list[dict]:
@@ -158,7 +196,7 @@ def atlas_checksum(db) -> dict:
             "amountTotal": f"{total:.2f}"}
 
 
-def orphan_ledger(db) -> dict:
+def orphan_ledger(db, ns: str) -> dict:
     """Every quarantined line with the header id it points at, and the proof it dangles."""
     orphans = sorted(
         ({"lineId": doc["lineId"],
@@ -183,6 +221,10 @@ def orphan_ledger(db) -> dict:
         "danglingInvoiceIds": dangling,
         "danglingIdsThatResolve": resolvable,
         "orphanLinesAlsoEmbedded": embedded,
+        "unplantedOrphans": unplanted_orphans(orphans, ns),
+        "unexpectedQuarantineReasons": sorted(
+            {row["quarantineReason"] for row in orphans}
+            - {QUARANTINE_MISSING_HEADER}),
     }
 
 
@@ -191,7 +233,7 @@ def reconcile(db, ns: str) -> dict:
     targets = doc.get("targets", {})
     counts = atlas_counts(db)
     checksum = atlas_checksum(db)
-    ledger = orphan_ledger(db)
+    ledger = orphan_ledger(db, ns)
 
     expected_headers = targets.get(HEADER_TARGET, {}).get("rows")
     expected_lines = targets.get(LINE_TARGET, {}).get("rows")
@@ -216,8 +258,10 @@ def reconcile(db, ns: str) -> dict:
          counts["zeroLineInvoicesWithEmptyArray"], counts["zeroLineInvoices"]),
         ("orphan documents == planted orphaned_rows anomaly",
          counts["orphanedLines"], expected_orphans),
-        ("every planted orphan id is in invoice_lines_orphaned",
-         len(ledger["orphans"]), expected_orphans),
+        ("every quarantined row is a planted orphan (ids re-derived, not counted)",
+         len(ledger["unplantedOrphans"]), 0),
+        ("every quarantined row carries quarantine_reason missing_header",
+         len(ledger["unexpectedQuarantineReasons"]), 0),
         ("no dangling INVOICE_ID resolves to a header",
          len(ledger["danglingIdsThatResolve"]), 0),
         ("no orphan line is also embedded in an invoice",
@@ -276,8 +320,9 @@ def as_markdown(report: dict) -> str:
         return f"{value:,}" if isinstance(value, int) else str(value)
 
     thin_check = f"invoices with fewer than {THIN_FANOUT_THRESHOLD} lines"
-    reasons = {row["quarantineReason"] for row in ledger["orphans"]}
+    reasons = sorted({row["quarantineReason"] for row in ledger["orphans"]})
     also_embedded = len(ledger["orphanLinesAlsoEmbedded"])
+    unplanted = len(ledger["unplantedOrphans"])
     out = [
         f"# Recon — `mongo-invoices` (NS=`{report['ns']}`)",
         "",
@@ -344,7 +389,8 @@ def as_markdown(report: dict) -> str:
         "",
         f"Manifest plants **{expected['orphans']}**; Atlas holds "
         f"**{counts['orphanedLines']}** in `invoice_lines_orphaned` with "
-        f"quarantine reason(s) {sorted(reasons)}, "
+        f"quarantine reason(s) {reasons}, {unplanted} of them failing the planted "
+        "`<NS>-GHOST-<i>` id recipe, "
         f"{also_embedded} of them also embedded in an invoice, and "
         f"{len(ledger['danglingIdsThatResolve'])} of the "
         f"{len(ledger['danglingInvoiceIds'])} distinct `INVOICE_ID`s they point "
