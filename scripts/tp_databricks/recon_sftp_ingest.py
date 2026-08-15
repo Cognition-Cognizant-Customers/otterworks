@@ -210,7 +210,9 @@ def check3_trailer(ns: str, golden: dict[str, GoldenFile]) -> Check:
     rows = dbx.sql(
         f"""
 SELECT file_name,
-       max(CASE WHEN raw_line LIKE 'TRL%' THEN CAST(substr(raw_line, 4, 10) AS BIGINT) END) AS declared,
+       -- TRY_CAST, as in the ingest: a file truncated mid-trailer is exactly what this
+       -- check exists to catch, and a plain CAST would abort the reporting query itself.
+       max(CASE WHEN raw_line LIKE 'TRL%' THEN TRY_CAST(substr(raw_line, 4, 10) AS BIGINT) END) AS declared,
        count_if(raw_line NOT LIKE 'HDR%' AND raw_line NOT LIKE 'TRL%')                      AS detail
 FROM {CATALOG}.bronze.custbill_lines
 WHERE ns = '{ns}'
@@ -251,13 +253,12 @@ def _snapshot(ns: str) -> dict[str, str]:
 
 
 def _landed_files(ns: str, landing_root: str) -> list[str]:
-    """File names the ingest's own source scan sees under the landing path."""
-    ns, _, landing_root = sftp_ingest_sql.validated(ns, CATALOG, landing_root)
-    rows = dbx.sql(
-        "SELECT DISTINCT regexp_extract(_metadata.file_path, '([^/]+)$', 1) AS file_name "
-        f"FROM read_files('{landing_root}/{ns}/custbill/', format => 'text', wholeText => true) "
-        "ORDER BY file_name"
-    )
+    """File names the ingest's own source scan sees under the landing path.
+
+    The query comes from the statement module, so what the recon claims the re-run
+    reads is literally what the re-run reads.
+    """
+    rows = dbx.sql(sftp_ingest_sql.landed_files_query(ns, CATALOG, landing_root))
     return [row[0] for row in rows]
 
 
@@ -389,50 +390,71 @@ def _contained(number: int, name: str, check_fn, *args) -> Check:
         return check
 
 
+PROBE_DIR = "_upload_probe"
+
+
 @dataclass
 class UploadProbe:
     """What the documented `make dbx-upload` transport did on this run."""
 
     target: str
-    verified: bool
+    verified: bool | None  # None == not attempted on this run
     error: str | None = None
+    skipped: str | None = None
 
 
-def probe_upload(ns: str, golden: dict[str, GoldenFile], golden_root: Path) -> UploadProbe:
-    """Attempt the documented upload transport and report what actually happened.
+def probe_upload(ns: str, landing_root: str, attempt: bool) -> UploadProbe:
+    """Exercise the documented upload transport and report what actually happened.
 
     The report is evidence, so its caveat about `make dbx-upload` has to be an
     observation rather than a remembered fact: a token that later gains the `files`
-    scope must flip this to verified without anyone editing prose. The bytes sent are
-    the golden artifact itself, to the path the job reads, so a success is the real
-    transport doing its real job, and it is idempotent (identical content).
+    scope must flip it to verified without anyone editing prose.
+
+    What is deliberately *not* done: writing into the drop directory. A verifier that
+    stages its own input into the path under test is no longer verifying the pipeline,
+    so the probe writes a probe payload to a sibling `{ns}/_upload_probe/` path that
+    no ingest statement reads, and it is skipped entirely when the requested
+    `landing_root` is not the one `dbx.upload` writes to (the driver derives its own
+    root from `OW_TP_CATALOG`), because a probe of a different volume proves nothing
+    about this run.
     """
-    name = sorted(golden)[0]
-    local = golden_root / "incoming" / f"{name}.done"
-    relpath = f"{ns}/custbill/{name}"
-    try:
-        target = dbx.upload(str(local), relpath)
-        return UploadProbe(target=target, verified=True)
-    except Exception as exc:  # noqa: BLE001 - the failure text *is* the evidence
+    probe_root = f"/Volumes/{dbx.CATALOG}/bronze/landing"
+    target = f"{probe_root}/{ns}/{PROBE_DIR}/upload_probe.txt"
+    if not attempt:
+        return UploadProbe(target=target, verified=None, skipped="not attempted on this run")
+    if landing_root.rstrip("/") != probe_root:
         return UploadProbe(
-            target=f"/Volumes/{CATALOG}/bronze/landing/{relpath}",
-            verified=False,
-            error=f"{type(exc).__name__}: {exc}",
+            target=target,
+            verified=None,
+            skipped=(
+                f"not attempted: dbx.upload writes under {probe_root}, but this run reconciles "
+                f"{landing_root}, so the probe would not exercise the path under test"
+            ),
         )
+    payload = Path(f"/tmp/ow_tp_upload_probe_{ns}.txt")
+    payload.write_text(f"ow_tp upload transport probe for ns={ns}; not ingest input\n")
+    try:
+        return UploadProbe(target=dbx.upload(str(payload), f"{ns}/{PROBE_DIR}/upload_probe.txt"), verified=True)
+    except Exception as exc:  # noqa: BLE001 - the failure text *is* the evidence
+        return UploadProbe(target=target, verified=False, error=f"{type(exc).__name__}: {exc}")
 
 
 def _upload_caveat(ns: str, upload: UploadProbe) -> list[str]:
     """Report the upload transport as observed by `probe_upload` on this run."""
+    if upload.verified is None:
+        return [
+            "* **`make dbx-upload` is UNVERIFIED (not probed on this run).** The transport was not",
+            f"  exercised: {upload.skipped}. The inputs the checks above read were landed inside",
+            "  Databricks (serverless task writing to the volume), which is a demo workaround, **not**",
+            "  the production transport.",
+            "",
+        ]
     if upload.verified:
         return [
             "* **`make dbx-upload` is VERIFIED.** The documented upload transport was exercised on this",
-            "  run: the golden artifact was PUT to the path the job reads, and the checks above then read",
-            "  it back out of the volume.",
-            "",
-            "  ```",
-            f"  $ make dbx-upload NS={ns}",
-            f"  -> {upload.target}",
-            "  ```",
+            "  run — a probe payload was PUT through the same `dbx.upload` path, to",
+            f"  `{upload.target}` (a sibling of the drop directory that no ingest statement reads, so",
+            "  the verifier never stages its own input into the path under test).",
             "",
         ]
     return [
@@ -509,6 +531,11 @@ def _main(argv: list[str]) -> int:
     parser.add_argument("--golden-root", default=str(GOLDEN_ROOT))
     parser.add_argument("--landing-root", default=LANDING_ROOT)
     parser.add_argument("--no-rerun", action="store_true", help="skip check 4 (the idempotency re-run)")
+    parser.add_argument(
+        "--no-upload-probe",
+        action="store_true",
+        help="do not exercise the dbx.upload transport; report it as unverified/unprobed",
+    )
     parser.add_argument("--report", help="write the markdown report to this path")
     args = parser.parse_args(argv)
 
@@ -517,13 +544,9 @@ def _main(argv: list[str]) -> int:
     sftp_ingest_sql.validated(args.ns, CATALOG, args.landing_root)
 
     golden = load_golden(Path(args.golden_root))
-    # Probed before the checks, so a working transport lands the golden bytes the
-    # checks then read, and a refused one is recorded verbatim rather than assumed.
-    upload = probe_upload(args.ns, golden, Path(args.golden_root))
-    print(
-        f"[{'VERIFIED' if upload.verified else 'UNVERIFIED'}] upload transport "
-        f"{upload.target}: {upload.error or 'ok'}"
-    )
+    # `--no-rerun` is the read-only pass, so it writes nothing at all, probe included.
+    upload = probe_upload(args.ns, args.landing_root, not args.no_upload_probe and not args.no_rerun)
+    print(f"[upload transport] {upload.target}: {upload.skipped or upload.error or 'VERIFIED'}")
     checks = [
         _contained(1, "bronze.custbill_files matches the golden artifacts", check1_manifest, args.ns, golden),
         _contained(2, "bronze.custbill_lines preserves the raw records", check2_lines, args.ns, golden),
