@@ -166,41 +166,54 @@ def teardown() -> TeardownResult:
     job_torn_down = False
     notebook_torn_down = False
     errors: dict[str, str] = {}
+    active_run_unconfirmed = False
 
     try:
-        current = existing_job_id()
-        if current is not None:
-            runs = dbx.request(
+        try:
+            current = existing_job_id()
+            runs = [] if current is None else dbx.request(
                 "GET", f"/api/2.2/jobs/runs/list?job_id={current}&limit=20"
             ).get("runs", [])
+        except Exception:
+            # A run we could not enumerate may still be executing the notebook.
+            active_run_unconfirmed = True
+            raise
+        if current is not None:
             active = [r for r in runs if r.get("state", {}).get("life_cycle_state") not in TERMINAL_STATES]
             for run in active:
                 run_id = run.get("run_id")
-                dbx.request("POST", "/api/2.2/jobs/runs/cancel", {"run_id": run_id})
-                deadline = time.monotonic() + TEARDOWN_TIMEOUT_S
-                while True:
-                    live = dbx.request("GET", f"/api/2.2/jobs/runs/get?run_id={run_id}")
-                    if live.get("state", {}).get("life_cycle_state") in TERMINAL_STATES:
-                        break
-                    if time.monotonic() >= deadline:
-                        raise dbx.DatabricksError(
-                            f"run {run_id} did not reach a terminal state before teardown timeout"
-                        )
-                    time.sleep(TEARDOWN_POLL_S)
+                try:
+                    dbx.request("POST", "/api/2.2/jobs/runs/cancel", {"run_id": run_id})
+                    deadline = time.monotonic() + TEARDOWN_TIMEOUT_S
+                    while True:
+                        live = dbx.request("GET", f"/api/2.2/jobs/runs/get?run_id={run_id}")
+                        if live.get("state", {}).get("life_cycle_state") in TERMINAL_STATES:
+                            break
+                        if time.monotonic() >= deadline:
+                            raise dbx.DatabricksError(
+                                f"run {run_id} did not reach a terminal state before teardown timeout"
+                            )
+                        time.sleep(TEARDOWN_POLL_S)
+                except Exception:
+                    active_run_unconfirmed = True
+                    raise
             dbx.request("POST", "/api/2.2/jobs/delete", {"job_id": current})
             job_torn_down = True
     except Exception as exc:
         errors["job"] = str(exc)
 
     notebook_path = f"{dbx.PIPELINE_ROOT}/{NOTEBOOK_NAME}"
-    try:
-        dbx.request("POST", "/api/2.0/workspace/delete", {"path": notebook_path, "recursive": False})
-        notebook_torn_down = True
-    except dbx.DatabricksError as exc:
-        if exc.status != 404 and exc.error_code != "RESOURCE_DOES_NOT_EXIST":
+    if active_run_unconfirmed:
+        errors["notebook"] = "skipped because an active drill run did not reach a confirmed terminal state"
+    else:
+        try:
+            dbx.request("POST", "/api/2.0/workspace/delete", {"path": notebook_path, "recursive": False})
+            notebook_torn_down = True
+        except dbx.DatabricksError as exc:
+            if exc.status != 404 and exc.error_code != "RESOURCE_DOES_NOT_EXIST":
+                errors["notebook"] = str(exc)
+        except Exception as exc:
             errors["notebook"] = str(exc)
-    except Exception as exc:
-        errors["notebook"] = str(exc)
     return TeardownResult(job_torn_down, notebook_torn_down, errors)
 
 
