@@ -46,7 +46,7 @@ tp-mongo-migrate-invoices: ## Migrate Oracle invoices to MongoDB (NS=<ns>; MONGO
 	$(call validate_ns)
 	$(TP_MONGO_UV) migrations/mongodb/migrate_invoices.py --ns $(NS) --port $(ORACLE_BILLING_DB_PORT)
 
-tp-mongo-recon-invoices: ## Recompute mongo_invoices recon from the target MongoDB (NS=<ns>)
+tp-mongo-recon-invoices: ## Recompute mongo_invoices state from the target MongoDB (NS=<ns>; report emission needs the rerun proof — use tp-mongo-verify-invoices)
 	$(call validate_ns)
 	$(TP_MONGO_UV) migrations/mongodb/recon_invoices.py --ns $(NS)
 

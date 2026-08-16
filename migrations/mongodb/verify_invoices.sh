@@ -11,8 +11,9 @@ RUN="uv run --with oracledb==2.5.1 --with pymongo==4.15.5"
 STATE="$(mktemp -t mongo_invoices_state.XXXXXX.json)"
 trap 'rm -f "$STATE"' EXIT
 
-$RUN "$DIR/migrate_invoices.py" --ns "$NS" "$@"
-$RUN "$DIR/recon_invoices.py" --ns "$NS" --state-out "$STATE"
-$RUN "$DIR/migrate_invoices.py" --ns "$NS" "$@"
-$RUN "$DIR/recon_invoices.py" --ns "$NS" --run-mode "${RUN_MODE:-fixture}" \
+MODE="${RUN_MODE:-fixture}"
+$RUN "$DIR/migrate_invoices.py" --ns "$NS" --run-mode "$MODE" "$@"
+$RUN "$DIR/recon_invoices.py" --ns "$NS" --run-mode "$MODE" --state-out "$STATE"
+$RUN "$DIR/migrate_invoices.py" --ns "$NS" --run-mode "$MODE" "$@"
+$RUN "$DIR/recon_invoices.py" --ns "$NS" --run-mode "$MODE" \
   --idempotency-state "$STATE"

@@ -84,7 +84,8 @@ def main() -> int:
     ap.add_argument("--out")
     ap.add_argument("--state-out", help="write the state fingerprint and exit")
     ap.add_argument("--idempotency-state",
-                    help="prior --state-out file to compare against for the rerun proof")
+                    help="prior --state-out file to compare against for the rerun proof; "
+                         "required when emitting a report (the schema mandates a rerun)")
     args = ap.parse_args()
     ns = args.ns
     if not tp_common.valid_ns(ns):
@@ -98,6 +99,13 @@ def main() -> int:
     if args.state_out:
         Path(args.state_out).write_text(json.dumps(state, indent=2) + "\n")
         print(f"[recon] state fingerprint written: {args.state_out}")
+        return 0
+
+    if not args.idempotency_state:
+        print(json.dumps(state, indent=2))
+        print("[recon] no --idempotency-state given: schema-valid reports require "
+              "the rerun proof; state printed instead (use verify_invoices.sh "
+              "for the full migrate -> rerun -> report flow)", file=sys.stderr)
         return 0
 
     manifest_file = tp_common.MANIFESTS_DIR / f"{ns}.json"
@@ -141,16 +149,14 @@ def main() -> int:
          "result": "pass" if orphan_count == exp_orphans else "fail"},
     ]
 
-    idem = {"performed": False, "result": "fail"}
-    if args.idempotency_state:
-        prior = json.loads(Path(args.idempotency_state).read_text())
-        same = prior["fingerprint"] == state["fingerprint"]
-        idem = {"performed": True, "result": "pass" if same else "fail",
-                "evidence": (f"migration rerun for ns={ns}: state fingerprint "
-                             f"{prior['fingerprint']} (run 1) vs "
-                             f"{state['fingerprint']} (run 2), "
-                             f"{'identical' if same else 'DIFFERENT'} counts/"
-                             "checksums/quarantine sets recomputed from the target")}
+    prior = json.loads(Path(args.idempotency_state).read_text())
+    same = prior["fingerprint"] == state["fingerprint"]
+    idem = {"performed": True, "result": "pass" if same else "fail",
+            "evidence": (f"migration rerun for ns={ns}: state fingerprint "
+                         f"{prior['fingerprint']} (run 1) vs "
+                         f"{state['fingerprint']} (run 2), "
+                         f"{'identical' if same else 'DIFFERENT'} counts/"
+                         "checksums/quarantine sets recomputed from the target")}
 
     expected_set = [f"orphaned_rows:{exp_orphans}"]
     actual_set = [f"orphaned_rows:{orphan_count}"] if orphan_count else []
