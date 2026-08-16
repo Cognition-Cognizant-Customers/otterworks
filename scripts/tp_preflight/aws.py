@@ -138,6 +138,7 @@ def leftover_scan(pid, description, args, extractor, own_role=None, classify_iam
         match for match in matches
         if re.search(rf"{re.escape(name_prefix)}preflight-", str(match))
     ]
+    concurrent_detail = None
     if preflight_matches:
         if classify_iam:
             concurrent = []
@@ -187,11 +188,11 @@ def leftover_scan(pid, description, args, extractor, own_role=None, classify_iam
                     )
                 detail = "; ".join(detail_parts)
             elif concurrent:
-                result = "informational"
-                detail = (
+                concurrent_detail = (
                     f"possibly in-flight preflight role(s) younger than "
                     f"{max_preflight_age_seconds}s ({len(concurrent)}): {json.dumps(concurrent)}"
                 )
+                preflight_matches = []
         else:
             result = "denied"
             detail = f"preflight debris ({len(preflight_matches)}): {json.dumps(preflight_matches)}"
@@ -203,6 +204,8 @@ def leftover_scan(pid, description, args, extractor, own_role=None, classify_iam
             detail = f"{len(matches)} existing resource(s): {detail}"
         else:
             result = "verified"
+    if concurrent_detail:
+        detail = f"{detail}; {concurrent_detail}"
     m.add(pid, description, "aws " + " ".join(args), result, detail)
     return result != "denied"
 
