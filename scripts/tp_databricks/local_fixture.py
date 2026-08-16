@@ -37,6 +37,18 @@ def validate_namespace(namespace: str) -> None:
         raise SystemExit("--ns must match [A-Za-z0-9_-]+ and must not be empty")
 
 
+def validate_landing(landing: str) -> Path:
+    repo_root = Path(__file__).resolve().parents[2]
+    sandbox = (repo_root / ".tp-preflight").resolve()
+    resolved = Path(landing).resolve()
+    if resolved == sandbox or sandbox not in resolved.parents:
+        raise SystemExit(
+            "--landing must resolve beneath the repository .tp-preflight sandbox "
+            f"({sandbox}) and must not be the sandbox root"
+        )
+    return resolved
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("action", choices=["land", "verify", "clean"])
@@ -45,7 +57,7 @@ def main() -> int:
     p.add_argument("--landing", default=".tp-preflight/databricks-fixture/landing")
     args = p.parse_args()
     validate_namespace(args.ns)
-    landing = Path(args.landing) / args.ns
+    landing = validate_landing(args.landing) / args.ns
     source = Path(args.source)
     if args.action == "clean":
         shutil.rmtree(landing, ignore_errors=True)

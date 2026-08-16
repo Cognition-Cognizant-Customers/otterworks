@@ -33,6 +33,7 @@ def main() -> int:
             print(f"{path}: invalid JSON Schema ({exc})")
             return 2
     legacy_prose: list[Path] = []
+    failures: list[str] = []
     if args.file:
         files = [Path(args.file)]
     elif args.kind == "contracts":
@@ -44,14 +45,15 @@ def main() -> int:
         for candidate in sorted((ROOT / "docs/tech-partnerships/recon").glob("*.json")):
             try:
                 data = json.loads(candidate.read_text())
-            except Exception:
-                data = None
+            except Exception as exc:
+                failures.append(f"{candidate}: not valid JSON ({exc})")
+                continue
             if isinstance(data, dict) and "unit" in data:
                 files.append(candidate)
             else:
                 legacy_prose.append(candidate)
     kind = "contract" if args.kind == "contracts" else "recon"
-    failures = [err for f in files for err in validate_file(f, schemas[kind])]
+    failures.extend(err for f in files for err in validate_file(f, schemas[kind]))
     print(f"validated {len(files)} {args.kind} file(s)")
     if legacy_prose:
         label = "legacy prose contract(s)" if args.kind == "contracts" else "unmigrated non-report JSON artifact(s)"
