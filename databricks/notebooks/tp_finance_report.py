@@ -408,8 +408,16 @@ def _deliver(smtp: object, message: object) -> str:
         refused = smtp.send_message(message)
         if refused:
             raise RuntimeError(f"SMTP refused {len(refused)} recipient(s)")
-    finally:
+    except Exception:
+        try:
+            smtp.quit()
+        except Exception:
+            pass
+        raise
+    try:
         smtp.quit()
+    except Exception:
+        pass
     return STATUS_DELIVERED
 
 
