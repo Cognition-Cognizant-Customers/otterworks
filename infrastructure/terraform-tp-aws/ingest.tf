@@ -50,19 +50,16 @@ data "aws_iam_policy_document" "ingest" {
     resources = ["${aws_s3_bucket.pipeline.arn}/landing/*"]
   }
 
-  # ListBucket scoped to landing/ so HeadObject on an already-deleted landed
+  # ListBucket on the bucket so HeadObject on an already-deleted landed
   # object returns 404 (not 403), which the redelivery no-op path relies on.
+  # No s3:prefix condition: HeadObject's 404-vs-403 check carries no s3:prefix
+  # in its request context, so a prefix-conditioned Allow never matches it.
+  # Read-only; bucket writes stay scoped to the stage prefixes below.
   statement {
     sid       = "LandingList"
     effect    = "Allow"
     actions   = ["s3:ListBucket"]
     resources = [aws_s3_bucket.pipeline.arn]
-
-    condition {
-      test     = "StringLike"
-      variable = "s3:prefix"
-      values   = ["landing/*"]
-    }
   }
 
   # Write only the stage prefixes this component owns — no bucket-wide write.
