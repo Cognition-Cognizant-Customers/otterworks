@@ -36,6 +36,10 @@ CATALOG = "ow_tp"
 # is rejected before a statement is built.
 _TOKEN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# The workspace is shared, so the catalog is constrained to this demo's prefix
+# rather than to any identifier-shaped word: job parameters are overridable at
+# run-now time, and every statement below creates or mutates tables in it.
+_CATALOG = re.compile(r"^ow_tp[a-z0-9_]*$")
 
 DDL_SQL = """
 CREATE TABLE IF NOT EXISTS {catalog}.bronze.storage_objects_raw (
@@ -189,7 +193,7 @@ def _checked(label: str, value: str, pattern=_TOKEN) -> str:
 
 def ddl_statements(catalog: str = CATALOG) -> list:
     """Idempotent CREATE TABLE statements for this unit's tables."""
-    catalog = _checked("catalog", catalog)
+    catalog = _checked("catalog", catalog, _CATALOG)
     return _split(DDL_SQL.format(catalog=catalog))
 
 
@@ -197,7 +201,7 @@ def ensure_legacy_attributed(
     execute, catalog: str = CATALOG, table: str = "storage_objects_raw"
 ) -> bool:
     """Add the legacy attribution column only when the bronze table lacks it."""
-    catalog = _checked("catalog", catalog)
+    catalog = _checked("catalog", catalog, _CATALOG)
     table = _checked("table", table)
     columns = execute(
         f"""
@@ -229,7 +233,7 @@ def pipeline_statements(
     """The set-based orphan detection + savings report, for one namespace slice."""
     ns = _checked("ns", ns)
     scenario = _checked("scenario", scenario)
-    catalog = _checked("catalog", catalog)
+    catalog = _checked("catalog", catalog, _CATALOG)
     run_date = _checked("run_date", run_date, _ISO_DATE)
     guard_cte = _GUARD_CTE.format(catalog=catalog, ns=ns).strip().rstrip(",")
     sql = PIPELINE_SQL.format(
@@ -265,7 +269,11 @@ if _in_databricks():  # pragma: no cover -- exercised by the job, not locally
         dbutils.widgets.text(_name, _default)  # noqa: F821
 
     stage = dbutils.widgets.get("stage")  # noqa: F821
-    catalog = _checked("catalog", dbutils.widgets.get("catalog") or CATALOG)  # noqa: F821
+    catalog = _checked(  # noqa: F821
+        "catalog",
+        dbutils.widgets.get("catalog") or CATALOG,  # noqa: F821
+        _CATALOG,
+    )
     ns = _checked("ns", dbutils.widgets.get("ns"))  # noqa: F821
     scenario = _checked("scenario", dbutils.widgets.get("scenario") or "nominal")  # noqa: F821
     dry_run = dbutils.widgets.get("dry_run").strip().lower() != "false"  # noqa: F821
