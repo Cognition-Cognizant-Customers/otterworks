@@ -218,7 +218,8 @@ def _resolve_capture_date(
 
 def _counterfactual_note(counterfactual_dir: Path = GOLDEN / "counterfactual") -> str:
     report_path = counterfactual_dir / "run_b_report.json"
-    if not report_path.is_file():
+    log_path = counterfactual_dir / "run_b_partial_metadata.txt"
+    if not report_path.is_file() or not log_path.is_file():
         return (
             "legacy counterfactual artefacts are not present on this machine; "
             "the separate legacy comparison is not being asserted"
@@ -228,15 +229,21 @@ def _counterfactual_note(counterfactual_dir: Path = GOLDEN / "counterfactual") -
         total_objects = report["inventory"]["total_objects"]
         orphaned_objects = report["orphans"]["orphaned_objects"]
         objects_quarantined = report["cleanup"]["objects_quarantined"]
-    except (OSError, KeyError, TypeError, ValueError):
+        log = log_path.read_text()
+        metadata_match = re.search(r"Found (\d+) S3 keys referenced in metadata", log)
+        if metadata_match is None:
+            raise ValueError("metadata key count missing")
+        metadata_keys = int(metadata_match.group(1))
+    except (OSError, KeyError, TypeError, UnicodeError, ValueError):
         return (
             "legacy counterfactual artefacts are not present on this machine; "
             "the separate legacy comparison is not being asserted"
         )
     return (
         "legacy counterfactual evidence from a separate unedited-script run: "
-        f"with {orphaned_objects} of {total_objects} metadata items unread it reported "
-        f"{orphaned_objects} orphans and quarantined {objects_quarantined} live customer files "
+        f"it listed {total_objects} objects, read {metadata_keys} metadata keys, "
+        f"reported {orphaned_objects} orphans, and quarantined {objects_quarantined} live "
+        f"customer files "
         f"(see {counterfactual_dir}/)"
     )
 
