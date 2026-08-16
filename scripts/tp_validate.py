@@ -48,7 +48,10 @@ def main() -> int:
             except Exception as exc:
                 failures.append(f"{candidate}: not valid JSON ({exc})")
                 continue
-            if isinstance(data, dict) and "unit" in data:
+            if (
+                isinstance(data, dict)
+                and (data.get("kind") == "recon-report" or candidate.name.endswith(".recon.json"))
+            ):
                 files.append(candidate)
             else:
                 legacy_prose.append(candidate)

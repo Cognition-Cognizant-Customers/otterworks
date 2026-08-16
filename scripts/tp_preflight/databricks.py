@@ -27,11 +27,8 @@ valid_databricks_host = (
     or parsed_host.hostname.endswith(".azuredatabricks.net")
     or parsed_host.hostname.endswith(".gcp.databricks.com")
 )
-if not valid_databricks_host and os.environ.get("TP_DATABRICKS_ALLOW_CUSTOM_HOST") != "1":
-    raise SystemExit(
-        "DATABRICKS_DEMO_HOST must use a Databricks workspace host unless "
-        "TP_DATABRICKS_ALLOW_CUSTOM_HOST=1"
-    )
+if not valid_databricks_host:
+    raise SystemExit("DATABRICKS_DEMO_HOST must use a Databricks workspace host")
 HOST = raw_host.rstrip("/")
 TOKEN = os.environ["DATABRICKS_DEMO_TOKEN"]
 catalog = os.environ.get("TP_DATABRICKS_CATALOG", "ow_tp")

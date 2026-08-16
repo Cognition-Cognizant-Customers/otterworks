@@ -49,8 +49,8 @@ raw_base = os.environ.get("TP_ATLAS_API_BASE", "https://cloud.mongodb.com/api/at
 parsed_base = urllib.parse.urlparse(raw_base)
 if parsed_base.scheme != "https" or not parsed_base.hostname or parsed_base.username or parsed_base.password:
     raise SystemExit("TP_ATLAS_API_BASE must be an HTTPS URL with a valid host")
-if parsed_base.hostname != "cloud.mongodb.com" and os.environ.get("TP_ATLAS_ALLOW_CUSTOM_API_BASE") != "1":
-    raise SystemExit("TP_ATLAS_API_BASE must use cloud.mongodb.com unless TP_ATLAS_ALLOW_CUSTOM_API_BASE=1")
+if parsed_base.hostname != "cloud.mongodb.com":
+    raise SystemExit("TP_ATLAS_API_BASE must use cloud.mongodb.com")
 base = raw_base.rstrip("/")
 project = os.environ["MONGODB_ATLAS_PROJECT_ID"]
 if not re.fullmatch(r"[A-Za-z0-9_-]+", project):

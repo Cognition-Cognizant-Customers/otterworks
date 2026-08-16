@@ -5,6 +5,11 @@ converted Databricks job: the legacy source, the deficiencies the conversion mus
 retire, the target Unity Catalog tables, where the golden legacy output lives, and the
 reconciliation checks that must pass to the cent.
 
+Machine-readable recon reports must declare `"kind": "recon-report"` and use
+the `*.recon.json` filename convention. They are validated against
+`schema/recon-report.schema.json`; other JSON artifacts are reported
+informationally rather than treated as recon reports.
+
 ## Shared rules (apply to every unit)
 
 - Target estate is parent-owned and already applied: catalog `ow_tp`, schemas

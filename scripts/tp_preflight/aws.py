@@ -8,13 +8,16 @@ import signal
 import subprocess
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from common import Manifest, exception_detail
 
 m = Manifest("aws")
 cleanup_registry = {}
-run_started_at = datetime.now(timezone.utc)
+max_preflight_age_seconds = int(os.environ.get("TP_AWS_MAX_PREFLIGHT_RUNTIME_SECONDS", str(45 * 16)))
+if max_preflight_age_seconds <= 0:
+    raise SystemExit("TP_AWS_MAX_PREFLIGHT_RUNTIME_SECONDS must be positive")
+debris_cutoff = datetime.now(timezone.utc) - timedelta(seconds=max_preflight_age_seconds)
 
 
 def handle_uncaught(exc_type, exc, traceback):
@@ -138,6 +141,7 @@ def leftover_scan(pid, description, args, extractor, own_role=None, classify_iam
         if classify_iam:
             concurrent = []
             abandoned = []
+            unknown_age = []
             for match in preflight_matches:
                 found, role_raw = aws(
                     "iam-role-age",
@@ -154,16 +158,28 @@ def leftover_scan(pid, description, args, extractor, own_role=None, classify_iam
                         created_at = datetime.fromisoformat(created.replace("Z", "+00:00"))
                     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
                         created_at = None
-                if created_at is not None and created_at > run_started_at:
+                if created_at is None:
+                    unknown_age.append(match)
+                elif created_at >= debris_cutoff:
                     concurrent.append(match)
                 else:
                     abandoned.append(match)
-            if abandoned:
+            if abandoned or unknown_age:
                 result = "denied"
-                detail = f"preflight debris ({len(abandoned)}): {json.dumps(abandoned)}"
+                detail_parts = []
+                if abandoned:
+                    detail_parts.append(f"preflight debris ({len(abandoned)}): {json.dumps(abandoned)}")
+                if unknown_age:
+                    detail_parts.append(
+                        f"creation date unavailable ({len(unknown_age)}): {json.dumps(unknown_age)}"
+                    )
+                detail = "; ".join(detail_parts)
             elif concurrent:
                 result = "informational"
-                detail = f"concurrent preflight role(s) in flight ({len(concurrent)}): {json.dumps(concurrent)}"
+                detail = (
+                    f"possibly in-flight preflight role(s) younger than "
+                    f"{max_preflight_age_seconds}s ({len(concurrent)}): {json.dumps(concurrent)}"
+                )
         else:
             result = "denied"
             detail = f"preflight debris ({len(preflight_matches)}): {json.dumps(preflight_matches)}"

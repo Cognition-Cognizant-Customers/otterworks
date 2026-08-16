@@ -25,6 +25,8 @@ than described as green.
 - [ ] Recon values were recomputed from the target platform, not copied from
       migration memory or a previous report.
 - [ ] Every unverified or untested path is listed in the recon report.
+- [ ] The recon report declares `"kind": "recon-report"` and is stored as a
+      `*.recon.json` artifact when using the machine-readable report schema.
 - [ ] Capability preflight passed for every required path before live work.
 - [ ] `make tp-smoke` is green.
 

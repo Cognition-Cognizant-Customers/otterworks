@@ -2,8 +2,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Tech-partnerships recon report",
   "type": "object",
-  "required": ["unit", "namespace", "generated_at", "run_mode", "checks", "values_recomputed_from_target", "idempotency_rerun", "planted_anomaly_detections", "unverified_paths"],
+  "required": ["kind", "unit", "namespace", "generated_at", "run_mode", "checks", "values_recomputed_from_target", "idempotency_rerun", "planted_anomaly_detections", "unverified_paths"],
   "properties": {
+    "kind": {"const": "recon-report"},
     "unit": {"type": "string"}, "namespace": {"type": "string"}, "generated_at": {"type": "string", "format": "date-time"},
     "run_mode": {"enum": ["fixture", "live"]},
     "checks": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["id", "expected", "actual", "source_of_truth"], "properties": {"id": {"type": "string"}, "expected": {}, "actual": {}, "source_of_truth": {"type": "string"}, "result": {"enum": ["pass", "fail", "skipped"]}}}},
