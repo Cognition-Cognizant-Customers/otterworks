@@ -49,9 +49,8 @@ def main() -> int:
             except Exception as exc:
                 failures.append(f"{candidate}: not valid JSON ({exc})")
                 continue
-            if (
-                isinstance(data, dict)
-                and (data.get("kind") == "recon-report" or candidate.name.endswith(".recon.json"))
+            if candidate.name.endswith(".recon.json") or (
+                isinstance(data, dict) and data.get("kind") == "recon-report"
             ):
                 files.append(candidate)
             else:
