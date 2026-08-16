@@ -199,9 +199,9 @@ def probe(pid, description, api, action, cleanup=None):
 
 identity_status, identity_body = call("GET", "/api/2.0/preview/scim/v2/Me")
 if 200 <= identity_status < 300 and isinstance(identity_body, dict):
-    manifest.data["credential_identity"] = identity_body.get("userName", "available")
+    manifest.set_identity(identity_body.get("userName", "available"))
 else:
-    manifest.data["credential_identity"] = "unavailable"
+    manifest.set_identity("unavailable")
     manifest.add("authenticate", "PAT can identify the caller", "GET /api/2.0/preview/scim/v2/Me",
                  "denied", response_detail(identity_status, identity_body))
 

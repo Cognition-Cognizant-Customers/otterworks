@@ -45,11 +45,11 @@ def handle_signal(signum, _frame):
 
 signal.signal(signal.SIGINT, handle_signal)
 signal.signal(signal.SIGTERM, handle_signal)
-region = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
+configured_region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
 name_prefix = os.environ.get("TP_AWS_NAME_PREFIX", "ow-tp-")
 tag_key = os.environ.get("TP_AWS_PROJECT_TAG_KEY", "Project")
 tag_value = os.environ.get("TP_AWS_PROJECT_TAG_VALUE", "otterworks-tp")
-if not re.fullmatch(r"[A-Za-z0-9_-]+", region):
+if configured_region and not re.fullmatch(r"[A-Za-z0-9_-]+", configured_region):
     raise SystemExit("AWS region must contain only letters, digits, '-' or '_'")
 if not re.fullmatch(r"[A-Za-z0-9_-]+", name_prefix):
     raise SystemExit("TP_AWS_NAME_PREFIX must contain only letters, digits, '-' or '_'")
@@ -58,7 +58,32 @@ if not re.fullmatch(tag_filter_pattern, tag_key) or not re.fullmatch(tag_filter_
     raise SystemExit(
         "AWS tag key/value may contain only letters, digits, spaces, '+', '-', '.', '_', ':', '/', and '@'"
     )
-env = {**os.environ, "AWS_DEFAULT_REGION": region, "AWS_REGION": region}
+env = dict(os.environ)
+if configured_region:
+    env["AWS_DEFAULT_REGION"] = configured_region
+    env["AWS_REGION"] = configured_region
+
+if configured_region:
+    region = configured_region
+else:
+    region_probe = subprocess.run(
+        ["aws", "configure", "get", "region"],
+        capture_output=True,
+        text=True,
+        timeout=45,
+        env=env,
+    )
+    region = (region_probe.stdout or "").strip() if region_probe.returncode == 0 else ""
+    if region and not re.fullmatch(r"[A-Za-z0-9_-]+", region):
+        region = ""
+if region:
+    m.add("region", "Resolve the AWS region used by the preflight",
+          "aws configure get region" if not configured_region else "AWS environment",
+          "verified", region)
+else:
+    m.add("region", "Resolve the AWS region used by the preflight",
+          "aws configure get region", "denied",
+          "no AWS region was provided or resolved from the active profile")
 
 
 def aws(pid, description, args, required=True, record=True):
@@ -154,7 +179,7 @@ ok, identity = aws("identity", "Identify the AWS caller", ["sts", "get-caller-id
 if ok:
     try:
         payload = json.loads(identity)
-        m.data["credential_identity"] = payload.get("Arn", "available") if isinstance(payload, dict) else "available"
+        m.set_identity(payload.get("Arn", "available") if isinstance(payload, dict) else "available")
     except json.JSONDecodeError:
         pass
 if ok:

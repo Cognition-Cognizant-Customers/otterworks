@@ -15,9 +15,12 @@ class Manifest:
         self.data = {
             "platform": platform,
             "checked_at": datetime.now(timezone.utc).isoformat(),
-            "credential_identity": identity,
+            "credential_identity": self._redact_identity(identity),
             "probes": [],
         }
+
+    def set_identity(self, identity: str) -> None:
+        self.data["credential_identity"] = self._redact_identity(identity)
 
     def add(self, probe_id: str, description: str, api: str, result: str, detail: str) -> None:
         redacted_detail = self._redact(str(detail))
@@ -55,6 +58,14 @@ class Manifest:
         detail = re.sub(r"\bAKIA[0-9A-Z]{16}\b", "[REDACTED_AWS_KEY]", detail)
         detail = re.sub(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]+", "Bearer [REDACTED]", detail)
         return detail[:1000]
+
+    @classmethod
+    def _redact_identity(cls, identity: str) -> str:
+        value = cls._redact(str(identity))
+        match = re.fullmatch(r"([^@\s]+)@([^\s@]+)", value)
+        if match:
+            return f"{match.group(1)[0]}***@{match.group(2)}"
+        return value
 
     def write(self, platform: str) -> int:
         out = Path(os.environ.get("TP_PREFLIGHT_DIR", ".tp-preflight"))

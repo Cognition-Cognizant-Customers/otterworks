@@ -8,11 +8,11 @@
     "source_artifact_path": {"type": "string", "minLength": 1},
     "target_objects": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
     "golden_baseline_location": {"type": "string", "minLength": 1},
-    "acceptance_checks": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["id", "description"], "properties": {"id": {"type": "string"}, "description": {"type": "string"}}}},
+    "acceptance_checks": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["id", "description"], "properties": {"id": {"type": "string"}, "description": {"type": "string", "minLength": 1}}}},
     "encoding_policy": {"type": "object", "required": ["input_encoding", "byte_transparency"], "properties": {"input_encoding": {"type": "string"}, "byte_transparency": {"type": "string"}, "invalid_bytes": {"type": "string"}}},
     "malformed_record_policy": {"type": "object", "required": ["extra_delimited_fields", "null_attribution"], "properties": {"extra_delimited_fields": {"enum": ["fail", "tolerate-and-attribute"]}, "null_attribution": {"enum": ["fail", "tolerate-and-attribute"]}, "details": {"type": "string"}}},
     "empty_input_semantics": {"type": "object", "required": ["action"], "properties": {"action": {"enum": ["no-op", "write-empty-result", "delete-prior-output", "fail"]}, "details": {"type": "string"}}},
     "trigger_granularity": {"enum": ["per-file", "per-batch"]},
-    "planted_anomalies": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["id", "status"], "properties": {"id": {"type": "string"}, "description": {"type": "string"}, "status": {"enum": ["must-detect", "coverage_gap"]}, "reason": {"type": "string"}}, "allOf": [{"if": {"properties": {"status": {"const": "coverage_gap"}}}, "then": {"required": ["reason"]}}]}}
+    "planted_anomalies": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["id", "status"], "properties": {"id": {"type": "string"}, "description": {"type": "string", "minLength": 1}, "status": {"enum": ["must-detect", "coverage_gap"]}, "reason": {"type": "string", "minLength": 1}}, "allOf": [{"if": {"properties": {"status": {"const": "coverage_gap"}}}, "then": {"required": ["reason"]}}]}}
   }
 }
