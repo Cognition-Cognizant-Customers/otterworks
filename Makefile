@@ -1,9 +1,37 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke dbx-init dbx-apply dbx-destroy dbx-inventory dbx-verify-teardown dbx-upload dbx-deploy-notebooks dbx-run dbx-recon aws-tp-plan aws-tp-apply aws-tp-run aws-tp-verify aws-tp-destroy aws-tp-scan mongo-tp-customers-setup mongo-tp-customers-test mongo-tp-customers-migrate mongo-tp-customers-recon
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean dbx-init dbx-apply dbx-destroy dbx-inventory dbx-verify-teardown dbx-upload dbx-deploy-notebooks dbx-run dbx-recon aws-tp-plan aws-tp-apply aws-tp-run aws-tp-verify aws-tp-destroy aws-tp-scan mongo-tp-customers-setup mongo-tp-customers-test mongo-tp-customers-migrate mongo-tp-customers-recon
 
 SHELL := /bin/bash
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+tp-preflight: ## Check platform capabilities (PLATFORM=databricks|atlas|aws)
+	@test "$(PLATFORM)" = databricks -o "$(PLATFORM)" = atlas -o "$(PLATFORM)" = aws || { echo "PLATFORM must be databricks, atlas, or aws" >&2; exit 2; }
+	scripts/tp-preflight-$(PLATFORM).sh
+
+tp-preflight-databricks: ## Check Databricks capability paths and emit a manifest
+	scripts/tp-preflight-databricks.sh
+
+tp-preflight-atlas: ## Check MongoDB Atlas capability paths and emit a manifest
+	scripts/tp-preflight-atlas.sh
+
+tp-preflight-aws: ## Check AWS capability paths and leftovers
+	scripts/tp-preflight-aws.sh
+
+tp-validate-contracts: ## Validate JSON contracts (legacy prose files are reported as failures)
+	uv run --no-project --with jsonschema==4.25.1 python3 scripts/tp_validate.py contracts
+
+tp-validate-recon: ## Validate recon JSON (FILE=<path> or all committed JSON)
+	uv run --no-project --with jsonschema==4.25.1 python3 scripts/tp_validate.py recon $(FILE)
+
+tp-fixture-land: ## Land source artifacts in the local Databricks transport fixture (NS=<ns>)
+	python3 scripts/tp_databricks/local_fixture.py land --ns $${NS:-fixture} --source $${FIXTURE_SOURCE:-etl/legacy-extra}
+
+tp-fixture-verify: ## Verify local fixture bytes and checksums (NS=<ns>)
+	python3 scripts/tp_databricks/local_fixture.py verify --ns $${NS:-fixture}
+
+tp-fixture-clean: ## Remove local Databricks transport fixture (NS=<ns>)
+	python3 scripts/tp_databricks/local_fixture.py clean --ns $${NS:-fixture}
 
 PROCS_COMPOSE = docker compose -f docker-compose.procs.yml -p otterworks-procs-$(NS)
 PROCS_UV = uv run --with psycopg[binary]==3.2.9 --with pyyaml==6.0.2
