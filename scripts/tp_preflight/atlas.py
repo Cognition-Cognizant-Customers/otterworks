@@ -5,6 +5,7 @@ import os
 import ipaddress
 import signal
 import socket
+import sys
 import urllib.parse
 import uuid
 from requests import delete, get, post
@@ -20,6 +21,18 @@ headers = {"Accept": "application/vnd.atlas.2024-08-05+json", "Content-Type": "a
 m = Manifest("atlas")
 
 
+def handle_uncaught(exc_type, exc, traceback):
+    try:
+        m.add("internal-error", "Unhandled preflight failure", "preflight runtime",
+              "denied", exception_detail(exc))
+        m.write("atlas")
+    finally:
+        sys.__excepthook__(exc_type, exc, traceback)
+
+
+sys.excepthook = handle_uncaught
+
+
 def check(pid, description, method, url, **kwargs):
     try:
         r = method(url, auth=auth, headers=headers, timeout=30, **kwargs)
@@ -28,7 +41,8 @@ def check(pid, description, method, url, **kwargs):
         if not r.ok:
             try:
                 body = r.json()
-                detail += f": {body.get('errorCode') or body.get('detail') or body.get('error') or body.get('message') or 'request failed'}"
+                if isinstance(body, dict):
+                    detail += f": {body.get('errorCode') or body.get('detail') or body.get('error') or body.get('message') or 'request failed'}"
             except ValueError:
                 detail += ": request failed"
         m.add(pid, description, url, result, detail)

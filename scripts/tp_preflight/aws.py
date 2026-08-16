@@ -4,11 +4,24 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import uuid
 
 from common import Manifest, exception_detail
 
 m = Manifest("aws")
+
+
+def handle_uncaught(exc_type, exc, traceback):
+    try:
+        m.add("internal-error", "Unhandled preflight failure", "preflight runtime",
+              "denied", exception_detail(exc))
+        m.write("aws")
+    finally:
+        sys.__excepthook__(exc_type, exc, traceback)
+
+
+sys.excepthook = handle_uncaught
 region = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
 name_prefix = os.environ.get("TP_AWS_NAME_PREFIX", "ow-tp-")
 tag_key = os.environ.get("TP_AWS_PROJECT_TAG_KEY", "Project")
@@ -64,7 +77,8 @@ def simulate_permission(pid, description, caller_arn, action):
         decision = None
         if p.stdout:
             try:
-                results = json.loads(p.stdout).get("EvaluationResults", [])
+                payload = json.loads(p.stdout)
+                results = payload.get("EvaluationResults", []) if isinstance(payload, dict) else []
                 decision = results[0].get("EvalDecision") if results else None
             except json.JSONDecodeError:
                 pass
@@ -80,7 +94,8 @@ def simulate_permission(pid, description, caller_arn, action):
 ok, identity = aws("identity", "Identify the AWS caller", ["sts", "get-caller-identity"])
 if ok:
     try:
-        m.data["credential_identity"] = json.loads(identity).get("Arn", "available")
+        payload = json.loads(identity)
+        m.data["credential_identity"] = payload.get("Arn", "available") if isinstance(payload, dict) else "available"
     except json.JSONDecodeError:
         pass
 if ok:

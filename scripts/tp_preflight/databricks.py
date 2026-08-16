@@ -4,11 +4,13 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 import time
 import urllib.error
 import urllib.request
 import uuid
 import urllib.parse
+from dataclasses import dataclass
 
 from common import Manifest, exception_detail, require_env
 
@@ -32,6 +34,26 @@ if not re.fullmatch(r"[A-Za-z0-9_]+", landing_catalog) or landing_catalog != cat
         f"{catalog!r}: {landing!r}"
     )
 manifest = Manifest("databricks")
+
+
+def handle_uncaught(exc_type, exc, traceback):
+    try:
+        manifest.add("internal-error", "Unhandled preflight failure", "preflight runtime",
+                     "denied", exception_detail(exc))
+        manifest.write("databricks")
+    finally:
+        sys.__excepthook__(exc_type, exc, traceback)
+
+
+sys.excepthook = handle_uncaught
+
+
+@dataclass(frozen=True)
+class SqlResult:
+    status: int
+    body: dict
+    accepted: bool
+    state: str
 
 
 def call(method: str, path: str, body=None):
@@ -63,23 +85,24 @@ def sql_call(statement: str, warehouse_id: str):
             "on_wait_timeout": "CANCEL",
         },
     )
+    accepted = 200 <= initial_status < 300
+    body = body if isinstance(body, dict) else {}
     status = initial_status
-    if 200 <= initial_status < 300 and isinstance(body, dict):
+    state = body.get("status", {}).get("state") if isinstance(body.get("status"), dict) else "unknown"
+    if accepted:
         statement_id = body.get("statement_id")
-        state = body.get("status", {}).get("state")
         for _ in range(30):
             if state in {"SUCCEEDED", "FAILED", "CANCELED"} or not statement_id:
                 break
             time.sleep(1)
-            status, body = call("GET", f"/api/2.0/sql/statements/{statement_id}")
-            state = body.get("status", {}).get("state") if isinstance(body, dict) else None
-    return status, body, 200 <= initial_status < 300
+            status, polled_body = call("GET", f"/api/2.0/sql/statements/{statement_id}")
+            body = polled_body if isinstance(polled_body, dict) else {}
+            state = body.get("status", {}).get("state") if isinstance(body.get("status"), dict) else "unknown"
+    return SqlResult(status, body, accepted, state)
 
 
 def sql_detail(result):
-    status, body, _ = result
-    if not isinstance(body, dict):
-        return f"HTTP {status}"
+    status, body = result.status, result.body
     statement_status = body.get("status", {})
     state = statement_status.get("state", "unknown")
     error = statement_status.get("error", {})
@@ -116,7 +139,7 @@ def probe(pid, description, api, action, cleanup=None):
 
 
 identity_status, identity_body = call("GET", "/api/2.0/preview/scim/v2/Me")
-if 200 <= identity_status < 300:
+if 200 <= identity_status < 300 and isinstance(identity_body, dict):
     manifest.data["credential_identity"] = identity_body.get("userName", "available")
 else:
     manifest.data["credential_identity"] = "unavailable"
@@ -160,15 +183,15 @@ finally:
 
 warehouse_probe = call("GET", "/api/2.0/sql/warehouses")
 warehouse_id = os.environ.get("DATABRICKS_SQL_WAREHOUSE_ID", "")
-if not warehouse_id and 200 <= warehouse_probe[0] < 300:
+if not warehouse_id and 200 <= warehouse_probe[0] < 300 and isinstance(warehouse_probe[1], dict):
     for warehouse in warehouse_probe[1].get("warehouses", []):
         if warehouse.get("enable_serverless_compute") or warehouse.get("warehouse_type") == "PRO":
             warehouse_id = warehouse.get("id", "")
             break
 schema = f"ow_tp_preflight_{uuid.uuid4().hex[:12]}"
 created_schema = sql_call(f"CREATE SCHEMA {catalog}.{schema}", warehouse_id)
-create_accepted = created_schema[2]
-create_succeeded = create_accepted and isinstance(created_schema[1], dict) and created_schema[1].get("status", {}).get("state") == "SUCCEEDED"
+create_accepted = created_schema.accepted
+create_succeeded = create_accepted and created_schema.state == "SUCCEEDED"
 if create_succeeded:
     listed_schema = call("GET", f"/api/2.1/unity-catalog/schemas?catalog_name={urllib.parse.quote(catalog)}")
     manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema", "SQL Statement + Unity Catalog APIs", "verified" if 200 <= listed_schema[0] < 300 else "denied", f"{sql_detail(created_schema)}; list HTTP {listed_schema[0]}")
@@ -176,7 +199,7 @@ else:
     manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema", "SQL Statement + Unity Catalog APIs", "denied", sql_detail(created_schema))
 if create_accepted:
     dropped_schema = sql_call(f"DROP SCHEMA IF EXISTS {catalog}.{schema} CASCADE", warehouse_id)
-    manifest.add("uc-schema-delete", "Delete the temporary Unity Catalog schema", "SQL Statement", "verified" if dropped_schema[0] >= 200 and dropped_schema[0] < 300 and dropped_schema[1].get("status", {}).get("state") == "SUCCEEDED" else "denied", sql_detail(dropped_schema))
+    manifest.add("uc-schema-delete", "Delete the temporary Unity Catalog schema", "SQL Statement", "verified" if dropped_schema.accepted and dropped_schema.state == "SUCCEEDED" else "denied", sql_detail(dropped_schema))
 else:
     manifest.add("uc-schema-delete", "Delete the temporary Unity Catalog schema", "SQL Statement", "skipped", "schema was not created")
 
@@ -201,7 +224,7 @@ else:
     manifest.add("secret-scope", "Create and delete a temporary secret scope", "Secrets API 2.0", "denied", response_detail(scope[0], scope[1]))
     manifest.add("secret-scope-delete", "Delete the temporary secret scope", "Secrets API 2.0", "skipped", "scope was not created")
 
-if 200 <= warehouse_probe[0] < 300:
+if 200 <= warehouse_probe[0] < 300 and isinstance(warehouse_probe[1], dict):
     serverless = [w for w in warehouse_probe[1].get("warehouses", []) if w.get("enable_serverless_compute") or w.get("warehouse_type") == "PRO"]
     summary = [{"id": w.get("id"), "name": w.get("name"), "state": w.get("state")} for w in serverless[:3]]
     manifest.add("serverless-warehouse", "An existing serverless SQL warehouse is available", "SQL Warehouses API", "verified" if serverless else "denied", json.dumps(summary) if summary else "no serverless warehouse")
