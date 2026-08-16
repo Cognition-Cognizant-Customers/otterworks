@@ -236,7 +236,7 @@ def _block_empty_golden(
         return False
     check.blocked(
         "golden output",
-        f"no rows loaded from {golden_dir} using "
+        f"no files matched in {golden_dir} using "
         f"CUSTBILL_{ns.upper()}_[0-9][0-9][0-9].psv",
     )
     return True

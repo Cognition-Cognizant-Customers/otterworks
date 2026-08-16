@@ -191,7 +191,7 @@ CUSTBILL_DEMO_002.psv: missing from /tmp/h-empty
 ```
 
 The blocking reason names the directory and exact namespace glob:
-`golden output` -> no rows loaded from `/tmp/h-empty` using
+`golden output` -> no files matched in `/tmp/h-empty` using
 `CUSTBILL_DEMO_[0-9][0-9][0-9].psv`.
 
 The report result was `red` because the baseline check could not find its two
