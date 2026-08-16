@@ -96,14 +96,16 @@ def scan_metadata(ns: str, limit: int | None = None) -> tuple[list[dict], bool, 
     """Metadata items for the namespace, and whether the read completed.
 
     Returns `(items, complete, claimed_elsewhere)`. `complete` is False when the
-    scan was cut short -- the distinction the legacy script structurally could
-    not make. `claimed_elsewhere` holds the storage keys another namespace's
-    metadata references, which `filter_claimed_elsewhere` uses to keep another
-    tenant's files out of this run's inventory.
+    in-namespace item list was truncated -- the distinction the legacy script
+    structurally could not make. `claimed_elsewhere` holds the complete set of
+    storage keys referenced by another namespace, even when `items` is
+    truncated, which `filter_claimed_elsewhere` uses to keep another tenant's
+    files out of this run's inventory.
     """
     dynamodb = _client("dynamodb")
     items: list[dict] = []
     claimed_elsewhere: set = set()
+    truncated = False
     kwargs: dict = {
         "TableName": DYNAMO_TABLE,
         "ProjectionExpression": "id, s3_key, size_bytes, created_at, #n",
@@ -114,6 +116,8 @@ def scan_metadata(ns: str, limit: int | None = None) -> tuple[list[dict], bool, 
         for raw in page.get("Items", []):
             if raw.get("ns", {}).get("S") != ns:
                 claimed_elsewhere.add(raw["s3_key"]["S"])
+                continue
+            if truncated:
                 continue
             key = raw["s3_key"]["S"]
             items.append(
@@ -126,8 +130,10 @@ def scan_metadata(ns: str, limit: int | None = None) -> tuple[list[dict], bool, 
                 }
             )
             if limit is not None and len(items) >= limit:
-                return items[:limit], False, claimed_elsewhere
+                truncated = True
         if "LastEvaluatedKey" not in page:
+            if truncated:
+                return items[:limit], False, claimed_elsewhere
             items.sort(key=lambda i: i["file_id"])
             return items, True, claimed_elsewhere
         kwargs["ExclusiveStartKey"] = page["LastEvaluatedKey"]
