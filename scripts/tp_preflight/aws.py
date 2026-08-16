@@ -45,8 +45,10 @@ def leftover_scan(pid, description, args, extractor):
         return False
     try:
         matches = extractor(json.loads(raw))
-    except (json.JSONDecodeError, TypeError):
-        matches = []
+    except (json.JSONDecodeError, TypeError, AttributeError, KeyError) as exc:
+        detail = f"unable to parse leftover scan output: {exc}; output={(raw or '<empty>')[:300]}"
+        m.add(pid, description, "aws " + " ".join(args), "denied", detail)
+        return False
     detail = json.dumps(matches) if matches else "none found"
     m.add(pid, description, "aws " + " ".join(args), "denied" if matches else "verified", detail)
     return not matches
@@ -118,14 +120,26 @@ leftover_scan(
     ["resourcegroupstaggingapi", "get-resources", "--tag-filters", f"Key={tag_key},Values={tag_value}"],
     lambda body: [item.get("ResourceARN") for item in body.get("ResourceTagMappingList", [])],
 )
+def list_output(body):
+    if not isinstance(body, list):
+        raise TypeError("expected a JSON list")
+    return body
+
+
+def field_list(body, field):
+    if not isinstance(body, dict) or not isinstance(body.get(field), list):
+        raise TypeError(f"expected JSON object with list field {field}")
+    return body[field]
+
+
 for label, args, extractor in [
-    ("leftover-lambda-scan", ["lambda", "list-functions", "--query", f"Functions[?starts_with(FunctionName,'{name_prefix}')].FunctionName"], lambda body: body if isinstance(body, list) else []),
-    ("leftover-sfn-scan", ["stepfunctions", "list-state-machines", "--query", f"stateMachines[?starts_with(name,'{name_prefix}')].name"], lambda body: body if isinstance(body, list) else []),
-    ("leftover-eventbridge-scan", ["events", "list-rules", "--name-prefix", name_prefix], lambda body: [item.get("Name") for item in body.get("Rules", [])]),
-    ("leftover-sqs-scan", ["sqs", "list-queues", "--queue-name-prefix", name_prefix], lambda body: body.get("QueueUrls", [])),
-    ("leftover-dynamodb-scan", ["dynamodb", "list-tables", "--query", f"TableNames[?starts_with(@,'{name_prefix}')]"], lambda body: body if isinstance(body, list) else []),
-    ("leftover-s3-scan", ["s3api", "list-buckets", "--query", f"Buckets[?starts_with(Name,'{name_prefix}')].Name"], lambda body: body if isinstance(body, list) else []),
-    ("leftover-iam-scan", ["iam", "list-roles", "--query", f"Roles[?starts_with(RoleName,'{name_prefix}')].RoleName"], lambda body: body if isinstance(body, list) else []),
+    ("leftover-lambda-scan", ["lambda", "list-functions", "--query", f"Functions[?starts_with(FunctionName,'{name_prefix}')].FunctionName"], list_output),
+    ("leftover-sfn-scan", ["stepfunctions", "list-state-machines", "--query", f"stateMachines[?starts_with(name,'{name_prefix}')].name"], list_output),
+    ("leftover-eventbridge-scan", ["events", "list-rules", "--name-prefix", name_prefix], lambda body: [item.get("Name") for item in field_list(body, "Rules")]),
+    ("leftover-sqs-scan", ["sqs", "list-queues", "--queue-name-prefix", name_prefix], lambda body: field_list(body, "QueueUrls")),
+    ("leftover-dynamodb-scan", ["dynamodb", "list-tables", "--query", f"TableNames[?starts_with(@,'{name_prefix}')]"], list_output),
+    ("leftover-s3-scan", ["s3api", "list-buckets", "--query", f"Buckets[?starts_with(Name,'{name_prefix}')].Name"], list_output),
+    ("leftover-iam-scan", ["iam", "list-roles", "--query", f"Roles[?starts_with(RoleName,'{name_prefix}')].RoleName"], list_output),
 ]:
     leftover_scan(label, f"Scan for leftover {name_prefix} resources", args, extractor)
 raise SystemExit(m.write("aws"))

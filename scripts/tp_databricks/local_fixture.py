@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,6 +32,11 @@ def files(root: Path) -> list[Path]:
     return sorted(p for p in root.rglob("*") if p.is_file())
 
 
+def validate_namespace(namespace: str) -> None:
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", namespace):
+        raise SystemExit("--ns must match [A-Za-z0-9_-]+ and must not be empty")
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("action", choices=["land", "verify", "clean"])
@@ -38,6 +44,7 @@ def main() -> int:
     p.add_argument("--source", default="etl/legacy-extra")
     p.add_argument("--landing", default=".tp-preflight/databricks-fixture/landing")
     args = p.parse_args()
+    validate_namespace(args.ns)
     landing = Path(args.landing) / args.ns
     source = Path(args.source)
     if args.action == "clean":
@@ -54,7 +61,11 @@ def main() -> int:
             dst = landing / src.relative_to(source)
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(src, dst)
-            copied.append({"path": str(dst.relative_to(landing)), "sha256": hashlib.sha256(dst.read_bytes()).hexdigest(), "bytes": dst.stat().st_size})
+            source_bytes = src.read_bytes()
+            copied_bytes = dst.read_bytes()
+            if source_bytes != copied_bytes:
+                raise SystemExit(f"fixture copy mismatch: {src} -> {dst}")
+            copied.append({"path": str(dst.relative_to(landing)), "sha256": hashlib.sha256(source_bytes).hexdigest(), "bytes": len(source_bytes)})
         manifest = {"namespace": args.ns, "generated_at": datetime.now(timezone.utc).isoformat(), "transport": "local landing directory", "sql_execution": "not emulated", "files": copied, "unit_coverage": [{"unit": u, "status": "transport-only", "coverage": c} for u, c in UNITS.items()]}
         (landing / "fixture-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
         print(f"fixture landed {len(copied)} file(s) under {landing}")

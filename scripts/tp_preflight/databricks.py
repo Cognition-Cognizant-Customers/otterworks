@@ -20,13 +20,17 @@ catalog = os.environ.get("TP_DATABRICKS_CATALOG", "ow_tp")
 landing = os.environ.get("TP_DATABRICKS_LANDING_PATH", f"/Volumes/{catalog}/bronze/landing")
 if not re.fullmatch(r"[A-Za-z0-9_]+", catalog):
     raise SystemExit(f"TP_DATABRICKS_CATALOG must match [A-Za-z0-9_]+: {catalog!r}")
-if landing.startswith("/Volumes/"):
-    landing_catalog = landing.split("/", 3)[2] if len(landing.split("/", 3)) > 2 else ""
-    if not re.fullmatch(r"[A-Za-z0-9_]+", landing_catalog) or landing_catalog != catalog:
-        raise SystemExit(
-            "TP_DATABRICKS_LANDING_PATH must use the configured catalog segment "
-            f"{catalog!r}: {landing!r}"
-        )
+if not landing.startswith("/Volumes/") or ".." in landing.split("/"):
+    raise SystemExit(
+        "TP_DATABRICKS_LANDING_PATH must start with /Volumes/ and contain no '..' segments: "
+        f"{landing!r}"
+    )
+landing_catalog = landing.split("/", 3)[2] if len(landing.split("/", 3)) > 2 else ""
+if not re.fullmatch(r"[A-Za-z0-9_]+", landing_catalog) or landing_catalog != catalog:
+    raise SystemExit(
+        "TP_DATABRICKS_LANDING_PATH must use the configured catalog segment "
+        f"{catalog!r}: {landing!r}"
+    )
 manifest = Manifest("databricks")
 
 
