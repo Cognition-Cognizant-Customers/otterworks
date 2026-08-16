@@ -79,17 +79,28 @@ def read_baseline(baseline_dir: str) -> dict:
     event_ids, timestamps, errors = [], [], []
     try:
         with gzip.open(archive, "rt", encoding="utf-8") as handle:
-            for line in handle:
+            for line_number, line in enumerate(handle, start=1):
                 if line.strip():
                     record = json.loads(line)
+                    if not isinstance(record, dict):
+                        raise TypeError(
+                            f"line {line_number}: expected JSON object, got "
+                            f"{type(record).__name__}"
+                        )
+                    for field in ("event_id", "timestamp"):
+                        if not isinstance(record.get(field), str):
+                            raise TypeError(
+                                f"line {line_number}: {field} must be str, got "
+                                f"{type(record.get(field)).__name__}"
+                            )
                     event_ids.append(record["event_id"])
                     timestamps.append(record["timestamp"])
     except Exception as exc:
         # Deliberately broad: corruption reaches here as more than the obvious
         # OSError/ValueError -- a damaged deflate stream surfaces as zlib.error and a
-        # line that is valid JSON but not an object as TypeError, both deriving
-        # straight from Exception. Any unusable artifact is a verdict to report, and
-        # an unreported traceback here is the one outcome this tool must not produce.
+        # malformed JSON shapes surface as TypeError, all deriving straight from
+        # Exception. Any unusable artifact is a verdict to report, and an unreported
+        # traceback here is the one outcome this tool must not produce.
         errors.append(f"{archive}: {type(exc).__name__}: {exc}")
     try:
         with open(report_path, encoding="utf-8") as handle:
