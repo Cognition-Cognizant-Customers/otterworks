@@ -169,11 +169,16 @@ def teardown() -> TeardownResult:
     active_run_unconfirmed = False
 
     try:
-        current = existing_job_id()
-        if current is not None:
-            runs = dbx.request(
+        try:
+            current = existing_job_id()
+            runs = [] if current is None else dbx.request(
                 "GET", f"/api/2.2/jobs/runs/list?job_id={current}&limit=20"
             ).get("runs", [])
+        except Exception:
+            # A run we could not enumerate may still be executing the notebook.
+            active_run_unconfirmed = True
+            raise
+        if current is not None:
             active = [r for r in runs if r.get("state", {}).get("life_cycle_state") not in TERMINAL_STATES]
             for run in active:
                 run_id = run.get("run_id")
