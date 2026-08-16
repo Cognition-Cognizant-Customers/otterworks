@@ -36,16 +36,29 @@ def api_entry_ip(entry):
     return entry.get("ipAddress") or entry.get("cidrBlock")
 
 
-def api_entry_id(entry):
-    return entry.get("ipAddress") or entry.get("cidrBlock") or entry.get("groupId") or entry.get("id")
-
-
 def delete_entry(entry):
-    entry_id = api_entry_id(entry)
+    entry_id = entry.get("ipAddress") or entry.get("cidrBlock")
+    label = entry_id or repr(entry)
     if not entry_id:
-        return
-    check("access-list-delete", "Delete a temporary API access-list entry", delete,
-          f"{base}/groups/{project}/accessList/{urllib.parse.quote(entry_id, safe='')}")
+        m.add("access-list-delete", "Delete a temporary API access-list entry",
+              "Atlas accessList DELETE", "denied",
+              f"entry {label} has no IP or CIDR; manual access-list cleanup required")
+        return False
+    url = f"{base}/groups/{project}/accessList/{urllib.parse.quote(entry_id, safe='')}"
+    try:
+        response = delete(url, auth=auth, headers=headers, timeout=30)
+        if response.ok:
+            m.add("access-list-delete", "Delete a temporary API access-list entry",
+                  "Atlas accessList DELETE", "verified", f"HTTP {response.status_code}: {label}")
+            return True
+        m.add("access-list-delete", "Delete a temporary API access-list entry",
+              "Atlas accessList DELETE", "denied",
+              f"HTTP {response.status_code}: {label}; manual access-list cleanup required")
+    except Exception as exc:
+        m.add("access-list-delete", "Delete a temporary API access-list entry",
+              "Atlas accessList DELETE", "denied",
+              f"{label}; manual access-list cleanup required: {exc}")
+    return False
 
 
 def db_user_write():

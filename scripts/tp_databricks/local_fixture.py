@@ -44,9 +44,9 @@ def main() -> int:
         shutil.rmtree(landing, ignore_errors=True)
         print(f"fixture cleaned: {landing}")
         return 0
-    if not source.exists():
-        raise SystemExit(f"source does not exist: {source}")
     if args.action == "land":
+        if not source.exists():
+            raise SystemExit(f"source does not exist: {source}")
         shutil.rmtree(landing, ignore_errors=True)
         landing.mkdir(parents=True, exist_ok=True)
         copied = []

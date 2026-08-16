@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 import uuid
@@ -16,6 +17,15 @@ HOST = os.environ["DATABRICKS_DEMO_HOST"].rstrip("/")
 TOKEN = os.environ["DATABRICKS_DEMO_TOKEN"]
 catalog = os.environ.get("TP_DATABRICKS_CATALOG", "ow_tp")
 landing = os.environ.get("TP_DATABRICKS_LANDING_PATH", f"/Volumes/{catalog}/bronze/landing")
+if not re.fullmatch(r"[A-Za-z0-9_]+", catalog):
+    raise SystemExit(f"TP_DATABRICKS_CATALOG must match [A-Za-z0-9_]+: {catalog!r}")
+if landing.startswith("/Volumes/"):
+    landing_catalog = landing.split("/", 3)[2] if len(landing.split("/", 3)) > 2 else ""
+    if not re.fullmatch(r"[A-Za-z0-9_]+", landing_catalog) or landing_catalog != catalog:
+        raise SystemExit(
+            "TP_DATABRICKS_LANDING_PATH must use the configured catalog segment "
+            f"{catalog!r}: {landing!r}"
+        )
 manifest = Manifest("databricks")
 
 
@@ -63,6 +73,7 @@ else:
 suffix = f"__tp_preflight_{uuid.uuid4().hex}"
 file_path = f"{landing}/{suffix}"
 payload = b"otterworks tp preflight\n"
+put_succeeded = False
 landing_api = "/api/2.0/fs/directories" + urllib.parse.quote(landing, safe="/")
 file_api = "/api/2.0/fs/files" + urllib.parse.quote(file_path, safe="/")
 req = urllib.request.Request(HOST + landing_api, headers={"Authorization": f"Bearer {TOKEN}"})
@@ -75,6 +86,7 @@ try:
     req = urllib.request.Request(HOST + file_api, data=payload, headers={"Authorization": f"Bearer {TOKEN}"}, method="PUT")
     with urllib.request.urlopen(req, timeout=30) as r:
         manifest.add("files-put", "Write a temporary landing file", "Files API PUT", "verified", f"HTTP {r.status}")
+        put_succeeded = True
     req = urllib.request.Request(HOST + file_api, headers={"Authorization": f"Bearer {TOKEN}"})
     with urllib.request.urlopen(req, timeout=30) as r:
         got = r.read()
@@ -83,12 +95,15 @@ try:
 except Exception as exc:
     manifest.add("files-put-get", "Write and read a temporary landing file", "Files API PUT/GET", "denied", str(exc))
 finally:
-    req = urllib.request.Request(HOST + file_api, headers={"Authorization": f"Bearer {TOKEN}"}, method="DELETE")
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            manifest.add("files-delete", "Delete the temporary landing file", "Files API DELETE", "verified", f"HTTP {r.status}")
-    except Exception as exc:
-        manifest.add("files-delete", "Delete the temporary landing file", "Files API DELETE", "denied", str(exc))
+    if put_succeeded:
+        req = urllib.request.Request(HOST + file_api, headers={"Authorization": f"Bearer {TOKEN}"}, method="DELETE")
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                manifest.add("files-delete", "Delete the temporary landing file", "Files API DELETE", "verified", f"HTTP {r.status}")
+        except Exception as exc:
+            manifest.add("files-delete", "Delete the temporary landing file", "Files API DELETE", "denied", str(exc))
+    else:
+        manifest.add("files-delete", "Delete the temporary landing file", "Files API DELETE", "skipped", "PUT did not create a file")
 
 warehouse_probe = call("GET", "/api/2.0/sql/warehouses")
 warehouse_id = os.environ.get("DATABRICKS_SQL_WAREHOUSE_ID", "")
@@ -104,24 +119,32 @@ if 200 <= created_schema[0] < 300:
     manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema", "SQL Statement + Unity Catalog APIs", "verified" if 200 <= listed_schema[0] < 300 else "denied", f"create HTTP {created_schema[0]}, list HTTP {listed_schema[0]}")
 else:
     manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema", "SQL Statement + Unity Catalog APIs", "denied", f"HTTP {created_schema[0]}: {created_schema[1]}")
-call("POST", "/api/2.0/sql/statements", {"statement": f"DROP SCHEMA IF EXISTS {catalog}.{schema} CASCADE", "warehouse_id": warehouse_id})
+if 200 <= created_schema[0] < 300:
+    dropped_schema = call("POST", "/api/2.0/sql/statements", {"statement": f"DROP SCHEMA IF EXISTS {catalog}.{schema} CASCADE", "warehouse_id": warehouse_id})
+    manifest.add("uc-schema-delete", "Delete the temporary Unity Catalog schema", "SQL Statement", "verified" if 200 <= dropped_schema[0] < 300 else "denied", f"HTTP {dropped_schema[0]}: {dropped_schema[1]}")
+else:
+    manifest.add("uc-schema-delete", "Delete the temporary Unity Catalog schema", "SQL Statement", "skipped", "schema was not created")
 
 job_name = f"ow_tp_preflight_{uuid.uuid4().hex[:8]}"
 job = call("POST", "/api/2.1/jobs/create", {"name": job_name, "tasks": [{"task_key": "noop", "notebook_task": {"notebook_path": "/Shared/ow_tp/preflight"}}]})
 if 200 <= job[0] < 300:
     listed_jobs = call("GET", "/api/2.1/jobs/list?name=" + job_name)
     manifest.add("jobs-create-list", "Create and list a temporary job", "Jobs API 2.1", "verified" if 200 <= listed_jobs[0] < 300 else "denied", f"create HTTP {job[0]}, list HTTP {listed_jobs[0]}")
-    call("POST", "/api/2.0/jobs/delete", {"job_id": job[1].get("job_id")})
+    deleted_job = call("POST", "/api/2.0/jobs/delete", {"job_id": job[1].get("job_id")})
+    manifest.add("jobs-delete", "Delete the temporary job", "Jobs API 2.0", "verified" if 200 <= deleted_job[0] < 300 else "denied", f"HTTP {deleted_job[0]}: {deleted_job[1]}")
 else:
     manifest.add("jobs-create-list", "Create and list a temporary job", "Jobs API 2.1", "denied", f"HTTP {job[0]}: {job[1]}")
+    manifest.add("jobs-delete", "Delete the temporary job", "Jobs API 2.0", "skipped", "job was not created")
 
 scope_name = f"ow_tp_preflight_{uuid.uuid4().hex[:8]}"
 scope = call("POST", "/api/2.0/secrets/scopes/create", {"scope": scope_name})
 if 200 <= scope[0] < 300:
     manifest.add("secret-scope", "Create and delete a temporary secret scope", "Secrets API 2.0", "verified", f"create HTTP {scope[0]}")
-    call("POST", "/api/2.0/secrets/scopes/delete", {"scope": scope_name})
+    deleted_scope = call("POST", "/api/2.0/secrets/scopes/delete", {"scope": scope_name})
+    manifest.add("secret-scope-delete", "Delete the temporary secret scope", "Secrets API 2.0", "verified" if 200 <= deleted_scope[0] < 300 else "denied", f"HTTP {deleted_scope[0]}: {deleted_scope[1]}")
 else:
     manifest.add("secret-scope", "Create and delete a temporary secret scope", "Secrets API 2.0", "denied", f"HTTP {scope[0]}: {scope[1]}")
+    manifest.add("secret-scope-delete", "Delete the temporary secret scope", "Secrets API 2.0", "skipped", "scope was not created")
 
 if 200 <= warehouse_probe[0] < 300:
     serverless = [w for w in warehouse_probe[1].get("warehouses", []) if w.get("enable_serverless_compute") or w.get("warehouse_type") == "PRO"]

@@ -28,6 +28,30 @@ def aws(pid, description, args, required=True):
         return False, str(exc)
 
 
+def simulate_permission(pid, description, caller_arn, action):
+    args = [
+        "iam", "simulate-principal-policy", "--policy-source-arn", caller_arn,
+        "--action-names", action,
+    ]
+    try:
+        p = subprocess.run(["aws", *args, "--output", "json"], capture_output=True, text=True, timeout=45, env=env)
+        detail = (p.stdout or p.stderr).strip().replace("\n", " ")[:1000]
+        decision = None
+        if p.stdout:
+            try:
+                results = json.loads(p.stdout).get("EvaluationResults", [])
+                decision = results[0].get("EvalDecision") if results else None
+            except json.JSONDecodeError:
+                pass
+        result = "verified" if decision == "allowed" else "denied"
+        m.add(pid, description, "aws " + " ".join(args), result,
+              f"decision={decision or 'unavailable'}; {detail or 'no response'}")
+        return result == "verified"
+    except Exception as exc:
+        m.add(pid, description, "aws " + " ".join(args), "denied", str(exc))
+        return False
+
+
 ok, identity = aws("identity", "Identify the AWS caller", ["sts", "get-caller-identity"])
 if ok:
     try:
@@ -43,10 +67,7 @@ if ok:
             ("dynamodb", "dynamodb:CreateTable"), ("s3", "s3:CreateBucket"),
             ("iam", "iam:CreateRole"),
         ]:
-            aws(f"{service}-create-permission", f"Simulate permission for {action}", [
-                "iam", "simulate-principal-policy", "--policy-source-arn", caller_arn,
-                "--action-names", action,
-            ])
+            simulate_permission(f"{service}-create-permission", f"Simulate permission for {action}", caller_arn, action)
     except (KeyError, json.JSONDecodeError):
         pass
 for service, args, desc in [
