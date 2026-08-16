@@ -394,9 +394,23 @@ finally:
     cleanup_all()
 
 if 200 <= warehouse_probe[0] < 300 and isinstance(warehouse_probe[1], dict):
-    serverless = [w for w in warehouse_probe[1].get("warehouses", []) if w.get("enable_serverless_compute") or w.get("warehouse_type") == "PRO"]
-    summary = [{"id": w.get("id"), "name": w.get("name"), "state": w.get("state")} for w in serverless[:3]]
-    manifest.add("serverless-warehouse", "An existing serverless SQL warehouse is available", "SQL Warehouses API", "verified" if serverless else "denied", json.dumps(summary) if summary else "no serverless warehouse")
+    serverless = [w for w in warehouse_probe[1].get("warehouses", []) if w.get("enable_serverless_compute")]
+    summary = [
+        {
+            "id": w.get("id"),
+            "name": w.get("name"),
+            "state": w.get("state"),
+            "enable_serverless_compute": w.get("enable_serverless_compute"),
+        }
+        for w in serverless[:3]
+    ]
+    manifest.add(
+        "serverless-warehouse",
+        "An existing serverless SQL warehouse is available",
+        "SQL Warehouses API",
+        "verified" if serverless else "denied",
+        json.dumps(summary) if summary else "no warehouse with enable_serverless_compute",
+    )
 else:
     manifest.add("serverless-warehouse", "An existing serverless SQL warehouse is available", "SQL Warehouses API", "denied", f"HTTP {warehouse_probe[0]}")
 
