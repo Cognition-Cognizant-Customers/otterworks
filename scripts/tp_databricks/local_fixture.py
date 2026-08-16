@@ -77,10 +77,22 @@ def main() -> int:
         return 0
     if args.action == "land":
         source = validate_source(args.source)
+        if (
+            source == landing
+            or source in landing.parents
+            or landing in source.parents
+        ):
+            raise SystemExit(
+                "source and landing paths overlap: "
+                f"source={source}, landing={landing}"
+            )
+        source_files = files(source)
+        if not source_files:
+            raise SystemExit(f"--source contains no files: {source}")
         manifest_name = Path("fixture-manifest.json")
         collision = next(
             (
-                src for src in files(source)
+                src for src in source_files
                 if src.relative_to(source) == manifest_name
             ),
             None,
@@ -93,7 +105,7 @@ def main() -> int:
         shutil.rmtree(landing, ignore_errors=True)
         landing.mkdir(parents=True, exist_ok=True)
         copied = []
-        for src in files(source):
+        for src in source_files:
             dst = landing / src.relative_to(source)
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(src, dst)
