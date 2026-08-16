@@ -361,6 +361,13 @@ reconciliation row for both delivered files:
 PASS  1. Row-level parity: every field of every row, keyed on (file, line_no)
       golden rows: 50; converted rows: 50
       all 50 rows match on all 6 fields
+BLOCKED  2. Per-file subtotals per record type and currency, exact to the cent
+      CUSTBILL_NEMPTYMIX_001 01 EUR: 12 / 55683.32
+      CUSTBILL_NEMPTYMIX_001 01 GBP: 16 / 107084.75
+      CUSTBILL_NEMPTYMIX_001 01 USD: 15 / 70039.36
+      CUSTBILL_NEMPTYMIX_001 02 EUR: 2 / 12243.83
+      CUSTBILL_NEMPTYMIX_001 02 GBP: 2 / 9116.73
+      CUSTBILL_NEMPTYMIX_001 02 USD: 3 / 21160.45
 PASS  3. Trailer reconciliation: declared_trailer_count = parsed + rejected, recon_ok
       CUSTBILL_NEMPTYMIX_001.dat: declared 50 = parsed 50 + rejected 0, recon_ok=true
       CUSTBILL_NEMPTYMIX_003.dat: declared 0 = parsed 0 + rejected 0, recon_ok=true
@@ -369,20 +376,22 @@ recon_exit=1
 ```
 
 The overall exit was nonzero because this throwaway namespace is not the
-`demo` contract namespace, so check 0 is blocked and check 2 does not evaluate
-the demo-only subtotal constants. The delivery-specific row and trailer
-checks passed.
+`demo` contract namespace: check 0 is blocked and check 2 is blocked because
+the demo-only contract subtotal constants cannot be evaluated. The
+delivery-specific row and trailer checks passed.
 
 ## O. All-empty delivery compares as a real zero-row result
 
 The throwaway namespace `ns=nemptyall` contained two HDR+TRL-only files, with
-two matching zero-byte `.psv` files. Checks 1, 2, 3, and 4 all passed:
+two matching zero-byte `.psv` files. Checks 1, 3, and 4 passed on the real
+0-vs-0 comparison, while check 2 was correctly blocked because the non-demo
+namespace cannot evaluate the demo-only contract subtotal constants:
 
 ```text
 PASS  1. Row-level parity: every field of every row, keyed on (file, line_no)
       golden rows: 0; converted rows: 0
       all 0 rows match on all 6 fields
-PASS  2. Per-file subtotals per record type and currency, exact to the cent
+BLOCKED  2. Per-file subtotals per record type and currency, exact to the cent
       golden rows: 0; converted rows: 0
       all 0 rows match; no subtotal groups to compare
 PASS  3. Trailer reconciliation: declared_trailer_count = parsed + rejected, recon_ok

@@ -324,7 +324,6 @@ def check_subtotals(
     if not golden and not converted:
         check.note("golden rows: 0; converted rows: 0")
         check.note("all 0 rows match; no subtotal groups to compare")
-        return check
     golden_agg = subtotals(golden)
     converted_agg = subtotals(converted)
     keys = set(golden_agg) | set(converted_agg)
