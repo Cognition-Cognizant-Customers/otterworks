@@ -172,29 +172,30 @@ def write_jsonl(path: Path, rows: list[dict]) -> None:
             handle.write(json.dumps(row, sort_keys=True) + "\n")
 
 
-def _lit(value) -> str:
-    if value is None:
-        return "NULL"
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, int):
-        return str(value)
-    # Spark honours backslash escapes inside string literals, so a key ending in
-    # a backslash would otherwise escape its own closing quote: object keys are
-    # user-supplied filenames, not trusted input.
-    return "'" + str(value).replace("\\", "\\\\").replace("'", "''") + "'"
-
-
 def _ts(value: str) -> str:
     """Normalise an ISO instant to a UTC literal Spark casts unambiguously."""
     text = value.replace("Z", "+00:00")
     return datetime.fromisoformat(text).astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _insert_rows(table: str, columns: str, rows: list[str], batch: int = 400) -> None:
+def _insert_json_rows(
+    table: str,
+    columns: str,
+    schema: str,
+    projection: str,
+    rows: list[dict],
+    batch: int = 400,
+) -> None:
     for start in range(0, len(rows), batch):
-        values = ",".join(rows[start : start + batch])
-        dbx.sql(f"INSERT INTO {table} ({columns}) VALUES {values}")
+        payload = json.dumps(rows[start : start + batch], separators=(",", ":"))
+        dbx.sql(
+            f"""
+            INSERT INTO {table} ({columns})
+            SELECT {projection}
+            FROM (SELECT explode(from_json(:payload, '{schema}')) AS r)
+            """,
+            parameters=[{"name": "payload", "value": payload, "type": "STRING"}],
+        )
 
 
 def load_bronze(ns: str, scenario: str, objects: list[dict], metadata: list[dict], manifest: dict) -> None:
@@ -211,55 +212,70 @@ def load_bronze(ns: str, scenario: str, objects: list[dict], metadata: list[dict
     """
     nb.ensure_legacy_attributed(dbx.sql, "ow_tp")
     for table in ("bronze.storage_objects_raw", "bronze.file_metadata_raw", "bronze.storage_extract_manifest"):
-        dbx.sql(f"DELETE FROM ow_tp.{table} WHERE ns = {_lit(ns)}")
+        dbx.sql(
+            f"DELETE FROM ow_tp.{table} WHERE ns = :ns",
+            parameters=[{"name": "ns", "value": ns, "type": "STRING"}],
+        )
 
     listed_at = _ts(manifest["extracted_at"])
-    _insert_rows(
+    _insert_json_rows(
         "ow_tp.bronze.storage_objects_raw",
         "ns, bucket, key, size_bytes, legacy_attributed, last_modified, listed_at",
+        "array<struct<ns:string,bucket:string,key:string,size_bytes:bigint,legacy_attributed:boolean,last_modified:string,listed_at:string>>",
+        "r.ns, r.bucket, r.key, r.size_bytes, r.legacy_attributed, "
+        "CAST(r.last_modified AS TIMESTAMP), CAST(r.listed_at AS TIMESTAMP)",
         [
-            "({}, {}, {}, {}, {}, TIMESTAMP {}, TIMESTAMP {})".format(
-                _lit(ns),
-                _lit(o["bucket"]),
-                _lit(o["key"]),
-                _lit(o["size_bytes"]),
-                _lit(o["legacy_attributed"]),
-                _lit(_ts(o["last_modified"])),
-                _lit(listed_at),
-            )
+            {
+                "ns": ns,
+                "bucket": o["bucket"],
+                "key": o["key"],
+                "size_bytes": o["size_bytes"],
+                "legacy_attributed": o["legacy_attributed"],
+                "last_modified": _ts(o["last_modified"]),
+                "listed_at": listed_at,
+            }
             for o in objects
         ],
     )
-    _insert_rows(
+    _insert_json_rows(
         "ow_tp.bronze.file_metadata_raw",
         "ns, file_id, storage_key, owner_id, size_bytes, created_at",
+        "array<struct<ns:string,file_id:string,storage_key:string,owner_id:string,size_bytes:bigint,created_at:string>>",
+        "r.ns, r.file_id, r.storage_key, r.owner_id, r.size_bytes, "
+        "CAST(r.created_at AS TIMESTAMP)",
         [
-            "({}, {}, {}, {}, {}, TIMESTAMP {})".format(
-                _lit(ns),
-                _lit(m["file_id"]),
-                _lit(m["storage_key"]),
-                _lit(m["owner_id"]),
-                _lit(m["size_bytes"]),
-                _lit(_ts(m["created_at"])),
-            )
+            {
+                "ns": ns,
+                "file_id": m["file_id"],
+                "storage_key": m["storage_key"],
+                "owner_id": m["owner_id"],
+                "size_bytes": m["size_bytes"],
+                "created_at": _ts(m["created_at"]),
+            }
             for m in metadata
         ],
     )
-    dbx.sql(
-        "INSERT INTO ow_tp.bronze.storage_extract_manifest "
-        "(ns, scenario, source_bucket, source_table, objects_expected, objects_bytes, "
-        "metadata_expected, metadata_read_complete, extracted_at, loaded_at) VALUES "
-        "({}, {}, {}, {}, {}, {}, {}, {}, TIMESTAMP {}, current_timestamp())".format(
-            _lit(ns),
-            _lit(scenario),
-            _lit(manifest["source_bucket"]),
-            _lit(manifest["source_table"]),
-            _lit(manifest["objects_expected"]),
-            _lit(manifest["objects_bytes"]),
-            _lit(manifest["metadata_expected"]),
-            _lit(manifest["metadata_read_complete"]),
-            _lit(listed_at),
-        )
+    _insert_json_rows(
+        "ow_tp.bronze.storage_extract_manifest",
+        "ns, scenario, source_bucket, source_table, objects_expected, objects_bytes, "
+        "metadata_expected, metadata_read_complete, extracted_at, loaded_at",
+        "array<struct<ns:string,scenario:string,source_bucket:string,source_table:string,objects_expected:bigint,objects_bytes:bigint,metadata_expected:bigint,metadata_read_complete:boolean,extracted_at:string>>",
+        "r.ns, r.scenario, r.source_bucket, r.source_table, r.objects_expected, "
+        "r.objects_bytes, r.metadata_expected, r.metadata_read_complete, "
+        "CAST(r.extracted_at AS TIMESTAMP), current_timestamp()",
+        [
+            {
+                "ns": ns,
+                "scenario": scenario,
+                "source_bucket": manifest["source_bucket"],
+                "source_table": manifest["source_table"],
+                "objects_expected": manifest["objects_expected"],
+                "objects_bytes": manifest["objects_bytes"],
+                "metadata_expected": manifest["metadata_expected"],
+                "metadata_read_complete": manifest["metadata_read_complete"],
+                "extracted_at": listed_at,
+            }
+        ],
     )
 
 

@@ -141,12 +141,19 @@ def savings(ns: str, scenario: str, run_date: str) -> dict:
 
 def capture_golden(ns: str) -> None:
     """Run the unedited legacy script and record what it actually quarantined."""
+    ns = nb._checked("ns", ns)
+    golden = GOLDEN / ns
+    golden.mkdir(parents=True, exist_ok=True)
+    fixture = json.loads((GOLDEN / f"fixture_manifest_{ns}.json").read_text())
+    planted_keys = {item["key"] for item in fixture["planted_orphans"]}
     env = dict(os.environ)
     env.setdefault("AWS_ENDPOINT_URL", extract.ENDPOINT)
     env.setdefault("AWS_ACCESS_KEY_ID", "test")
     env.setdefault("AWS_SECRET_ACCESS_KEY", "test")
     env.setdefault("AWS_DEFAULT_REGION", extract.REGION)
-    GOLDEN.mkdir(parents=True, exist_ok=True)
+    env["PYTHONPATH"] = os.pathsep.join(
+        part for part in (str(GOLDEN.parent.parent), env.get("PYTHONPATH", "")) if part
+    )
     started_at = datetime.now(tz=timezone.utc)
     fallback_date = started_at.date().isoformat()
 
@@ -157,8 +164,8 @@ def capture_golden(ns: str) -> None:
         env=env,
         cwd=str(REPO),
     )
-    (GOLDEN / "legacy_stdout.txt").write_text(proc.stdout + proc.stderr)
-    (GOLDEN / "legacy_exit_code.txt").write_text(f"exit_code={proc.returncode}\n")
+    (golden / "legacy_stdout.txt").write_text(proc.stdout + proc.stderr)
+    (golden / "legacy_exit_code.txt").write_text(f"exit_code={proc.returncode}\n")
     if proc.returncode != 0:
         raise SystemExit(
             "legacy script failed -- tier 1 baseline not available:\n"
@@ -207,14 +214,28 @@ def capture_golden(ns: str) -> None:
     for page in s3.get_paginator("list_objects_v2").paginate(Bucket=quarantine, Prefix=prefix):
         for obj in page.get("Contents", []):
             keys.append(obj["Key"][len(prefix) :])
-    (GOLDEN / "quarantined_keys.txt").write_text("\n".join(sorted(keys)) + "\n")
+    filtered_keys = sorted(key for key in keys if key in planted_keys)
+    (golden / "quarantined_keys.txt").write_text("\n".join(filtered_keys) + "\n")
+    report = json.loads(report_body)
+    report["capture_namespace"] = ns
+    (golden / "legacy_report.json").write_text(json.dumps(report, indent=2) + "\n")
+    (golden / "capture_metadata.json").write_text(
+        json.dumps(
+            {
+                "namespace": ns,
+                "report_date": capture_date,
+                "planted_key_count": len(planted_keys),
+                "filtered_quarantined_key_count": len(filtered_keys),
+            },
+            indent=2,
+        )
+        + "\n"
+    )
 
-    (GOLDEN / "legacy_report.json").write_bytes(report_body)
 
-
-def legacy_metadata_keys() -> int:
+def legacy_metadata_keys(ns: str) -> int:
     """The metadata key count the legacy run itself reported (never assumed)."""
-    text = (GOLDEN / "legacy_stdout.txt").read_text()
+    text = (GOLDEN / ns / "legacy_stdout.txt").read_text()
     match = re.search(r"Found (\d+) S3 keys referenced in metadata", text)
     if not match:
         raise SystemExit("legacy stdout does not report a metadata key count")
@@ -222,10 +243,23 @@ def legacy_metadata_keys() -> int:
 
 
 def read_golden(ns: str) -> tuple[dict, set, dict]:
-    report = json.loads((GOLDEN / "legacy_report.json").read_text())
+    ns = nb._checked("ns", ns)
+    golden = GOLDEN / ns
+    metadata = json.loads((golden / "capture_metadata.json").read_text())
+    if metadata.get("namespace") != ns:
+        raise SystemExit(
+            f"golden baseline namespace mismatch: expected {ns!r}, "
+            f"recorded {metadata.get('namespace')!r}"
+        )
+    report = json.loads((golden / "legacy_report.json").read_text())
+    if report.get("capture_namespace") != ns:
+        raise SystemExit(
+            f"legacy report namespace mismatch: expected {ns!r}, "
+            f"recorded {report.get('capture_namespace')!r}"
+        )
     keys = {
         (extract.FILE_STORAGE_BUCKET, line)
-        for line in (GOLDEN / "quarantined_keys.txt").read_text().split()
+        for line in (golden / "quarantined_keys.txt").read_text().split()
         if line
     }
     fixture = json.loads((GOLDEN / f"fixture_manifest_{ns}.json").read_text())
@@ -281,7 +315,7 @@ def check_2(ns: str, run_date: str, report: dict, fixture: dict) -> Check:
         sum(o["size_bytes"] for o in fixture["planted_orphans"]),
         gold["orphan_bytes"],
     )
-    check.compare("metadata_rows", legacy_metadata_keys(), gold["metadata_rows"])
+    check.compare("metadata_rows", legacy_metadata_keys(ns), gold["metadata_rows"])
 
     legacy_scope = int(
         dbx.sql(
@@ -428,17 +462,19 @@ def write_report(path: Path, ns: str, run_date: str, checks: list, fixture: dict
         "Tier 1. The legacy script names `s3://otterworks-file-storage/files/`, which no local",
         "fixture provided (`NoSuchBucket`). What had to be stood up on this VM:",
         "",
-        "- `make infra-up` plus the documented workaround for the occupied host port 5432:",
+        f"- `make infra-up` plus the documented workaround for the occupied host port 5432 (namespace `{ns}`):",
         "  Postgres runs in container `otterworks-postgres-alt` on 55432 (`DB_PORT=55432`).",
-        "- `make seed-legacy NS=demo` and `make seed-legacy-validate NS=demo` (15/15 checks).",
-        "- `scripts/tp_databricks/fixture_storage_cleanup.py build --ns demo`: creates the missing",
+        f"- `make seed-legacy NS={ns}` and `make seed-legacy-validate NS={ns}` (15/15 checks).",
+        f"- `scripts/tp_databricks/fixture_storage_cleanup.py build --ns {ns}`: creates the missing",
         f"  `{fixture['buckets']['file_storage']}` and `{fixture['buckets']['quarantine']}` buckets,",
         f"  writes {fixture['live_objects_written']} live objects from the seeded metadata keys, and",
         f"  plants {fixture['planted_orphan_count']} objects with no metadata row",
         f"  ({fixture['planted_orphan_bytes']} bytes) under the `files/` prefix the script lists.",
-        "- Then the **unedited** `etl/scripts/storage_cleanup_daily.py` was run (nothing under `etl/`",
+        f"- Then the **unedited** `etl/scripts/storage_cleanup_daily.py` was run for `{ns}` (nothing under `etl/`",
         "  was modified) and what it moved into the quarantine bucket is the golden orphan set:",
-        f"  `{GOLDEN}/legacy_stdout.txt`, `legacy_report.json`, `quarantined_keys.txt`.",
+        f"  `{GOLDEN}/{ns}/legacy_stdout.txt`, `legacy_report.json`, `quarantined_keys.txt`.",
+        f"- Because the legacy `files/` prefix is shared, the golden quarantine set is restricted to "
+        f"the planted keys recorded for `{ns}`; mixed-namespace keys are never used as its baseline.",
         "",
         "Legacy run, for the record:",
         "",
@@ -491,10 +527,10 @@ def write_report(path: Path, ns: str, run_date: str, checks: list, fixture: dict
         "## Reproducing",
         "",
         "```bash",
-        "make infra-up && make seed-legacy NS=demo && make seed-legacy-validate NS=demo",
-        "python3 scripts/tp_databricks/fixture_storage_cleanup.py build --ns demo",
-        "python3 scripts/tp_databricks/extract_storage_cleanup.py --ns demo --load --scenario nominal",
-        f"python3 scripts/tp_databricks/recon_storage_cleanup.py --ns demo --run-date {run_date} \\",
+        f"make infra-up && make seed-legacy NS={ns} && make seed-legacy-validate NS={ns}",
+        f"python3 scripts/tp_databricks/fixture_storage_cleanup.py build --ns {ns}",
+        f"python3 scripts/tp_databricks/extract_storage_cleanup.py --ns {ns} --load --scenario nominal",
+        f"python3 scripts/tp_databricks/recon_storage_cleanup.py --ns {ns} --run-date {run_date} \\",
         "    --capture-golden",
         "```",
         "",
