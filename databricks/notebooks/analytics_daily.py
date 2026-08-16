@@ -20,12 +20,13 @@ What replaces it here:
 * nothing is dropped silently: every bronze row lands in either `silver.analytics_events`
   or `silver.analytics_events_rejects` with a reason, and the run asserts
   `silver + rejects = bronze`;
-* transient failures are retried with a bounded exponential backoff and then **raise**;
+* runner-specific transient failures are retried with a bounded exponential backoff and then
+  **raise**; the Databricks task's `max_retries = 2` is the outer retry layer;
   an empty extract raises `ZeroEventExtract`. A run that cannot read its source fails —
   it never reports success on zero events.
 
-The module is deliberately runner-agnostic: `run_pipeline` takes `execute`/`scalar`
-callables, so the exact same statement text runs as this notebook task (`spark.sql`) and
+The module is deliberately runner-agnostic: `run_pipeline` takes `execute`/`scalar` and an
+exception classifier, so the exact same statement text runs as this notebook task (`spark.sql`) and
 through `scripts/tp_databricks/pipeline_analytics_daily.py` on the serverless SQL
 warehouse, which is what the recon evidence is produced with.
 """
@@ -51,6 +52,25 @@ REJECT_REASONS = ("missing_event_id", "missing_event_type", "invalid_event_ts", 
 # built, so a value carrying a quote or a statement terminator cannot widen that predicate.
 NS_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_]{0,63}$")
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*){0,2}$")
+
+
+def _spark_retryable(exc: Exception) -> bool:
+    """Retry only Spark failures that identify a transient pre-write/cloud-storage fault."""
+    message = str(exc).lower()
+    if "ambiguous" in message or "already executing" in message:
+        return False
+    transient_markers = (
+        "connection refused",
+        "connection reset before",
+        "failed to connect",
+        "temporarily unavailable",
+        "service unavailable",
+        "slow down",
+        "http status 429",
+        "http status 500",
+        "http status 503",
+    )
+    return any(marker in message for marker in transient_markers)
 # `source_glob` and `source_kind` arrive the same way and land in string literals
 # (`read_files('<path>')`, `'<kind>' AS source`), so they are constrained too: the path must
 # stay below the analytics_daily landing root with no traversal segments, the kind to the
@@ -295,26 +315,15 @@ def _execute_with_retry(
     backoff_s: float,
     sleep: Callable[[float], None],
     log: Callable[[str], None],
+    is_retryable: Callable[[Exception], bool],
 ) -> None:
-    def retryable_failure(exc: Exception) -> bool:
-        message = str(exc)
-        if message.startswith("statement failed ("):
-            return True
-        # A rejected POST proves no statement was accepted. A transport error while
-        # polling is ambiguous because the server-side write may still be running.
-        return (
-            exc.__class__.__name__ == "DatabricksError"
-            and message.startswith("POST ")
-            and 400 <= int(getattr(exc, "status", 0) or 0) < 500
-        )
-
     attempts = max_attempts if statement["retryable"] else 1
     for attempt in range(1, attempts + 1):
         try:
             execute(statement["sql"])
             return
         except Exception as exc:  # noqa: BLE001 - re-raised below; the point is the bounded retry
-            if not retryable_failure(exc):
+            if not is_retryable(exc):
                 log(f"{statement['name']}: ambiguous execution failure; not retrying: {exc}")
                 raise
             if attempt == attempts:
@@ -340,13 +349,20 @@ def run_pipeline(
     apply_ddl: bool = True,
     sleep: Callable[[float], None] = time.sleep,
     log: Callable[[str], None] = print,
+    is_retryable: Callable[[Exception], bool] | None = None,
 ) -> dict[str, int]:
-    """Reject empty input before bronze replacement, then run four loads and assert parity."""
+    """Reject empty input before replacement, then run four loads and assert parity.
+
+    The caller supplies retry classification because Spark and the local SQL driver expose
+    different exception types. Ambiguous failures from a destructive write must be non-retryable.
+    """
+    if is_retryable is None:
+        raise ValueError("run_pipeline requires a runner-specific is_retryable classifier")
     statements: Iterable[dict] = pipeline_statements(catalog, ns, source_glob, source_kind, source_table)
     if apply_ddl:
         validate_identifier(catalog, "catalog")
         for statement in ddl_statements(ddl_text, catalog):
-            _execute_with_retry(execute, statement, 1, backoff_s, sleep, log)
+            _execute_with_retry(execute, statement, 1, backoff_s, sleep, log, is_retryable)
         log(f"ddl applied to {catalog}")
 
     source_relation = _source_relation(source_glob, ns, catalog, source_table)
@@ -361,7 +377,7 @@ def run_pipeline(
     counts: dict[str, int] = {}
     queries = count_queries(catalog, ns)
     for statement in statements:
-        _execute_with_retry(execute, statement, max_attempts, backoff_s, sleep, log)
+        _execute_with_retry(execute, statement, max_attempts, backoff_s, sleep, log, is_retryable)
         log(f"{statement['name']}: ok")
         if statement["name"] == "bronze_ingest":
             counts["bronze"] = int(scalar(queries["bronze"]))
@@ -418,4 +434,5 @@ if __name__ == "__main__":
         source_glob=dbutils.widgets.get("source_glob"),
         source_kind=dbutils.widgets.get("source_kind"),
         source_table=dbutils.widgets.get("source_table") or None,
+        is_retryable=_spark_retryable,
     )
