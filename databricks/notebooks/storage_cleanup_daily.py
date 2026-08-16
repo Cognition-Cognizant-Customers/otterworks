@@ -166,7 +166,8 @@ SELECT
   (SELECT COUNT(*) FROM {catalog}.bronze.file_metadata_raw WHERE ns = '{ns}') AS metadata_rows,
   o.orphan_count,
   o.orphan_bytes,
-  CASE WHEN {dry_run_sql} THEN 0 ELSE o.orphan_count END AS quarantined_count,
+  CASE WHEN {dry_run_sql} OR NOT g.metadata_read_ok
+       THEN 0 ELSE o.orphan_count END AS quarantined_count,
   {dry_run_sql} AS dry_run,
   '{scenario}' AS scenario,
   g.metadata_read_ok,
