@@ -91,7 +91,7 @@ created_entry = None
 try:
     if created is not None and created.ok:
         body = created.json()
-        created_entry = (body.get("results") or [body])[0] if isinstance(body, dict) else body[0]
+        created_entry = {"ipAddress": probe_ip}
     if ip in listed:
         m.add("vm-ip-listed", "The VM public IP is present in the Atlas access list",
               "Atlas accessList GET", "verified", f"VM IP {ip}; entries={listed}")
@@ -108,7 +108,7 @@ try:
         try:
             if own is not None and own.ok:
                 body = own.json()
-                own_entry = (body.get("results") or [body])[0] if isinstance(body, dict) else body[0]
+                own_entry = {"ipAddress": ip}
                 m.add("vm-ip-listed", "The VM public IP can be self-healed for the DB write path",
                       "Atlas accessList POST/DELETE", "verified", f"VM IP {ip} was absent and temporary add succeeded")
                 if os.environ.get("MONGODB_ATLAS_URI"):

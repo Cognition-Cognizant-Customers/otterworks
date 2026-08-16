@@ -11,12 +11,12 @@ SCHEMA = {
     "recon": ROOT / "docs/tech-partnerships/contracts/schema/recon-report.schema.json",
 }
 
-def validate_file(path: Path, kind: str) -> list[str]:
+def validate_file(path: Path, schema: dict) -> list[str]:
     try:
         data = json.loads(path.read_text())
     except Exception as exc:
         return [f"{path}: not valid JSON ({exc})"]
-    errors = sorted(Draft202012Validator(json.loads(SCHEMA[kind].read_text())).iter_errors(data), key=lambda e: list(e.path))
+    errors = sorted(Draft202012Validator(schema).iter_errors(data), key=lambda e: list(e.path))
     return [f"{path}: {'.'.join(map(str, e.path)) or '<root>'}: {e.message}" for e in errors]
 
 def main() -> int:
@@ -24,6 +24,14 @@ def main() -> int:
     p.add_argument("kind", choices=["contracts", "recon"])
     p.add_argument("file", nargs="?")
     args = p.parse_args()
+    schemas = {}
+    for kind, path in SCHEMA.items():
+        try:
+            schemas[kind] = json.loads(path.read_text())
+            Draft202012Validator.check_schema(schemas[kind])
+        except Exception as exc:
+            print(f"{path}: invalid JSON Schema ({exc})")
+            return 2
     legacy_prose: list[Path] = []
     if args.file:
         files = [Path(args.file)]
@@ -34,12 +42,16 @@ def main() -> int:
         files = sorted((ROOT / "docs/tech-partnerships/recon").glob("*.json"))
         legacy_prose = []
     kind = "contract" if args.kind == "contracts" else "recon"
-    failures = [err for f in files for err in validate_file(f, kind)]
+    failures = [err for f in files for err in validate_file(f, schemas[kind])]
     print(f"validated {len(files)} {args.kind} file(s)")
     if legacy_prose:
         print(f"informational: {len(legacy_prose)} legacy prose contract(s) are not yet migrated to JSON schema")
         for path in legacy_prose:
             print(f"  legacy prose: {path}")
+    if not args.file and args.kind == "contracts" and not files:
+        failures.append(
+            "no JSON contract files found; legacy Markdown contracts are not yet migrated to the schema"
+        )
     if failures:
         print("\n".join(failures))
         print(f"FAIL: {len(failures)} validation error(s)")

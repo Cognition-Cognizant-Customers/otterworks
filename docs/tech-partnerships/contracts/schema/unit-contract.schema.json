@@ -14,4 +14,5 @@
     "empty_input_semantics": {"type": "object", "required": ["action"], "properties": {"action": {"enum": ["no-op", "write-empty-result", "delete-prior-output", "fail"]}, "details": {"type": "string"}}},
     "trigger_granularity": {"enum": ["per-file", "per-batch"]},
     "planted_anomalies": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["id", "status"], "properties": {"id": {"type": "string"}, "description": {"type": "string"}, "status": {"enum": ["must-detect", "coverage_gap"]}, "reason": {"type": "string"}}, "allOf": [{"if": {"properties": {"status": {"const": "coverage_gap"}}}, "then": {"required": ["reason"]}}]}}
+  }
 }
