@@ -1,0 +1,94 @@
+{
+  "kind": "recon-report",
+  "unit": "custbill_estate_live",
+  "namespace": "demo",
+  "generated_at": "2026-08-16T20:35:00+00:00",
+  "run_mode": "live",
+  "checks": [
+    {
+      "id": "bronze-registry-byte-parity",
+      "expected": {
+        "rows": 2,
+        "files": {
+          "CUSTBILL_DEMO_001.dat": {"bytes": 3430, "sha256": "c70f30ca08842885fe2bc96c3902d463609d05be95a96c01875b825a88aa336c"},
+          "CUSTBILL_DEMO_002.dat": {"bytes": 3430, "sha256": "652974b8bb3a168483c8f63fb9f2db440a6ff606f4563cd0800f15914b344f48"}
+        }
+      },
+      "actual": {
+        "rows": 2,
+        "files": {
+          "CUSTBILL_DEMO_001.dat": {"bytes": 3430, "sha256": "c70f30ca08842885fe2bc96c3902d463609d05be95a96c01875b825a88aa336c"},
+          "CUSTBILL_DEMO_002.dat": {"bytes": 3430, "sha256": "652974b8bb3a168483c8f63fb9f2db440a6ff606f4563cd0800f15914b344f48"}
+        }
+      },
+      "source_of_truth": "SELECT file_name, byte_count, sha256 FROM ow_tp.bronze.custbill_raw_files WHERE ns='demo' vs parent golden baseline sha256s (~/tp-golden/databricks-20260816T175547Z)",
+      "result": "pass"
+    },
+    {
+      "id": "silver-row-parity",
+      "expected": {"custbill_records": 100, "custbill_rescue_clean_run": 0},
+      "actual": {"custbill_records": 100, "custbill_rescue_clean_run": 0},
+      "source_of_truth": "SELECT COUNT(*) FROM ow_tp.silver.custbill_records / custbill_rescue WHERE ns='demo' after estate run vs golden parsed row count (2 files x 50 rows)",
+      "result": "pass"
+    },
+    {
+      "id": "gold-aggregates-to-the-cent",
+      "expected": [
+        ["EUR", "CREDIT", 6, "33375.97"],
+        ["EUR", "INVOICE", 22, "101554.41"],
+        ["GBP", "CREDIT", 5, "28454.59"],
+        ["GBP", "INVOICE", 32, "183113.58"],
+        ["USD", "CREDIT", 7, "33390.44"],
+        ["USD", "INVOICE", 28, "130502.15"]
+      ],
+      "actual": [
+        ["EUR", "CREDIT", 6, "33375.97"],
+        ["EUR", "INVOICE", 22, "101554.41"],
+        ["GBP", "CREDIT", 5, "28454.59"],
+        ["GBP", "INVOICE", 32, "183113.58"],
+        ["USD", "CREDIT", 7, "33390.44"],
+        ["USD", "INVOICE", 28, "130502.15"]
+      ],
+      "source_of_truth": "SELECT currency, record_type, record_count, total_amount FROM ow_tp.gold.finance_billing_summary WHERE ns='demo' AND report_date='20260115' vs golden legacy report finance_billing_20260115.csv",
+      "result": "pass"
+    },
+    {
+      "id": "export-csv-byte-identical",
+      "expected": {"sha256": "c8923a71ab5a2d8048ad06ae91840631c009551e9082755fa4672e034a15627e", "bytes": 185},
+      "actual": {"sha256": "c8923a71ab5a2d8048ad06ae91840631c009551e9082755fa4672e034a15627e", "bytes": 185},
+      "source_of_truth": "Files API GET /Volumes/ow_tp/bronze/landing/demo/finance_excel_report/exports/finance_billing_20260115.csv, sha256 vs golden legacy report",
+      "result": "pass"
+    },
+    {
+      "id": "estate-run-log-attribution",
+      "expected": {"failed_first_run": ["parse FAILED (notebook missing)", "finance UPSTREAM_FAILED"], "successful_run": ["ingest SUCCESS", "parse SUCCESS", "finance SUCCESS"]},
+      "actual": {"failed_first_run": ["parse FAILED", "finance UPSTREAM_FAILED", "ingest SUCCESS"], "successful_run": ["ingest SUCCESS", "parse SUCCESS", "finance SUCCESS"]},
+      "source_of_truth": "SELECT task_key, result_state FROM ow_tp.gold.estate_run_log WHERE ns='demo' — a failed stage is recorded attributed, never a green run over partial data",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "ow_tp_custbill_estate run 466858518404150 (SUCCESS) then rerun 359095019836820 (SUCCESS): bronze 2 rows, silver 100 rows, rescue 0, gold 6 rows, export sha256 unchanged (c8923a71...) — observed from target tables, not code"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      "CUSTBILL_ANOM_001.dat:invalid_date:not_a_calendar_date:20261332",
+      "CUSTBILL_ANOM_001.dat:malformed_amount:not_numeric:'0000ABC10000'",
+      "CUSTBILL_ANOM_002.dat:trailer_mismatch:trailer=5,parsed=1"
+    ],
+    "actual_set": [
+      "CUSTBILL_ANOM_001.dat:invalid_date:not_a_calendar_date:20261332",
+      "CUSTBILL_ANOM_001.dat:malformed_amount:not_numeric:'0000ABC10000'",
+      "CUSTBILL_ANOM_002.dat:trailer_mismatch:trailer=5,parsed=1"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "email delivery (finance contract coverage_gap: no mail transport in the target design)",
+    "crontab overlap suppression under truly concurrent triggers (asserted from max_concurrent_runs=1 + queueing job definition, not raced live)"
+  ]
+}
