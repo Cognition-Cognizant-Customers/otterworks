@@ -18,7 +18,7 @@ tp-preflight-atlas: ## Check MongoDB Atlas capability paths and emit a manifest
 tp-preflight-aws: ## Check AWS capability paths and leftovers
 	scripts/tp-preflight-aws.sh
 
-tp-validate-contracts: ## Validate JSON contracts (legacy Markdown is informational)
+tp-validate-contracts: ## Validate JSON contracts (intentionally fails until prose contracts are migrated)
 	uv run --no-project --with jsonschema==4.25.1 python3 scripts/tp_validate.py contracts
 
 tp-validate-recon: ## Validate recon JSON (FILE=<path> or all committed JSON)

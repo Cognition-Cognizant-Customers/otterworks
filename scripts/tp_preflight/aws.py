@@ -17,7 +17,7 @@ tag_value = os.environ.get("TP_AWS_PROJECT_TAG_VALUE", "otterworks-tp")
 env = {**os.environ, "AWS_DEFAULT_REGION": region, "AWS_REGION": region}
 
 
-def aws(pid, description, args, required=True):
+def aws(pid, description, args, required=True, record=True):
     try:
         p = subprocess.run(["aws", *args, "--output", "json"], capture_output=True, text=True, timeout=45, env=env)
         raw = (p.stdout or p.stderr).strip()
@@ -29,11 +29,27 @@ def aws(pid, description, args, required=True):
                 detail = error.get("message") or error.get("Message") or error.get("Code") or "command failed"
             except json.JSONDecodeError:
                 detail = next((line.strip() for line in raw.splitlines() if line.strip()), "command failed")
-        m.add(pid, description, "aws " + " ".join(args), "verified" if p.returncode == 0 else ("denied" if required else "skipped"), detail or "ok")
+        if record:
+            m.add(pid, description, "aws " + " ".join(args), "verified" if p.returncode == 0 else ("denied" if required else "skipped"), detail or "ok")
         return p.returncode == 0, raw
     except Exception as exc:
-        m.add(pid, description, "aws " + " ".join(args), "denied", str(exc))
+        if record:
+            m.add(pid, description, "aws " + " ".join(args), "denied", str(exc))
         return False, str(exc)
+
+
+def leftover_scan(pid, description, args, extractor):
+    ok, raw = aws(pid, description, args, required=True, record=False)
+    if not ok:
+        m.add(pid, description, "aws " + " ".join(args), "denied", "scan command failed")
+        return False
+    try:
+        matches = extractor(json.loads(raw))
+    except (json.JSONDecodeError, TypeError):
+        matches = []
+    detail = json.dumps(matches) if matches else "none found"
+    m.add(pid, description, "aws " + " ".join(args), "denied" if matches else "verified", detail)
+    return not matches
 
 
 def simulate_permission(pid, description, caller_arn, action):
@@ -96,15 +112,20 @@ if created:
 else:
     m.add("iam-role-delete", "Delete the temporary IAM role", "iam:DeleteRole", "skipped", "role was not created")
 
-tagged, _ = aws("leftover-tag-scan", f"Scan for {tag_key}={tag_value} resources", ["resourcegroupstaggingapi", "get-resources", "--tag-filters", f"Key={tag_key},Values={tag_value}"])
-for label, args in [
-    ("leftover-lambda-scan", ["lambda", "list-functions", "--query", f"Functions[?starts_with(FunctionName,'{name_prefix}')].FunctionName"]),
-    ("leftover-sfn-scan", ["stepfunctions", "list-state-machines", "--query", f"stateMachines[?starts_with(name,'{name_prefix}')].name"]),
-    ("leftover-eventbridge-scan", ["events", "list-rules", "--name-prefix", name_prefix]),
-    ("leftover-sqs-scan", ["sqs", "list-queues", "--queue-name-prefix", name_prefix]),
-    ("leftover-dynamodb-scan", ["dynamodb", "list-tables", "--query", f"TableNames[?starts_with(@,'{name_prefix}')]"]),
-    ("leftover-s3-scan", ["s3api", "list-buckets", "--query", f"Buckets[?starts_with(Name,'{name_prefix}')].Name"]),
-    ("leftover-iam-scan", ["iam", "list-roles", "--query", f"Roles[?starts_with(RoleName,'{name_prefix}')].RoleName"]),
+leftover_scan(
+    "leftover-tag-scan",
+    f"Scan for {tag_key}={tag_value} resources",
+    ["resourcegroupstaggingapi", "get-resources", "--tag-filters", f"Key={tag_key},Values={tag_value}"],
+    lambda body: [item.get("ResourceARN") for item in body.get("ResourceTagMappingList", [])],
+)
+for label, args, extractor in [
+    ("leftover-lambda-scan", ["lambda", "list-functions", "--query", f"Functions[?starts_with(FunctionName,'{name_prefix}')].FunctionName"], lambda body: body if isinstance(body, list) else []),
+    ("leftover-sfn-scan", ["stepfunctions", "list-state-machines", "--query", f"stateMachines[?starts_with(name,'{name_prefix}')].name"], lambda body: body if isinstance(body, list) else []),
+    ("leftover-eventbridge-scan", ["events", "list-rules", "--name-prefix", name_prefix], lambda body: [item.get("Name") for item in body.get("Rules", [])]),
+    ("leftover-sqs-scan", ["sqs", "list-queues", "--queue-name-prefix", name_prefix], lambda body: body.get("QueueUrls", [])),
+    ("leftover-dynamodb-scan", ["dynamodb", "list-tables", "--query", f"TableNames[?starts_with(@,'{name_prefix}')]"], lambda body: body if isinstance(body, list) else []),
+    ("leftover-s3-scan", ["s3api", "list-buckets", "--query", f"Buckets[?starts_with(Name,'{name_prefix}')].Name"], lambda body: body if isinstance(body, list) else []),
+    ("leftover-iam-scan", ["iam", "list-roles", "--query", f"Roles[?starts_with(RoleName,'{name_prefix}')].RoleName"], lambda body: body if isinstance(body, list) else []),
 ]:
-    aws(label, f"Scan for leftover {name_prefix} resources", args)
+    leftover_scan(label, f"Scan for leftover {name_prefix} resources", args, extractor)
 raise SystemExit(m.write("aws"))

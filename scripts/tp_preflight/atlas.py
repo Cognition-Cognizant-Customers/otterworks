@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+import ipaddress
+import signal
 import socket
 import urllib.parse
 import uuid
@@ -43,6 +45,20 @@ def api_entry_ip(entry):
     return entry.get("ipAddress") or entry.get("cidrBlock")
 
 
+def covers(ip, entries):
+    try:
+        address = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    for entry in entries:
+        try:
+            if address in ipaddress.ip_network(entry, strict=False):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def delete_entry(entry):
     entry_id = entry.get("ipAddress") or entry.get("cidrBlock")
     label = entry_id or repr(entry)
@@ -75,8 +91,8 @@ def db_user_write():
         name = f"ow_tp_preflight_{uuid.uuid4().hex}"
         db[name].insert_one({"_id": "probe"})
         db[name].delete_one({"_id": "probe"})
-        m.add("db-user-write", "Insert and delete a temporary document with the DB user", "MongoDB wire protocol", "verified", "temporary collection cleaned")
         db.drop_collection(name)
+        m.add("db-user-write", "Insert and delete a temporary document with the DB user", "MongoDB wire protocol", "verified", "temporary collection cleaned")
     except Exception as exc:
         m.add("db-user-write", "Insert and delete a temporary document with the DB user", "MongoDB wire protocol", "denied", str(exc))
 
@@ -91,14 +107,38 @@ if entries is not None and entries.ok:
     listed = [api_entry_ip(entry) for entry in entries.json().get("results", []) if api_entry_ip(entry)]
 
 probe_ip = os.environ.get("TP_ATLAS_TEST_IP", "203.0.113.254")
-created = check("access-list-post", "Create a temporary API access-list entry", post,
-                f"{base}/groups/{project}/accessList",
-                json=[{"ipAddress": probe_ip, "comment": "otterworks preflight"}])
 created_entry = None
+own_entry = None
+
+
+def cleanup_entries():
+    global created_entry, own_entry
+    if own_entry:
+        delete_entry(own_entry)
+        own_entry = None
+    if created_entry:
+        delete_entry(created_entry)
+        created_entry = None
+
+
+def handle_signal(signum, _frame):
+    cleanup_entries()
+    raise SystemExit(128 + signum)
+
+
+signal.signal(signal.SIGINT, handle_signal)
+signal.signal(signal.SIGTERM, handle_signal)
 try:
-    if created is not None and created.ok:
-        created_entry = {"ipAddress": probe_ip}
-    if ip in listed:
+    if covers(probe_ip, listed):
+        m.add("access-list-post", "Create a temporary API access-list entry",
+              "Atlas accessList POST", "skipped", f"{probe_ip} is already covered")
+    else:
+        created = check("access-list-post", "Create a temporary API access-list entry", post,
+                        f"{base}/groups/{project}/accessList",
+                        json=[{"ipAddress": probe_ip, "comment": "otterworks preflight"}])
+        if created is not None and created.ok:
+            created_entry = {"ipAddress": probe_ip}
+    if covers(ip, listed):
         m.add("vm-ip-listed", "The VM public IP is present in the Atlas access list",
               "Atlas accessList GET", "verified", f"VM IP {ip}; entries={listed}")
         if os.environ.get("MONGODB_ATLAS_URI"):
@@ -110,7 +150,6 @@ try:
         own = check("access-list-post-own-ip", "Temporarily add the VM IP for the DB write probe",
                     post, f"{base}/groups/{project}/accessList",
                     json=[{"ipAddress": ip, "comment": "otterworks preflight temporary access"}])
-        own_entry = None
         try:
             if own is not None and own.ok:
                 own_entry = {"ipAddress": ip}
@@ -127,8 +166,7 @@ try:
         finally:
             if own_entry:
                 delete_entry(own_entry)
+                own_entry = None
 finally:
-    if created_entry:
-        # If later probing failed, still remove the TEST-NET entry.
-        delete_entry(created_entry)
+    cleanup_entries()
 raise SystemExit(m.write("atlas"))

@@ -50,7 +50,8 @@ def main() -> int:
             print(f"  legacy prose: {path}")
     if not args.file and args.kind == "contracts" and not files:
         failures.append(
-            "no JSON contract files found; legacy Markdown contracts are not yet migrated to the schema"
+            "no JSON contract files found; migrate these legacy prose contracts to the schema:\n"
+            + "\n".join(f"  - {path}" for path in legacy_prose)
         )
     if failures:
         print("\n".join(failures))
