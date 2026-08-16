@@ -45,7 +45,7 @@ def _sql_literal(value: str) -> str:
 
 def source_files(source_dir: Path, ns: str) -> list[Path]:
     """Legacy landing files, preferring the completed `.done` copy."""
-    pattern = f"CUSTBILL_{ns.upper()}_*.dat"
+    pattern = f"CUSTBILL_{ns.upper()}_[0-9][0-9][0-9].dat"
     selected: dict[str, Path] = {}
     for path in sorted(source_dir.glob(pattern)) + sorted(source_dir.glob(pattern + ".done")):
         if not path.is_file():
@@ -90,7 +90,10 @@ def load(ns: str, source_dir: Path) -> int:
     ns = custbill_parse_sql.validate_namespace(ns)
     files = source_files(source_dir, ns)
     if not files:
-        print(f"no CUSTBILL_{ns.upper()}_*.dat[.done] files under {source_dir}", file=sys.stderr)
+        print(
+            f"no CUSTBILL_{ns.upper()}_[0-9][0-9][0-9].dat[.done] files under {source_dir}",
+            file=sys.stderr,
+        )
         return 1
 
     for statement in custbill_sql.bronze_bootstrap_ddl():
