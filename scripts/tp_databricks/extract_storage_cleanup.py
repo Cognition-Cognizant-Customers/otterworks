@@ -25,6 +25,7 @@ credential is inlined here -- that is one of the deficiencies being retired.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import sys
@@ -42,6 +43,22 @@ DYNAMO_TABLE = "otterworks-file-metadata"
 FILE_STORAGE_BUCKET = "otterworks-file-storage"
 LEGACY_PREFIX = "files/"  # the un-namespaced prefix the legacy script hardcodes
 OUT_ROOT = Path(os.environ.get("TP_EXTRACT_ROOT", "/tmp/ow_tp_extracts"))
+NOTEBOOK = Path(__file__).resolve().parents[2] / "databricks" / "notebooks" / "storage_cleanup_daily.py"
+
+
+def _load_notebook():
+    spec = importlib.util.spec_from_file_location("ow_tp_storage_cleanup", NOTEBOOK)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+nb = _load_notebook()
+
+
+def _validate_inputs(ns: str, scenario: str) -> None:
+    nb._checked("ns", ns)
+    nb._checked("scenario", scenario)
 
 
 def _client(service: str):
@@ -261,6 +278,7 @@ def main(argv: list[str]) -> int:
         help="also load the extract into ow_tp bronze via the serverless SQL warehouse",
     )
     args = parser.parse_args(argv)
+    _validate_inputs(args.ns, args.scenario)
 
     # List first, then scan metadata: an object is visible to the join if its
     # metadata row lands before the second observation, avoiding a read-order
