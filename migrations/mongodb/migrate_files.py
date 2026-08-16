@@ -88,7 +88,8 @@ def quarantine_id(ns: str, source_id: str, reason: str) -> str:
 
 def quarantine_record(ns: str, item: dict, reason: str, detail: str) -> ReplaceOne:
     source_id = str(item.get("id") or "")
-    qid = quarantine_id(ns, source_id or repr(sorted(item)), reason)
+    fallback = repr(sorted((k, repr(v)) for k, v in item.items()))
+    qid = quarantine_id(ns, source_id or fallback, reason)
     doc = {
         "_id": qid,
         "unit": UNIT,
@@ -117,6 +118,7 @@ def map_item(ns: str, item: dict) -> tuple[ReplaceOne | None, list[ReplaceOne]]:
 
     null_attrs = sorted(k for k, v in item.items() if v is None)
     extra_attrs = sorted(k for k in item if k not in KNOWN_ATTRS)
+    invalid_attrs: list[str] = []
 
     doc: dict = {"_id": str(item["id"]), "tenant": str(item["ns"])}
     for attr in KNOWN_ATTRS:
@@ -129,7 +131,10 @@ def map_item(ns: str, item: dict) -> tuple[ReplaceOne | None, list[ReplaceOne]]:
             quarantine.append(quarantine_record(
                 ns, item, "invalid_attribute",
                 f"attribute {attr} is not integral: {value!r}"))
-            return None, quarantine
+            if attr in CRITICAL_ATTRS:
+                return None, quarantine
+            invalid_attrs.append(attr)
+            continue  # non-critical: omitted and attributed, document still lands
         doc[attr] = value
 
     anomalies: list[str] = []
@@ -147,6 +152,8 @@ def map_item(ns: str, item: dict) -> tuple[ReplaceOne | None, list[ReplaceOne]]:
         attribution["anomalies"] = anomalies
     if null_attrs:
         attribution["null_attributes"] = null_attrs
+    if invalid_attrs:
+        attribution["invalid_attributes"] = invalid_attrs
     if extra_attrs:
         attribution["extra_attributes"] = extra_attrs
     doc["migration"] = attribution
