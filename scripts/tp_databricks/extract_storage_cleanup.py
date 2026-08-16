@@ -127,6 +127,7 @@ def scan_metadata(ns: str, limit: int | None = None) -> tuple[list[dict], bool, 
     items: list[dict] = []
     claimed_elsewhere: set = set()
     truncated = False
+    dropped = False
     kwargs: dict = {
         "TableName": DYNAMO_TABLE,
         "ProjectionExpression": "id, s3_key, size_bytes, created_at, #n",
@@ -139,6 +140,7 @@ def scan_metadata(ns: str, limit: int | None = None) -> tuple[list[dict], bool, 
                 claimed_elsewhere.add(raw["s3_key"]["S"])
                 continue
             if truncated:
+                dropped = True
                 continue
             key = raw["s3_key"]["S"]
             items.append(
@@ -154,7 +156,9 @@ def scan_metadata(ns: str, limit: int | None = None) -> tuple[list[dict], bool, 
                 truncated = True
         if "LastEvaluatedKey" not in page:
             if truncated:
-                return items[:limit], False, claimed_elsewhere
+                selected = items[:limit]
+                selected.sort(key=lambda i: i["file_id"])
+                return selected, not dropped, claimed_elsewhere
             items.sort(key=lambda i: i["file_id"])
             return items, True, claimed_elsewhere
         kwargs["ExclusiveStartKey"] = page["LastEvaluatedKey"]
