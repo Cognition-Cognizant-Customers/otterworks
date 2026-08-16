@@ -249,6 +249,32 @@ rows`. The other empty-namespace assertions are intentionally harmless:
 the bronze manifest gate rejects an empty manifest first, while duplicate checks
 and missing-recon checks operate on the actual rows/files and cannot erase data.
 
+## K. An unknown manifest record count fails the handshake
+
+The `manifest record_count matches all landed lines` predicate now treats a
+NULL declaration as an error (`record_count IS NULL OR record_count <> landed`).
+The shared workspace's existing bronze table has an enforced NOT NULL constraint,
+so the direct mutation attempt in throwaway namespace `ns=kneg` was rejected by
+the warehouse before the gate could run:
+
+```text
+[DELTA_NOT_NULL_CONSTRAINT_VIOLATED] NOT NULL constraint violated for column: record_count.
+```
+
+To exercise the nullable shape without weakening or altering the ingest-owned
+table, the same gate query was run against an isolated manifest projection with
+`CUSTBILL_DEMO_001.dat`'s `record_count` replaced by SQL NULL. It returned the
+file, proving the NULL branch is not a vacuous pass:
+
+```text
+isolated_null_count_gate [['CUSTBILL_DEMO_001.dat', None, '52']]
+```
+
+The namespace had 100 published rows before cleanup and all eight bronze,
+published-silver, and staging tables were returned to zero rows. The attempted
+mutation could not reach the parse task; therefore no claim is made that the
+live constrained table produced a full end-to-end NULL-count run.
+
 ## Note on the shared workspace
 
 During the session an extra bronze line (`line_no = 999`, `raw_line` `STALE TAIL RECORD`)
