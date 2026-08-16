@@ -145,19 +145,19 @@ def handler(event, context):
                 return {"status": status, "basename": basename, "redelivery": True}
             raise RuntimeError(f"landed object {key!r} not found and no ledger record exists")
 
-    if _ledger_get(table, basename, etag) is not None:
-        # Redelivery of a recorded object: copies and ledger row already
-        # converged. Only the landing delete may remain if the prior run
-        # crashed between ledger put and delete. Delete only if the object
-        # at the key is still the recorded one: feed names are reused, so a
-        # replayed old event must never remove a newer same-named object
-        # (that object's own event processes it).
-        if _head_etag(bucket, key) == etag:
-            _s3.delete_object(Bucket=bucket, Key=key)
+    recorded = _ledger_get(table, basename, etag) is not None
+    if recorded and _head_etag(bucket, key) != etag:
+        # Recorded event whose object is gone or has been replaced by a newer
+        # same-named object (feed names are reused): nothing to do for THIS
+        # event — a replaced object's own event processes it.
         return {"status": status, "basename": basename, "redelivery": True}
 
-    # (Re)run the server-side copies — they converge to identical
-    # destination state — then record and delete.
+    # (Re)run the server-side copies — they converge to identical destination
+    # state — then record and delete. Recorded objects still present at the
+    # key (a crash between ledger put and delete, or a genuine re-landing of
+    # identical bytes) run through here too: re-copying re-fires the
+    # incoming/ Object Created event so downstream is always triggered, like
+    # the legacy script's unconditional re-copy.
     for dest in dispositions.values():
         _copy(bucket, key, dest)
 
@@ -182,6 +182,6 @@ def handler(event, context):
     return {
         "status": status,
         "basename": basename,
-        "redelivery": False,
+        "redelivery": recorded,
         **{f"{name}_key": dest for name, dest in dispositions.items()},
     }

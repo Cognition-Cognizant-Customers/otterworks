@@ -179,6 +179,21 @@ def test_idempotent_redelivery_without_etag(env):
     assert len(ledger_items(ddb)) == 1
 
 
+def test_identical_reland_recopies_and_clears_landing(env):
+    mod, s3, ddb = env
+    ev = land(s3, "CUSTBILL_DEMO_001.dat", b"nil extract")
+    mod.handler(ev, None)
+    # The same name lands again with byte-identical content (e.g. a nil
+    # daily feed two days running): it must be re-copied to incoming/ so a
+    # fresh Object Created event triggers downstream, and landing/ cleared.
+    ev2 = land(s3, "CUSTBILL_DEMO_001.dat", b"nil extract")
+    result = mod.handler(ev2, None)
+    assert result["redelivery"] is True
+    assert get_body(s3, "incoming/CUSTBILL_DEMO_001.dat") == b"nil extract"
+    assert "Contents" not in s3.list_objects_v2(Bucket=BUCKET, Prefix="landing/")
+    assert len(ledger_items(ddb)) == 1
+
+
 def test_replayed_old_event_never_deletes_newer_same_named_object(env):
     mod, s3, ddb = env
     ev_old = land(s3, "CUSTBILL_DEMO_001.dat", b"day-1 payload")
