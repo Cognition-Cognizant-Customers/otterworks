@@ -65,6 +65,7 @@
 
 ### 5. Idempotency: replaying summary and delivery statements avoids duplicates — **PASS**
 
+- summary replay preflight found 100 billing rows in silver
 - re-executing the job's 2 summary statements and delivery statements against the serverless warehouse
 - `DELETE FROM ow_tp.gold.finance_billing_summary WHERE ns = 'd...` -> [['6']]
 - `INSERT INTO ow_tp.gold.finance_billing_summary (ns, currency...` -> [['6', '6']]

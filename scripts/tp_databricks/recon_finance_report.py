@@ -316,6 +316,23 @@ def check_5(ns: str, report_date: str) -> Check:
         "Idempotency: replaying summary and delivery statements avoids duplicates",
     )
     before = gold_rows(ns, report_date)
+    preflight = f"""
+        SELECT count(*)
+        FROM {CATALOG}.silver.custbill_records
+        WHERE ns = {sql_literal(ns)} AND record_type IN ('01', '02')
+    """
+    try:
+        silver_rows = dbx.sql_scalar(preflight)
+    except Exception as error:  # noqa: BLE001 - reported, never swallowed
+        check.block(preflight, str(error), "a reachable serverless warehouse")
+        return check
+    if not int(silver_rows):
+        check.fail(
+            "cannot replay summary statements: the upstream parse precondition has no "
+            f"billing rows for ns={ns!r}"
+        )
+        return check
+    check.note(f"summary replay preflight found {silver_rows} billing rows in silver")
     statements = pipeline.summary_statements(ns, report_date, CATALOG)
     check.note(
         f"re-executing the job's {len(statements)} summary statements and delivery "
