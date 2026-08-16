@@ -249,6 +249,33 @@ rows`. The other empty-namespace assertions are intentionally harmless:
 the bronze manifest gate rejects an empty manifest first, while duplicate checks
 and missing-recon checks operate on the actual rows/files and cannot erase data.
 
+The guard considers all three staging tables (records, rejects, and recon), so
+valid empty-record deliveries are still publishable:
+
+**All detail records rejected** (`ns=allrej`): the run passed and published the
+quarantine rows instead of treating the empty records table as an accidental
+wipe:
+
+```text
+ns=allrej: 0 parsed records, 100 quarantined
+allrej rejects [['CUSTBILL_DEMO_001.dat', '50'], ['CUSTBILL_DEMO_002.dat', '50']]
+allrej recon [['CUSTBILL_DEMO_001.dat', '50', '0', '50', 'true'], ['CUSTBILL_DEMO_002.dat', '50', '0', '50', 'true']]
+```
+
+**HDR+TRL only, zero detail records** (`ns=hdrtrl`): the run also passed and
+published the clean zero-detail reconciliation:
+
+```text
+ns=hdrtrl: 0 parsed records, 0 quarantined
+hdrtrl records []
+hdrtrl rejects []
+hdrtrl recon [['CUSTBILL_DEMO_001.dat', '0', '0', '0', 'true'], ['CUSTBILL_DEMO_002.dat', '0', '0', '0', 'true']]
+```
+
+Both throwaway namespaces were cleaned to zero rows in all eight tables. The
+accidental-wipe case above remains protected by the bronze gate and leaves its
+published records and recon rows unchanged.
+
 ## K. An unknown manifest record count fails the handshake
 
 The `manifest record_count matches all landed lines` predicate now treats a
