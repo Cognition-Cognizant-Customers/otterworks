@@ -3,9 +3,11 @@
 # and the run_all.sh sleep-600 orchestration).
 #
 # The state machine is started explicitly per batch with
-# {"ns": "<ns>", "report_date": "YYYYMMDD"}: it verifies the parsed/ inputs
-# are visible (no dependency guessing by sleeping), invokes the report
-# Lambda, and fails visibly on any error (no 2>/dev/null || true).
+# {"ns": "<ns>", "report_date": "YYYYMMDD"} (optionally
+# "expected_parsed_count": <n>): it verifies the parsed/ inputs are visible
+# (no dependency guessing by sleeping), fails visibly when fewer objects
+# than expected are present, invokes the report Lambda, and propagates any
+# error to the execution (no 2>/dev/null || true).
 
 # The hashicorp/archive provider requirement belongs in the shared
 # versions.tf, which components must not edit; terraform init resolves the
@@ -218,11 +220,35 @@ resource "aws_sfn_state_machine" "chain" {
           "parsedObjectCount.$" = "$.KeyCount"
         }
         ResultPath = "$.verify"
-        Next       = "RunFinanceReport"
+        Next       = "ParsedInputsSatisfyExpectation"
       }
-      # Zero parsed objects is a valid batch state: the report Lambda then
-      # writes a header-only report and the execution still succeeds,
-      # matching the legacy exit-0 behaviour.
+      # Gate on the observed count when the caller states how many parsed
+      # objects the batch expects; a shortfall fails the execution visibly
+      # instead of reporting on partial data. Without expected_parsed_count
+      # any count (including zero) is valid: the report Lambda writes a
+      # header-only report and the execution succeeds, matching the legacy
+      # exit-0 behaviour.
+      ParsedInputsSatisfyExpectation = {
+        Type = "Choice"
+        Choices = [
+          {
+            Variable  = "$.expected_parsed_count"
+            IsPresent = false
+            Next      = "RunFinanceReport"
+          },
+          {
+            Variable                     = "$.verify.parsedObjectCount"
+            NumericGreaterThanEqualsPath = "$.expected_parsed_count"
+            Next                         = "RunFinanceReport"
+          },
+        ]
+        Default = "ParsedInputsMissing"
+      }
+      ParsedInputsMissing = {
+        Type  = "Fail"
+        Error = "ParsedInputsMissing"
+        Cause = "parsed/ object count is below expected_parsed_count; refusing to report on partial data"
+      }
       RunFinanceReport = {
         Type     = "Task"
         Resource = "arn:aws:states:::lambda:invoke"

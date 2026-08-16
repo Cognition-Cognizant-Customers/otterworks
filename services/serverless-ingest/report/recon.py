@@ -69,12 +69,12 @@ def main() -> int:
             s3.put_object(Bucket=BUCKET, Key=f"parsed/{p.name}", Body=p.read_bytes())
 
         def run():
-            handler.handler({"ns": NS, "report_date": REPORT_DATE}, None)
+            result = handler.handler({"ns": NS, "report_date": REPORT_DATE}, None)
             csv = s3.get_object(Bucket=BUCKET, Key=f"reports/finance_billing_{REPORT_DATE}.csv")["Body"].read()
             xls = s3.get_object(Bucket=BUCKET, Key=f"reports/finance_billing_{REPORT_DATE}.xls")["Body"].read()
-            return csv, xls
+            return result, csv, xls
 
-        csv1, xls1 = run()
+        result1, csv1, xls1 = run()
         checks.append({
             "id": "byte-identical-report",
             "expected": md5(golden_csv.read_bytes()),
@@ -89,15 +89,35 @@ def main() -> int:
             "source_of_truth": f"S3 .xls object bytes vs S3 .csv object bytes (and golden .xls md5 {md5(golden_xls.read_bytes())})",
             "result": "pass" if xls1 == csv1 else "fail",
         })
+        # Recomputed, not asserted: invoke with an alternate date and check
+        # the observed S3 keys derive from the event date, never the clock.
+        alt_date = "19990101"
+        alt_result = handler.handler({"ns": NS, "report_date": alt_date}, None)
+        alt_keys = {
+            o["Key"]
+            for o in s3.list_objects_v2(Bucket=BUCKET, Prefix="reports/")["Contents"]
+        }
+        expected_alt = {
+            f"reports/finance_billing_{d}.{ext}"
+            for d in (REPORT_DATE, alt_date)
+            for ext in ("csv", "xls")
+        }
+        date_ok = (
+            result1["csv_key"] == f"reports/finance_billing_{REPORT_DATE}.csv"
+            and alt_result["csv_key"] == f"reports/finance_billing_{alt_date}.csv"
+            and alt_keys == expected_alt
+        )
         checks.append({
             "id": "report-date-parameter",
-            "expected": f"reports/finance_billing_{REPORT_DATE}.csv written from event report_date, no wall-clock use",
-            "actual": "handler derives the key solely from event['report_date'] (validated YYYYMMDD); artifact bytes carry no timestamps",
-            "source_of_truth": "fixture invocation with fixed report_date; object key + bytes read back from S3",
-            "result": "pass",
+            "expected": sorted(expected_alt),
+            "actual": sorted(alt_keys),
+            "source_of_truth": "two fixture invocations with different event report_date values; S3 reports/ listing and handler csv_key read back",
+            "result": "pass" if date_ok else "fail",
         })
+        for ext in ("csv", "xls"):
+            s3.delete_object(Bucket=BUCKET, Key=f"reports/finance_billing_{alt_date}.{ext}")
 
-        csv2, xls2 = run()
+        _, csv2, xls2 = run()
         reports = {o["Key"] for o in s3.list_objects_v2(Bucket=BUCKET, Prefix="reports/")["Contents"]}
         idem_ok = csv2 == csv1 and xls2 == xls1 and reports == {
             f"reports/finance_billing_{REPORT_DATE}.csv",

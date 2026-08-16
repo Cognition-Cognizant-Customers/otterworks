@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "aws-report",
   "namespace": "demo",
-  "generated_at": "2026-08-16T18:21:05.231004+00:00",
+  "generated_at": "2026-08-16T18:33:36.431662+00:00",
   "run_mode": "fixture",
   "checks": [
     {
@@ -21,9 +21,19 @@
     },
     {
       "id": "report-date-parameter",
-      "expected": "reports/finance_billing_20260115.csv written from event report_date, no wall-clock use",
-      "actual": "handler derives the key solely from event['report_date'] (validated YYYYMMDD); artifact bytes carry no timestamps",
-      "source_of_truth": "fixture invocation with fixed report_date; object key + bytes read back from S3",
+      "expected": [
+        "reports/finance_billing_19990101.csv",
+        "reports/finance_billing_19990101.xls",
+        "reports/finance_billing_20260115.csv",
+        "reports/finance_billing_20260115.xls"
+      ],
+      "actual": [
+        "reports/finance_billing_19990101.csv",
+        "reports/finance_billing_19990101.xls",
+        "reports/finance_billing_20260115.csv",
+        "reports/finance_billing_20260115.xls"
+      ],
+      "source_of_truth": "two fixture invocations with different event report_date values; S3 reports/ listing and handler csv_key read back",
       "result": "pass"
     },
     {
