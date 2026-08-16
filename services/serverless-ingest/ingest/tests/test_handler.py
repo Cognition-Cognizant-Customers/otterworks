@@ -167,6 +167,25 @@ def test_idempotent_redelivery(env):
     assert len(ledger_items(ddb)) == 2
 
 
+def test_idempotent_redelivery_without_etag(env):
+    mod, s3, ddb = env
+    ev = land(s3, "CUSTBILL_DEMO_001.dat", b"payload")
+    mod.handler(ev, None)
+    # Redelivery whose event carries no etag, after the landed object is gone:
+    # the ledger (not S3 404-vs-403 semantics) identifies the completed run.
+    second = mod.handler(event_for("CUSTBILL_DEMO_001.dat"), None)
+    assert second["redelivery"] is True
+    assert get_body(s3, "incoming/CUSTBILL_DEMO_001.dat") == b"payload"
+    assert len(ledger_items(ddb)) == 1
+
+
+def test_errors_surface_on_missing_object_without_etag(env):
+    mod, s3, ddb = env
+    # No etag in the event, no landed object, no ledger row: must raise.
+    with pytest.raises(Exception):
+        mod.handler(event_for("CUSTBILL_DEMO_404.dat"), None)
+
+
 def test_errors_surface_on_missing_object(env):
     mod, s3, ddb = env
     with pytest.raises(Exception):

@@ -14,8 +14,11 @@ per S3 "Object Created" event under landing/ in the pipeline bucket:
   * records every object in the DynamoDB batch-state ledger, keyed by
     basename + ETag so EventBridge at-least-once redelivery is a no-op.
 
-Errors always raise: EventBridge retries the invocation and undeliverable
-events drain to the rule's dead-letter queue. There are no lock files.
+Errors always raise: Lambda's asynchronous invoke retries and then delivers
+the failure to the shared events DLQ (on_failure destination); EventBridge
+delivery failures dead-letter to the same queue. Redelivery detection never
+depends on S3 404-vs-403 semantics: the DynamoDB ledger is the source of
+truth, so the role needs no bucket-wide s3:ListBucket. No lock files.
 """
 
 import fnmatch
@@ -58,6 +61,17 @@ def _ledger_get(table: str, basename: str, etag: str):
     return resp.get("Item")
 
 
+def _ledger_has_basename(table: str, basename: str) -> bool:
+    resp = _ddb.query(
+        TableName=table,
+        KeyConditionExpression="pk = :pk",
+        ExpressionAttributeValues={":pk": {"S": f"INGEST#{basename}"}},
+        ConsistentRead=True,
+        Limit=1,
+    )
+    return bool(resp.get("Items"))
+
+
 def _ledger_put(table: str, basename: str, etag: str, item_fields: dict) -> None:
     # Item content is fully determined by (basename, etag), so a rerun
     # overwrite converges to the identical item.
@@ -96,9 +110,6 @@ def handler(event, context):
     if not basename or "/" in basename:
         raise ValueError(f"unexpected nested or empty landing key {key!r}")
 
-    if not etag:
-        etag = _s3.head_object(Bucket=bucket, Key=key)["ETag"].strip('"')
-
     valid = fnmatch.fnmatchcase(basename, VALID_PATTERN)
     if valid:
         dispositions = {"incoming": f"incoming/{basename}", "archive": f"archive/{basename}"}
@@ -107,20 +118,26 @@ def handler(event, context):
         dispositions = {"quarantine": f"quarantine/{basename}"}
         status = "quarantined"
 
-    already_recorded = _ledger_get(table, basename, etag) is not None
-    if already_recorded:
+    if not etag:
         try:
-            _s3.head_object(Bucket=bucket, Key=key)
-        except _s3.exceptions.ClientError as exc:
-            if exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode") == 404:
-                # Redelivery after a completed run: the ledger is written only
-                # after staging succeeds and the landed object is gone, so all
-                # copies exist. Idempotent no-op.
+            etag = _s3.head_object(Bucket=bucket, Key=key)["ETag"].strip('"')
+        except _s3.exceptions.ClientError:
+            # The landed object is gone. If a ledger row for this basename
+            # exists, a prior run completed and this is a redelivery: no-op.
+            # Otherwise the object genuinely vanished — surface the error.
+            if _ledger_has_basename(table, basename):
                 return {"status": status, "basename": basename, "redelivery": True}
             raise
 
-    # The landed object still exists: (re)run the server-side copies — they
-    # converge to identical destination state — then record and delete.
+    if _ledger_get(table, basename, etag) is not None:
+        # Redelivery of a recorded object: copies and ledger row already
+        # converged. Only the landing delete may remain if the prior run
+        # crashed between ledger put and delete; S3 deletes are idempotent.
+        _s3.delete_object(Bucket=bucket, Key=key)
+        return {"status": status, "basename": basename, "redelivery": True}
+
+    # (Re)run the server-side copies — they converge to identical
+    # destination state — then record and delete.
     for dest in dispositions.values():
         _copy(bucket, key, dest)
 
@@ -141,6 +158,6 @@ def handler(event, context):
     return {
         "status": status,
         "basename": basename,
-        "redelivery": already_recorded,
+        "redelivery": False,
         **{f"{name}_key": dest for name, dest in dispositions.items()},
     }

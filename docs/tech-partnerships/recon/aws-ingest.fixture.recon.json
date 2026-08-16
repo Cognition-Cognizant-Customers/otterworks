@@ -44,14 +44,14 @@
     {
       "id": "idempotent-redelivery",
       "expected": "second delivery of the same event yields identical incoming/ and archive/ state, one ledger row, no failure",
-      "actual": "redelivery after completion is a no-op (redelivery=true); mid-flight redelivery reconverges; single ledger row per (basename, etag)",
-      "source_of_truth": "test_idempotent_redelivery — actual rerun of the handler on the same event, both post-completion and mid-flight",
+      "actual": "redelivery after completion is a no-op (redelivery=true) whether or not the event carries an etag; mid-flight redelivery reconverges; single ledger row per (basename, etag); detection uses the DynamoDB ledger, not S3 404-vs-403 semantics",
+      "source_of_truth": "test_idempotent_redelivery + test_idempotent_redelivery_without_etag — actual reruns of the handler on the same event, post-completion (with and without etag) and mid-flight",
       "result": "pass"
     },
     {
       "id": "least-privilege",
       "expected": "role ow-tp-<ns>-ingest-role: GetObject+DeleteObject on landing/*, PutObject on incoming/*, archive/*, quarantine/* only, no bucket-wide write, trust conditioned on aws:SourceAccount",
-      "actual": "data.aws_iam_policy_document.ingest grants exactly those prefix-scoped actions plus GetItem/PutItem on the batch-state table and log-group-scoped logs; trust policy carries StringEquals aws:SourceAccount; terraform validate green",
+      "actual": "data.aws_iam_policy_document.ingest grants exactly those prefix-scoped S3 actions (no s3:ListBucket anywhere) plus GetItem/PutItem/Query on the batch-state table, sqs:SendMessage on the events DLQ for the on_failure destination, and log-group-scoped logs; trust policy carries StringEquals aws:SourceAccount; terraform validate green",
       "source_of_truth": "infrastructure/terraform-tp-aws/ingest.tf (static Terraform review + terraform validate); live IAM evaluation is parent-only",
       "result": "pass"
     },
