@@ -153,10 +153,10 @@ def main() -> int:
             c["id"]: {"baseline": base_actuals.get(c["id"]), "rerun": c["actual"]}
             for c in checks if base_actuals.get(c["id"]) != c["actual"]
         }
-        base_orphans = baseline.get("orphaned_metadata_enumeration", orphan_ids)
+        base_orphans = baseline.get("orphaned_metadata_enumeration")
         if base_orphans != orphan_ids:
             drift["orphaned_metadata_enumeration"] = {
-                "baseline_len": len(base_orphans), "rerun_len": len(orphan_ids)}
+                "baseline_len": len(base_orphans or []), "rerun_len": len(orphan_ids)}
         idempotency = {
             "performed": True,
             "result": "pass" if not drift else "fail",

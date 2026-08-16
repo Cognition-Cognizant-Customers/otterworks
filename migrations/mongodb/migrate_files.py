@@ -144,8 +144,9 @@ def map_item(ns: str, item: dict) -> tuple[ReplaceOne | None, list[ReplaceOne]]:
             ns, item, "orphaned_s3_key",
             f"s3_key {item['s3_key']!r} points at no seeded object"))
 
-    if extra_attrs:
-        doc["extra_attributes"] = {a: to_bson(item[a]) for a in extra_attrs}
+    extra_present = [a for a in extra_attrs if item[a] is not None]
+    if extra_present:
+        doc["extra_attributes"] = {a: to_bson(item[a]) for a in extra_present}
 
     attribution: dict = {"unit": UNIT, "source": SOURCE}
     if anomalies:
