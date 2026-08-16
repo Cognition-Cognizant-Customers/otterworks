@@ -90,9 +90,25 @@ def main() -> int:
     failures = []
     for item in manifest["files"]:
         path = landing / item["path"]
-        if not path.exists() or path.stat().st_size != item["bytes"] or hashlib.sha256(path.read_bytes()).hexdigest() != item["sha256"]:
-            failures.append(item["path"])
-    print(f"fixture verified: {len(manifest['files']) - len(failures)}/{len(manifest['files'])} files byte-identical")
+        issues = []
+        if not path.exists():
+            issues.append("missing")
+        else:
+            if path.stat().st_size != item["bytes"]:
+                issues.append(f"size {path.stat().st_size} != {item['bytes']} bytes")
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            if digest != item["sha256"]:
+                issues.append(f"digest {digest} != {item['sha256']}")
+        if issues:
+            failures.append((item["path"], "; ".join(issues)))
+    verified = len(manifest["files"]) - len(failures)
+    if failures:
+        print(f"fixture verification failed: {verified}/{len(manifest['files'])} files byte-identical")
+        print("mismatches:")
+        for path, reason in failures:
+            print(f"  - {path}: {reason}")
+    else:
+        print(f"fixture verified: {verified}/{len(manifest['files'])} files byte-identical")
     return 1 if failures else 0
 
 
