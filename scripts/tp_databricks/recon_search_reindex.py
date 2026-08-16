@@ -160,7 +160,7 @@ def duplicate_entity_ids(ns: str) -> int:
 def serving_sample(ns: str, entity_type: str, ids: list[str]) -> dict[str, dict]:
     for entity_id in ids:
         if not re.fullmatch(r"[A-Za-z0-9_-]+", entity_id):
-            raise ValueError(
+            raise Blocked(
                 f"sampled id {entity_id!r} does not match [A-Za-z0-9_-]+"
             )
     columns = ["entity_id"] + list(FIELD_MAP[entity_type])
