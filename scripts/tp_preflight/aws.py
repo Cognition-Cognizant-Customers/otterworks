@@ -11,6 +11,9 @@ from common import Manifest, require_env
 require_env("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")
 m = Manifest("aws")
 region = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
+name_prefix = os.environ.get("TP_AWS_NAME_PREFIX", "ow-tp-")
+tag_key = os.environ.get("TP_AWS_PROJECT_TAG_KEY", "Project")
+tag_value = os.environ.get("TP_AWS_PROJECT_TAG_VALUE", "otterworks-tp")
 env = {**os.environ, "AWS_DEFAULT_REGION": region, "AWS_REGION": region}
 
 
@@ -57,7 +60,7 @@ for service, args, desc in [
 ]:
     aws(f"{service}-permissions", desc, args)
 
-role = f"ow-tp-preflight-{uuid.uuid4().hex[:12]}"
+role = f"{name_prefix}preflight-{uuid.uuid4().hex[:12]}"
 trust = json.dumps({"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}, "Action": "sts:AssumeRole"}]})
 created, detail = aws("iam-role-create", "Create a temporary IAM role to prove role creation permission", ["iam", "create-role", "--role-name", role, "--assume-role-policy-document", trust])
 if created:
@@ -65,15 +68,15 @@ if created:
 else:
     m.add("iam-role-delete", "Delete the temporary IAM role", "iam:DeleteRole", "skipped", "role was not created")
 
-tagged, _ = aws("leftover-tag-scan", "Scan for Project=otterworks-tp resources", ["resourcegroupstaggingapi", "get-resources", "--tag-filters", "Key=Project,Values=otterworks-tp"])
+tagged, _ = aws("leftover-tag-scan", f"Scan for {tag_key}={tag_value} resources", ["resourcegroupstaggingapi", "get-resources", "--tag-filters", f"Key={tag_key},Values={tag_value}"])
 for label, args in [
-    ("leftover-lambda-scan", ["lambda", "list-functions", "--query", "Functions[?starts_with(FunctionName,'ow-tp-')].FunctionName"]),
-    ("leftover-sfn-scan", ["stepfunctions", "list-state-machines", "--query", "stateMachines[?starts_with(name,'ow-tp-')].name"]),
-    ("leftover-eventbridge-scan", ["events", "list-rules", "--name-prefix", "ow-tp-"]),
-    ("leftover-sqs-scan", ["sqs", "list-queues", "--queue-name-prefix", "ow-tp-"]),
-    ("leftover-dynamodb-scan", ["dynamodb", "list-tables", "--query", "TableNames[?starts_with(@,'ow-tp-')]"]),
-    ("leftover-s3-scan", ["s3api", "list-buckets", "--query", "Buckets[?starts_with(Name,'ow-tp-')].Name"]),
-    ("leftover-iam-scan", ["iam", "list-roles", "--query", "Roles[?starts_with(RoleName,'ow-tp-')].RoleName"]),
+    ("leftover-lambda-scan", ["lambda", "list-functions", "--query", f"Functions[?starts_with(FunctionName,'{name_prefix}')].FunctionName"]),
+    ("leftover-sfn-scan", ["stepfunctions", "list-state-machines", "--query", f"stateMachines[?starts_with(name,'{name_prefix}')].name"]),
+    ("leftover-eventbridge-scan", ["events", "list-rules", "--name-prefix", name_prefix]),
+    ("leftover-sqs-scan", ["sqs", "list-queues", "--queue-name-prefix", name_prefix]),
+    ("leftover-dynamodb-scan", ["dynamodb", "list-tables", "--query", f"TableNames[?starts_with(@,'{name_prefix}')]"]),
+    ("leftover-s3-scan", ["s3api", "list-buckets", "--query", f"Buckets[?starts_with(Name,'{name_prefix}')].Name"]),
+    ("leftover-iam-scan", ["iam", "list-roles", "--query", f"Roles[?starts_with(RoleName,'{name_prefix}')].RoleName"]),
 ]:
-    aws(label, "Scan for leftover ow-tp- resources", args)
+    aws(label, f"Scan for leftover {name_prefix} resources", args)
 raise SystemExit(m.write("aws"))

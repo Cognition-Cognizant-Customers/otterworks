@@ -30,13 +30,13 @@ class Manifest:
         out.mkdir(parents=True, exist_ok=True)
         path = out / f"{platform}-capabilities.json"
         path.write_text(json.dumps(self.data, indent=2) + "\n")
-        required_denied = [
+        denied_probes = [
             p for p in self.data["probes"]
             if p["result"] == "denied"
         ]
         print(f"\nmanifest: {path}")
-        print(f"probes: {len(self.data['probes'])}, denied: {len(required_denied)}")
-        return 1 if required_denied else 0
+        print(f"probes: {len(self.data['probes'])}, denied: {len(denied_probes)}")
+        return 1 if denied_probes else 0
 
 
 def require_env(*names: str) -> None:

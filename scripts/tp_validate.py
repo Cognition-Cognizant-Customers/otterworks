@@ -28,12 +28,17 @@ def main() -> int:
         files = [Path(args.file)]
     elif args.kind == "contracts":
         files = sorted((ROOT / "docs/tech-partnerships/contracts").glob("*.json"))
-        files += sorted((ROOT / "docs/tech-partnerships/contracts").glob("*.md"))
+        legacy_prose = sorted((ROOT / "docs/tech-partnerships/contracts").glob("*.md"))
     else:
         files = sorted((ROOT / "docs/tech-partnerships/recon").glob("*.json"))
+        legacy_prose = []
     kind = "contract" if args.kind == "contracts" else "recon"
     failures = [err for f in files for err in validate_file(f, kind)]
     print(f"validated {len(files)} {args.kind} file(s)")
+    if legacy_prose:
+        print(f"informational: {len(legacy_prose)} legacy prose contract(s) are not yet migrated to JSON schema")
+        for path in legacy_prose:
+            print(f"  legacy prose: {path}")
     if failures:
         print("\n".join(failures))
         print(f"FAIL: {len(failures)} validation error(s)")

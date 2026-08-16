@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import os
-import time
 import urllib.error
 import urllib.request
 import uuid
@@ -15,6 +14,8 @@ from common import Manifest, require_env
 require_env("DATABRICKS_DEMO_HOST", "DATABRICKS_DEMO_TOKEN")
 HOST = os.environ["DATABRICKS_DEMO_HOST"].rstrip("/")
 TOKEN = os.environ["DATABRICKS_DEMO_TOKEN"]
+catalog = os.environ.get("TP_DATABRICKS_CATALOG", "ow_tp")
+landing = os.environ.get("TP_DATABRICKS_LANDING_PATH", f"/Volumes/{catalog}/bronze/landing")
 manifest = Manifest("databricks")
 
 
@@ -51,15 +52,14 @@ def probe(pid, description, api, action, cleanup=None):
     return None
 
 
-identity = call("GET", "/api/2.0/preview/scim/v2/Me")
-if 200 <= identity[0] < 300:
-    manifest.data["credential_identity"] = identity[1].get("userName", "available")
+identity_status, identity_body = call("GET", "/api/2.0/preview/scim/v2/Me")
+if 200 <= identity_status < 300:
+    manifest.data["credential_identity"] = identity_body.get("userName", "available")
 else:
     manifest.data["credential_identity"] = "unavailable"
     manifest.add("authenticate", "PAT can identify the caller", "/api/2.0/current-user",
-                 "denied", f"HTTP {identity[0]}: {identity[1]}")
+                 "denied", f"HTTP {identity_status}: {identity_body}")
 
-landing = "/Volumes/ow_tp/bronze/landing"
 suffix = f"__tp_preflight_{uuid.uuid4().hex}"
 file_path = f"{landing}/{suffix}"
 payload = b"otterworks tp preflight\n"
@@ -90,22 +90,21 @@ finally:
     except Exception as exc:
         manifest.add("files-delete", "Delete the temporary landing file", "Files API DELETE", "denied", str(exc))
 
+warehouse_probe = call("GET", "/api/2.0/sql/warehouses")
 warehouse_id = os.environ.get("DATABRICKS_SQL_WAREHOUSE_ID", "")
-if not warehouse_id:
-    warehouse_probe = call("GET", "/api/2.0/sql/warehouses")
-    if 200 <= warehouse_probe[0] < 300:
-        for warehouse in warehouse_probe[1].get("warehouses", []):
-            if warehouse.get("enable_serverless_compute") or warehouse.get("warehouse_type") == "PRO":
-                warehouse_id = warehouse.get("id", "")
-                break
+if not warehouse_id and 200 <= warehouse_probe[0] < 300:
+    for warehouse in warehouse_probe[1].get("warehouses", []):
+        if warehouse.get("enable_serverless_compute") or warehouse.get("warehouse_type") == "PRO":
+            warehouse_id = warehouse.get("id", "")
+            break
 schema = f"ow_tp_preflight_{uuid.uuid4().hex[:12]}"
-created_schema = call("POST", "/api/2.0/sql/statements", {"statement": f"CREATE SCHEMA ow_tp.{schema}", "warehouse_id": warehouse_id})
+created_schema = call("POST", "/api/2.0/sql/statements", {"statement": f"CREATE SCHEMA {catalog}.{schema}", "warehouse_id": warehouse_id})
 if 200 <= created_schema[0] < 300:
-    listed_schema = call("GET", "/api/2.1/unity-catalog/schemas?catalog_name=ow_tp")
+    listed_schema = call("GET", f"/api/2.1/unity-catalog/schemas?catalog_name={urllib.parse.quote(catalog)}")
     manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema", "SQL Statement + Unity Catalog APIs", "verified" if 200 <= listed_schema[0] < 300 else "denied", f"create HTTP {created_schema[0]}, list HTTP {listed_schema[0]}")
 else:
     manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema", "SQL Statement + Unity Catalog APIs", "denied", f"HTTP {created_schema[0]}: {created_schema[1]}")
-call("POST", "/api/2.0/sql/statements", {"statement": f"DROP SCHEMA IF EXISTS ow_tp.{schema} CASCADE", "warehouse_id": warehouse_id})
+call("POST", "/api/2.0/sql/statements", {"statement": f"DROP SCHEMA IF EXISTS {catalog}.{schema} CASCADE", "warehouse_id": warehouse_id})
 
 job_name = f"ow_tp_preflight_{uuid.uuid4().hex[:8]}"
 job = call("POST", "/api/2.1/jobs/create", {"name": job_name, "tasks": [{"task_key": "noop", "notebook_task": {"notebook_path": "/Shared/ow_tp/preflight"}}]})
@@ -124,11 +123,10 @@ if 200 <= scope[0] < 300:
 else:
     manifest.add("secret-scope", "Create and delete a temporary secret scope", "Secrets API 2.0", "denied", f"HTTP {scope[0]}: {scope[1]}")
 
-warehouses = call("GET", "/api/2.0/sql/warehouses")
-if 200 <= warehouses[0] < 300:
-    serverless = [w for w in warehouses[1].get("warehouses", []) if w.get("enable_serverless_compute") or w.get("warehouse_type") == "PRO"]
+if 200 <= warehouse_probe[0] < 300:
+    serverless = [w for w in warehouse_probe[1].get("warehouses", []) if w.get("enable_serverless_compute") or w.get("warehouse_type") == "PRO"]
     manifest.add("serverless-warehouse", "An existing serverless SQL warehouse is available", "SQL Warehouses API", "verified" if serverless else "denied", json.dumps(serverless[:3]) if serverless else "no serverless warehouse")
 else:
-    manifest.add("serverless-warehouse", "An existing serverless SQL warehouse is available", "SQL Warehouses API", "denied", f"HTTP {warehouses[0]}: {warehouses[1]}")
+    manifest.add("serverless-warehouse", "An existing serverless SQL warehouse is available", "SQL Warehouses API", "denied", f"HTTP {warehouse_probe[0]}: {warehouse_probe[1]}")
 
 raise SystemExit(manifest.write("databricks"))
