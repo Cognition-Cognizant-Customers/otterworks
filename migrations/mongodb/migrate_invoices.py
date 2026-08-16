@@ -155,15 +155,18 @@ def main() -> int:
                 hid = pk_str(row[0])
                 bad_header_ids.add(hid)
                 quarantine(
-                    {"_id": hid, "unit": "mongo_invoices", "ns": ns,
+                    {"_id": tp_common.det_id(ns, "quarantine", hid),
+                     "source_invoice_id": hid,
+                     "unit": "mongo_invoices", "ns": ns,
                      "reason": "invalid_utf8", "record_type": "invoice_header",
                      "raw_repr": repr(row)})
                 continue
-            doc["_id"] = doc.pop("invoice_id")
+            inv_id = doc["invoice_id"]
+            doc["_id"] = tp_common.det_id(ns, "invoice", inv_id)
             doc["ns"] = ns
             doc["lines"] = []
-            headers[doc["_id"]] = doc
-            header_ids.add(doc["_id"])
+            headers[inv_id] = doc
+            header_ids.add(inv_id)
 
     # --- lines: streamed in invoice_id order so each invoice document is
     # completed and flushed as soon as its last line arrives ---
@@ -186,7 +189,9 @@ def main() -> int:
                 if current_inv is not None:
                     flush_invoice(current_inv)
                 current_inv = invoice_id
-            base = {"_id": line_id, "unit": "mongo_invoices", "ns": ns}
+            base = {"_id": tp_common.det_id(ns, "quarantine", line_id),
+                    "source_line_id": line_id,
+                    "unit": "mongo_invoices", "ns": ns}
             try:
                 line = to_doc(LINE_COLS, row)
             except UnicodeError:

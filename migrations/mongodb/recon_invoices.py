@@ -50,11 +50,13 @@ def compute_state(client, ns: str) -> dict:
     q_by_reason: dict[str, list[str]] = {}
     n_quarantined_lines = 0
     for q in quarantined:
-        q_by_reason.setdefault(q["reason"], []).append(q["_id"])
         if q.get("record_type") == "invoice_header":
-            continue  # header-level quarantine never contributes a line
+            # header-level quarantine never contributes a line
+            q_by_reason.setdefault(q["reason"], []).append(q["source_invoice_id"])
+            continue
+        q_by_reason.setdefault(q["reason"], []).append(q["source_line_id"])
         n_quarantined_lines += 1
-        pairs.append((q["_id"], dec_str(q.get("line", {}).get("amount"))))
+        pairs.append((q["source_line_id"], dec_str(q.get("line", {}).get("amount"))))
 
     line_ids = [pk for pk, _ in pairs]
     duplicates = len(line_ids) - len(set(line_ids))
