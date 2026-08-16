@@ -1,0 +1,131 @@
+{
+  "kind": "recon-report",
+  "unit": "sftp_ingest_poll",
+  "namespace": "demo",
+  "generated_at": "2026-08-16T18:15:29.109680+00:00",
+  "run_mode": "fixture",
+  "checks": [
+    {
+      "id": "byte-parity",
+      "expected": {
+        "CUSTBILL_DEMO_001.dat": [
+          "c70f30ca08842885fe2bc96c3902d463609d05be95a96c01875b825a88aa336c",
+          3430
+        ],
+        "CUSTBILL_DEMO_002.dat": [
+          "652974b8bb3a168483c8f63fb9f2db440a6ff606f4563cd0800f15914b344f48",
+          3430
+        ]
+      },
+      "actual": {
+        "CUSTBILL_DEMO_001.dat": [
+          "c70f30ca08842885fe2bc96c3902d463609d05be95a96c01875b825a88aa336c",
+          3430
+        ],
+        "CUSTBILL_DEMO_002.dat": [
+          "652974b8bb3a168483c8f63fb9f2db440a6ff606f4563cd0800f15914b344f48",
+          3430
+        ]
+      },
+      "source_of_truth": "contract golden_baseline_location sha256s vs sha256 recomputed from fixture landing",
+      "result": "pass"
+    },
+    {
+      "id": "registry-row-per-file",
+      "expected": {
+        "rows": 2,
+        "inserted": 2,
+        "skipped": 0
+      },
+      "actual": {
+        "rows": 2,
+        "inserted": 2,
+        "skipped": 0
+      },
+      "source_of_truth": "fixture registry recomputed after run vs fixture landing listing",
+      "result": "pass"
+    },
+    {
+      "id": "registry-fields",
+      "expected": true,
+      "actual": true,
+      "source_of_truth": "fixture registry rows vs golden sha256 set",
+      "result": "pass"
+    },
+    {
+      "id": "no-lock-poison",
+      "expected": {
+        "rerun_inserted": 0,
+        "rerun_skipped": 2,
+        "rows": 2
+      },
+      "actual": {
+        "rerun_inserted": 0,
+        "rerun_skipped": 2,
+        "rows": 2
+      },
+      "source_of_truth": "fixture registry recomputed after idempotent rerun (no lock files exist by construction)",
+      "result": "pass"
+    },
+    {
+      "id": "empty-input-noop",
+      "expected": {
+        "inserted": 0,
+        "skipped": 0,
+        "rows": 2
+      },
+      "actual": {
+        "inserted": 0,
+        "skipped": 0,
+        "rows": 2
+      },
+      "source_of_truth": "contract empty_input_semantics vs fixture rerun against an empty drop",
+      "result": "pass"
+    },
+    {
+      "id": "zero-byte-fails-loudly",
+      "expected": true,
+      "actual": true,
+      "source_of_truth": "contract malformed_record_policy (null/zero-byte must fail) vs fixture run",
+      "result": "pass"
+    },
+    {
+      "id": "no-hostname-branching",
+      "expected": true,
+      "actual": true,
+      "source_of_truth": "static scan of sftp_ingest_poll_notebook.py; all paths derive from ns + volume_root",
+      "result": "pass"
+    },
+    {
+      "id": "half-written-file",
+      "expected": "retired-by-construction",
+      "actual": "retired-by-construction",
+      "source_of_truth": "contract planted_anomalies: Files API PUT is atomic per PUT; the settle heuristic race cannot occur",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "byte-identical re-land of both golden files followed by a rerun: 0 inserts, 2 attributed duplicate-redrop skips, row count unchanged"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      "duplicate-redrop"
+    ],
+    "actual_set": [
+      "duplicate-redrop"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "SQL execution and Delta semantics of ow_tp.bronze.custbill_raw_files (CREATE TABLE IF NOT EXISTS, parameterized INSERT, concurrent writers)",
+    "Unity Catalog permissions/grants on catalog ow_tp and the landing volume",
+    "Serverless SQL warehouse and serverless notebook-task execution",
+    "Live Files API transport into /Volumes/ow_tp/bronze/landing/demo/sftp_ingest_poll/",
+    "Jobs API run of job ow_tp_sftp_ingest_poll (parameters, max_concurrent_runs=1 queueing)",
+    "Terraform resources in jobs_sftp_ingest_poll.tf (parent applies after merge)"
+  ]
+}
