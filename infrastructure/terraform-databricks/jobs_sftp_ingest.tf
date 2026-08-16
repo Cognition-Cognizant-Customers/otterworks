@@ -145,8 +145,21 @@ resource "databricks_job" "sftp_ingest" {
     task_key = "retention"
 
     depends_on {
+      task_key = "create_tables"
+    }
+
+    depends_on {
       task_key = "ingest_bronze"
     }
+
+    # Row retention must not hang off the ingest's result. An abandoned half-written
+    # delivery fails `ingest_bronze` on every run (landing is the archive, so nothing
+    # removes it), and on ALL_SUCCESS that failure would silently disable trimming for
+    # the namespace forever — the unbounded-archive deficiency this conversion retires.
+    # AT_LEAST_ONE_SUCCESS rather than ALL_DONE, because the tables have to exist: if
+    # `create_tables` fails, `ingest_bronze` is skipped, no dependency succeeded, and
+    # retention is skipped with it instead of deleting from a table that is not there.
+    run_if = "AT_LEAST_ONE_SUCCESS"
 
     max_retries               = 2
     min_retry_interval_millis = 60000
