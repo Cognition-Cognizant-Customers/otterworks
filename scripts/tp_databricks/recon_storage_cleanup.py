@@ -216,6 +216,31 @@ def _resolve_capture_date(
     return effective, report
 
 
+def _counterfactual_note(counterfactual_dir: Path = GOLDEN / "counterfactual") -> str:
+    report_path = counterfactual_dir / "run_b_report.json"
+    if not report_path.is_file():
+        return (
+            "legacy counterfactual artefacts are not present on this machine; "
+            "the separate legacy comparison is not being asserted"
+        )
+    try:
+        report = json.loads(report_path.read_text())
+        total_objects = report["inventory"]["total_objects"]
+        orphaned_objects = report["orphans"]["orphaned_objects"]
+        objects_quarantined = report["cleanup"]["objects_quarantined"]
+    except (OSError, KeyError, TypeError, ValueError):
+        return (
+            "legacy counterfactual artefacts are not present on this machine; "
+            "the separate legacy comparison is not being asserted"
+        )
+    return (
+        "legacy counterfactual evidence from a separate unedited-script run: "
+        f"with {orphaned_objects} of {total_objects} metadata items unread it reported "
+        f"{orphaned_objects} orphans and quarantined {objects_quarantined} live customer files "
+        f"(see {counterfactual_dir}/)"
+    )
+
+
 def capture_golden(ns: str) -> None:
     """Run the unedited legacy script and record what it actually quarantined."""
     env = dict(os.environ)
@@ -397,11 +422,7 @@ def check_3(ns: str, run_date: str, limit: int) -> Check:
             "AND orphan_reason = 'candidate_unverified_metadata_read'"
         ),
     )
-    check.note(
-        f"legacy counterfactual, same defect, unedited script: with 100 of 200 metadata items "
-        f"unread it reported 100 orphans and quarantined 100 live customer files "
-        f"(see {GOLDEN}/counterfactual/)"
-    )
+    check.note(_counterfactual_note())
     return check
 
 
