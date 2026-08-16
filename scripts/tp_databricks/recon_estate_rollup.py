@@ -47,6 +47,10 @@ REQUIRED_EDGES = {
     "search_reindex": set(),
     "storage_cleanup": set(),
 }
+# The leaves the rollup must wait on. The CUSTBILL chain contributes whichever of its two units
+# is last enabled, so either satisfies that side; the Python-wave leaves are not optional.
+REQUIRED_ROLLUP_LEAVES = {"user_activity", "audit_archive", "search_reindex", "storage_cleanup"}
+CUSTBILL_CHAIN_LEAVES = {"finance_report", "parse_custbill"}
 
 
 def _load(path: Path, name: str) -> ModuleType:
@@ -237,14 +241,27 @@ def check_failure_path(ns: str, catalog: str, artifact: Path) -> Check:
                   "the throwaway drill job was not deleted; the test artifact must be reverted")
 
     # Asked of the live table now, not read from the artifact: an upstream failure must leave
-    # no rollup row at all for the drill's run_date, green or otherwise.
-    drill_date = drill.get("run_date", "")
-    pipeline.validate_run_date(drill_date)
+    # no rollup row at all for the drill's own slice, green or otherwise. Both coordinates of
+    # that slice come from the artifact, so the query cannot be pointed at a namespace the
+    # drill never wrote to and pass by finding nothing there. A malformed artifact is a red
+    # check rather than a traceback, like a missing one.
+    drill_ns = drill.get("ns")
+    drill_date = drill.get("run_date")
+    well_formed = (isinstance(drill_ns, str) and pipeline.NS_PATTERN.match(drill_ns or "") is not None
+                   and isinstance(drill_date, str)
+                   and pipeline.RUN_DATE_PATTERN.match(drill_date or "") is not None)
+    if not check.require(well_formed,
+                         f"the drill artifact does not record the slice it ran (ns={drill_ns!r}, "
+                         f"run_date={drill_date!r}), so the live table cannot be asked about that run"):
+        return check
+    check.require(drill_ns == ns,
+                  f"the drill ran in ns={drill_ns} but this recon is reporting on ns={ns}; the drill "
+                  "evidence does not belong to this namespace")
     live = _rows(
         f"SELECT recon_result, count(*) FROM {catalog}.gold.estate_daily_rollup "
-        f"WHERE ns = {_q(ns)} AND run_date = DATE{_q(drill_date)} GROUP BY recon_result"
+        f"WHERE ns = {_q(drill_ns)} AND run_date = DATE{_q(drill_date)} GROUP BY recon_result"
     )
-    check.record(f"live rollup rows for the drill's run_date {drill_date}: "
+    check.record(f"live rollup rows for the drill's own slice ns={drill_ns} run_date={drill_date}: "
                  f"{ {row[0]: int(row[1]) for row in live} or 'none'}")
     check.require(not live, f"the failed run left rollup rows for {drill_date}: {live}")
     return check
@@ -293,6 +310,26 @@ def check_anomalies(ns: str, catalog: str) -> Check:
     return check
 
 
+def _local_expression(text: str, name: str) -> str | None:
+    """The right-hand side of a Terraform `locals` assignment, brackets balanced."""
+    match = re.search(rf"\n\s*{re.escape(name)}\s*=\s*", text)
+    if match is None:
+        return None
+    start = match.end()
+    depth = 0
+    for index in range(start, len(text)):
+        char = text[index]
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+            if depth == 0:
+                return text[start:index + 1]
+        elif char == "\n" and depth == 0:
+            return text[start:index]
+    return text[start:]
+
+
 def check_job_configuration() -> Check:
     check = Check("5", "committed job configuration: serialized, no sleep, no cluster")
     if not TERRAFORM.exists():
@@ -309,32 +346,57 @@ def check_job_configuration() -> Check:
 
     sleeps = [line for line in text.splitlines() if re.search(r"\bsleep\b", line)]
     check.require(not sleeps, f"sleep-based ordering found: {sleeps}")
-    check.record("sleep-based ordering: none")
+    check.record(f"sleep-based ordering: {sleeps or 'none'}")
 
     clusters = [key for key in CLUSTER_KEYS if re.search(rf"\b{key}\b", text)]
     check.require(not clusters, f"cluster configuration found: {clusters}")
-    check.record(f"cluster configuration: none ({', '.join(CLUSTER_KEYS)} all absent)")
+    check.record(f"cluster configuration: {clusters or 'none'} "
+                 f"(of {', '.join(CLUSTER_KEYS)})")
 
     # Parse the orchestrator's task blocks so a missing DAG edge fails here.
     orchestrator = text.split('resource "databricks_job" "estate_orchestrator"', 1)[-1]
     edges: dict[str, set[str]] = {}
+    bodies: dict[str, str] = {}
     for block in re.split(r"\n\s*(?:dynamic \"task\"|task) \{", orchestrator)[1:]:
         key_match = re.search(r'task_key\s*=\s*"([\w]+)"', block)
         if not key_match:
             continue
         body = block.split("task_key", 1)[1]
+        bodies[key_match.group(1)] = body
         edges[key_match.group(1)] = set(re.findall(r'depends_on \{\s*task_key\s*=\s*"(\w+)"', body))
-    rollup_upstream = edges.pop("estate_rollup", set())
+    edges.pop("estate_rollup", set())
     check.record(f"orchestrator edges: { {task: sorted(up) for task, up in sorted(edges.items())} }")
-    check.record(f"estate_rollup depends on: {sorted(rollup_upstream) or 'a dynamic leaf list'}")
     for task, upstream in REQUIRED_EDGES.items():
         check.require(task in edges, f"orchestrator has no {task} task")
         if task in edges:
             check.require(edges[task] == upstream,
                           f"{task} upstream edges {sorted(edges[task])} != required {sorted(upstream)}")
     check.require("run_job_task" in text, "the orchestrator does not order units through run_job_task edges")
-    check.require("estate_rollup_leaf_tasks" in text or rollup_upstream,
-                  "the estate_rollup task has no upstream edges, so it could run against a half-finished estate")
+
+    # The rollup's edges are generated from a local rather than written out one per leaf, so they
+    # are resolved rather than asserted from the identifier merely appearing somewhere in the file:
+    # the leaf list is read out of the `locals` block the rollup task's `for_each` actually names.
+    rollup_body = bodies.get("estate_rollup")
+    if not check.require(rollup_body is not None,
+                         "the orchestrator has no estate_rollup task, so nothing reconciles the estate"):
+        return check
+    leaves = set(re.findall(r'depends_on \{\s*task_key\s*=\s*"(\w+)"', rollup_body))
+    for_each = re.search(r'dynamic "depends_on" \{\s*for_each\s*=\s*local\.(\w+)', rollup_body)
+    if for_each is not None:
+        expression = _local_expression(text, for_each.group(1))
+        if check.require(expression is not None,
+                         f"the estate_rollup task depends on local.{for_each.group(1)}, which is not "
+                         "defined in this file"):
+            leaves |= set(re.findall(r'"(\w+)"', expression or ""))
+    check.record(f"estate_rollup depends on: {sorted(leaves) or 'nothing'}"
+                 + (f" (resolved from local.{for_each.group(1)})" if for_each else ""))
+    missing = REQUIRED_ROLLUP_LEAVES - leaves
+    check.require(not missing,
+                  f"estate_rollup does not wait on {sorted(missing)}, so it could roll up a "
+                  "half-finished estate")
+    check.require(bool(leaves & CUSTBILL_CHAIN_LEAVES),
+                  f"estate_rollup waits on neither of {sorted(CUSTBILL_CHAIN_LEAVES)}, so the CUSTBILL "
+                  "chain is not a dependency of the rollup")
     return check
 
 
