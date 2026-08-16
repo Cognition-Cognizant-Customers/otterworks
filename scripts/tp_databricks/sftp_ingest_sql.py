@@ -97,14 +97,26 @@ def validated(ns: str, catalog: str, landing_root: str) -> tuple[str, str, str]:
 
 
 def _source_cte(ns: str, landing_root: str) -> str:
-    """CTEs over the landed files: whole-file bytes, exploded lines, audit, gate.
+    """CTEs over the landed files: the bytes, exploded lines, audit, gate.
 
-    `wholeText => true` keeps each file as one value, which is what makes the
-    hash comparable to `sha256sum` on the legacy artifact and the line numbering
-    faithful to delivery order.
+    Two reads of the same directory, deliberately. `binaryFile` is where `size_bytes`
+    and `sha256` come from, so the manifest describes the delivered bytes and its hash
+    equals `sha256sum` on the artifact even for a drop that is not valid UTF-8 — a text
+    read substitutes U+FFFD for undecodable bytes, which would make both the size and
+    the hash describe a re-encoded copy rather than the file. `wholeText => true` on
+    the text read keeps each file as one value, which is what makes the line numbering
+    faithful to delivery order; a file whose bytes do not survive that decode fails the
+    gate (`utf8_faithful`) instead of being stored altered under a mismatched hash.
     """
     return f"""
-WITH raw AS (
+WITH bytes AS (
+  SELECT
+    regexp_extract(path, '([^/]+)$', 1)                        AS file_name,
+    octet_length(content)                                      AS size_bytes,
+    sha2(content, 256)                                         AS sha256
+  FROM read_files('{landing_root}/{ns}/custbill/', format => 'binaryFile')
+),
+raw AS (
   SELECT
     _metadata.file_path                                       AS source_path,
     regexp_extract(_metadata.file_path, '([^/]+)$', 1)         AS file_name,
@@ -126,6 +138,16 @@ lines AS (
   FROM raw
   LATERAL VIEW posexplode(split(raw.body, '\\n')) l AS pos, line
 ),
+-- Does the text read describe the delivered bytes at all? A drop containing a byte
+-- sequence that is not valid UTF-8 comes back with U+FFFD in place of it, so the record
+-- text would be silently altered while the manifest hash (taken over the real bytes)
+-- disagreed with it. Comparing the re-encoded length against the file's own length
+-- catches exactly that, and such a file is treated as not ingestible.
+decoded AS (
+  SELECT r.file_name, octet_length(encode(r.content, 'utf-8')) = b.size_bytes AS utf8_faithful
+  FROM raw r
+  JOIN bytes b USING (file_name)
+),
 audit AS (
   SELECT
     file_name,
@@ -140,9 +162,11 @@ audit AS (
   GROUP BY file_name
 ),
 complete AS (
-  SELECT file_name
-  FROM audit
-  WHERE header_lines = 1 AND trailer_lines = 1 AND detail_lines = trailer_declared
+  SELECT a.file_name
+  FROM audit a
+  JOIN decoded d USING (file_name)
+  WHERE a.header_lines = 1 AND a.trailer_lines = 1 AND a.detail_lines = a.trailer_declared
+    AND d.utf8_faithful
 )"""
 
 
@@ -156,9 +180,10 @@ def incomplete_files_query(ns: str, catalog: str, landing_root: str) -> str:
     ns, catalog, landing_root = _validated(ns, catalog, landing_root)
     return f"""{_source_cte(ns, landing_root)}
 SELECT a.file_name, a.header_lines, a.trailer_lines, a.detail_lines, a.trailer_declared,
-       octet_length(r.content) AS size_bytes
+       b.size_bytes, d.utf8_faithful
 FROM audit a
-JOIN raw r USING (file_name)
+JOIN bytes b USING (file_name)
+JOIN decoded d USING (file_name)
 WHERE a.file_name NOT IN (SELECT file_name FROM complete)
 ORDER BY a.file_name"""
 
@@ -211,12 +236,13 @@ USING (
   SELECT
     '{ns}'                                                            AS ns,
     raw.file_name,
-    octet_length(raw.content)                                         AS size_bytes,
-    sha2(encode(raw.content, 'utf-8'), 256)                           AS sha256,
+    bytes.size_bytes,
+    bytes.sha256,
     size(split(raw.body, '\\n'))                                      AS record_count,
     current_timestamp()                                               AS ingested_at,
     raw.source_path
   FROM raw
+  JOIN bytes USING (file_name)
   JOIN complete USING (file_name)
 ) AS s
 ON t.ns = s.ns AND t.file_name = s.file_name
@@ -329,11 +355,15 @@ class IncompleteDropError(RuntimeError):
 
 def describe_incomplete(row: list[str]) -> str:
     """One `incomplete_files_query` row as observed-versus-declared text."""
-    file_name, header_lines, trailer_lines, detail_lines, trailer_declared, size_bytes = row
+    (file_name, header_lines, trailer_lines, detail_lines, trailer_declared, size_bytes,
+     utf8_faithful) = row
     declared = "none (no parseable TRL count)" if trailer_declared is None else trailer_declared
+    # Only worth saying when it is the problem: a file that does not decode has
+    # meaningless record counts, so this is the reason to lead with.
+    undecodable = "" if str(utf8_faithful).lower() in ("true", "1") else "; NOT valid UTF-8"
     return (
         f"{file_name} (observed {size_bytes} bytes, hdr={header_lines}, trl={trailer_lines}, "
-        f"detail={detail_lines}; TRL declares {declared})"
+        f"detail={detail_lines}; TRL declares {declared}{undecodable})"
     )
 
 
