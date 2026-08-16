@@ -40,6 +40,16 @@ resource "mongodbatlas_database_user" "run" {
     database_name = local.quarantine_db
   }
 
+  roles {
+    role_name     = "dbAdmin"
+    database_name = local.run_db
+  }
+
+  roles {
+    role_name     = "dbAdmin"
+    database_name = local.quarantine_db
+  }
+
   scopes {
     name = var.cluster_name
     type = "CLUSTER"
