@@ -13,6 +13,7 @@ baseline: legacy output
 - **Guards not exercised by this corpus**: three defensive paths are reasoned and reviewed but never entered by a run on this data, and none of them contributes to any PASS below -- the empty-extract guard and the erase-an-existing-entity-type guard in `ingest_bronze`, and the shrink-to-zero guard in `publish_index`. They fire only on a degenerate extract, which the seeded fixture does not produce; the checks below all ran on a full 1,933 / 9,461 corpus.
 - **Sample selection (check 2)**: ids are drawn from the legacy index itself using `random.Random(int(sha256('search_reindex_weekly:<ns>:<entity_type>').hexdigest()[:16], 16))` over the lexicographically sorted id list, 50 per entity type. Fixed seed, fixed ordering, fixed before any value is compared -- the sample is not chosen to favour the conversion.
 - **Null/default normalization (check 2)**: the legacy script defaulted absent source fields to `""` / `[]`; where the converted projection stores SQL NULL for the same absent field the two are treated as equal. Every application is counted per entity type as `null_default_normalizations` below, so the extent of the leniency is visible rather than implied -- zero there means the two sides matched on representation as well as on value.
+- **Timestamp normalization (check 2)**: `created_at` and `updated_at` values are compared as instants, forgiving offset-suffix form (`Z` vs `+00:00`) and separator form (space vs `T`); offset-less text is treated as UTC, which is an assumption about the legacy side's representation rather than a verified fact. Each textual difference accepted this way is counted per entity type as `timestamp_normalizations` below.
 - **Count snapshots (checks 3b and 4)**: the serving counts each run is judged on are read by `run_search_reindex_dev.py` the moment that run finishes and stored in its run artifact; recon reads those recorded values and compares the live table on top. Reading both sides at report time would make the equality hold by construction and could never detect drift.
 - **Counts**: the seed generator creates 2,000 documents, 67 of them soft-deleted and therefore never returned by `/api/v1/documents`; the legacy run indexed 1,933, so parity is measured against that legacy output rather than the raw seed total. Files: 10,000 DynamoDB items, 9,461 API-visible once trashed items are excluded.
 
@@ -47,7 +48,8 @@ baseline: legacy output
   "missing_from_converted": [],
   "mismatches": [],
   "mismatch_count": 0,
-  "null_default_normalizations": 0
+  "null_default_normalizations": 0,
+  "timestamp_normalizations": 100
 }
 ```
 
@@ -61,7 +63,8 @@ baseline: legacy output
   "missing_from_converted": [],
   "mismatches": [],
   "mismatch_count": 0,
-  "null_default_normalizations": 0
+  "null_default_normalizations": 0,
+  "timestamp_normalizations": 100
 }
 ```
 

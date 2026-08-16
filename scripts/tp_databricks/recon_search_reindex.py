@@ -230,6 +230,7 @@ def check_sample(ns: str, index: str, entity_type: str) -> dict:
     missing = [i for i in ids if i not in converted]
     mismatches = []
     normalized_nulls = 0
+    timestamp_normalizations = 0
     compared_fields = 0
     for entity_id in ids:
         if entity_id in missing:
@@ -240,6 +241,14 @@ def check_sample(ns: str, index: str, entity_type: str) -> dict:
             compared_fields += 1
             if converted[entity_id].get(column) is None and legacy[entity_id].get(legacy_field) in ("", [], None):
                 normalized_nulls += 1
+            if (
+                column in ("created_at", "updated_at")
+                and legacy[entity_id].get(legacy_field) not in (None, "")
+                and converted[entity_id].get(column) not in (None, "")
+                and legacy[entity_id].get(legacy_field) != converted[entity_id].get(column)
+                and expected == actual
+            ):
+                timestamp_normalizations += 1
             if expected != actual:
                 mismatches.append({
                     "entity_id": entity_id, "field": column,
@@ -255,6 +264,7 @@ def check_sample(ns: str, index: str, entity_type: str) -> dict:
         "mismatches": mismatches[:20],
         "mismatch_count": len(mismatches),
         "null_default_normalizations": normalized_nulls,
+        "timestamp_normalizations": timestamp_normalizations,
     }
 
 
@@ -397,6 +407,11 @@ def disclosures(transport: str) -> list[str]:
         "treated as equal. Every application is counted per entity type as `null_default_normalizations` "
         "below, so the extent of the leniency is visible rather than implied -- zero there means the two "
         "sides matched on representation as well as on value.",
+        "- **Timestamp normalization (check 2)**: `created_at` and `updated_at` values are compared as "
+        "instants, forgiving offset-suffix form (`Z` vs `+00:00`) and separator form (space vs `T`); "
+        "offset-less text is treated as UTC, which is an assumption about the legacy side's representation "
+        "rather than a verified fact. Each textual difference accepted this way is counted per entity type "
+        "as `timestamp_normalizations` below.",
         "- **Count snapshots (checks 3b and 4)**: the serving counts each run is judged on are read by "
         "`run_search_reindex_dev.py` the moment that run finishes and stored in its run artifact; recon reads "
         "those recorded values and compares the live table on top. Reading both sides at report time would "
