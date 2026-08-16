@@ -45,6 +45,15 @@ resource "databricks_workspace_file" "audit_archive_ddl" {
   }
 }
 
+# The pipeline itself, versioned in the repo and deployed as a workspace
+# notebook so a run always executes the reviewed code.
+resource "databricks_notebook" "audit_archive" {
+  source   = "${path.module}/../../databricks/notebooks/ow_tp_audit_archive.py"
+  path     = "${databricks_directory.pipelines.path}/ow_tp_audit_archive"
+  format   = "SOURCE"
+  language = "PYTHON"
+}
+
 resource "databricks_job" "audit_archive" {
   name        = "${var.prefix}_audit_archive"
   description = "Weekly audit-event retention: archive events past the horizon, verify the archive, then purge the source."
@@ -97,6 +106,25 @@ resource "databricks_job" "audit_archive" {
         path   = databricks_workspace_file.audit_archive_ddl.path
         source = "WORKSPACE"
       }
+    }
+  }
+
+  # Serverless job compute: retries are safe because every write is a MERGE and
+  # the source purge is gated on re-verifying the archive, so a retried run
+  # converges on the same state rather than double-archiving or double-deleting.
+  task {
+    task_key                  = "archive"
+    max_retries               = 2
+    min_retry_interval_millis = 30000
+    retry_on_timeout          = true
+
+    depends_on {
+      task_key = "create_tables"
+    }
+
+    notebook_task {
+      notebook_path = databricks_notebook.audit_archive.path
+      source        = "WORKSPACE"
     }
   }
 
