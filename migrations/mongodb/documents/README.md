@@ -14,7 +14,9 @@ is the Atlas database `ow_tp_demo`.
 | `document_snapshots_orphaned` | source `document_snapshots.id` | snapshots whose `document_id` does not exist, `quarantine_reason: "missing_document"` — quarantined, never dropped |
 
 Indexes: `documents {ownerId: 1, updatedAt: -1}`, `{folderId: 1}`, `{isDeleted: 1}`;
-both snapshot collections `{documentId: 1}`.
+both snapshot collections `{documentId: 1}`; and `{_migration.ns: 1}` on all
+three, since the collections are shared across namespaces and every recon read
+is scoped by that field.
 
 Every document carries `_migration: { ns, sourceTable, migratedAt }`.
 
