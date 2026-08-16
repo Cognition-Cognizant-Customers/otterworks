@@ -179,6 +179,25 @@ def test_idempotent_redelivery_without_etag(env):
     assert len(ledger_items(ddb)) == 1
 
 
+def test_replayed_old_event_never_deletes_newer_same_named_object(env):
+    mod, s3, ddb = env
+    ev_old = land(s3, "CUSTBILL_DEMO_001.dat", b"day-1 payload")
+    mod.handler(ev_old, None)
+    # A new same-named feed file lands (names are reused across days).
+    ev_new = land(s3, "CUSTBILL_DEMO_001.dat", b"day-2 payload")
+    # A delayed duplicate of the OLD event is replayed: it must not delete
+    # the newer object.
+    replay = mod.handler(ev_old, None)
+    assert replay["redelivery"] is True
+    assert get_body(s3, "landing/CUSTBILL_DEMO_001.dat") == b"day-2 payload"
+    # The new object's own event then stages it normally.
+    result = mod.handler(ev_new, None)
+    assert result["redelivery"] is False
+    assert get_body(s3, "incoming/CUSTBILL_DEMO_001.dat") == b"day-2 payload"
+    assert "Contents" not in s3.list_objects_v2(Bucket=BUCKET, Prefix="landing/")
+    assert len(ledger_items(ddb)) == 2
+
+
 def test_errors_surface_on_missing_object_without_etag(env):
     mod, s3, ddb = env
     # No etag in the event, no landed object, no ledger row: must raise.

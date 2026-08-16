@@ -81,6 +81,23 @@ def _ledger_put(table: str, basename: str, etag: str, item_fields: dict) -> None
     _ddb.put_item(TableName=table, Item=item)
 
 
+# Error codes meaning "the landed object is absent". Without s3:ListBucket
+# (deliberately not granted — least privilege) S3 answers 403/AccessDenied for
+# a missing key, so both spellings of absence are included; genuinely
+# transient or server-side errors (SlowDown, 500, ...) are not.
+_ABSENT_CODES = {"404", "NoSuchKey", "403", "AccessDenied"}
+
+
+def _head_etag(bucket: str, key: str):
+    """Return the current ETag of the object, or None if it is absent."""
+    try:
+        return _s3.head_object(Bucket=bucket, Key=key)["ETag"].strip('"')
+    except _s3.exceptions.ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") in _ABSENT_CODES:
+            return None
+        raise
+
+
 def _copy(bucket: str, source_key: str, dest_key: str) -> None:
     # Server-side copy: bytes are never read or decoded by this function.
     _s3.copy_object(
@@ -119,21 +136,24 @@ def handler(event, context):
         status = "quarantined"
 
     if not etag:
-        try:
-            etag = _s3.head_object(Bucket=bucket, Key=key)["ETag"].strip('"')
-        except _s3.exceptions.ClientError:
+        etag = _head_etag(bucket, key)
+        if etag is None:
             # The landed object is gone. If a ledger row for this basename
             # exists, a prior run completed and this is a redelivery: no-op.
             # Otherwise the object genuinely vanished — surface the error.
             if _ledger_has_basename(table, basename):
                 return {"status": status, "basename": basename, "redelivery": True}
-            raise
+            raise RuntimeError(f"landed object {key!r} not found and no ledger record exists")
 
     if _ledger_get(table, basename, etag) is not None:
         # Redelivery of a recorded object: copies and ledger row already
         # converged. Only the landing delete may remain if the prior run
-        # crashed between ledger put and delete; S3 deletes are idempotent.
-        _s3.delete_object(Bucket=bucket, Key=key)
+        # crashed between ledger put and delete. Delete only if the object
+        # at the key is still the recorded one: feed names are reused, so a
+        # replayed old event must never remove a newer same-named object
+        # (that object's own event processes it).
+        if _head_etag(bucket, key) == etag:
+            _s3.delete_object(Bucket=bucket, Key=key)
         return {"status": status, "basename": basename, "redelivery": True}
 
     # (Re)run the server-side copies — they converge to identical
