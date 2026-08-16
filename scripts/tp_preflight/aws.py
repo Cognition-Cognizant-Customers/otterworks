@@ -174,10 +174,8 @@ def leftover_scan(pid, description, args, extractor, own_role=None, classify_iam
                     abandoned.append(match)
             preflight_matches = active_preflight_matches
             matches = [match for match in matches if match not in gone_preflight_matches]
-            if not preflight_matches:
-                result = "verified"
-                detail = "none found"
-            elif abandoned or unknown_age:
+            detail = json.dumps(matches) if matches else "none found"
+            if abandoned or unknown_age:
                 result = "denied"
                 detail_parts = []
                 if abandoned:
@@ -196,13 +194,14 @@ def leftover_scan(pid, description, args, extractor, own_role=None, classify_iam
         else:
             result = "denied"
             detail = f"preflight debris ({len(preflight_matches)}): {json.dumps(preflight_matches)}"
-    elif matches and os.environ.get("TP_AWS_REQUIRE_CLEAN_ESTATE") == "1":
-        result = "denied"
-    elif matches:
-        result = "informational"
-        detail = f"{len(matches)} existing resource(s): {detail}"
-    else:
-        result = "verified"
+    if not preflight_matches:
+        if matches and os.environ.get("TP_AWS_REQUIRE_CLEAN_ESTATE") == "1":
+            result = "denied"
+        elif matches:
+            result = "informational"
+            detail = f"{len(matches)} existing resource(s): {detail}"
+        else:
+            result = "verified"
     m.add(pid, description, "aws " + " ".join(args), result, detail)
     return result != "denied"
 
