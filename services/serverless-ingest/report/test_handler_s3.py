@@ -6,10 +6,9 @@ import os
 from pathlib import Path
 
 import boto3
+import handler
 import pytest
 from moto import mock_aws
-
-import handler
 
 GOLDEN_ROOT = Path(os.environ.get("OTTERWORKS_LEGACY_ROOT", "/tmp/ow-legacy-report"))
 GOLDEN_REPORT_MD5 = "300862b738fdb8b6add8d1007362c0e0"

@@ -22,9 +22,8 @@ import sys
 from pathlib import Path
 
 import boto3
-from moto import mock_aws
-
 import handler
+from moto import mock_aws
 
 GOLDEN_ROOT = Path(os.environ.get("OTTERWORKS_LEGACY_ROOT", "/tmp/ow-legacy-report"))
 GOLDEN_REPORT_MD5 = "300862b738fdb8b6add8d1007362c0e0"
@@ -87,7 +86,7 @@ def main() -> int:
             "id": "xls-copy",
             "expected": md5(csv1),
             "actual": md5(xls1),
-            "source_of_truth": "S3 .xls object bytes vs S3 .csv object bytes (and golden .xls md5 %s)" % md5(golden_xls.read_bytes()),
+            "source_of_truth": f"S3 .xls object bytes vs S3 .csv object bytes (and golden .xls md5 {md5(golden_xls.read_bytes())})",
             "result": "pass" if xls1 == csv1 else "fail",
         })
         checks.append({

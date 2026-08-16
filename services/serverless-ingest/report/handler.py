@@ -65,7 +65,7 @@ def aggregate(psv_bodies: list[bytes]) -> bytes:
         ccy, _, rt = key.partition(b"|")
         out.append(
             ccy + b"," + record_type_name(rt)
-            + (",%d,%.2f\n" % (counts[key], totals[key])).encode("ascii")
+            + f",{counts[key]:d},{totals[key]:.2f}\n".encode("ascii")
         )
     return b"".join(out)
 

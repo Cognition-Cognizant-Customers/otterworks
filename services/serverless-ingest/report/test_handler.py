@@ -20,7 +20,6 @@ import os
 from pathlib import Path
 
 import pytest
-
 from handler import HEADER, aggregate, perl_num, record_type_name
 
 GOLDEN_ROOT = Path(os.environ.get("OTTERWORKS_LEGACY_ROOT", "/tmp/ow-legacy-report"))
