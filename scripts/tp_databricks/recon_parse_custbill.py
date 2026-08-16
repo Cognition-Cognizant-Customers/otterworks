@@ -124,7 +124,9 @@ def read_golden(
     """
     rows: dict[tuple[str, int], dict[str, object]] = {}
     errors: list[str] = []
-    for psv in sorted(golden_dir.glob(f"CUSTBILL_{ns.upper()}_*.psv")):
+    for psv in sorted(
+        golden_dir.glob(f"CUSTBILL_{ns.upper()}_[0-9][0-9][0-9].psv")
+    ):
         stem = psv.stem
         data_index = 0
         for index, line in enumerate(psv.read_text().splitlines(), start=1):
@@ -228,7 +230,8 @@ def _block_empty_golden(check: Check, golden_dir: Path, ns: str, golden) -> bool
         return False
     check.blocked(
         "golden output",
-        f"no rows loaded from {golden_dir} using CUSTBILL_{ns.upper()}_*.psv",
+        f"no rows loaded from {golden_dir} using "
+        f"CUSTBILL_{ns.upper()}_[0-9][0-9][0-9].psv",
     )
     return True
 

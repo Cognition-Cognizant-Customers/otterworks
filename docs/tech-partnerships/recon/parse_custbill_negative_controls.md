@@ -167,7 +167,7 @@ verified back to `0` rows for `ns='trlneg'` afterwards.
 ## H. An empty golden directory is blocked, not reported as a match
 
 Mutation: recon was pointed at the empty scratch directory `/tmp/empty-golden`, which
-contains no files matching `CUSTBILL_DEMO_*.psv`.
+contains no files matching `CUSTBILL_DEMO_[0-9][0-9][0-9].psv`.
 
 The report was written to `/tmp/empty-golden-report.md` and exited `1`. The
 golden-dependent checks were all blocked, including trailer reconciliation (which
@@ -179,7 +179,7 @@ comparison):
 | 2. Per-file subtotals per record type and currency, exact to the cent | **BLOCKED** |
 | 3. Trailer reconciliation: declared_trailer_count = parsed + rejected, recon_ok | **BLOCKED** |
 | 4. Quarantine justified: nothing the legacy output contains is rejected | **BLOCKED** |
-Blocked: `golden output` -> no rows loaded from /tmp/empty-golden using CUSTBILL_DEMO_*.psv
+Blocked: `golden output` -> no rows loaded from /tmp/empty-golden using CUSTBILL_DEMO_[0-9][0-9][0-9].psv
 ```
 
 The report result was `red` because the baseline check could not find its two
@@ -318,6 +318,24 @@ report_written=yes
 
 The row-parity check otherwise reported `all 100 rows match on all 6 fields`;
 the blank line did not cascade into false mismatches for following rows.
+
+## M. Namespace-prefix filenames do not cross the demo boundary
+
+The landing and golden scratch directories contained the normal two demo files
+plus planted `CUSTBILL_DEMO_2_001.dat.done` and
+`CUSTBILL_DEMO_2_001.psv` files. The exact three-digit sequence matcher kept
+the namespace-prefix files out of both sides:
+
+```text
+loader_manifests ['CUSTBILL_DEMO_001.dat.done', 'CUSTBILL_DEMO_002.dat.done']
+recon_golden_rows 100
+recon_golden_errors []
+planted_source_exists True
+planted_golden_exists True
+```
+
+The planted files were scratch-only and were not loaded or included in the
+demo namespace. The scratch directories were removed after the control.
 
 ## Note on the shared workspace
 
