@@ -287,7 +287,7 @@ def reconcile_schema():
         manifest.add("uc-schema-delete", "Reconcile the temporary Unity Catalog schema",
                      "SQL Statement", "verified", f"{schema} was never created")
         return
-    if schema_result is not None and schema_result.accepted and schema_result.status != 0:
+    if schema_result is not None and schema_result.accepted:
         dropped = sql_call(f"DROP SCHEMA IF EXISTS {catalog}.{schema} CASCADE", warehouse_id)
         manifest.add("uc-schema-delete", "Delete the temporary Unity Catalog schema",
                      "SQL Statement", "verified" if dropped.state == "SUCCEEDED" else "denied",
