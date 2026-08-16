@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import ipaddress
+import re
 import signal
 import sys
 import urllib.parse
@@ -21,6 +22,8 @@ if parsed_base.hostname != "cloud.mongodb.com" and os.environ.get("TP_ATLAS_ALLO
     raise SystemExit("TP_ATLAS_API_BASE must use cloud.mongodb.com unless TP_ATLAS_ALLOW_CUSTOM_API_BASE=1")
 base = raw_base.rstrip("/")
 project = os.environ["MONGODB_ATLAS_PROJECT_ID"]
+if not re.fullmatch(r"[A-Za-z0-9_-]+", project):
+    raise SystemExit("MONGODB_ATLAS_PROJECT_ID must contain only letters, digits, '_' or '-'")
 auth = HTTPDigestAuth(os.environ["MONGODB_ATLAS_PUBLIC_KEY"], os.environ["MONGODB_ATLAS_PRIVATE_KEY"])
 headers = {"Accept": "application/vnd.atlas.2024-08-05+json", "Content-Type": "application/json"}
 m = Manifest("atlas")

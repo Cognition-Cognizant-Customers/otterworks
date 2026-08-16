@@ -17,7 +17,22 @@ from common import Manifest, exception_detail, require_env
 
 
 require_env("DATABRICKS_DEMO_HOST", "DATABRICKS_DEMO_TOKEN")
-HOST = os.environ["DATABRICKS_DEMO_HOST"].rstrip("/")
+raw_host = os.environ["DATABRICKS_DEMO_HOST"]
+parsed_host = urllib.parse.urlparse(raw_host)
+if parsed_host.scheme != "https" or not parsed_host.hostname or parsed_host.username or parsed_host.password:
+    raise SystemExit("DATABRICKS_DEMO_HOST must be an HTTPS URL with a valid host")
+valid_databricks_host = (
+    parsed_host.hostname == "cloud.databricks.com"
+    or parsed_host.hostname.endswith(".cloud.databricks.com")
+    or parsed_host.hostname.endswith(".azuredatabricks.net")
+    or parsed_host.hostname.endswith(".gcp.databricks.com")
+)
+if not valid_databricks_host and os.environ.get("TP_DATABRICKS_ALLOW_CUSTOM_HOST") != "1":
+    raise SystemExit(
+        "DATABRICKS_DEMO_HOST must use a Databricks workspace host unless "
+        "TP_DATABRICKS_ALLOW_CUSTOM_HOST=1"
+    )
+HOST = raw_host.rstrip("/")
 TOKEN = os.environ["DATABRICKS_DEMO_TOKEN"]
 catalog = os.environ.get("TP_DATABRICKS_CATALOG", "ow_tp")
 landing = os.environ.get("TP_DATABRICKS_LANDING_PATH", f"/Volumes/{catalog}/bronze/landing")

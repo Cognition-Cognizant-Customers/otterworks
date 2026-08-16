@@ -46,9 +46,7 @@ def main() -> int:
                 data = json.loads(candidate.read_text())
             except Exception:
                 data = None
-            if isinstance(data, dict) and "unit" in data and (
-                "run_mode" in data or "checks" in data
-            ):
+            if isinstance(data, dict) and "unit" in data:
                 files.append(candidate)
             else:
                 legacy_prose.append(candidate)
