@@ -1,111 +1,160 @@
-"""Step Functions task: regenerate the finance billing report for a namespace.
+"""Generate the finance report from parsed CUSTBILL PSV objects."""
 
-Reads every parsed/<ns>/CUSTBILL*.psv object (sorted by key, matching the
-legacy report's sorted readdir), aggregates totals by currency + record type,
-and writes reports/<ns>/finance_billing_<YYYYMMDD>.csv plus the traditional
-byte-identical .xls copy.
-"""
+from __future__ import annotations
 
+from collections.abc import Iterable
+from datetime import datetime
+from functools import lru_cache
 import os
-import time
-import uuid
+import re
+from zoneinfo import ZoneInfo
 
 import boto3
-from botocore.exceptions import ClientError
 
-from custbill import finance_report
-
-s3 = boto3.client("s3")
-dynamodb = boto3.client("dynamodb")
-
-BUCKET = os.environ.get("BUCKET", "")
-TABLE_NAME = os.environ.get("TABLE_NAME", "")
-
-LOCK_REC = "_report_lock"
-# Lease outlives the Lambda timeout (120s) so a live holder never loses the
-# lock mid-report; expiry only reclaims locks from crashed executions
-LOCK_TTL_SECONDS = 180
-LOCK_WAIT_SECONDS = 90
+from custbill import latin1_lines
+from pipeline import PARSED_PREFIX, env, report_key
 
 
-def _acquire_lock(ns: str, owner: str) -> None:
-    """Per-namespace mutex so concurrent executions serialize the report.
-
-    List + write must be atomic relative to sibling executions: without the
-    lock, an execution that listed parsed/<ns>/ early could overwrite a more
-    complete report written by a sibling.
-    """
-    deadline = time.time() + LOCK_WAIT_SECONDS
-    while True:
-        now = int(time.time())
-        try:
-            dynamodb.put_item(
-                TableName=TABLE_NAME,
-                Item={
-                    "ns": {"S": ns},
-                    "rec": {"S": LOCK_REC},
-                    "lock_expires": {"N": str(now + LOCK_TTL_SECONDS)},
-                    "lock_owner": {"S": owner},
-                },
-                ConditionExpression="attribute_not_exists(#ns) OR lock_expires < :now",
-                ExpressionAttributeNames={"#ns": "ns"},
-                ExpressionAttributeValues={":now": {"N": str(now)}},
-            )
-            return
-        except ClientError as e:
-            if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
-                raise
-            if time.time() >= deadline:
-                raise TimeoutError(f"could not acquire report lock for ns={ns}")
-            time.sleep(3)
+@lru_cache(maxsize=1)
+def _s3():
+    return boto3.client("s3")
 
 
-def _release_lock(ns: str, owner: str) -> None:
-    try:
-        dynamodb.delete_item(
-            TableName=TABLE_NAME,
-            Key={"ns": {"S": ns}, "rec": {"S": LOCK_REC}},
-            ConditionExpression="lock_owner = :me",
-            ExpressionAttributeValues={":me": {"S": owner}},
+_MAX_AGGREGATION_ATTEMPTS = 3
+
+_PERL_NUMBER = re.compile(r"\s*[+-]?(?:\d+\.?\d*(?:[eE][+-]?\d+)?|\.\d+(?:[eE][+-]?\d+)?)")
+
+
+def _perl_number(value: str) -> float:
+    """Coerce like Perl's numeric context: leading numeric prefix, else 0."""
+    match = _PERL_NUMBER.match(value)
+    return float(match.group()) if match else 0.0
+
+
+def aggregate(psv_lines: Iterable[str]) -> list[dict]:
+    """Aggregate parsed records by currency and record type."""
+    totals: dict[str, float] = {}
+    counts: dict[str, int] = {}
+
+    for line in psv_lines:
+        # legacy `($cust,$name,$dt,$amt,$ccy,$rt) = split(/\|/)`: surplus fields are
+        # dropped, missing ones are undef (""), and a bad record never aborts the run
+        fields = line.split("|")
+        cust, _name, _date, amount, currency, record_type = (fields + [""] * 6)[:6]
+        if not cust:
+            continue
+        value = _perl_number(amount)
+
+        key = f"{currency}|{record_type}"
+        totals[key] = totals.get(key, 0.0) + value
+        counts[key] = counts.get(key, 0) + 1
+
+    rows = []
+    for key in sorted(totals):
+        currency, record_type = key.split("|", 1)
+        label = {
+            "01": "INVOICE",
+            "02": "CREDIT",
+        }.get(record_type, f"UNKNOWN({record_type})")
+        rows.append(
+            {
+                "currency": currency,
+                "record_type": label,
+                "count": counts[key],
+                "total": totals[key],
+            }
         )
-    except ClientError as e:
-        if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
-            raise
+    return rows
+
+
+def render_csv(rows: Iterable[dict]) -> str:
+    """Render report rows using the legacy CSV byte format."""
+    lines = ["Currency,RecordType,RecordCount,TotalAmount"]
+    lines.extend(
+        f"{row['currency']},{row['record_type']},{row['count']},{row['total']:.2f}"
+        for row in rows
+    )
+    return "\n".join(lines) + "\n"
+
+
+def report_stamp() -> str:
+    """Return today's report stamp in the configured timezone."""
+    timezone = ZoneInfo(os.environ.get("TZ", "UTC"))
+    return datetime.now(timezone).strftime("%Y%m%d")
+
+
+def _parsed_keys(client, bucket: str, prefix: str) -> list[str]:
+    keys = []
+    paginator = client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        keys.extend(
+            item["Key"]
+            for item in page.get("Contents", [])
+            if item["Key"].endswith(".psv")
+        )
+    return sorted(keys)
 
 
 def handler(event, context):
-    bucket = event.get("bucket") or BUCKET
-    ns = event["ns"]
+    """Aggregate every parsed PSV for the event namespace and publish reports."""
+    ns = event.get("ns") if event else None
+    if not ns:
+        raise ValueError("event must include a non-empty ns")
+    if "/" in ns or ns in {".", ".."}:
+        raise ValueError("ns must be a single path segment")
 
-    owner = getattr(context, "aws_request_id", None) or str(uuid.uuid4())
-    _acquire_lock(ns, owner)
-    try:
-        return _build_report(bucket, ns)
-    finally:
-        _release_lock(ns, owner)
+    bucket = env("BUCKET")
+    prefix = f"{PARSED_PREFIX}/{ns}/"
+    client = _s3()
 
+    # one execution runs per landed file, so concurrent reports race on the single
+    # dated report key: re-read the listing after aggregating and start over if a
+    # sibling parse landed meanwhile, so the aggregate matches a real listing
+    for _ in range(_MAX_AGGREGATION_ATTEMPTS):
+        keys = _parsed_keys(client, bucket, prefix)
+        lines = []
+        for key in keys:
+            body = client.get_object(Bucket=bucket, Key=key)["Body"].read()
+            # the parser writes PSV as latin-1 bytes and the legacy Perl reader broke
+            # records on "\n" only, so \v/\f/\x85 inside a name must not split a record
+            lines.extend(latin1_lines(body))
+        rows = aggregate(lines)
+        latest = _parsed_keys(client, bucket, prefix)
+        if latest == keys:
+            break
 
-def _build_report(bucket: str, ns: str):
-    prefix = f"parsed/{ns}/"
-    keys = []
-    paginator = s3.get_paginator("list_objects_v2")
-    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-        for obj in page.get("Contents", []):
-            name = obj["Key"].split("/")[-1]
-            if name.startswith("CUSTBILL") and name.endswith(".psv"):
-                keys.append(obj["Key"])
+    report_bytes = render_csv(rows).encode("latin-1")
+    stamp = report_stamp()
+    csv_key = report_key(ns, f"finance_billing_{stamp}.csv")
+    xls_key = report_key(ns, f"finance_billing_{stamp}.xls")
 
-    lines: list[str] = []
-    for key in sorted(keys):
-        text = s3.get_object(Bucket=bucket, Key=key)["Body"].read().decode("latin-1")
-        lines.extend(line for line in text.split("\n") if line)
+    # ...and never let a slow run publish an aggregate that is already known to be
+    # incomplete. The check is against the live listing, not the published report's
+    # source count, so a legitimately smaller estate (an operator removing a bad
+    # parsed file) still republishes and corrects the report on the next run.
+    if len(latest) > len(keys):
+        return {
+            "ns": ns,
+            "report_key": csv_key,
+            "xls_key": xls_key,
+            "rows": len(rows),
+            "files_aggregated": len(keys),
+            "published": False,
+        }
 
-    csv = finance_report(lines)
-    # Legacy finance_excel_report.pl stamps with localtime; honor TZ if set
-    stamp = time.strftime("%Y%m%d", time.localtime())
-    csv_key = f"reports/{ns}/finance_billing_{stamp}.csv"
-    xls_key = f"reports/{ns}/finance_billing_{stamp}.xls"
-    s3.put_object(Bucket=bucket, Key=csv_key, Body=csv.encode("latin-1"))
-    s3.put_object(Bucket=bucket, Key=xls_key, Body=csv.encode("latin-1"))
+    metadata = {"source-count": str(len(keys))}
+    client.put_object(
+        Bucket=bucket, Key=csv_key, Body=report_bytes, Metadata=dict(metadata)
+    )
+    client.put_object(
+        Bucket=bucket, Key=xls_key, Body=report_bytes, Metadata=dict(metadata)
+    )
 
-    return {"bucket": bucket, "ns": ns, "report_key": csv_key, "files": len(keys)}
+    return {
+        "ns": ns,
+        "report_key": csv_key,
+        "xls_key": xls_key,
+        "rows": len(rows),
+        "files_aggregated": len(keys),
+        "published": True,
+    }

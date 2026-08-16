@@ -1,62 +1,103 @@
-"""SQS-triggered Lambda: starts a Step Functions execution per landed CUSTBILL file.
+"""ow-tp-trigger — SQS-driven starter for the CUSTBILL pipeline.
 
-Event path: S3 (landing/<ns>/CUSTBILL_*.dat) -> EventBridge rule -> SQS -> here.
-The namespace is derived from the landing key prefix (landing/<ns>/...), falling
-back to the CUSTBILL_<NS>_NNN.dat filename.
+Replaces ``etl/legacy-extra/jobs/sftp_ingest_poll.ksh``: instead of polling the
+drop directory, comparing byte counts to guess whether a file has settled and
+leaving a lock file behind, the S3 ``Object Created`` event (EventBridge -> SQS)
+is the arrival signal, and each landed file becomes exactly one Step Functions
+execution.
+
+Delivery semantics: SQS is at-least-once, so the execution name is derived from
+the object key plus the event time — a redelivery of the same event reuses the
+name and ``ExecutionAlreadyExists`` is treated as success. Records that raise are
+returned in ``batchItemFailures`` so only they are retried and eventually land in
+the DLQ, rather than replaying the whole batch.
 """
 
+from __future__ import annotations
+
+import hashlib
 import json
+import logging
 import os
 import re
-import time
+from typing import Any
 
 import boto3
 
-sfn = boto3.client("stepfunctions")
+import pipeline
 
-STATE_MACHINE_ARN = os.environ["STATE_MACHINE_ARN"]
+LOGGER = logging.getLogger()
+LOGGER.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 
-_FNAME_NS = re.compile(r"^CUSTBILL_([A-Za-z0-9]+)_\d+\.dat$")
-_FNAME_OK = re.compile(r"^CUSTBILL.*\.dat$")
+FILENAME_RE = re.compile(r"^CUSTBILL.*\.dat$")
+UNSAFE_NAME_CHARS = re.compile(r"[^A-Za-z0-9_-]")
+MAX_EXECUTION_NAME = 80
+
+_SFN = None
 
 
-def _ns_from_key(key: str) -> str | None:
+def _client():
+    global _SFN
+    if _SFN is None:
+        _SFN = boto3.client("stepfunctions")
+    return _SFN
+
+
+def execution_name(ns: str, filename: str, key: str, event_time: str) -> str:
+    """Deterministic per (file, event) execution name, <=80 safe characters."""
+    digest = hashlib.md5(f"{key}{event_time}".encode()).hexdigest()[:8]
+    stem = filename.rsplit(".", 1)[0]
+    suffix = f"-{digest}"
+    prefix = UNSAFE_NAME_CHARS.sub("-", f"{ns}-{stem}")
+    return prefix[: MAX_EXECUTION_NAME - len(suffix)] + suffix
+
+
+def _is_pipeline_key(key: str) -> bool:
     parts = key.split("/")
-    if not _FNAME_OK.match(parts[-1]):
-        return None
-    if len(parts) >= 3 and parts[0] == "landing":
-        return parts[1].lower()
-    m = _FNAME_NS.match(parts[-1])
-    return m.group(1).lower() if m else None
-
-
-def _process_record(record) -> None:
-    body = json.loads(record["body"])
-    detail = body.get("detail", {})
-    bucket = detail.get("bucket", {}).get("name")
-    key = detail.get("object", {}).get("key")
-    if not bucket or not key:
-        return
-    ns = _ns_from_key(key)
-    if ns is None:
-        print(f"skipping non-CUSTBILL object: s3://{bucket}/{key}")
-        return
-    name = re.sub(r"[^A-Za-z0-9_-]", "-", key)[-60:] + f"-{int(time.time() * 1000)}"
-    sfn.start_execution(
-        stateMachineArn=STATE_MACHINE_ARN,
-        name=name,
-        input=json.dumps({"bucket": bucket, "key": key, "ns": ns}),
+    return (
+        len(parts) == 3
+        and parts[0] == pipeline.LANDING_PREFIX
+        and bool(FILENAME_RE.match(parts[2]))
     )
-    print(f"started pipeline for s3://{bucket}/{key} ns={ns}")
 
 
-def handler(event, context):
-    # Partial-batch response: only failing messages are retried / DLQ'd
-    failures = []
+def _start(record: dict[str, Any]) -> None:
+    envelope = json.loads(record["body"])
+    detail = envelope["detail"]
+    bucket = detail["bucket"]["name"]
+    key = detail["object"]["key"]
+
+    if not _is_pipeline_key(key):
+        LOGGER.info("skipping non-CUSTBILL key %s", key)
+        return
+
+    ns = pipeline.namespace_from_key(key)
+    filename = key.rsplit("/", 1)[-1]
+    state_machine_arn = pipeline.env("STATE_MACHINE_ARN")
+    name = execution_name(ns, filename, key, envelope.get("time", ""))
+    payload = {"ns": ns, "bucket": bucket, "key": key, "filename": filename}
+
+    client = _client()
+    try:
+        client.start_execution(
+            stateMachineArn=state_machine_arn,
+            name=name,
+            input=json.dumps(payload),
+        )
+    except client.exceptions.ExecutionAlreadyExists:
+        LOGGER.info("execution %s already started for %s", name, key)
+        return
+    LOGGER.info("started execution %s for %s", name, key)
+
+
+def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
+    failures: list[dict[str, str]] = []
+
     for record in event.get("Records", []):
         try:
-            _process_record(record)
-        except Exception as e:  # noqa: BLE001 - isolate per-message failures
-            print(f"failed to process message {record.get('messageId')}: {e}")
-            failures.append({"itemIdentifier": record["messageId"]})
+            _start(record)
+        except Exception:
+            LOGGER.exception("record %s failed", record.get("messageId"))
+            failures.append({"itemIdentifier": record.get("messageId", "")})
+
     return {"batchItemFailures": failures}

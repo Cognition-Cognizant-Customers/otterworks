@@ -1,77 +1,81 @@
-"""Step Functions task: parse one CUSTBILL fixed-width file.
+"""Step Functions Parse-state Lambda handler."""
 
-Writes the pipe-delimited output to s3://<bucket>/parsed/<ns>/<base>.psv and
-one item per record to the DynamoDB billing table (on-demand), then archives
-the input under archive/<ns>/.
-"""
-
-import os
+from __future__ import annotations
 
 import boto3
-from boto3.dynamodb.conditions import Key
 
-from custbill import parse_file
+from custbill import parse_body, parse_records, trailer_count
+from pipeline import LANDING_PREFIX, env, parsed_key
 
 s3 = boto3.client("s3")
-dynamodb = boto3.resource("dynamodb")
-
-TABLE_NAME = os.environ["TABLE_NAME"]
+billing_table = None
 
 
-def _delete_existing(table, ns: str, rec_prefix: str) -> None:
-    kwargs = {
-        "KeyConditionExpression": Key("ns").eq(ns) & Key("rec").begins_with(rec_prefix),
-        "ProjectionExpression": "#ns, rec",
-        "ExpressionAttributeNames": {"#ns": "ns"},
-    }
-    with table.batch_writer() as batch:
-        while True:
-            page = table.query(**kwargs)
-            for item in page.get("Items", []):
-                batch.delete_item(Key={"ns": item["ns"], "rec": item["rec"]})
-            lek = page.get("LastEvaluatedKey")
-            if not lek:
-                break
-            kwargs["ExclusiveStartKey"] = lek
+def _validate_segment(value: str, label: str) -> None:
+    if not value or "/" in value or value in {".", ".."}:
+        raise ValueError(f"{label} must be a single path segment")
 
 
-def handler(event, context):
-    bucket = event["bucket"]
+def _source_parts(key: str) -> tuple[str, str]:
+    parts = key.split("/")
+    if len(parts) != 3 or parts[0] != LANDING_PREFIX:
+        raise ValueError("key must be a landing object path")
+    _validate_segment(parts[1], "key namespace")
+    _validate_segment(parts[2], "key filename")
+    return parts[1], parts[2]
+
+
+def _get_billing_table():
+    global billing_table
+    if billing_table is None:
+        billing_table = boto3.resource("dynamodb").Table(env("TABLE_NAME"))
+    return billing_table
+
+
+def handler(event: dict, context: object) -> dict[str, object]:
     key = event["key"]
-    ns = event["ns"]
-    base = key.split("/")[-1].rsplit(".dat", 1)[0]
+    key_ns, key_filename = _source_parts(key)
+    provided_ns = event.get("ns")
+    ns = provided_ns or key_ns
+    if provided_ns and provided_ns != key_ns:
+        raise ValueError("event namespace does not match key namespace")
+    # the output key and the DynamoDB sort keys are derived from the filename, so an
+    # event that names a different file than the one it reads must not be honoured
+    filename = event.get("filename") or key_filename
+    if filename != key_filename:
+        raise ValueError("event filename does not match key filename")
+    _validate_segment(ns, "namespace")
+    _validate_segment(filename, "filename")
+    output_filename = filename[:-4] + ".psv" if filename.endswith(".dat") else filename
+    bucket = env("BUCKET")
 
-    # latin-1 is byte-preserving, matching the legacy chain's byte-oriented
-    # cut/awk processing (no validation; dirty records pass through)
-    raw = s3.get_object(Bucket=bucket, Key=key)["Body"].read().decode("latin-1")
-    records = parse_file(raw)
+    source = s3.get_object(Bucket=bucket, Key=key)["Body"].read()
+    output, records = parse_body(source)
+    output_key = parsed_key(ns, output_filename)
+    s3.put_object(Bucket=bucket, Key=output_key, Body=output)
 
-    parsed_key = f"parsed/{ns}/{base}.psv"
-    body = ("\n".join(records) + "\n") if records else ""
-    s3.put_object(Bucket=bucket, Key=parsed_key, Body=body.encode("latin-1"))
-
-    table = dynamodb.Table(TABLE_NAME)
-    # Clear any rows from a previous version of this file first: a re-sent
-    # file with fewer records must not leave orphaned high-index items behind
-    _delete_existing(table, ns, f"{base}#")
-    with table.batch_writer() as batch:
-        for i, rec in enumerate(records, start=1):
-            fields = rec.split("|")
-            cust, name, dt, amt, ccy, rt = (fields + [""] * 6)[:6]
+    with _get_billing_table().batch_writer() as batch:
+        for line_number, fields in enumerate(parse_records(source), start=1):
+            cust_id, cust_name, bill_date, amount, currency, rec_type = fields
             batch.put_item(
                 Item={
                     "ns": ns,
-                    "rec": f"{base}#{i:05d}",
-                    "cust_id": cust,
-                    "cust_name": name,
-                    "bill_date": dt,
-                    "amount": amt,
-                    "currency": ccy,
-                    "rec_type": rt,
+                    "rec": f"{filename}#{line_number:06d}",
+                    "cust_id": cust_id,
+                    "cust_name": cust_name,
+                    "bill_date": bill_date,
+                    "amount": amount,
+                    "currency": currency,
+                    "rec_type": rec_type,
+                    "source_key": key,
                 }
             )
 
-    archive_key = f"archive/{ns}/{base}.dat"
-    s3.copy_object(Bucket=bucket, CopySource={"Bucket": bucket, "Key": key}, Key=archive_key)
-
-    return {"bucket": bucket, "ns": ns, "parsed_key": parsed_key, "records": len(records)}
+    expected_trailer = trailer_count(source)
+    return {
+        "ns": ns,
+        "parsed_key": output_key,
+        "records": records,
+        "trailer_count": expected_trailer,
+        "trailer_match": expected_trailer is not None and expected_trailer == records,
+    }

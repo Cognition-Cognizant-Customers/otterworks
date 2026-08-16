@@ -18,7 +18,10 @@ export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-east-1}}"
 export AWS_REGION="$AWS_DEFAULT_REGION"
 # The stack's provider region wins over the ambient one, so the deployed region
 # is authoritative for every CLI call below.
-if deployed_region="$(terraform -chdir="$STACK_DIR" output -raw aws_region 2>/dev/null)" && [ -n "$deployed_region" ]; then
+# an empty/destroyed state makes terraform print a "No outputs found" warning
+# instead of a value, so the value is only trusted when it looks like a region
+if deployed_region="$(terraform -chdir="$STACK_DIR" output -raw aws_region 2>/dev/null)" &&
+  [[ "$deployed_region" =~ ^[a-z]{2}(-[a-z]+)+-[0-9]$ ]]; then
   # AWS_REGION outranks AWS_DEFAULT_REGION in the CLI, so both must be pinned
   export AWS_DEFAULT_REGION="$deployed_region"
   export AWS_REGION="$deployed_region"
