@@ -331,8 +331,11 @@ try:
                 m.add("vm-ip-listed", "The VM public IP is present or can be self-healed in the Atlas access list",
                       "Atlas accessList POST/DELETE", "denied", f"VM IP {ip}; access-list entries checked={len(listed)}")
                 m.add("db-user-write", "Insert and delete a temporary document with the DB user",
-                      "MongoDB wire protocol", "skipped",
-                      "VM IP could not be temporarily allow-listed")
+                      "MongoDB wire protocol",
+                      "denied" if os.environ.get("MONGODB_ATLAS_URI") else "skipped",
+                      "VM IP could not be temporarily allow-listed"
+                      if os.environ.get("MONGODB_ATLAS_URI")
+                      else "MONGODB_ATLAS_URI is not set")
         finally:
             cleanup_entries()
 finally:

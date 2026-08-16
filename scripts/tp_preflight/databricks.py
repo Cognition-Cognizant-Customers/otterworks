@@ -145,14 +145,26 @@ def response_detail(status, body):
     if isinstance(body, dict):
         raw_error = body.get("_raw_error")
         message = (
-            body.get("error_code")
-            or body.get("errorCode")
-            or body.get("message")
+            body.get("message")
             or body.get("detail")
             or body.get("error")
+            or body.get("error_code")
+            or body.get("errorCode")
         )
         return f"HTTP {status}" + (f": {message or raw_error}" if message or raw_error else "")
     return f"HTTP {status}"
+
+
+def http_error_detail(error):
+    try:
+        raw = error.read().decode(errors="replace")
+    except Exception:
+        raw = ""
+    try:
+        body = json.loads(raw) if raw else {}
+    except json.JSONDecodeError:
+        body = {"_raw_error": raw[:300]}
+    return response_detail(error.code, body)
 
 
 cleanup_registry = {}
@@ -215,6 +227,9 @@ req = urllib.request.Request(HOST + landing_api, headers={"Authorization": f"Bea
 try:
     with urllib.request.urlopen(req, timeout=30) as r:
         manifest.add("files-get-directory", "List the landing volume directory", "Files API GET", "verified", f"HTTP {r.status}")
+except urllib.error.HTTPError as exc:
+    manifest.add("files-get-directory", "List the landing volume directory", "Files API GET",
+                 "denied", http_error_detail(exc))
 except Exception as exc:
     manifest.add("files-get-directory", "List the landing volume directory", "Files API GET", "denied", exception_detail(exc))
 def reconcile_file():
@@ -256,8 +271,12 @@ try:
         got = r.read()
         result = "verified" if got == payload else "denied"
         manifest.add("files-get-file", "Read the temporary landing file", "Files API GET", result, f"HTTP {r.status}, {len(got)} bytes")
+except urllib.error.HTTPError as exc:
+    manifest.add("files-put-get", "Write and read a temporary landing file", "Files API PUT/GET",
+                 "denied", http_error_detail(exc))
 except Exception as exc:
-    manifest.add("files-put-get", "Write and read a temporary landing file", "Files API PUT/GET", "denied", exception_detail(exc))
+    manifest.add("files-put-get", "Write and read a temporary landing file", "Files API PUT/GET",
+                 "denied", exception_detail(exc))
 finally:
     if not file_put_attempted:
         manifest.add("files-delete", "Delete the temporary landing file", "Files API DELETE", "skipped", "PUT did not create a file")
