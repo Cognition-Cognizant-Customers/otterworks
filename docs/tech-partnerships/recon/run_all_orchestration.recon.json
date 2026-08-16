@@ -1,0 +1,228 @@
+{
+  "kind": "recon-report",
+  "unit": "run_all_orchestration",
+  "namespace": "demo",
+  "generated_at": "2026-08-16T19:11:21.437739+00:00",
+  "run_mode": "fixture",
+  "checks": [
+    {
+      "id": "dag-dependencies",
+      "expected": {
+        "tasks": [
+          "ingest",
+          "parse",
+          "finance",
+          "record_run_log"
+        ],
+        "parse_depends": [
+          "ingest"
+        ],
+        "finance_depends": [
+          "parse"
+        ],
+        "record_depends": [
+          "finance",
+          "ingest",
+          "parse"
+        ],
+        "consumes_sibling_jobs": [
+          "finance_excel_report",
+          "parse_custbill_fixedwidth",
+          "sftp_ingest_poll"
+        ],
+        "sleep_free": true
+      },
+      "actual": {
+        "tasks": [
+          "ingest",
+          "parse",
+          "finance",
+          "record_run_log"
+        ],
+        "parse_depends": [
+          "ingest"
+        ],
+        "finance_depends": [
+          "parse"
+        ],
+        "record_depends": [
+          "finance",
+          "ingest",
+          "parse"
+        ],
+        "consumes_sibling_jobs": [
+          "finance_excel_report",
+          "parse_custbill_fixedwidth",
+          "sftp_ingest_poll"
+        ],
+        "sleep_free": true
+      },
+      "source_of_truth": "contract acceptance dag-dependencies vs static read of jobs_run_all_orchestration.tf",
+      "result": "pass"
+    },
+    {
+      "id": "single-active-run",
+      "expected": {
+        "max_concurrent_runs": "1",
+        "queue_enabled": true
+      },
+      "actual": {
+        "max_concurrent_runs": "1",
+        "queue_enabled": true
+      },
+      "source_of_truth": "contract acceptance single-active-run vs job definition (overlap-suppression is a declared coverage gap)",
+      "result": "pass"
+    },
+    {
+      "id": "end-state-parity",
+      "expected": {
+        "archived_files": 2,
+        "parsed_rows": 100,
+        "aggregates": {
+          "EUR/INVOICE": [
+            22,
+            "101554.41"
+          ],
+          "EUR/CREDIT": [
+            6,
+            "33375.97"
+          ],
+          "GBP/INVOICE": [
+            32,
+            "183113.58"
+          ],
+          "GBP/CREDIT": [
+            5,
+            "28454.59"
+          ],
+          "USD/INVOICE": [
+            28,
+            "130502.15"
+          ],
+          "USD/CREDIT": [
+            7,
+            "33390.44"
+          ]
+        }
+      },
+      "actual": {
+        "archived_files": 2,
+        "parsed_rows": 100,
+        "aggregates": {
+          "EUR/INVOICE": [
+            22,
+            "101554.41"
+          ],
+          "EUR/CREDIT": [
+            6,
+            "33375.97"
+          ],
+          "GBP/INVOICE": [
+            32,
+            "183113.58"
+          ],
+          "GBP/CREDIT": [
+            5,
+            "28454.59"
+          ],
+          "USD/INVOICE": [
+            28,
+            "130502.15"
+          ],
+          "USD/CREDIT": [
+            7,
+            "33390.44"
+          ]
+        }
+      },
+      "source_of_truth": "contract golden_baseline_location (2 archived, 100 silver rows, 6 cent-exact aggregates) vs deterministic legacy chain rerun end-state",
+      "result": "pass"
+    },
+    {
+      "id": "errors-surfaced",
+      "expected": {
+        "logged_rows": 3,
+        "failed_tasks": [
+          "parse",
+          "finance"
+        ],
+        "run_fails": true
+      },
+      "actual": {
+        "logged_rows": 3,
+        "failed_tasks": [
+          "parse",
+          "finance"
+        ],
+        "run_fails": true
+      },
+      "source_of_truth": "contract acceptance errors-surfaced vs recorder core over a parse-failure state set",
+      "result": "pass"
+    },
+    {
+      "id": "null-attribution-fails",
+      "expected": {
+        "all_rejected": true,
+        "missing_task_rejected": true
+      },
+      "actual": {
+        "all_rejected": true,
+        "missing_task_rejected": true
+      },
+      "source_of_truth": "contract malformed_record_policy vs recorder core over NULL/blank/unresolved/unknown states",
+      "result": "pass"
+    },
+    {
+      "id": "empty-input-noop",
+      "expected": {
+        "rows": 3,
+        "failed_tasks": []
+      },
+      "actual": {
+        "rows": 3,
+        "failed_tasks": []
+      },
+      "source_of_truth": "contract empty_input_semantics vs recorder core over an all-no-op-success state set",
+      "result": "pass"
+    },
+    {
+      "id": "rerun-idempotency",
+      "expected": {
+        "run_keys": 1,
+        "rows_for_run": 3
+      },
+      "actual": {
+        "run_keys": 1,
+        "rows_for_run": 3
+      },
+      "source_of_truth": "recorder write semantics recomputed after a repeated apply for the same estate_run_id",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "re-applied the same estate run's rows twice: still one (ns, estate_run_id) key with exactly 3 task rows (delete-then-insert semantics)"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      "upstream-failure-propagation"
+    ],
+    "actual_set": [
+      "upstream-failure-propagation"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "Jobs API run_job_task execution of the sibling jobs and task dependency scheduling",
+    "Dynamic value resolution of {{tasks.<key>.result_state}} / {{job.run_id}} into the recorder's parameters",
+    "Live max_concurrent_runs=1 queueing under genuinely concurrent triggers (declared coverage gap overlap-suppression)",
+    "SQL execution and Delta semantics of ow_tp.gold.estate_run_log (CREATE TABLE IF NOT EXISTS, parameterized DELETE, append)",
+    "Unity Catalog permissions/grants on catalog ow_tp",
+    "Serverless notebook-task execution and the serverless SQL warehouse",
+    "Terraform resources in jobs_run_all_orchestration.tf, including the cross-file reference to databricks_job.finance_excel_report (parent applies at the wave boundary)",
+    "Live upstream-failure-propagation run against the parent's trailer-mismatched drop (parent triggers post-merge)"
+  ]
+}
