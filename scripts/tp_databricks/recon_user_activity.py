@@ -89,6 +89,19 @@ FIELDS = ("events", "active_days", "documents_touched", "files_touched")
 # captured JSONL is the busiest 500 users, not the population.
 LEGACY_SUMMARY_CAP = 500
 
+# Everything the capture of the legacy run must have left behind for the comparison to be
+# tier 1. `exit_code.txt` belongs here too: without it the run's success is unknown.
+BASELINE_ARTEFACTS = (
+    "activity_report.json",
+    "user_summaries.jsonl",
+    "manifest_sha256.txt",
+    "exit_code.txt",
+)
+
+
+def baseline_artefacts(baseline: str) -> dict[str, bool]:
+    return {name: os.path.exists(os.path.join(baseline, name)) for name in BASELINE_ARTEFACTS}
+
 
 def table_exists(qualified: str) -> bool:
     catalog, schema, name = qualified.split(".")
@@ -380,6 +393,45 @@ WHERE ns = '{ns}' AND report_date = DATE'{report_date}'
     }
 
 
+def render_blocked(report: dict) -> str:
+    """Render the report for a capture too incomplete to reconcile against."""
+    missing = sorted(name for name, present in
+                     report["checks"][0]["baseline_artefacts"].items() if not present)
+    return "\n".join([
+        "# user_activity_daily.py -> ow_tp_user_activity: reconciliation",
+        "",
+        "baseline: legacy output",
+        "",
+        "## Result: blocked",
+        "",
+        f"The captured legacy output under `{report['baseline_dir']}` is incomplete -",
+        f"missing {', '.join(f'`{name}`' for name in missing)}. There is no tier-1 baseline",
+        "to compare against, so no check was run and nothing here is green. Re-capture the",
+        "legacy run (`etl/scripts/user_activity_daily.py`) and re-run this script.",
+        "",
+        "```json",
+        json.dumps(report["checks"][0], indent=2, default=str),
+        "```",
+        "",
+    ])
+
+
+def emit(report: dict, out: str | None) -> int:
+    text = render_blocked(report) if report["verdict"] == "blocked" else render(report)
+    if out:
+        out_dir = os.path.dirname(out)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+        with open(out, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        print(f"wrote {out}")
+    else:
+        print(text)
+    for check in report["checks"]:
+        print(f"  {'PASS' if check['passed'] else 'FAIL'}  {check['name']}")
+    return 0 if report["verdict"] == "green" else 1
+
+
 def render(report: dict) -> str:
     """Render the markdown recon report."""
     lines = [
@@ -472,10 +524,32 @@ def render(report: dict) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ns", default="demo")
-    parser.add_argument("--catalog", default="ow_tp")
+    # Same reason as the runner: the recon must read the catalog the inputs were landed in.
+    parser.add_argument("--catalog", default=dbx.CATALOG)
     parser.add_argument("--baseline", default="/home/ubuntu/tp-golden/python/user_activity_daily")
     parser.add_argument("--out", default=None, help="write the markdown report here")
     args = parser.parse_args(argv)
+
+    # Probed before any baseline file is opened. The provenance check below is the one that
+    # must fail when the capture is incomplete, so an operator gets a written report saying
+    # so rather than a FileNotFoundError traceback and no evidence at all.
+    artefacts = baseline_artefacts(args.baseline)
+    if not all(artefacts.values()):
+        return emit({
+            "baseline_dir": args.baseline,
+            "catalog": args.catalog,
+            "verdict": "blocked",
+            "checks": [{
+                "name": "5. Baseline provenance stated (tier 1, legacy output)",
+                "passed": False,
+                "blocked": (
+                    "the captured legacy output is incomplete, so there is no tier-1 baseline"
+                    " to reconcile against: re-capture the legacy run before trusting any"
+                    " comparison. Checks 1-4 were not attempted."
+                ),
+                "baseline_artefacts": artefacts,
+            }],
+        }, args.out)
 
     rpt = legacy_report(args.baseline)
     report_date = rpt["report_date"]
@@ -510,12 +584,8 @@ def main(argv: list[str] | None = None) -> int:
     # on the code itself.
     exit_status = exit_code.split("=")[-1].strip()
 
-    # Check 5: tier 1 only holds if the captured legacy run actually succeeded and left
-    # every artefact behind — a baseline from a failed run must not report green.
-    artefacts = {
-        name: os.path.exists(os.path.join(args.baseline, name))
-        for name in ("activity_report.json", "user_summaries.jsonl", "manifest_sha256.txt")
-    }
+    # Check 5: tier 1 only holds if the captured legacy run actually succeeded — a baseline
+    # from a failed run must not report green. Its artefacts were established above.
     checks.append({
         "name": "5. Baseline provenance stated (tier 1, legacy output)",
         "passed": all(artefacts.values()) and exit_status == "0",
@@ -540,19 +610,7 @@ def main(argv: list[str] | None = None) -> int:
         "verdict": "green" if all(c["passed"] for c in checks) else "partial",
         "checks": checks,
     }
-    text = render(report)
-    if args.out:
-        out_dir = os.path.dirname(args.out)
-        if out_dir:
-            os.makedirs(out_dir, exist_ok=True)
-        with open(args.out, "w", encoding="utf-8") as handle:
-            handle.write(text)
-        print(f"wrote {args.out}")
-    else:
-        print(text)
-    for check in checks:
-        print(f"  {'PASS' if check['passed'] else 'FAIL'}  {check['name']}")
-    return 0 if report["verdict"] == "green" else 1
+    return emit(report, args.out)
 
 
 if __name__ == "__main__":

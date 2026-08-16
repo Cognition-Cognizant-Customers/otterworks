@@ -33,6 +33,7 @@ import json
 import os
 import sys
 import tempfile
+import urllib.parse
 from collections import defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -85,7 +86,42 @@ def read_events(ns: str, bucket: str) -> dict[str, list[dict]]:
     return per_date
 
 
+def volume_event_files(ns: str) -> list[str]:
+    """Every event file currently landed for the namespace, or none if nothing is landed."""
+    root = f"/Volumes/{dbx.CATALOG}/bronze/landing/{ns}/user_activity/events"
+    found: list[str] = []
+    pending = [root]
+    while pending:
+        directory = pending.pop()
+        # The listing is paginated, and an unread page is a stale file that survives the
+        # delete below, so every page is followed rather than only the first.
+        page_token = ""
+        while True:
+            path = f"/api/2.0/fs/directories{urllib.parse.quote(directory)}"
+            if page_token:
+                path += f"?page_token={urllib.parse.quote(page_token)}"
+            try:
+                listing = dbx.request("GET", path)
+            except dbx.DatabricksError as exc:
+                if exc.status == 404 and directory == root:
+                    return []
+                raise
+            for entry in listing.get("contents") or []:
+                (pending if entry.get("is_directory") else found).append(entry["path"])
+            page_token = listing.get("next_page_token") or ""
+            if not page_token:
+                break
+    return found
+
+
 def land_events_to_volume(ns: str, per_date: dict[str, list[dict]]) -> int:
+    # The namespace's landed events are replaced, not merged: `dbx.upload` overwrites only
+    # the dates in this run, and the notebook scans the events root recursively, so a file
+    # left by an earlier landing of different dates would still be aggregated into the
+    # report. The table ingest below replaces the namespace's rows for the same reason.
+    for stale in volume_event_files(ns):
+        dbx.request("DELETE", f"/api/2.0/fs/files{urllib.parse.quote(stale)}")
+        print(f"  removed stale {stale}")
     total = 0
     with tempfile.TemporaryDirectory() as tmp:
         for date, events in sorted(per_date.items()):

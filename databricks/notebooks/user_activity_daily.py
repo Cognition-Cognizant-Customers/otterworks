@@ -365,7 +365,10 @@ def run_log_statement(cfg: dict[str, str], stage: str, upstream_summary_date: st
                       upstream_fresh: bool, status: str, detail: str, rows_written: int) -> str:
     catalog, ns = cfg["catalog"], cfg["ns"]
     upstream_date_sql = f"DATE'{upstream_summary_date}'" if upstream_summary_date else "CAST(NULL AS DATE)"
-    safe_detail = detail.replace("'", "''")
+    # Spark treats a backslash as an escape inside a string literal, so doubling quotes
+    # alone lets text ending in a backslash close the literal early. The detail carries
+    # arbitrary exception text, and this INSERT is the failed run's only verdict row.
+    safe_detail = detail.replace("\\", "\\\\").replace("'", "''")
     return f"""
 INSERT INTO {catalog}.gold.user_activity_run_log
 SELECT '{ns}', CURRENT_TIMESTAMP(), {cfg["report_date_expr"]}, '{stage}',

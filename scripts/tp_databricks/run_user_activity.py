@@ -92,7 +92,10 @@ def run(params: dict[str, str]) -> dict:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ns", default="demo")
-    parser.add_argument("--catalog", default="ow_tp")
+    # The driver's catalog, not a literal: the landing helper writes to dbx.CATALOG, so a
+    # workspace configured for another ow_tp catalog would otherwise be landed in one
+    # place and read in another.
+    parser.add_argument("--catalog", default=dbx.CATALOG)
     parser.add_argument("--report-date", default="")
     parser.add_argument("--lookback-days", default="30")
     parser.add_argument("--max-upstream-lag-days", default=None,

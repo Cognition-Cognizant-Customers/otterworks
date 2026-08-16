@@ -177,10 +177,12 @@ resource "databricks_job" "user_activity" {
   health {
     rules {
       metric = "RUN_DURATION_SECONDS"
-      # Above the worst case both tasks are allowed (1800 + 3600), so the warning means
-      # the run is genuinely stuck rather than merely using its budget.
+      # Strictly above the sanctioned worst case, so that a run which merely exhausts its
+      # retries does not page anyone: each task may attempt 3 times (max_retries = 2) with
+      # a 60s minimum gap, i.e. 3*1800 + 3*3600 + 4*60 = 16440s. Anything past that is a
+      # run the retry policy cannot explain.
       op    = "GREATER_THAN"
-      value = 5400
+      value = 18000
     }
   }
 }
