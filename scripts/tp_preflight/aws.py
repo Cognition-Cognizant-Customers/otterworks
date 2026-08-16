@@ -156,7 +156,7 @@ def leftover_scan(pid, description, args, extractor, own_role=None, classify_iam
                     detail_parts.append(
                         f"creation date unavailable ({len(unknown_age)}): {json.dumps(unknown_age)}"
                     )
-                detail = "; ".join(detail_parts)
+                detail = f"{detail}; " + "; ".join(detail_parts)
             elif concurrent:
                 concurrent_detail = (
                     f"possibly in-flight preflight role(s) younger than "
@@ -165,7 +165,7 @@ def leftover_scan(pid, description, args, extractor, own_role=None, classify_iam
                 preflight_matches = []
         else:
             result = "denied"
-            detail = f"preflight debris ({len(preflight_matches)}): {json.dumps(preflight_matches)}"
+            detail = f"{detail}; preflight debris ({len(preflight_matches)}): {json.dumps(preflight_matches)}"
     if not preflight_matches:
         if matches and os.environ.get("TP_AWS_REQUIRE_CLEAN_ESTATE") == "1":
             result = "denied"
