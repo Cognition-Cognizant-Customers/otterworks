@@ -31,11 +31,13 @@ Usage:
 from __future__ import annotations
 
 import json
-import re
+import importlib.util
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from types import ModuleType
+from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dbx  # noqa: E402
@@ -49,6 +51,25 @@ RUN_TIMEOUT_S = 5400
 TEARDOWN_POLL_S = 2
 TEARDOWN_TIMEOUT_S = 600
 TERMINAL_STATES = {"TERMINATED", "SKIPPED", "INTERNAL_ERROR"}
+
+
+class TeardownResult(NamedTuple):
+    job: bool
+    notebook: bool
+    errors: dict[str, str]
+
+
+def _load(path: Path, name: str) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot import {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+pipeline = _load(NOTEBOOK_SOURCE, "tp_estate_rollup_notebook")
 
 # The Terraform DAG, as (task_key, upstream task keys). Kept in this shape so a divergence
 # from jobs_estate_rollup.tf is a visible edit here rather than a silently different run.
@@ -70,6 +91,8 @@ def deploy() -> str:
 
 
 def job_settings(ns: str, run_date: str, fail_unit: str | None) -> dict:
+    pipeline.validate_ns(ns)
+    pipeline.validate_run_date(run_date)
     notebook_path = f"{dbx.PIPELINE_ROOT}/{NOTEBOOK_NAME}"
     tasks: list[dict] = []
     for unit, upstream in UNIT_EDGES:
@@ -139,29 +162,52 @@ def ensure_job(settings: dict) -> int:
     return current
 
 
-def teardown() -> bool:
-    current = existing_job_id()
-    if current is None:
-        return False
-    runs = dbx.request("GET", f"/api/2.2/jobs/runs/list?job_id={current}&limit=20").get("runs", [])
-    active = [r for r in runs if r.get("state", {}).get("life_cycle_state") not in TERMINAL_STATES]
-    for run in active:
-        run_id = run.get("run_id")
-        dbx.request("POST", "/api/2.2/jobs/runs/cancel", {"run_id": run_id})
-        deadline = time.monotonic() + TEARDOWN_TIMEOUT_S
-        while True:
-            live = dbx.request("GET", f"/api/2.2/jobs/runs/get?run_id={run_id}")
-            if live.get("state", {}).get("life_cycle_state") in TERMINAL_STATES:
-                break
-            if time.monotonic() >= deadline:
-                raise dbx.DatabricksError(f"run {run_id} did not reach a terminal state before teardown timeout")
-            time.sleep(TEARDOWN_POLL_S)
-    dbx.request("POST", "/api/2.2/jobs/delete", {"job_id": current})
-    return True
+def teardown() -> TeardownResult:
+    job_torn_down = False
+    notebook_torn_down = False
+    errors: dict[str, str] = {}
+
+    try:
+        current = existing_job_id()
+        if current is not None:
+            runs = dbx.request(
+                "GET", f"/api/2.2/jobs/runs/list?job_id={current}&limit=20"
+            ).get("runs", [])
+            active = [r for r in runs if r.get("state", {}).get("life_cycle_state") not in TERMINAL_STATES]
+            for run in active:
+                run_id = run.get("run_id")
+                dbx.request("POST", "/api/2.2/jobs/runs/cancel", {"run_id": run_id})
+                deadline = time.monotonic() + TEARDOWN_TIMEOUT_S
+                while True:
+                    live = dbx.request("GET", f"/api/2.2/jobs/runs/get?run_id={run_id}")
+                    if live.get("state", {}).get("life_cycle_state") in TERMINAL_STATES:
+                        break
+                    if time.monotonic() >= deadline:
+                        raise dbx.DatabricksError(
+                            f"run {run_id} did not reach a terminal state before teardown timeout"
+                        )
+                    time.sleep(TEARDOWN_POLL_S)
+            dbx.request("POST", "/api/2.2/jobs/delete", {"job_id": current})
+            job_torn_down = True
+    except Exception as exc:
+        errors["job"] = str(exc)
+
+    notebook_path = f"{dbx.PIPELINE_ROOT}/{NOTEBOOK_NAME}"
+    try:
+        dbx.request("POST", "/api/2.0/workspace/delete", {"path": notebook_path, "recursive": False})
+        notebook_torn_down = True
+    except dbx.DatabricksError as exc:
+        if exc.status != 404 and exc.error_code != "RESOURCE_DOES_NOT_EXIST":
+            errors["notebook"] = str(exc)
+    except Exception as exc:
+        errors["notebook"] = str(exc)
+    return TeardownResult(job_torn_down, notebook_torn_down, errors)
 
 
 def rollup_rows(ns: str, run_date: str) -> list[dict]:
     """Rollup rows for the drill's own (ns, run_date), read after the run finished."""
+    pipeline.validate_ns(ns)
+    pipeline.validate_run_date(run_date)
     rows = dbx.sql(
         "SELECT unit, recon_result, job_run_id FROM "
         f"{dbx.CATALOG}.gold.estate_daily_rollup WHERE ns = '{ns}' AND run_date = DATE'{run_date}' ORDER BY unit"
@@ -173,18 +219,30 @@ def main(argv: list[str]) -> int:
     command = argv[0] if argv else "run"
     params = dict(arg.split("=", 1) for arg in argv[1:])
     if command == "teardown":
-        print(json.dumps({"deleted": teardown(), "job": JOB_NAME}, indent=2))
-        return 0
+        deleted = teardown()
+        print(json.dumps({
+            "deleted": {
+                "job": deleted.job,
+                "notebook": deleted.notebook,
+                "errors": deleted.errors,
+            },
+            "job": JOB_NAME,
+        }, indent=2))
+        return 1 if deleted.errors else 0
     if command != "run":
         print(__doc__, file=sys.stderr)
         return 2
 
     ns = params.get("ns", "demo")
-    if not re.fullmatch(r"[a-z0-9_]+", ns):
-        raise SystemExit(f"ns must match [a-z0-9_]+, got {ns!r}")
+    try:
+        pipeline.validate_ns(ns)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
     run_date = params.get("run_date") or datetime.now(timezone.utc).date().isoformat()
-    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", run_date):
-        raise SystemExit(f"run_date must be YYYY-MM-DD, got {run_date!r}")
+    try:
+        pipeline.validate_run_date(run_date)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
     fail_unit = params.get("fail_unit") or None
     known = [unit for unit, _ in UNIT_EDGES]
     if fail_unit is not None and fail_unit not in known:
@@ -219,15 +277,26 @@ def main(argv: list[str]) -> int:
             "read_at": datetime.now(timezone.utc).isoformat(),
         }
     finally:
-        torn_down = False
+        torn_down = TeardownResult(False, False, {})
+        teardown_error = None
         if not keep:
             torn_down = teardown()
+            if torn_down.errors:
+                teardown_error = "; ".join(
+                    f"{resource}: {message}" for resource, message in torn_down.errors.items()
+                )
+                print(f"warning: failed to tear down {JOB_NAME}: {teardown_error}", file=sys.stderr)
         if summary is not None:
-            summary["job_torn_down"] = torn_down
+            summary["job_torn_down"] = torn_down.job
+            summary["notebook_torn_down"] = torn_down.notebook
+            if teardown_error is not None:
+                summary["teardown_error"] = str(teardown_error)
 
     if summary is None:
         raise RuntimeError("run completed without a summary")
     print(json.dumps(summary, indent=2))
+    if teardown_error is not None:
+        return 1
     return 0 if summary["result_state"] == "SUCCESS" else 1
 
 
