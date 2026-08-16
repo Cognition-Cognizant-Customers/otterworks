@@ -122,11 +122,19 @@ resource "databricks_job" "finance_report" {
   }
 
   task {
-    task_key            = "finance_summary"
-    depends_on          = var.finance_report_parse_job_id == null ? [] : [{ task_key = "parse_custbill" }]
-    max_retries         = 2
+    task_key = "finance_summary"
+
+    dynamic "depends_on" {
+      for_each = var.finance_report_parse_job_id == null ? [] : ["parse_custbill"]
+
+      content {
+        task_key = depends_on.value
+      }
+    }
+
+    max_retries               = 2
     min_retry_interval_millis = 60000
-    timeout_seconds     = 1800
+    timeout_seconds           = 1800
 
     notebook_task {
       notebook_path = databricks_notebook.finance_report[0].path
