@@ -139,7 +139,7 @@ SELECT
   o.bucket,
   o.key,
   o.size_bytes,
-  CASE WHEN o.key LIKE 'files/%' AND NOT o.legacy_attributed THEN 'unattributable_legacy_prefix'
+  CASE WHEN o.key LIKE 'files/%' AND NOT COALESCE(o.legacy_attributed, false) THEN 'unattributable_legacy_prefix'
        WHEN g.metadata_read_ok THEN 'no_metadata_row'
        ELSE 'candidate_unverified_metadata_read' END AS orphan_reason,
   current_timestamp() AS detected_at,
