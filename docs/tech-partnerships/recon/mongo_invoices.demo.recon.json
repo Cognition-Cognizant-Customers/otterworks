@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_invoices",
   "namespace": "demo",
-  "generated_at": "2026-08-16T19:03:24Z",
+  "generated_at": "2026-08-16T19:11:31Z",
   "run_mode": "fixture",
   "checks": [
     {
@@ -15,8 +15,11 @@
     {
       "id": "lines-embedded",
       "expected": 149963,
-      "actual": 149963,
-      "source_of_truth": "manifest testdata/legacy/manifests/demo.json (INVOICE_LINE.rows minus all quarantined line records, recomputed from target) vs recomputed from target MongoDB collections",
+      "actual": {
+        "embedded_lines": 149963,
+        "quarantined_line_records": 37
+      },
+      "source_of_truth": "manifest testdata/legacy/manifests/demo.json (INVOICE_LINE.rows minus planted orphaned_rows count, both fixed by the manifest) vs recomputed from target MongoDB collections",
       "result": "pass"
     },
     {
@@ -65,8 +68,8 @@
   },
   "unverified_paths": [
     "live Atlas run (this report is run_mode=fixture; the parent owns the live window)",
-    "invalid_utf8 quarantine path (no non-UTF-8 rows exist in the seeded fixture)",
-    "null_amount quarantine path (no NULL amounts exist in the seeded fixture)",
+    "invalid_utf8 quarantine path (no non-UTF-8 rows observed in this source namespace)",
+    "null_amount quarantine path (no NULL amounts observed in this source namespace)",
     "empty-input no-op verified only against an unseeded namespace, not a truncated one"
   ]
 }

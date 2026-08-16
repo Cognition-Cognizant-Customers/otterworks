@@ -131,12 +131,15 @@ def main() -> int:
          "source_of_truth": f"{src} (INVOICE_HEADER.rows) vs {tgt}",
          "result": "pass" if state["invoices"] == exp_headers else "fail"},
         {"id": "lines-embedded",
-         "expected": exp_lines - state["quarantined_line_records"],
-         "actual": state["embedded_lines"],
-         "source_of_truth": f"{src} (INVOICE_LINE.rows minus all quarantined "
-                            f"line records, recomputed from target) vs {tgt}",
+         "expected": exp_lines - exp_orphans,
+         "actual": {"embedded_lines": state["embedded_lines"],
+                    "quarantined_line_records": state["quarantined_line_records"]},
+         "source_of_truth": f"{src} (INVOICE_LINE.rows minus planted orphaned_rows "
+                            f"count, both fixed by the manifest) vs {tgt}",
          "result": "pass"
-         if state["embedded_lines"] == exp_lines - state["quarantined_line_records"]
+         if (state["embedded_lines"] == exp_lines - exp_orphans
+             and state["embedded_lines"] + state["quarantined_line_records"]
+             == exp_lines)
          else "fail"},
         {"id": "lines-checksum",
          "expected": {"checksum": exp_checksum, "rows": exp_lines},
@@ -168,6 +171,19 @@ def main() -> int:
 
     expected_set = [f"orphaned_rows:{exp_orphans}"]
     actual_set = [f"orphaned_rows:{orphan_count}"] if orphan_count else []
+
+    unverified = []
+    if args.run_mode == "fixture":
+        unverified.append("live Atlas run (this report is run_mode=fixture; "
+                          "the parent owns the live window)")
+    if not state["quarantined_by_reason"].get("invalid_utf8"):
+        unverified.append("invalid_utf8 quarantine path (no non-UTF-8 rows "
+                          "observed in this source namespace)")
+    if not state["quarantined_by_reason"].get("null_amount"):
+        unverified.append("null_amount quarantine path (no NULL amounts "
+                          "observed in this source namespace)")
+    unverified.append("empty-input no-op verified only against an unseeded "
+                      "namespace, not a truncated one")
     report = {
         "kind": "recon-report",
         "unit": UNIT,
@@ -183,12 +199,7 @@ def main() -> int:
             "missing": sorted(set(expected_set) - set(actual_set)),
             "unexpected": sorted(set(actual_set) - set(expected_set)),
         },
-        "unverified_paths": [
-            "live Atlas run (this report is run_mode=fixture; the parent owns the live window)",
-            "invalid_utf8 quarantine path (no non-UTF-8 rows exist in the seeded fixture)",
-            "null_amount quarantine path (no NULL amounts exist in the seeded fixture)",
-            "empty-input no-op verified only against an unseeded namespace, not a truncated one",
-        ],
+        "unverified_paths": unverified,
     }
     out = Path(args.out) if args.out else (
         tp_common.REPO_ROOT / "docs/tech-partnerships/recon"
