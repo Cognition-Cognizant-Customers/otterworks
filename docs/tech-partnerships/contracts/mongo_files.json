@@ -1,0 +1,33 @@
+{
+  "unit": "mongo_files",
+  "source_artifact_path": "DynamoDB table otterworks-file-metadata (LocalStack :4566), items where ns=<ns>, seeded by make seed-legacy",
+  "target_objects": [
+    "ow_tp_mongodb_<ns>.files",
+    "ow_tp_mongodb_<ns>_quarantine.files_quarantine"
+  ],
+  "golden_baseline_location": "testdata/legacy/manifests/<ns>.json (target dynamodb.file-metadata items=10000 checksum=db614663b2c6d41141cae82261b416d5 at NS=demo)",
+  "acceptance_checks": [
+    { "id": "files-count", "description": "files collection holds exactly the manifest item count (10000 at NS=demo), item-per-document 1:1, ns attribute mapped to a tenant field." },
+    { "id": "files-checksum", "description": "order-independent md5 checksum recomputed from the target collection matches the manifest dynamodb.file-metadata checksum." },
+    { "id": "orphaned-metadata-reported", "description": "items whose s3_key points at no seeded object are flagged/quarantined with attribution and enumerated." }
+  ],
+  "encoding_policy": {
+    "input_encoding": "UTF-8 (DynamoDB string attributes)",
+    "byte_transparency": "attribute values carried byte-for-byte; binary attributes preserved as BSON binary",
+    "invalid_bytes": "not expected from DynamoDB; if encountered the item quarantines with attribution"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "tolerate-and-attribute",
+    "details": "missing attributes become omitted fields, never fabricated; unknown extra attributes are carried through and attributed."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "a run with no items for the namespace writes nothing and leaves prior target output untouched."
+  },
+  "trigger_granularity": "per-batch",
+  "planted_anomalies": [
+    { "id": "orphaned_metadata", "description": "40 items with orphaned s3_key values (manifest kind=orphaned_metadata)", "status": "must-detect" },
+    { "id": "missing_hours", "description": "1 missing hourly object under s3.data-lake/events/<ns>/ (manifest kind=missing_hours)", "status": "coverage_gap", "reason": "S3 hourly event objects are not part of the MongoDB document model; no unit in this track ingests the events prefix. Declared here so the run-level anomaly set is fully attributed." }
+  ]
+}

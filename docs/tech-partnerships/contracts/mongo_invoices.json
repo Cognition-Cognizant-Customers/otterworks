@@ -1,0 +1,33 @@
+{
+  "unit": "mongo_invoices",
+  "source_artifact_path": "services/legacy-billing/db/oracle/ (OW_BILLING.INVOICE_HEADER + INVOICE_LINE), seeded by testdata/legacy/oracle_billing_seed.py",
+  "target_objects": [
+    "ow_tp_mongodb_<ns>.invoices",
+    "ow_tp_mongodb_<ns>_quarantine.invoice_lines_quarantine"
+  ],
+  "golden_baseline_location": "testdata/legacy/manifests/<ns>.json (targets oracle.OW_BILLING.INVOICE_HEADER rows=18750, INVOICE_LINE rows=150000 checksum=88a66751f0b08b476b492105a2efc537 at NS=demo)",
+  "acceptance_checks": [
+    { "id": "invoices-count", "description": "invoices collection holds exactly the manifest INVOICE_HEADER row count (18750 at NS=demo)." },
+    { "id": "lines-embedded", "description": "every non-orphaned INVOICE_LINE row is embedded in its header document; embedded line total equals manifest line count minus quarantined orphans (149963 at NS=demo)." },
+    { "id": "lines-checksum", "description": "order-independent md5 checksum recomputed from embedded lines plus quarantined orphans matches the manifest INVOICE_LINE checksum (every source line accounted for exactly once)." },
+    { "id": "orphans-quarantined", "description": "orphaned lines (no matching header) are quarantined with attribution and enumerated; never silently dropped and never embedded in a fabricated header." }
+  ],
+  "encoding_policy": {
+    "input_encoding": "UTF-8 as stored in Oracle VARCHAR2 (AL32UTF8)",
+    "byte_transparency": "string fields carried byte-for-byte; numeric amounts preserved exactly (no float rounding of cents)",
+    "invalid_bytes": "records that do not decode as UTF-8 are quarantined with attribution"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "tolerate-and-attribute",
+    "details": "NULL source columns are omitted fields; a NULL amount never fails open to 0. Lines referencing missing headers are quarantined, not dropped."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "a run against an empty/absent source namespace writes nothing and leaves prior target output untouched."
+  },
+  "trigger_granularity": "per-batch",
+  "planted_anomalies": [
+    { "id": "orphaned_rows", "description": "37 orphaned INVOICE_LINE rows referencing ghost invoice ids (manifest kind=orphaned_rows)", "status": "must-detect" }
+  ]
+}

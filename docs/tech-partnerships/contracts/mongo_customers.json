@@ -1,0 +1,35 @@
+{
+  "unit": "mongo_customers",
+  "source_artifact_path": "services/legacy-billing/db/oracle/ (OW_BILLING.CUSTOMER_MASTER 155 cols + ENTITY_ATTR_VALUE), seeded by testdata/legacy/oracle_billing_seed.py",
+  "target_objects": [
+    "ow_tp_mongodb_<ns>.customers",
+    "ow_tp_mongodb_<ns>_quarantine.customers_quarantine"
+  ],
+  "golden_baseline_location": "testdata/legacy/manifests/<ns>.json (targets oracle.OW_BILLING.CUSTOMER_MASTER rows=25000 checksum=4f92feef2ad58dbab30e289957931928, ENTITY_ATTR_VALUE rows=8333 at NS=demo)",
+  "acceptance_checks": [
+    { "id": "customers-count", "description": "customers collection holds exactly the manifest CUSTOMER_MASTER row count (25000 at NS=demo), one document per customer." },
+    { "id": "customers-checksum", "description": "order-independent md5 checksum (testdata/legacy/legacy_common.py checksum_lines line format) recomputed from the target collection matches manifest checksum for CUSTOMER_MASTER." },
+    { "id": "eav-folded", "description": "all 8333 ENTITY_ATTR_VALUE rows fold into the owning customer document's attributes subdocument; sum of attributes entries across documents equals the manifest EAV row count." },
+    { "id": "csv-to-arrays", "description": "RELATED_ACCT_IDS / PROMO_CODES_CSV become real arrays; malformed CSV lists are quarantined with attribution, never silently coerced." },
+    { "id": "dates-to-bson", "description": "valid DD-MON-YY VARCHAR2 dates become BSON dates; dirty SIGNUP_DT values are quarantined and enumerated." }
+  ],
+  "encoding_policy": {
+    "input_encoding": "UTF-8 as stored in Oracle VARCHAR2 (AL32UTF8)",
+    "byte_transparency": "string fields are carried byte-for-byte; no re-encoding or normalization",
+    "invalid_bytes": "a value that does not decode as UTF-8 quarantines the record with attribution; never dropped or mangled"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "tolerate-and-attribute",
+    "details": "NULL/missing source values are omitted fields in the document, never fabricated defaults; a NULL may never fail open into a valid-looking value. Malformed CSV lists and unparseable dates go to the quarantine collection with source PK and reason."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "a run against an empty/absent source namespace writes nothing and leaves prior target output untouched."
+  },
+  "trigger_granularity": "per-batch",
+  "planted_anomalies": [
+    { "id": "malformed_csv_lists", "description": "31 malformed RELATED_ACCT_IDS CSV lists (manifest kind=malformed_csv_lists)", "status": "must-detect" },
+    { "id": "dirty_dates", "description": "50 dirty SIGNUP_DT strings such as 31-FEB-24 and N/A (manifest kind=dirty_dates)", "status": "must-detect" }
+  ]
+}
