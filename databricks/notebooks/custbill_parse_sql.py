@@ -170,7 +170,8 @@ def gate_statements(ns: str) -> list[tuple[str, str]]:
             LEFT JOIN {BRONZE_LINES} l ON l.ns = f.ns AND l.file_name = f.file_name
             WHERE f.ns = {lit}
             GROUP BY f.file_name, f.record_count
-            HAVING f.record_count <> count(l.raw_line)
+            -- NULL is an unknown declaration, not a matching count.
+            HAVING f.record_count IS NULL OR f.record_count <> count(l.raw_line)
             """,
         ),
         (
