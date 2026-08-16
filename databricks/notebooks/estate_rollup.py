@@ -177,10 +177,31 @@ def unit_specs(catalog: str = DEFAULT_CATALOG, ns: str = "demo") -> list[dict]:
     `rows_in` is not the same unit of measure for every unit — the ingest unit counts files,
     the storage unit counts objects, the rest count records — so each spec states its unit of
     measure in `recon_detail` rather than leaving the number to be misread.
+
+    The two sides of a parity identity must describe the *same* run. The units differ in how
+    they persist history: `finance_billing_summary`, `search_reindex_summary`,
+    `user_activity_report` and `audit_archive_manifest` keep one slice per business date and add
+    to it, while the silver tables they are compared against are replaced per namespace on every
+    run. Aggregating those gold tables over the whole namespace therefore holds only until a unit
+    has published a second slice, after which a healthy unit reports red. Each accumulating gold
+    table is scoped to its own latest slice with `_slice`, which is also why `storage_cleanup`
+    takes the latest row by `generated_at`. `analytics_daily_summary` is deliberately *not*
+    scoped: it is written `REPLACE WHERE ns`, so its several `summary_date` rows are all one run
+    and are summed against the whole silver slice.
     """
     validate_ns(ns)
     validate_identifier(catalog, "catalog")
     n = _quoted(ns)
+
+    def _slice(table: str, column: str) -> str:
+        """Predicate restricting an accumulating table to the latest slice it holds."""
+        return f"ns = {n} AND {column} = (SELECT max({column}) FROM {catalog}.{table} WHERE ns = {n})"
+
+    finance_slice = _slice("gold.finance_billing_summary", "report_date")
+    search_slice = _slice("gold.search_reindex_summary", "run_date")
+    activity_slice = _slice("gold.user_activity_report", "report_date")
+    audit_slice = _slice("gold.audit_archive_manifest", "run_date")
+    audit_run_date = f"(SELECT max(run_date) FROM {catalog}.gold.audit_archive_manifest WHERE ns = {n})"
 
     return [
         {
@@ -233,9 +254,9 @@ def unit_specs(catalog: str = DEFAULT_CATALOG, ns: str = "demo") -> list[dict]:
             "language_vintage": "perl (2003)",
             "measures": {
                 "rows_in": f"(SELECT count(*) FROM {catalog}.silver.custbill_records WHERE ns = {n})",
-                "rows_out": f"(SELECT count(*) FROM {catalog}.gold.finance_billing_summary WHERE ns = {n})",
-                "summed": f"(SELECT coalesce(sum(record_count), 0) FROM {catalog}.gold.finance_billing_summary WHERE ns = {n})",
-                "total_amount": f"(SELECT coalesce(sum(total_amount), 0) FROM {catalog}.gold.finance_billing_summary WHERE ns = {n})",
+                "rows_out": f"(SELECT count(*) FROM {catalog}.gold.finance_billing_summary WHERE {finance_slice})",
+                "summed": f"(SELECT coalesce(sum(record_count), 0) FROM {catalog}.gold.finance_billing_summary WHERE {finance_slice})",
+                "total_amount": f"(SELECT coalesce(sum(total_amount), 0) FROM {catalog}.gold.finance_billing_summary WHERE {finance_slice})",
                 "silver_amount": f"(SELECT coalesce(sum(amount), 0) FROM {catalog}.silver.custbill_records WHERE ns = {n})",
                 "delivery": (
                     f"(SELECT max(delivery_status) FROM {catalog}.gold.finance_report_delivery WHERE ns = {n})"
@@ -289,11 +310,13 @@ def unit_specs(catalog: str = DEFAULT_CATALOG, ns: str = "demo") -> list[dict]:
             "legacy_source": "etl/scripts/audit_archive_weekly.py",
             "language_vintage": "python (2015)",
             "measures": {
-                "rows_in": f"(SELECT coalesce(max(candidate_count), 0) FROM {catalog}.gold.audit_archive_manifest WHERE ns = {n})",
-                "rows_out": f"(SELECT coalesce(max(archived_count), 0) FROM {catalog}.gold.audit_archive_manifest WHERE ns = {n})",
-                "archived_silver": f"(SELECT count(*) FROM {catalog}.silver.audit_events_archived WHERE ns = {n})",
-                "deleted": f"(SELECT coalesce(max(deleted_count), 0) FROM {catalog}.gold.audit_archive_manifest WHERE ns = {n})",
-                "verified": f"(SELECT max(verified) FROM {catalog}.gold.audit_archive_manifest WHERE ns = {n})",
+                "rows_in": f"(SELECT coalesce(max(candidate_count), 0) FROM {catalog}.gold.audit_archive_manifest WHERE {audit_slice})",
+                "rows_out": f"(SELECT coalesce(max(archived_count), 0) FROM {catalog}.gold.audit_archive_manifest WHERE {audit_slice})",
+                # The silver archive is a MERGE on (ns, event_id) and so is cumulative across
+                # weeks; it is counted for the manifest's own run_date, not over all of history.
+                "archived_silver": f"(SELECT count(*) FROM {catalog}.silver.audit_events_archived WHERE ns = {n} AND run_date = {audit_run_date})",
+                "deleted": f"(SELECT coalesce(max(deleted_count), 0) FROM {catalog}.gold.audit_archive_manifest WHERE {audit_slice})",
+                "verified": f"(SELECT max(verified) FROM {catalog}.gold.audit_archive_manifest WHERE {audit_slice})",
                 "slice_date": f"(SELECT max(run_date) FROM {catalog}.gold.audit_archive_manifest WHERE ns = {n})",
             },
             "result": (
@@ -315,10 +338,12 @@ def unit_specs(catalog: str = DEFAULT_CATALOG, ns: str = "demo") -> list[dict]:
             "legacy_source": "etl/scripts/search_reindex_weekly.py",
             "language_vintage": "python (2016)",
             "measures": {
-                "rows_in": f"(SELECT coalesce(sum(source_count), 0) FROM {catalog}.gold.search_reindex_summary WHERE ns = {n})",
-                "rows_out": f"(SELECT coalesce(sum(indexed_count), 0) FROM {catalog}.gold.search_reindex_summary WHERE ns = {n})",
+                "rows_in": f"(SELECT coalesce(sum(source_count), 0) FROM {catalog}.gold.search_reindex_summary WHERE {search_slice})",
+                "rows_out": f"(SELECT coalesce(sum(indexed_count), 0) FROM {catalog}.gold.search_reindex_summary WHERE {search_slice})",
                 "silver_docs": f"(SELECT count(*) FROM {catalog}.silver.search_index_documents WHERE ns = {n})",
-                "unmatched": f"(SELECT count(*) FROM {catalog}.gold.search_reindex_summary WHERE ns = {n} AND NOT (counts_match AND swap_completed))",
+                # Scoped to the same slice: a historical failed reindex (the unit's own simulated
+                # failure run is one) must not hold this unit red for every night afterwards.
+                "unmatched": f"(SELECT count(*) FROM {catalog}.gold.search_reindex_summary WHERE {search_slice} AND NOT (counts_match AND swap_completed))",
                 "slice_date": f"(SELECT max(run_date) FROM {catalog}.gold.search_reindex_summary WHERE ns = {n})",
             },
             "result": (
@@ -373,9 +398,9 @@ def unit_specs(catalog: str = DEFAULT_CATALOG, ns: str = "demo") -> list[dict]:
             "language_vintage": "python (2017)",
             "measures": {
                 "rows_in": f"(SELECT coalesce(sum(events), 0) FROM {catalog}.silver.user_activity_daily WHERE ns = {n})",
-                "rows_out": f"(SELECT coalesce(sum(events), 0) FROM {catalog}.gold.user_activity_report WHERE ns = {n})",
-                "report_rows": f"(SELECT count(*) FROM {catalog}.gold.user_activity_report WHERE ns = {n})",
-                "upstream_fresh": f"(SELECT min(upstream_fresh) FROM {catalog}.gold.user_activity_report WHERE ns = {n})",
+                "rows_out": f"(SELECT coalesce(sum(events), 0) FROM {catalog}.gold.user_activity_report WHERE {activity_slice})",
+                "report_rows": f"(SELECT count(*) FROM {catalog}.gold.user_activity_report WHERE {activity_slice})",
+                "upstream_fresh": f"(SELECT min(upstream_fresh) FROM {catalog}.gold.user_activity_report WHERE {activity_slice})",
                 "last_status": (
                     f"(SELECT status FROM {catalog}.gold.user_activity_run_log WHERE ns = {n} "
                     "AND stage = 'pipeline' ORDER BY run_ts DESC LIMIT 1)"
