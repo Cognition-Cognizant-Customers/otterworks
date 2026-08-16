@@ -34,6 +34,23 @@ resource "databricks_job" "custbill_estate" {
     default = "demo"
   }
 
+  # Tasks are declared in alphabetical task_key order to match the order the
+  # Jobs API returns them in, keeping `terraform plan` clean between applies.
+  task {
+    task_key = "finance"
+
+    depends_on {
+      task_key = "parse"
+    }
+
+    run_job_task {
+      job_id = databricks_job.finance_excel_report.id
+      job_parameters = {
+        ns = "{{job.parameters.ns}}"
+      }
+    }
+  }
+
   task {
     task_key = "ingest"
 
@@ -60,21 +77,6 @@ resource "databricks_job" "custbill_estate" {
     }
   }
 
-  task {
-    task_key = "finance"
-
-    depends_on {
-      task_key = "parse"
-    }
-
-    run_job_task {
-      job_id = databricks_job.finance_excel_report.id
-      job_parameters = {
-        ns = "{{job.parameters.ns}}"
-      }
-    }
-  }
-
   # Runs regardless of upstream outcome so every estate run gets an
   # attributed log row per task; re-raises on any non-success upstream
   # state so a failed stage is never a green run over partial data.
@@ -83,13 +85,13 @@ resource "databricks_job" "custbill_estate" {
     run_if   = "ALL_DONE"
 
     depends_on {
+      task_key = "finance"
+    }
+    depends_on {
       task_key = "ingest"
     }
     depends_on {
       task_key = "parse"
-    }
-    depends_on {
-      task_key = "finance"
     }
 
     notebook_task {
