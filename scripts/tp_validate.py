@@ -39,7 +39,11 @@ def main() -> int:
         files = [Path(args.file)]
     elif args.kind == "contracts":
         files = sorted((ROOT / "docs/tech-partnerships/contracts").glob("*.json"))
-        legacy_prose = sorted((ROOT / "docs/tech-partnerships/contracts").glob("*.md"))
+        legacy_prose = [
+            p
+            for p in sorted((ROOT / "docs/tech-partnerships/contracts").glob("*.md"))
+            if p.name != "README.md"
+        ]
     else:
         files = []
         legacy_prose = []
@@ -65,10 +69,16 @@ def main() -> int:
             prefix = "legacy prose" if args.kind == "contracts" else "unmigrated artifact"
             print(f"  {prefix}: {path}")
     if not args.file and args.kind == "contracts" and not files:
-        failures.append(
-            "no JSON contract files found; migrate these legacy prose contracts to the schema:\n"
-            + "\n".join(f"  - {path}" for path in legacy_prose)
-        )
+        if legacy_prose:
+            failures.append(
+                "no JSON contract files found; migrate these legacy prose contracts to the schema:\n"
+                + "\n".join(f"  - {path}" for path in legacy_prose)
+            )
+        else:
+            failures.append(
+                "no JSON contract files found; a run must produce one schema-valid "
+                "contract per unit before fan-out"
+            )
     if failures:
         print("\n".join(failures))
         print(f"FAIL: {len(failures)} validation error(s)")
