@@ -276,9 +276,9 @@ def handle_signal(signum, _frame):
 signal.signal(signal.SIGINT, handle_signal)
 signal.signal(signal.SIGTERM, handle_signal)
 try:
-    if covers(probe_ip, listed):
+    if probe_ip in listed or f"{probe_ip}/32" in listed:
         m.add("access-list-post", "Create a temporary API access-list entry",
-              "Atlas accessList POST", "skipped", f"{probe_ip} is already covered")
+              "Atlas accessList POST", "skipped", f"{probe_ip} is already listed exactly")
     else:
         created_entry = {"ipAddress": probe_ip, "comment": run_marker}
         register_cleanup(created_entry)

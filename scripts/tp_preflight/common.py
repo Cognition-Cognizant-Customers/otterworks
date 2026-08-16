@@ -12,6 +12,7 @@ from pathlib import Path
 
 class Manifest:
     def __init__(self, platform: str, identity: str = "unavailable") -> None:
+        self.output_dir = validate_manifest_dir()
         self.data = {
             "platform": platform,
             "checked_at": datetime.now(timezone.utc).isoformat(),
@@ -68,9 +69,8 @@ class Manifest:
         return value
 
     def write(self, platform: str) -> int:
-        out = Path(os.environ.get("TP_PREFLIGHT_DIR", ".tp-preflight"))
-        out.mkdir(parents=True, exist_ok=True)
-        path = out / f"{platform}-capabilities.json"
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        path = self.output_dir / f"{platform}-capabilities.json"
         path.write_text(json.dumps(self.data, indent=2) + "\n")
         denied_probes = [
             p for p in self.data["probes"]
@@ -79,6 +79,20 @@ class Manifest:
         print(f"\nmanifest: {path}")
         print(f"probes: {len(self.data['probes'])}, denied: {len(denied_probes)}")
         return 1 if denied_probes else 0
+
+
+def validate_manifest_dir() -> Path:
+    repo_root = Path(__file__).resolve().parents[2]
+    sandbox = (repo_root / ".tp-preflight").resolve()
+    configured = os.environ.get("TP_PREFLIGHT_DIR")
+    resolved = Path(configured).resolve() if configured else sandbox
+    if resolved == repo_root or repo_root in resolved.parents:
+        if resolved != sandbox and sandbox not in resolved.parents:
+            raise SystemExit(
+                "TP_PREFLIGHT_DIR must resolve beneath the repository .tp-preflight "
+                f"sandbox, not {resolved}"
+            )
+    return resolved
 
 
 def require_env(*names: str) -> None:
