@@ -129,17 +129,17 @@ def main() -> int:
                 quarantine.append({**base, "reason": "invalid_utf8",
                                    "raw_repr": repr(row)})
                 continue
-            if "amount" not in line:
-                quarantine.append({**base, "reason": "null_amount",
-                                   "line": line,
-                                   "attribution": "NULL amount is never coerced to 0"})
-                continue
             if invoice_id not in headers:
                 quarantine.append({**base, "reason": "orphaned_line",
                                    "missing_invoice_id": invoice_id,
                                    "line": line,
                                    "attribution": "no matching INVOICE_HEADER row; "
                                                   "quarantined, not embedded"})
+                continue
+            if "amount" not in line:
+                quarantine.append({**base, "reason": "null_amount",
+                                   "line": line,
+                                   "attribution": "NULL amount is never coerced to 0"})
                 continue
             line.pop("line_id")
             line["_line_id"] = line_id
