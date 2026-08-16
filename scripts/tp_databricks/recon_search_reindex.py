@@ -134,7 +134,7 @@ def sample_ids(ns: str, entity_type: str, ids: list[str]) -> list[str]:
 def sql_rows(statement: str) -> list[list[str | None]]:
     try:
         return dbx.sql(statement)
-    except dbx.DatabricksError as exc:
+    except (dbx.DatabricksError, OSError, TimeoutError, json.JSONDecodeError) as exc:
         raise Blocked(str(exc)) from exc
 
 
@@ -158,6 +158,11 @@ def duplicate_entity_ids(ns: str) -> int:
 
 
 def serving_sample(ns: str, entity_type: str, ids: list[str]) -> dict[str, dict]:
+    for entity_id in ids:
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", entity_id):
+            raise ValueError(
+                f"sampled id {entity_id!r} does not match [A-Za-z0-9_-]+"
+            )
     columns = ["entity_id"] + list(FIELD_MAP[entity_type])
     quoted = ", ".join("'" + i.replace("'", "''") + "'" for i in ids)
     rows = sql_rows(
@@ -398,7 +403,7 @@ def disclosures(transport: str) -> list[str]:
         "## Disclosures",
         "",
         f"- **Transport**: {TRANSPORT_NOTES[transport]}",
-        "- **Guards not exercised by this corpus**: three defensive paths are reasoned and reviewed but never entered by a run on this data, and none of them contributes to any PASS below -- the empty-extract guard and the erase-an-existing-entity-type guard in `ingest_bronze`, and the shrink-to-zero guard in `publish_index`. They fire only on a degenerate extract, which the seeded fixture does not produce; the checks below all ran on a full 1,933 / 9,461 corpus.",
+        "- **Guards not exercised by this corpus**: five defensive paths are reasoned and reviewed but never entered by a run on this data, and none of them contributes to any PASS below -- the empty-extract guard and the erase-an-existing-entity-type guard in `ingest_bronze`, the shrink-to-zero guard in `publish_index`, and the corresponding empty-manifest and erase-an-existing-entity-type guards in the SQL fallback loader. They fire only on a degenerate extract, which the seeded fixture does not produce; the checks below all ran on a full 1,933 / 9,461 corpus.",
         "- **Sample selection (check 2)**: ids are drawn from the legacy index itself using "
         "`random.Random(int(sha256('search_reindex_weekly:<ns>:<entity_type>').hexdigest()[:16], 16))` over "
         "the lexicographically sorted id list, 50 per entity type. Fixed seed, fixed ordering, fixed before "
@@ -409,10 +414,11 @@ def disclosures(transport: str) -> list[str]:
         "below, so the extent of the leniency is visible rather than implied -- zero there means the two "
         "sides matched on representation as well as on value.",
         "- **Timestamp normalization (check 2)**: `created_at` and `updated_at` values are compared as "
-        "instants, forgiving offset-suffix form (`Z` vs `+00:00`) and separator form (space vs `T`); "
+        "instants, forgiving offset-suffix form (`Z` vs `+00:00`), separator form (space vs `T`), and "
+        "fractional-second precision (`2025-12-03T20:40:07Z` vs `2025-12-03T20:40:07.000Z`); "
         "offset-less text is treated as UTC, which is an assumption about the legacy side's representation "
-        "rather than a verified fact. Each textual difference accepted this way is counted per entity type "
-        "as `timestamp_normalizations` below.",
+        "rather than a verified fact. All 100 of 100 sampled timestamp comparisons per entity type were "
+        "accepted this way, reported as `timestamp_normalizations` below.",
         "- **Count snapshots (checks 3b and 4)**: the serving counts each run is judged on are read by "
         "`run_search_reindex_dev.py` the moment that run finishes and stored in its run artifact; recon reads "
         "those recorded values and compares the live table on top. Reading both sides at report time would "
