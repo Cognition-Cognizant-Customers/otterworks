@@ -239,7 +239,15 @@ def reconcile_file():
 
 register_cleanup("landing-file", reconcile_file)
 try:
-    req = urllib.request.Request(HOST + file_api, data=payload, headers={"Authorization": f"Bearer {TOKEN}"}, method="PUT")
+    req = urllib.request.Request(
+        HOST + file_api + "?overwrite=true",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {TOKEN}",
+            "Content-Type": "application/octet-stream",
+        },
+        method="PUT",
+    )
     file_put_attempted = True
     with urllib.request.urlopen(req, timeout=30) as r:
         manifest.add("files-put", "Write a temporary landing file", "Files API PUT", "verified", f"HTTP {r.status}")

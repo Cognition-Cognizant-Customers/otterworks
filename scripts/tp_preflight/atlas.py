@@ -132,7 +132,7 @@ def delete_entry(entry):
 def db_user_write():
     try:
         from pymongo import MongoClient
-        db = MongoClient(os.environ["MONGODB_ATLAS_URI"], serverSelectionTimeoutMS=10000)["tp_preflight"]
+        db = MongoClient(os.environ["MONGODB_ATLAS_URI"], serverSelectionTimeoutMS=10000)["ow_tp_preflight"]
         name = f"ow_tp_preflight_{uuid.uuid4().hex}"
         db[name].insert_one({"_id": "probe"})
         db[name].delete_one({"_id": "probe"})
