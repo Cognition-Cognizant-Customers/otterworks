@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "sftp_ingest_poll",
   "namespace": "demo",
-  "generated_at": "2026-08-16T18:34:05.970217+00:00",
+  "generated_at": "2026-08-16T18:38:55.038330+00:00",
   "run_mode": "fixture",
   "checks": [
     {

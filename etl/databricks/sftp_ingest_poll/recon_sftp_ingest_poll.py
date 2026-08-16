@@ -93,7 +93,12 @@ def main() -> int:
     # hard-fails when TP_FAKETIME is set without libfaketime installed.
     shutil.rmtree(LEGACY_ROOT, ignore_errors=True)
     gen_env = {**os.environ, "OTTERWORKS_LEGACY_ROOT": str(LEGACY_ROOT)}
-    if shutil.which("faketime"):
+    libfaketime_paths = (
+        "/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1",
+        "/usr/lib/aarch64-linux-gnu/faketime/libfaketime.so.1",
+        "/usr/local/lib/faketime/libfaketime.so.1",
+    )
+    if any(Path(p).is_file() for p in libfaketime_paths):
         gen_env["TP_FAKETIME"] = TP_FAKETIME
     else:
         gen_env.pop("TP_FAKETIME", None)
