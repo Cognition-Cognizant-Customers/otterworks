@@ -58,6 +58,14 @@ with the tables the numbers were read from, the slice date, and that unit's stan
 (`finance_report`'s `delivery_status=NOT_DELIVERED_NO_TRANSPORT_CONFIGURED`, `storage_cleanup`'s
 `dry_run=true`, the weekly units whose slice legitimately predates the run date).
 
+The units do not persist history the same way: `finance_billing_summary`, `search_reindex_summary`,
+`user_activity_report` and `audit_archive_manifest` keep one slice per business date and add to it,
+while the silver tables they are reconciled against are replaced per namespace on every run. Each
+of those gold measures is therefore scoped to the unit's own latest slice, so both sides of an
+identity describe the same run and a unit stays green on its second night instead of comparing
+accumulated history against a single silver slice. `analytics_daily_summary` is deliberately not
+scoped — it is written `REPLACE WHERE ns`, so its several `summary_date` rows are all one run.
+
 `job_run_id` is empty for the rows above and the report labels them as such: they were written by
 the local warehouse runner, because the unit jobs are not applied in this shared workspace (the
 parent session owns `terraform apply`). A job-written slice is shown under check 3.
@@ -65,7 +73,11 @@ parent session owns `terraform apply`). A job-written slice is shown under check
 ## Check 2 — CUSTBILL cross-foots to the legacy baseline, to the cent
 
 Legacy Perl report (left) vs `ow_tp.gold.finance_billing_summary` (right), all six
-currency/record-type groups equal:
+currency/record-type groups equal. The gold table is keyed by `(ns, report_date, currency,
+record_type)` and the finance job replaces only its own date slice, so the recon resolves the
+business day explicitly and names it rather than comparing one day's legacy report against every
+slice in the namespace: `report_date 2026-08-15` is the only slice present for `ns=demo`, and a
+second slice makes the check demand `--report-date` instead of picking one.
 
 | currency | type | legacy count / amount | gold count / amount |
 |---|---|---:|---:|
@@ -76,8 +88,9 @@ currency/record-type groups equal:
 | USD | INVOICE | 28 / 130502.15 | 28 / 130502.15 |
 | USD | CREDIT | 7 / 33390.44 | 7 / 33390.44 |
 
-Cross-foot: 100 records / 510391.14 in `silver.custbill_records` == 100 / 510391.14 summed over the
-legacy report's own rows. Amounts are compared as decimals, so a cent of drift fails.
+Cross-foot: 100 records / 510391.14 in `silver.custbill_records` (the whole `ns=demo` parse slice —
+that table carries no `report_date`) == 100 / 510391.14 summed over the legacy report's own rows.
+Amounts are compared as decimals, so a cent of drift fails.
 
 ## Check 3 — a real failing upstream, in a real multi-task run
 
@@ -129,6 +142,7 @@ converted. The recon check fails if a planted kind is neither detected nor decla
 Read out of `infrastructure/terraform-databricks/jobs_estate_rollup.tf` by the recon script:
 
 - jobs defined: `estate_rollup`, `estate_orchestrator`; **both** set `max_concurrent_runs = 1`
+  (matched with a digit boundary, so a value like `10` fails the check rather than satisfying it)
   (queueing enabled, so a queued run stays visible instead of being dropped like an overlapping cron
   invocation)
 - sleep-based ordering: **none** (no occurrence of `sleep` anywhere in the file)

@@ -126,8 +126,11 @@ def check_one_row_per_unit(ns: str, run_date: str, catalog: str) -> Check:
         row = stored.get(spec["unit"])
         if row is None:
             continue
-        agree = (recomputed[0] == row["result"] and int(recomputed[1]) == row["rows_in"]
-                 and int(recomputed[2]) == row["rows_out"])
+        # A measure over an absent slice is SQL NULL -- `storage_cleanup` relies on that to report
+        # `blocked` -- while the stored side coalesces to 0. Compare on the stored side's terms, so
+        # the unit with no evidence gets a red verdict instead of a traceback from int(None).
+        agree = (recomputed[0] == row["result"] and int(recomputed[1] or 0) == row["rows_in"]
+                 and int(recomputed[2] or 0) == row["rows_out"])
         check.require(
             agree,
             f"{spec['unit']}: stored ({row['result']}, rows_in={row['rows_in']}, rows_out={row['rows_out']}) "
@@ -144,7 +147,8 @@ def check_one_row_per_unit(ns: str, run_date: str, catalog: str) -> Check:
     return check
 
 
-def check_custbill_crossfoot(ns: str, catalog: str, legacy_report: Path) -> Check:
+def check_custbill_crossfoot(ns: str, catalog: str, legacy_report: Path,
+                            report_date: str | None = None) -> Check:
     check = Check("2", "CUSTBILL cross-foots to the legacy report to the cent")
     if not legacy_report.exists():
         check.require(False, f"legacy baseline report not found at {legacy_report}; "
@@ -159,11 +163,31 @@ def check_custbill_crossfoot(ns: str, catalog: str, legacy_report: Path) -> Chec
             )
     check.record(f"legacy baseline: {legacy_report} ({len(baseline)} currency/type groups)")
 
+    # gold.finance_billing_summary is keyed by (ns, report_date, currency, record_type) and the
+    # finance job replaces only its own date slice, so several business days can coexist for one
+    # namespace. Comparing a single day's legacy report against the whole namespace would let
+    # another day's rows stand in silently, so the date is resolved explicitly and named in the
+    # evidence: either the caller states it, or there must be exactly one slice to compare.
+    available = [str(row[0]) for row in _rows(
+        f"SELECT DISTINCT report_date FROM {catalog}.gold.finance_billing_summary "
+        f"WHERE ns = {_q(ns)} ORDER BY report_date")]
+    if report_date is None:
+        if not check.require(len(available) == 1,
+                             f"gold.finance_billing_summary holds {len(available)} report_date slices for "
+                             f"ns={ns} ({available}); pass --report-date so the comparison names one "
+                             "business day rather than picking one"):
+            return check
+        report_date = available[0]
+    pipeline.validate_run_date(report_date)
+    check.require(report_date in available,
+                  f"no gold.finance_billing_summary slice for report_date {report_date}; available {available}")
+    check.record(f"migrated slice compared: report_date {report_date} (slices present: {available})")
+
     migrated = {
         (row[0], row[1]): (int(row[2]), decimal.Decimal(str(row[3])))
         for row in _rows(
             f"SELECT currency, record_type, record_count, total_amount FROM {catalog}.gold.finance_billing_summary "
-            f"WHERE ns = {_q(ns)} ORDER BY currency, record_type"
+            f"WHERE ns = {_q(ns)} AND report_date = DATE{_q(report_date)} ORDER BY currency, record_type"
         )
     }
     check.require(set(migrated) == set(baseline),
@@ -182,7 +206,8 @@ def check_custbill_crossfoot(ns: str, catalog: str, legacy_report: Path) -> Chec
         f"SELECT coalesce(sum(amount), 0) FROM {catalog}.silver.custbill_records WHERE ns = {_q(ns)}")[0][0]))
     check.require(parsed == legacy_total_rows and parsed_amount == legacy_total_amount,
                   f"silver totals {parsed}/{parsed_amount} != legacy totals {legacy_total_rows}/{legacy_total_amount}")
-    check.record(f"totals: {parsed} records / {parsed_amount} in silver == {legacy_total_rows} / "
+    check.record(f"totals: {parsed} records / {parsed_amount} in silver (the whole ns={ns} parse slice; "
+                 f"silver.custbill_records carries no report_date) == {legacy_total_rows} / "
                  f"{legacy_total_amount} in the legacy report")
     return check
 
@@ -277,7 +302,9 @@ def check_job_configuration() -> Check:
 
     jobs = re.findall(r'resource "databricks_job" "(\w+)"', text)
     check.record(f"jobs defined: {', '.join(jobs)}")
-    check.require(len(re.findall(r"max_concurrent_runs\s*=\s*1", text)) == len(jobs),
+    # The digit boundary matters: without it, max_concurrent_runs = 10 would satisfy the check
+    # that the estate cannot run concurrently, which is the legacy defect being retired.
+    check.require(len(re.findall(r"max_concurrent_runs\s*=\s*1(?!\d)", text)) == len(jobs),
                   "not every job in the file sets max_concurrent_runs = 1")
 
     sleeps = [line for line in text.splitlines() if re.search(r"\bsleep\b", line)]
@@ -319,6 +346,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--legacy-report", type=Path,
                         default=Path("/home/ubuntu/tp-golden/custbill/reports/finance_billing_20260816.csv"),
                         help="CSV the legacy Perl finance report produced, the CUSTBILL baseline")
+    parser.add_argument("--report-date", default=None,
+                        help="report_date of the gold finance slice to cross-foot; required only when "
+                             "more than one business day is present for the namespace")
     parser.add_argument("--fail-drill", type=Path,
                         default=Path("/home/ubuntu/tp-golden/estate/faildrill-2026-08-18.json"),
                         help="recorded run summary of the orchestrator failure drill")
@@ -331,7 +361,7 @@ def main(argv: list[str] | None = None) -> int:
 
     checks = [
         check_one_row_per_unit(args.ns, args.run_date, args.catalog),
-        check_custbill_crossfoot(args.ns, args.catalog, args.legacy_report),
+        check_custbill_crossfoot(args.ns, args.catalog, args.legacy_report, args.report_date),
         check_failure_path(args.ns, args.catalog, args.fail_drill),
         check_anomalies(args.ns, args.catalog),
         check_job_configuration(),
