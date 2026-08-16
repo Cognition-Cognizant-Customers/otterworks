@@ -27,6 +27,7 @@ if not re.fullmatch(r"[A-Za-z0-9_-]+", project):
 auth = HTTPDigestAuth(os.environ["MONGODB_ATLAS_PUBLIC_KEY"], os.environ["MONGODB_ATLAS_PRIVATE_KEY"])
 headers = {"Accept": "application/vnd.atlas.2024-08-05+json", "Content-Type": "application/json"}
 m = Manifest("atlas")
+run_marker = f"otterworks preflight {uuid.uuid4().hex}"
 
 
 def handle_uncaught(exc_type, exc, traceback):
@@ -89,6 +90,28 @@ def delete_entry(entry):
               "Atlas accessList DELETE", "denied",
               f"entry {label} has no IP or CIDR; manual access-list cleanup required")
         return False
+    current = access_list_snapshot(record=False)
+    if current is None:
+        m.add("access-list-delete", "Delete a temporary API access-list entry",
+              "Atlas accessList DELETE", "denied",
+              f"{label}; could not verify ownership; manual access-list cleanup required")
+        return False
+    current_entry = next((item for item in current if entry_matches(item, entry)), None)
+    if current_entry is None:
+        m.add("access-list-delete", "Delete a temporary API access-list entry",
+              "Atlas accessList DELETE", "verified", f"{label} was already absent")
+        return True
+    comment = current_entry.get("comment")
+    if not isinstance(comment, str):
+        m.add("access-list-delete", "Delete a temporary API access-list entry",
+              "Atlas accessList DELETE", "denied",
+              f"{label}; ownership comment unavailable; manual access-list cleanup required")
+        return False
+    if run_marker not in comment:
+        m.add("access-list-delete", "Delete a temporary API access-list entry",
+              "Atlas accessList DELETE", "informational",
+              f"{label} was not created by this run and was left in place")
+        return False
     url = f"{base}/groups/{project}/accessList/{urllib.parse.quote(entry_id, safe='')}"
     try:
         response = delete(url, auth=auth, headers=headers, timeout=30)
@@ -119,7 +142,7 @@ def db_user_write():
         m.add("db-user-write", "Insert and delete a temporary document with the DB user", "MongoDB wire protocol", "denied", exception_detail(exc))
 
 
-def access_list_snapshot():
+def access_list_snapshot(record=True):
     entries = []
     page = 1
     total = None
@@ -129,12 +152,14 @@ def access_list_snapshot():
         try:
             response = get(url, auth=auth, headers=headers, timeout=30)
             if not response.ok:
-                m.add("access-list-read", "Read the Atlas API access list", url, "denied", f"HTTP {response.status_code}")
+                if record:
+                    m.add("access-list-read", "Read the Atlas API access list", url, "denied", f"HTTP {response.status_code}")
                 return None
             body = response.json()
             page_entries = body.get("results")
             if not isinstance(page_entries, list):
-                m.add("access-list-read", "Read the Atlas API access list", url, "denied", "response missing results list")
+                if record:
+                    m.add("access-list-read", "Read the Atlas API access list", url, "denied", "response missing results list")
                 return None
             entries.extend(page_entries)
             total = body.get("totalCount")
@@ -142,11 +167,13 @@ def access_list_snapshot():
                 break
             page += 1
         except Exception as exc:
-            m.add("access-list-read", "Read the Atlas API access list", url, "denied", exception_detail(exc))
+            if record:
+                m.add("access-list-read", "Read the Atlas API access list", url, "denied", exception_detail(exc))
             return None
-    m.add("access-list-read", "Read the Atlas API access list",
-          f"{base}/groups/{project}/accessList", "verified",
-          f"{len(entries)} entr{'y' if len(entries) == 1 else 'ies'} across {page} page(s)")
+    if record:
+        m.add("access-list-read", "Read the Atlas API access list",
+              f"{base}/groups/{project}/accessList", "verified",
+              f"{len(entries)} entr{'y' if len(entries) == 1 else 'ies'} across {page} page(s)")
     return entries
 
 
@@ -217,7 +244,7 @@ def register_cleanup(entry):
 
 
 def reconcile_ambiguous(entry):
-    current = access_list_snapshot()
+    current = access_list_snapshot(record=False)
     if current is None:
         m.add("access-list-ambiguous-cleanup", "Reconcile an ambiguous access-list create",
               "Atlas accessList GET", "denied",
@@ -250,11 +277,11 @@ try:
         m.add("access-list-post", "Create a temporary API access-list entry",
               "Atlas accessList POST", "skipped", f"{probe_ip} is already covered")
     else:
-        created_entry = {"ipAddress": probe_ip}
+        created_entry = {"ipAddress": probe_ip, "comment": run_marker}
         register_cleanup(created_entry)
         created = check("access-list-post", "Create a temporary API access-list entry", post,
                         f"{base}/groups/{project}/accessList",
-                        json=[{"ipAddress": probe_ip, "comment": "otterworks preflight"}])
+                        json=[{"ipAddress": probe_ip, "comment": run_marker}])
         if created is None or not created.ok:
             reconcile_ambiguous(created_entry)
     if covers(ip, listed):
@@ -266,11 +293,11 @@ try:
             m.add("db-user-write", "Insert and delete a temporary document with the DB user",
                   "MongoDB wire protocol", "skipped", "MONGODB_ATLAS_URI is not set")
     else:
-        own_entry = {"ipAddress": ip}
+        own_entry = {"ipAddress": ip, "comment": run_marker}
         register_cleanup(own_entry)
         own = check("access-list-post-own-ip", "Temporarily add the VM IP for the DB write probe",
                     post, f"{base}/groups/{project}/accessList",
-                    json=[{"ipAddress": ip, "comment": "otterworks preflight temporary access"}])
+                    json=[{"ipAddress": ip, "comment": run_marker}])
         try:
             if own is not None and own.ok:
                 m.add("vm-ip-listed", "The VM public IP can be self-healed for the DB write path",
@@ -284,6 +311,9 @@ try:
                 reconcile_ambiguous(own_entry)
                 m.add("vm-ip-listed", "The VM public IP is present or can be self-healed in the Atlas access list",
                       "Atlas accessList POST/DELETE", "denied", f"VM IP {ip}; access-list entries checked={len(listed)}")
+                m.add("db-user-write", "Insert and delete a temporary document with the DB user",
+                      "MongoDB wire protocol", "skipped",
+                      "VM IP could not be temporarily allow-listed")
         finally:
             cleanup_entries()
 finally:
