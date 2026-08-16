@@ -67,12 +67,13 @@ class JsonRegistry:
 
 
 def run_ingest(core, registry: JsonRegistry, drop_dir: Path) -> tuple[int, int]:
-    scanned = core.scan_drop(str(drop_dir))
-    if not scanned:
-        return (0, 0)
-    plan = core.plan_ingest(registry.existing(NS), scanned)
+    scan = core.scan_drop(str(drop_dir))
+    plan = core.plan_ingest(registry.existing(NS), scan.landed)
     for f in plan.to_insert:
         registry.insert(NS, f)
+    failures = scan.errors + plan.conflicts
+    if failures:
+        raise RuntimeError("; ".join(failures))
     return (len(plan.to_insert), len(plan.duplicate_skips))
 
 

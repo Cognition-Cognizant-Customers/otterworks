@@ -37,9 +37,16 @@ class LandedFile:
 
 
 @dataclass(frozen=True)
+class ScanResult:
+    landed: tuple
+    errors: tuple
+
+
+@dataclass(frozen=True)
 class IngestPlan:
     to_insert: tuple
     duplicate_skips: tuple
+    conflicts: tuple
 
 
 def sha256_of(path: str) -> str:
@@ -50,28 +57,31 @@ def sha256_of(path: str) -> str:
     return h.hexdigest()
 
 
-def scan_drop(drop_dir: str) -> list:
+def scan_drop(drop_dir: str) -> ScanResult:
     """Scan the landing drop for CUSTBILL files, byte-transparently.
 
-    A missing or empty drop directory is a no-op (empty list). A zero-byte
-    body or blank file name fails loudly.
+    A missing or empty drop directory is a no-op. Zero-byte bodies and
+    blank file names are collected as attributed errors (never registered)
+    without blocking registration of the healthy files in the same drop.
     """
     if not os.path.isdir(drop_dir):
-        return []
-    landed = []
+        return ScanResult(landed=(), errors=())
+    landed, errors = [], []
     for name in sorted(os.listdir(drop_dir)):
         path = os.path.join(drop_dir, name)
         if not os.path.isfile(path):
             continue
+        if not name.strip():
+            errors.append(f"refusing to register file with blank name in {drop_dir}")
+            continue
         if not any(fnmatch.fnmatch(name, pat) for pat in FILE_PATTERNS):
             continue
-        if not name.strip():
-            raise RuntimeError(f"refusing to register file with blank name in {drop_dir}")
         byte_count = os.path.getsize(path)
         if byte_count == 0:
-            raise RuntimeError(f"refusing to register zero-byte file: {path}")
+            errors.append(f"refusing to register zero-byte file: {path}")
+            continue
         landed.append(LandedFile(file_name=name, byte_count=byte_count, sha256=sha256_of(path)))
-    return landed
+    return ScanResult(landed=tuple(landed), errors=tuple(errors))
 
 
 def plan_ingest(existing: dict, scanned: list) -> IngestPlan:
@@ -79,9 +89,10 @@ def plan_ingest(existing: dict, scanned: list) -> IngestPlan:
 
     `existing` maps file_name -> sha256 for rows already registered in this
     namespace. A byte-identical redrop is skipped; a same-name file with
-    different bytes is a byte-parity conflict and fails loudly.
+    different bytes is collected as an attributed byte-parity conflict that
+    fails the run after healthy files are registered.
     """
-    to_insert, duplicate_skips = [], []
+    to_insert, duplicate_skips, conflicts = [], [], []
     for f in scanned:
         prior = existing.get(f.file_name)
         if prior is None:
@@ -89,11 +100,15 @@ def plan_ingest(existing: dict, scanned: list) -> IngestPlan:
         elif prior == f.sha256:
             duplicate_skips.append(f)
         else:
-            raise RuntimeError(
+            conflicts.append(
                 f"byte-parity conflict for {f.file_name}: "
                 f"registered sha256={prior}, landed sha256={f.sha256}"
             )
-    return IngestPlan(to_insert=tuple(to_insert), duplicate_skips=tuple(duplicate_skips))
+    return IngestPlan(
+        to_insert=tuple(to_insert),
+        duplicate_skips=tuple(duplicate_skips),
+        conflicts=tuple(conflicts),
+    )
 
 
 def _require(pattern: re.Pattern, value: str, what: str) -> str:
@@ -142,8 +157,8 @@ def _main_databricks() -> None:
         """
     )
 
-    scanned = scan_drop(drop_dir)
-    if not scanned:
+    scan = scan_drop(drop_dir)
+    if not scan.landed and not scan.errors:
         print(f"no new files in {drop_dir}; registry and volume untouched (no-op)")
         return
 
@@ -153,7 +168,7 @@ def _main_databricks() -> None:
             f"SELECT file_name, sha256 FROM {fqtn} WHERE ns = :ns", args={"ns": ns}
         ).collect()
     }
-    plan = plan_ingest(existing, scanned)
+    plan = plan_ingest(existing, scan.landed)
 
     for f in plan.duplicate_skips:
         print(f"duplicate-redrop: {f.file_name} already registered byte-identically (sha256={f.sha256}); idempotent skip")
@@ -170,8 +185,17 @@ def _main_databricks() -> None:
 
     print(
         f"sftp_ingest_poll done: ns={ns} inserted={len(plan.to_insert)} "
-        f"duplicate_skips={len(plan.duplicate_skips)} scanned={len(scanned)}"
+        f"duplicate_skips={len(plan.duplicate_skips)} scanned={len(scan.landed)}"
     )
+
+    failures = scan.errors + plan.conflicts
+    if failures:
+        for msg in failures:
+            print(f"ingest-failure: {msg}")
+        raise RuntimeError(
+            f"sftp_ingest_poll: {len(failures)} file(s) failed "
+            f"({len(plan.to_insert)} healthy file(s) registered): " + "; ".join(failures)
+        )
 
 
 if _running_in_databricks():
