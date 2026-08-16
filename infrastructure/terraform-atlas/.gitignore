@@ -1,6 +1,0 @@
-.terraform/
-terraform.tfstate
-terraform.tfstate.*
-*.tfvars
-*.tfvars.json
-*.plan
