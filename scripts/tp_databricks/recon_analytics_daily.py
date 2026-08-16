@@ -165,15 +165,18 @@ def converted_facts(ns: str, catalog: str, sample_users: set[str] | None = None)
         )
     }
     user_filter = ""
-    if sample_users:
-        encoded_users = (
-            "decode(unbase64('"
-            + base64.b64encode(user.encode("utf-8")).decode("ascii")
-            + "'), 'UTF-8')"
-            for user in sorted(sample_users)
-        )
-        quoted_users = ", ".join(encoded_users)
-        user_filter = f" AND user_id IN ({quoted_users})"
+    if sample_users is not None:
+        if not sample_users:
+            user_filter = " AND 1 = 0"
+        else:
+            encoded_users = (
+                "decode(unbase64('"
+                + base64.b64encode(user.encode("utf-8")).decode("ascii")
+                + "'), 'UTF-8')"
+                for user in sorted(sample_users)
+            )
+            quoted_users = ", ".join(encoded_users)
+            user_filter = f" AND user_id IN ({quoted_users})"
     user_by_type = {
         (row[0], row[1]): int(row[2])
         for row in dbx.sql(
@@ -250,6 +253,11 @@ def check_2(baseline: dict, converted: dict) -> Check:
     check.note(
         f"legacy top-100 user sample for the defect signature: {sorted(baseline['users'])}"
     )
+    if not baseline["users"]:
+        check.note(
+            "legacy top-100 user sample is empty; the user-grain comparison intentionally "
+            "restricts both sides to no users"
+        )
     check.note("contract dimensions unavailable in legacy artifacts: summary_date, document_id, file_id")
     user_comparable = check.record(
         "(user_id, event_type) totals — both sides restricted to legacy top-100 sample",
