@@ -97,7 +97,7 @@ def plan_ingest(existing: dict, scanned: list) -> IngestPlan:
 
 
 def _require(pattern: re.Pattern, value: str, what: str) -> str:
-    if not pattern.match(value or ""):
+    if not pattern.fullmatch(value or ""):
         raise ValueError(f"invalid {what}: {value!r}")
     return value
 
