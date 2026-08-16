@@ -106,9 +106,45 @@ def main() -> int:
               "no-op, target left untouched")
         return 0
 
-    # --- headers ---
+    # --- Mongo sinks: buffered idempotent upserts + stale-id prune at the end,
+    # so memory stays bounded regardless of namespace scale ---
+    client = MongoClient(tp_common.mongo_uri(args.run_mode))
+    invoices = client[tp_common.target_db_name(ns)]["invoices"]
+    qcoll = client[tp_common.quarantine_db_name(ns)]["invoice_lines_quarantine"]
+
+    class Sink:
+        def __init__(self, coll):
+            self.coll, self.buf, self.ids, self.count = coll, [], set(), 0
+
+        def add(self, doc):
+            self.ids.add(doc["_id"])
+            self.count += 1
+            self.buf.append(ReplaceOne({"_id": doc["_id"]}, doc, upsert=True))
+            if len(self.buf) >= 1000:
+                self.coll.bulk_write(self.buf, ordered=False)
+                self.buf.clear()
+
+        def finish(self) -> int:
+            if self.buf:
+                self.coll.bulk_write(self.buf, ordered=False)
+                self.buf.clear()
+            existing = {d["_id"] for d in self.coll.find({"ns": ns}, {"_id": 1})}
+            stale = sorted(existing - self.ids)
+            if stale:
+                self.coll.delete_many({"_id": {"$in": stale}, "ns": ns})
+            return len(stale)
+
+    inv_sink, q_sink = Sink(invoices), Sink(qcoll)
+    q_reasons: dict[str, int] = {}
+
+    def quarantine(doc):
+        q_reasons[doc["reason"]] = q_reasons.get(doc["reason"], 0) + 1
+        q_sink.add(doc)
+
+    # --- headers: keep only the (line-less) header docs in memory ---
     headers: dict[str, dict] = {}
-    quarantined_headers: list[dict] = []
+    header_ids: set[str] = set()
+    bad_header_ids: set[str] = set()
     cur.execute(f"SELECT {', '.join(HEADER_COLS)} FROM invoice_header "
                 "WHERE batch_no = :1", [batch])
     while rows := cur.fetchmany(5000):
@@ -116,8 +152,10 @@ def main() -> int:
             try:
                 doc = to_doc(HEADER_COLS, row)
             except UnicodeError:
-                quarantined_headers.append(
-                    {"_id": pk_str(row[0]), "unit": "mongo_invoices", "ns": ns,
+                hid = pk_str(row[0])
+                bad_header_ids.add(hid)
+                quarantine(
+                    {"_id": hid, "unit": "mongo_invoices", "ns": ns,
                      "reason": "invalid_utf8", "record_type": "invoice_header",
                      "raw_repr": repr(row)})
                 continue
@@ -125,72 +163,80 @@ def main() -> int:
             doc["ns"] = ns
             doc["lines"] = []
             headers[doc["_id"]] = doc
+            header_ids.add(doc["_id"])
 
-    # --- lines: embed under their header or quarantine orphans ---
-    quarantine: list[dict] = list(quarantined_headers)
+    # --- lines: streamed in invoice_id order so each invoice document is
+    # completed and flushed as soon as its last line arrives ---
     cur.execute(f"SELECT {', '.join(LINE_COLS)} FROM invoice_line "
-                "WHERE batch_no = :1", [batch])
+                "WHERE batch_no = :1 ORDER BY invoice_id", [batch])
     n_embedded = 0
+    current_inv: str | None = None
+
+    def flush_invoice(inv_id):
+        doc = headers.pop(inv_id, None)
+        if doc is not None:
+            doc["lines"].sort(key=lambda l: (int(l.get("line_no", 0)),
+                                             l["_line_id"]))
+            inv_sink.add(doc)
+
     while rows := cur.fetchmany(10000):
         for row in rows:
             line_id, invoice_id = pk_str(row[0]), pk_str(row[2])
+            if invoice_id != current_inv:
+                if current_inv is not None:
+                    flush_invoice(current_inv)
+                current_inv = invoice_id
             base = {"_id": line_id, "unit": "mongo_invoices", "ns": ns}
             try:
                 line = to_doc(LINE_COLS, row)
             except UnicodeError:
-                quarantine.append({**base, "reason": "invalid_utf8",
-                                   "raw_repr": repr(row),
-                                   "attribution": "source bytes do not decode "
-                                                  "as UTF-8; quarantined raw"})
+                quarantine({**base, "reason": "invalid_utf8",
+                            "raw_repr": repr(row),
+                            "attribution": "source bytes do not decode "
+                                           "as UTF-8; quarantined raw"})
                 continue
             except Exception:
-                quarantine.append({**base, "reason": "invalid_record",
-                                   "raw_repr": repr(row)})
+                quarantine({**base, "reason": "invalid_record",
+                            "raw_repr": repr(row)})
                 continue
-            if invoice_id not in headers:
-                quarantine.append({**base, "reason": "orphaned_line",
-                                   "missing_invoice_id": invoice_id,
-                                   "line": line,
-                                   "attribution": "no matching INVOICE_HEADER row; "
-                                                  "quarantined, not embedded"})
+            if invoice_id in bad_header_ids:
+                quarantine({**base, "reason": "header_quarantined",
+                            "header_invoice_id": invoice_id,
+                            "line": line,
+                            "attribution": "header row exists in source but was "
+                                           "quarantined (invalid_utf8); line set "
+                                           "aside with it, not an orphan"})
+                continue
+            if invoice_id not in header_ids:
+                quarantine({**base, "reason": "orphaned_line",
+                            "missing_invoice_id": invoice_id,
+                            "line": line,
+                            "attribution": "no matching INVOICE_HEADER row; "
+                                           "quarantined, not embedded"})
                 continue
             if "amount" not in line:
-                quarantine.append({**base, "reason": "null_amount",
-                                   "line": line,
-                                   "attribution": "NULL amount is never coerced to 0"})
+                quarantine({**base, "reason": "null_amount",
+                            "line": line,
+                            "attribution": "NULL amount is never coerced to 0"})
                 continue
             line.pop("line_id")
             line["_line_id"] = line_id
             headers[invoice_id]["lines"].append(line)
             n_embedded += 1
+    if current_inv is not None:
+        flush_invoice(current_inv)
     cur.close()
     conn.close()
 
-    for doc in headers.values():
-        doc["lines"].sort(key=lambda l: (int(l.get("line_no", 0)), l["_line_id"]))
+    for doc in headers.values():  # headers with no lines at all
+        inv_sink.add(doc)
 
-    # --- write to Mongo: idempotent upserts keyed on the deterministic ids ---
-    client = MongoClient(tp_common.mongo_uri(args.run_mode))
-    invoices = client[tp_common.target_db_name(ns)]["invoices"]
-    qcoll = client[tp_common.quarantine_db_name(ns)]["invoice_lines_quarantine"]
-
-    def sync(coll, docs_by_id):
-        ops = [ReplaceOne({"_id": _id}, doc, upsert=True)
-               for _id, doc in docs_by_id.items()]
-        for i in range(0, len(ops), 1000):
-            coll.bulk_write(ops[i:i + 1000], ordered=False)
-        existing = {d["_id"] for d in coll.find({"ns": ns}, {"_id": 1})}
-        stale = sorted(existing - set(docs_by_id))
-        if stale:
-            coll.delete_many({"_id": {"$in": stale}, "ns": ns})
-        return len(stale)
-
-    stale_inv = sync(invoices, headers)
-    stale_q = sync(qcoll, {d["_id"]: d for d in quarantine})
-    n_orphans = sum(1 for d in quarantine if d["reason"] == "orphaned_line")
-    print(f"[migrate] ns={ns} invoices={len(headers)} embedded_lines={n_embedded} "
-          f"quarantined={len(quarantine)} (orphaned_line={n_orphans}) "
-          f"pruned_stale={stale_inv + stale_q}")
+    stale = inv_sink.finish() + q_sink.finish()
+    n_quarantined = sum(q_reasons.values())
+    print(f"[migrate] ns={ns} invoices={inv_sink.count} embedded_lines={n_embedded} "
+          f"quarantined={n_quarantined} "
+          f"(orphaned_line={q_reasons.get('orphaned_line', 0)}) "
+          f"pruned_stale={stale}")
     client.close()
     return 0
 
