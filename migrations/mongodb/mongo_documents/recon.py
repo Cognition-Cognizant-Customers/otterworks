@@ -16,9 +16,16 @@ Checksum line formats mirror testdata/legacy/seed.py exactly:
 Emits a recon report valid against
 docs/tech-partnerships/contracts/schema/recon-report.schema.json.
 
-Usage:
+Usage (two-pass, because the report schema requires a proven rerun):
+    uv run migrations/mongodb/mongo_documents/recon.py --ns <ns> --out /tmp/baseline.json
+    uv run migrations/mongodb/mongo_documents/migrate.py --ns <ns>   # rerun
     uv run migrations/mongodb/mongo_documents/recon.py --ns <ns> \
-        [--run-mode fixture|live] [--out <path>] [--idempotency-rerun-performed]
+        --idempotency-rerun-performed --baseline /tmp/baseline.json
+
+Without --idempotency-rerun-performed the output is a `recon-baseline`
+snapshot (not a recon-report): the report schema constrains
+`idempotency_rerun.performed` to `true`, so only a rerun-proven pass may emit
+the final `*.recon.json` artifact.
 """
 
 from __future__ import annotations
@@ -188,7 +195,6 @@ def main() -> int:
               actual["policy_violation_quarantine_count"], src),
     ]
 
-    idempotency: dict = {"performed": False, "result": "fail"}
     if args.idempotency_rerun_performed:
         if not args.baseline:
             print("--idempotency-rerun-performed requires --baseline", file=sys.stderr)
@@ -204,15 +210,23 @@ def main() -> int:
                          " counts, checksums, and anomaly enumerations"),
         }
 
+    else:
+        if not args.out:
+            print("without --idempotency-rerun-performed this run is a baseline "
+                  "snapshot and requires --out (the schema-valid recon report "
+                  "needs a proven rerun)", file=sys.stderr)
+            return 2
+        idempotency = None
+
     report = {
-        "kind": "recon-report",
+        "kind": "recon-report" if idempotency else "recon-baseline",
         "unit": UNIT,
         "namespace": ns,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "run_mode": args.run_mode,
         "checks": checks,
         "values_recomputed_from_target": True,
-        "idempotency_rerun": idempotency,
+        **({"idempotency_rerun": idempotency} if idempotency else {}),
         "planted_anomaly_detections": {
             "expected_set": expected_anomalies,
             "actual_set": actual_anomalies,

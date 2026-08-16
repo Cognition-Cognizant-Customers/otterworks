@@ -31,8 +31,11 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import re
 import sys
+from datetime import timezone
 
 import psycopg2
 import psycopg2.extras
@@ -65,20 +68,39 @@ def log(msg: str) -> None:
 
 
 class QuarantineError(Exception):
-    def __init__(self, reason: str, field: str | None = None) -> None:
+    """Carries the offending row and table so attribution is accurate."""
+
+    def __init__(self, reason: str, row: dict, table: str) -> None:
         super().__init__(reason)
         self.reason = reason
-        self.field = field
+        self.row = row
+        self.table = table
 
 
-def null_violations(row: dict, not_null: tuple[str, ...]) -> None:
+def null_violations(row: dict, not_null: tuple[str, ...], table: str) -> None:
     for col in not_null:
         if row.get(col) is None:
-            raise QuarantineError(f"NULL in NOT NULL column '{col}'", field=col)
+            raise QuarantineError(f"NULL in NOT NULL column '{col}'", row, table)
 
 
 def iso(dt) -> str:
+    if getattr(dt, "tzinfo", None) is not None:
+        dt = dt.astimezone(timezone.utc)
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def quarantine_key(ns: str, kind: str, row: dict) -> str:
+    """Deterministic quarantine _id that never collides for id-less rows.
+
+    A row whose own `id` is NULL keys on a content hash of the full row so
+    multiple such rows never collapse onto one quarantine entry.
+    """
+    if row.get("id") is not None:
+        return det_id(ns, f"quarantine:{kind}", str(row["id"]))
+    fingerprint = hashlib.md5(json.dumps(
+        {k: (iso(v) if hasattr(v, "strftime") else str(v))
+         for k, v in sorted(row.items())}, sort_keys=True).encode()).hexdigest()
+    return det_id(ns, f"quarantine:{kind}:rowhash", fingerprint)
 
 
 def quarantine_doc(ns: str, kind: str, source_table: str, row: dict,
@@ -86,7 +108,7 @@ def quarantine_doc(ns: str, kind: str, source_table: str, row: dict,
     source = {k: (iso(v) if hasattr(v, "strftime") else v)
               for k, v in row.items() if v is not None}
     return {
-        "_id": det_id(ns, f"quarantine:{kind}", str(row["id"])),
+        "_id": quarantine_key(ns, kind, row),
         "unit": UNIT,
         "ns": ns,
         "kind": kind,
@@ -109,9 +131,9 @@ def fetch_all(cur, schema: str, table: str, order_by: str) -> list[dict]:
     return [dict(r) for r in cur.fetchall()]
 
 
-def build_document(ns: str, row: dict, versions: list[dict],
+def build_document(ns: str, schema: str, row: dict, versions: list[dict],
                    snapshots: list[dict]) -> dict:
-    null_violations(row, DOC_NOT_NULL)
+    null_violations(row, DOC_NOT_NULL, f"{schema}.documents")
     doc_id = str(row["id"])
     doc = {
         "_id": det_id(ns, "document", doc_id),
@@ -134,8 +156,10 @@ def build_document(ns: str, row: dict, versions: list[dict],
     if row.get("folder_id") is not None:  # NULL columns become omitted fields
         doc["folder_id"] = str(row["folder_id"])
 
-    for ver in sorted(versions, key=lambda v: v["version_number"]):
-        null_violations(ver, VER_NOT_NULL)
+    for ver in sorted(versions,
+                      key=lambda v: (v["version_number"] is None,
+                                     v["version_number"] or 0)):
+        null_violations(ver, VER_NOT_NULL, f"{schema}.document_versions")
         doc["versions"].append({
             "source_id": str(ver["id"]),
             "version_number": ver["version_number"],
@@ -146,7 +170,7 @@ def build_document(ns: str, row: dict, versions: list[dict],
         })
 
     for snap in sorted(snapshots, key=lambda s: str(s["id"])):
-        null_violations(snap, SNAP_NOT_NULL)
+        null_violations(snap, SNAP_NOT_NULL, f"{schema}.document_snapshots")
         ref = {
             "source_id": str(snap["id"]),
             "state_b64": snap["state_b64"],
@@ -192,25 +216,42 @@ def main() -> int:
     for snap in snapshots:
         snaps_by_doc.setdefault(str(snap["document_id"]), []).append(snap)
 
-    doc_ids = {str(row["id"]) for row in docs}
     quarantine_ops: list[ReplaceOne] = []
     doc_ops: list[ReplaceOne] = []
+    migrated_doc_ids: set[str] = set()
     embedded_versions = 0
     gap_docs: list[str] = []
     orphan_snaps: list[str] = []
 
+    def quarantine(kind: str, table: str, row: dict, reason: str) -> None:
+        q = quarantine_doc(ns, kind, table, row, reason)
+        quarantine_ops.append(ReplaceOne({"_id": q["_id"]}, q, upsert=True))
+
     for row in docs:
-        doc_id = str(row["id"])
+        doc_id = str(row["id"]) if row.get("id") is not None else None
+        doc_versions = versions_by_doc.get(doc_id, []) if doc_id else []
+        doc_snapshots = snaps_by_doc.get(doc_id, []) if doc_id else []
         try:
-            doc = build_document(
-                ns, row, versions_by_doc.get(doc_id, []),
-                snaps_by_doc.get(doc_id, []),
-            )
+            doc = build_document(ns, schema, row, doc_versions, doc_snapshots)
         except QuarantineError as exc:
-            q = quarantine_doc(ns, "policy_violation", f"{schema}.documents",
-                               row, exc.reason)
-            quarantine_ops.append(ReplaceOne({"_id": q["_id"]}, q, upsert=True))
+            # Quarantine the offending row with accurate attribution, then
+            # the document row and every attached history row so nothing
+            # silently disappears from the migrated output or the ledger.
+            quarantine("policy_violation", exc.table, exc.row, exc.reason)
+            parent_reason = (f"parent document {row.get('id')} quarantined: "
+                             f"{exc.reason} in {exc.table}")
+            if exc.row is not row:
+                quarantine("policy_violation", f"{schema}.documents", row,
+                           parent_reason)
+            for child_table, children in (
+                    (f"{schema}.document_versions", doc_versions),
+                    (f"{schema}.document_snapshots", doc_snapshots)):
+                for child in children:
+                    if child is not exc.row:
+                        quarantine("policy_violation", child_table, child,
+                                   parent_reason)
             continue
+        migrated_doc_ids.add(doc_id)
         embedded_versions += len(doc["versions"])
         gaps = contiguous_gaps([v["version_number"] for v in doc["versions"]],
                                doc["version"])
@@ -218,14 +259,18 @@ def main() -> int:
             gap_docs.append(doc_id)
         doc_ops.append(ReplaceOne({"_id": doc["_id"]}, doc, upsert=True))
 
-    for snap in snapshots:  # snapshots referencing missing documents quarantine
-        if str(snap["document_id"]) not in doc_ids:
-            q = quarantine_doc(
-                ns, "orphaned_snapshot", f"{schema}.document_snapshots", snap,
-                f"document_id {snap['document_id']} not found in {schema}.documents",
-            )
-            quarantine_ops.append(ReplaceOne({"_id": q["_id"]}, q, upsert=True))
-            orphan_snaps.append(str(snap["id"]))
+    source_doc_ids = {str(row["id"]) for row in docs if row.get("id") is not None}
+    for snap in snapshots:
+        snap_doc_id = str(snap["document_id"]) if snap.get("document_id") is not None else None
+        if snap_doc_id in migrated_doc_ids:
+            continue
+        if snap_doc_id in source_doc_ids:
+            continue  # parent exists but was quarantined; handled above
+        quarantine(
+            "orphaned_snapshot", f"{schema}.document_snapshots", snap,
+            f"document_id {snap['document_id']} not found in {schema}.documents",
+        )
+        orphan_snaps.append(str(snap["id"]))
 
     client: MongoClient = MongoClient(mongo_uri())
     try:

@@ -100,7 +100,7 @@
       "source_of_truth": "recomputed from MongoDB ow_tp_mongodb_demo / ow_tp_mongodb_demo_quarantine"
     }
   ],
-  "generated_at": "2026-08-16T18:19:42Z",
+  "generated_at": "2026-08-16T18:27:49Z",
   "idempotency_rerun": {
     "evidence": "rerun of migrate.py followed by a fresh recompute produced identical counts, checksums, and anomaly enumerations",
     "performed": true,
