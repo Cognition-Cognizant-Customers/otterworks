@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean
 
 SHELL := /bin/bash
 
@@ -21,6 +21,9 @@ tp-preflight-atlas: ## Check MongoDB Atlas capability paths and emit a manifest
 
 tp-preflight-aws: ## Check AWS capability paths and leftovers
 	scripts/tp-preflight-aws.sh
+
+tp-validate-schemas: ## Validate the contract/recon schemas themselves against their metaschema
+	uv run --no-project --with check-jsonschema==0.38.0 check-jsonschema --check-metaschema docs/tech-partnerships/contracts/schema/*.schema.json
 
 tp-validate-contracts: ## Validate JSON contracts (intentionally fails until prose contracts are migrated)
 	uv run --no-project --with jsonschema==4.25.1 --with rfc3339-validator==0.1.4 python3 scripts/tp_validate.py contracts
