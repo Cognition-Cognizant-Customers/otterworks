@@ -126,6 +126,25 @@ trust = json.dumps({"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "
 created, detail = aws("iam-role-create", "Create a temporary IAM role to prove role creation permission", ["iam", "create-role", "--role-name", role, "--assume-role-policy-document", trust])
 if created:
     aws("iam-role-delete", "Delete the temporary IAM role", ["iam", "delete-role", "--role-name", role])
+elif "TimeoutExpired" in detail:
+    found, lookup_detail = aws(
+        "iam-role-reconcile",
+        "Reconcile an ambiguous temporary IAM role create",
+        ["iam", "get-role", "--role-name", role],
+        required=False,
+        record=False,
+    )
+    if found:
+        m.add("iam-role-reconcile", "Reconcile an ambiguous temporary IAM role create",
+              "iam:GetRole", "verified", f"role {role} exists after ambiguous create")
+        aws("iam-role-delete", "Delete the temporary IAM role", ["iam", "delete-role", "--role-name", role])
+    elif "NoSuchEntity" in lookup_detail or "not found" in lookup_detail.lower():
+        m.add("iam-role-reconcile", "Reconcile an ambiguous temporary IAM role create",
+              "iam:GetRole", "verified", f"role {role} was not found after ambiguous create")
+    else:
+        m.add("iam-role-reconcile", "Reconcile an ambiguous temporary IAM role create",
+              "iam:GetRole", "denied",
+              f"role {role} may exist; manual IAM cleanup may be required")
 else:
     m.add("iam-role-delete", "Delete the temporary IAM role", "iam:DeleteRole", "skipped", "role was not created")
 

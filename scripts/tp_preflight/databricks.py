@@ -69,7 +69,10 @@ def call(method: str, path: str, body=None):
             return response.status, json.loads(raw) if raw else {}
     except urllib.error.HTTPError as exc:
         raw = exc.read().decode(errors="replace")
-        return exc.code, raw
+        try:
+            return exc.code, json.loads(raw)
+        except json.JSONDecodeError:
+            return exc.code, raw[:300]
     except Exception as exc:
         return 0, exception_detail(exc)
 
