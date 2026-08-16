@@ -6,7 +6,16 @@ memory) and diffs against the immutable golden baseline manifest
 (testdata/legacy/manifests/<ns>.json). Emits a recon report valid against
 docs/tech-partnerships/contracts/schema/recon-report.schema.json.
 
-Usage: python3 recon_customers.py --ns demo --run-mode fixture --out <path>
+Standalone usage proves idempotency itself (mirroring the mongo_files unit):
+run once without --compare to write a baseline snapshot (intermediate, NOT
+committable), rerun the migration, then run again with --compare <baseline>
+to emit the schema-valid report with real rerun evidence.
+
+Usage:
+  python3 recon_customers.py --ns demo --out /tmp/baseline.json
+  python3 migrate_customers.py --ns demo
+  python3 recon_customers.py --ns demo --run-mode fixture \
+      --compare /tmp/baseline.json --out <report.recon.json>
 """
 
 import argparse
@@ -175,21 +184,39 @@ def main() -> int:
     ap.add_argument("--ns", required=True)
     ap.add_argument("--run-mode", choices=["fixture", "live"], default="fixture")
     ap.add_argument("--out", required=True)
-    ap.add_argument("--idempotency-result", choices=["pass", "fail"],
-                    required=True)
-    ap.add_argument("--idempotency-evidence", required=True)
+    ap.add_argument("--compare", help="baseline snapshot from a previous run; "
+                    "required to emit a committable report with real rerun "
+                    "evidence")
     args = ap.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9_]+", args.ns):
         print("NS must match ^[A-Za-z0-9_]+$", file=sys.stderr)
         return 2
-    report = build_report(
-        args.ns, args.run_mode, compute(args.ns),
-        {"performed": True, "result": args.idempotency_result,
-         "evidence": args.idempotency_evidence})
+    actual = compute(args.ns)
+    if not args.compare:
+        with open(args.out, "w") as f:
+            json.dump(actual, f, indent=2)
+            f.write("\n")
+        print(f"[{UNIT}] baseline snapshot written to {args.out} "
+              "(intermediate, NOT committable); rerun the migration and pass "
+              "--compare to emit the report with rerun evidence")
+        return 0
+    with open(args.compare) as f:
+        baseline = json.load(f)
+    identical = baseline == actual
+    idempotency = {
+        "performed": True,
+        "result": "pass" if identical else "fail",
+        "evidence": ("recon values recomputed from the target after a rerun "
+                     f"are {'identical to' if identical else 'DIFFERENT from'} "
+                     f"the baseline snapshot {args.compare}"),
+    }
+    report = build_report(args.ns, args.run_mode, actual, idempotency)
     with open(args.out, "w") as f:
         json.dump(report, f, indent=2)
         f.write("\n")
     failed = [c["id"] for c in report["checks"] if c["result"] != "pass"]
+    if not identical:
+        failed.append("idempotency-rerun")
     print(f"[{UNIT}] recon written to {args.out}; "
           f"{'FAIL: ' + ','.join(failed) if failed else 'all checks pass'}")
     return 1 if failed else 0
