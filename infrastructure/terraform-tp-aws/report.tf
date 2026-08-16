@@ -177,6 +177,7 @@ data "aws_iam_policy_document" "chain_permissions" {
       "logs:UpdateLogDelivery",
       "logs:DeleteLogDelivery",
       "logs:ListLogDeliveries",
+      "logs:PutLogEvents",
       "logs:PutResourcePolicy",
       "logs:DescribeResourcePolicies",
       "logs:DescribeLogGroups",
