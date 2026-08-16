@@ -10,7 +10,7 @@ import uuid
 from requests import delete, get, post
 from requests.auth import HTTPDigestAuth
 
-from common import Manifest, require_env
+from common import Manifest, exception_detail, require_env
 
 require_env("MONGODB_ATLAS_PUBLIC_KEY", "MONGODB_ATLAS_PRIVATE_KEY", "MONGODB_ATLAS_PROJECT_ID")
 base = os.environ.get("TP_ATLAS_API_BASE", "https://cloud.mongodb.com/api/atlas/v2").rstrip("/")
@@ -34,7 +34,7 @@ def check(pid, description, method, url, **kwargs):
         m.add(pid, description, url, result, detail)
         return r
     except Exception as exc:
-        m.add(pid, description, url, "denied", str(exc))
+        m.add(pid, description, url, "denied", exception_detail(exc))
         return None
 
 
@@ -94,7 +94,7 @@ def db_user_write():
         db.drop_collection(name)
         m.add("db-user-write", "Insert and delete a temporary document with the DB user", "MongoDB wire protocol", "verified", "temporary collection cleaned")
     except Exception as exc:
-        m.add("db-user-write", "Insert and delete a temporary document with the DB user", "MongoDB wire protocol", "denied", str(exc))
+        m.add("db-user-write", "Insert and delete a temporary document with the DB user", "MongoDB wire protocol", "denied", exception_detail(exc))
 
 
 def access_list_snapshot():
@@ -120,7 +120,7 @@ def access_list_snapshot():
                 break
             page += 1
         except Exception as exc:
-            m.add("access-list-read", "Read the Atlas API access list", url, "denied", str(exc))
+            m.add("access-list-read", "Read the Atlas API access list", url, "denied", exception_detail(exc))
             return None
     m.add("access-list-read", "Read the Atlas API access list",
           f"{base}/groups/{project}/accessList", "verified",

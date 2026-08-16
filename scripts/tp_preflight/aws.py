@@ -6,9 +6,8 @@ import os
 import subprocess
 import uuid
 
-from common import Manifest, require_env
+from common import Manifest, exception_detail
 
-require_env("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")
 m = Manifest("aws")
 region = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
 name_prefix = os.environ.get("TP_AWS_NAME_PREFIX", "ow-tp-")
@@ -34,8 +33,8 @@ def aws(pid, description, args, required=True, record=True):
         return p.returncode == 0, raw
     except Exception as exc:
         if record:
-            m.add(pid, description, "aws " + " ".join(args), "denied", str(exc))
-        return False, str(exc)
+            m.add(pid, description, "aws " + " ".join(args), "denied", exception_detail(exc))
+        return False, exception_detail(exc)
 
 
 def leftover_scan(pid, description, args, extractor):
@@ -74,7 +73,7 @@ def simulate_permission(pid, description, caller_arn, action):
               f"decision={decision or 'unavailable'}")
         return result == "verified"
     except Exception as exc:
-        m.add(pid, description, "aws " + " ".join(args), "denied", str(exc))
+        m.add(pid, description, "aws " + " ".join(args), "denied", exception_detail(exc))
         return False
 
 

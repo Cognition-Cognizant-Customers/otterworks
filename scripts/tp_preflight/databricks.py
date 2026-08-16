@@ -10,7 +10,7 @@ import urllib.request
 import uuid
 import urllib.parse
 
-from common import Manifest, require_env
+from common import Manifest, exception_detail, require_env
 
 
 require_env("DATABRICKS_DEMO_HOST", "DATABRICKS_DEMO_TOKEN")
@@ -49,11 +49,11 @@ def call(method: str, path: str, body=None):
         raw = exc.read().decode(errors="replace")
         return exc.code, raw
     except Exception as exc:
-        return 0, str(exc)
+        return 0, exception_detail(exc)
 
 
 def sql_call(statement: str, warehouse_id: str):
-    status, body = call(
+    initial_status, body = call(
         "POST",
         "/api/2.0/sql/statements",
         {
@@ -63,7 +63,8 @@ def sql_call(statement: str, warehouse_id: str):
             "on_wait_timeout": "CANCEL",
         },
     )
-    if 200 <= status < 300 and isinstance(body, dict):
+    status = initial_status
+    if 200 <= initial_status < 300 and isinstance(body, dict):
         statement_id = body.get("statement_id")
         state = body.get("status", {}).get("state")
         for _ in range(30):
@@ -72,11 +73,11 @@ def sql_call(statement: str, warehouse_id: str):
             time.sleep(1)
             status, body = call("GET", f"/api/2.0/sql/statements/{statement_id}")
             state = body.get("status", {}).get("state") if isinstance(body, dict) else None
-    return status, body
+    return status, body, 200 <= initial_status < 300
 
 
 def sql_detail(result):
-    status, body = result
+    status, body, _ = result
     if not isinstance(body, dict):
         return f"HTTP {status}"
     statement_status = body.get("status", {})
@@ -107,7 +108,7 @@ def probe(pid, description, api, action, cleanup=None):
             return detail
         manifest.add(pid, description, api, "denied", f"HTTP {status}: {detail}")
     except Exception as exc:
-        manifest.add(pid, description, api, "denied", str(exc))
+        manifest.add(pid, description, api, "denied", exception_detail(exc))
     finally:
         if cleanup:
             cleanup()
@@ -133,7 +134,7 @@ try:
     with urllib.request.urlopen(req, timeout=30) as r:
         manifest.add("files-get-directory", "List the landing volume directory", "Files API GET", "verified", f"HTTP {r.status}")
 except Exception as exc:
-    manifest.add("files-get-directory", "List the landing volume directory", "Files API GET", "denied", str(exc))
+    manifest.add("files-get-directory", "List the landing volume directory", "Files API GET", "denied", exception_detail(exc))
 try:
     req = urllib.request.Request(HOST + file_api, data=payload, headers={"Authorization": f"Bearer {TOKEN}"}, method="PUT")
     with urllib.request.urlopen(req, timeout=30) as r:
@@ -145,7 +146,7 @@ try:
         result = "verified" if got == payload else "denied"
         manifest.add("files-get-file", "Read the temporary landing file", "Files API GET", result, f"HTTP {r.status}, {len(got)} bytes")
 except Exception as exc:
-    manifest.add("files-put-get", "Write and read a temporary landing file", "Files API PUT/GET", "denied", str(exc))
+    manifest.add("files-put-get", "Write and read a temporary landing file", "Files API PUT/GET", "denied", exception_detail(exc))
 finally:
     if put_succeeded:
         req = urllib.request.Request(HOST + file_api, headers={"Authorization": f"Bearer {TOKEN}"}, method="DELETE")
@@ -153,7 +154,7 @@ finally:
             with urllib.request.urlopen(req, timeout=30) as r:
                 manifest.add("files-delete", "Delete the temporary landing file", "Files API DELETE", "verified", f"HTTP {r.status}")
         except Exception as exc:
-            manifest.add("files-delete", "Delete the temporary landing file", "Files API DELETE", "denied", str(exc))
+            manifest.add("files-delete", "Delete the temporary landing file", "Files API DELETE", "denied", exception_detail(exc))
     else:
         manifest.add("files-delete", "Delete the temporary landing file", "Files API DELETE", "skipped", "PUT did not create a file")
 
@@ -166,7 +167,7 @@ if not warehouse_id and 200 <= warehouse_probe[0] < 300:
             break
 schema = f"ow_tp_preflight_{uuid.uuid4().hex[:12]}"
 created_schema = sql_call(f"CREATE SCHEMA {catalog}.{schema}", warehouse_id)
-create_accepted = 200 <= created_schema[0] < 300
+create_accepted = created_schema[2]
 create_succeeded = create_accepted and isinstance(created_schema[1], dict) and created_schema[1].get("status", {}).get("state") == "SUCCEEDED"
 if create_succeeded:
     listed_schema = call("GET", f"/api/2.1/unity-catalog/schemas?catalog_name={urllib.parse.quote(catalog)}")

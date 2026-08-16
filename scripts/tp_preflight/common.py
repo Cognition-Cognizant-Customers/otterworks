@@ -31,7 +31,18 @@ class Manifest:
     def _redact(detail: str) -> str:
         secrets = [
             value for key, value in os.environ.items()
-            if value and any(token in key.upper() for token in ("TOKEN", "SECRET", "PRIVATE_KEY", "ACCESS_KEY", "URI"))
+            if value and (
+                key in {
+                    "MONGODB_ATLAS_PUBLIC_KEY",
+                    "MONGODB_ATLAS_PRIVATE_KEY",
+                    "MONGODB_ATLAS_PROJECT_ID",
+                    "DATABRICKS_DEMO_HOST",
+                    "DATABRICKS_DEMO_TOKEN",
+                    "AWS_ACCESS_KEY_ID",
+                    "AWS_SECRET_ACCESS_KEY",
+                }
+                or any(token in key.upper() for token in ("TOKEN", "SECRET", "PRIVATE_KEY", "ACCESS_KEY", "URI"))
+            )
         ]
         for secret in sorted(secrets, key=len, reverse=True):
             detail = detail.replace(secret, "[REDACTED]")
@@ -59,3 +70,9 @@ def require_env(*names: str) -> None:
     if missing:
         print(f"missing required environment variable(s): {', '.join(missing)}", file=sys.stderr)
         raise SystemExit(2)
+
+
+def exception_detail(exc: Exception) -> str:
+    line = str(exc).splitlines()[0][:240] if str(exc) else ""
+    line = re.sub(r"https?://\S+", "[URL]", line)
+    return f"{type(exc).__name__}: {line}" if line else type(exc).__name__
