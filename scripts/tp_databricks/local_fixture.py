@@ -77,6 +77,19 @@ def main() -> int:
         return 0
     if args.action == "land":
         source = validate_source(args.source)
+        manifest_name = Path("fixture-manifest.json")
+        collision = next(
+            (
+                src for src in files(source)
+                if src.relative_to(source) == manifest_name
+            ),
+            None,
+        )
+        if collision is not None:
+            raise SystemExit(
+                "source artifact collides with reserved fixture manifest path: "
+                f"{collision}"
+            )
         shutil.rmtree(landing, ignore_errors=True)
         landing.mkdir(parents=True, exist_ok=True)
         copied = []

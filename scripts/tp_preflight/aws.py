@@ -121,7 +121,8 @@ def aws(pid, description, args, required=True, record=True):
 def leftover_scan(pid, description, args, extractor, own_role=None, classify_iam=False):
     ok, raw = aws(pid, description, args, required=True, record=False)
     if not ok:
-        m.add(pid, description, "aws " + " ".join(args), "denied", "scan command failed")
+        m.add(pid, description, "aws " + " ".join(args), "denied",
+              raw.strip() or "scan command failed")
         return False
     try:
         body = {} if not raw.strip() else json.loads(raw)
