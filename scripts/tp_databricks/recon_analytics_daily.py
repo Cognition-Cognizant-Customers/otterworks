@@ -284,8 +284,8 @@ def check_2(baseline: dict, converted: dict) -> Check:
             f"collapsed all {baseline['total_events']} events into {len(baseline_groups)} groups at "
             "hour='00'/user_id='unknown' with no event date dimension; the converted job attributes them across "
             f"{len(converted_groups)} groups/{converted['hours']} hours/{converted['users']} users/"
-            f"{converted['dates']} dates. Every dimension the baseline does carry is compared exactly "
-            "above and matches."
+            f"{converted['dates']} dates. Dimension-free and per-event_type totals match exactly; "
+            "the hour/user attribution differences are shown above and qualify only under this signature."
         )
     else:
         check.resolve(False)
