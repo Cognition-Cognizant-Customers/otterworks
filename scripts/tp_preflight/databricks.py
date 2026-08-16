@@ -335,20 +335,27 @@ def reconcile_schema():
                  sql_detail(dropped))
 
 
-register_cleanup("schema", reconcile_schema)
-try:
-    schema_result = sql_call(f"CREATE SCHEMA {catalog}.{schema}", warehouse_id)
-    if schema_result.state == "SUCCEEDED":
-        listed_schema = call("GET", f"/api/2.1/unity-catalog/schemas?catalog_name={urllib.parse.quote(catalog)}")
-        manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema",
-                     "SQL Statement + Unity Catalog APIs",
-                     "verified" if 200 <= listed_schema[0] < 300 else "denied",
-                     f"{sql_detail(schema_result)}; list HTTP {listed_schema[0]}")
-    else:
-        manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema",
-                     "SQL Statement + Unity Catalog APIs", "denied", sql_detail(schema_result))
-finally:
-    cleanup_all()
+if warehouse_id:
+    register_cleanup("schema", reconcile_schema)
+    try:
+        schema_result = sql_call(f"CREATE SCHEMA {catalog}.{schema}", warehouse_id)
+        if schema_result.state == "SUCCEEDED":
+            listed_schema = call("GET", f"/api/2.1/unity-catalog/schemas?catalog_name={urllib.parse.quote(catalog)}")
+            manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema",
+                         "SQL Statement + Unity Catalog APIs",
+                         "verified" if 200 <= listed_schema[0] < 300 else "denied",
+                         f"{sql_detail(schema_result)}; list HTTP {listed_schema[0]}")
+        else:
+            manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema",
+                         "SQL Statement + Unity Catalog APIs", "denied", sql_detail(schema_result))
+    finally:
+        cleanup_all()
+else:
+    no_warehouse_detail = "no usable SQL warehouse was available"
+    manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema",
+                 "SQL Statement + Unity Catalog APIs", "skipped", no_warehouse_detail)
+    manifest.add("uc-schema-delete", "Reconcile the temporary Unity Catalog schema",
+                 "SQL Statement", "skipped", no_warehouse_detail)
 
 job_name = f"ow_tp_preflight_{uuid.uuid4().hex[:8]}"
 def reconcile_job():
