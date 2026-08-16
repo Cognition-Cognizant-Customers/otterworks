@@ -257,12 +257,23 @@ finally:
 
 warehouse_probe = call("GET", "/api/2.0/sql/warehouses")
 warehouse_id = configured_warehouse_id
+discovered_warehouse_id = False
 if not warehouse_id and 200 <= warehouse_probe[0] < 300 and isinstance(warehouse_probe[1], dict):
     for warehouse in warehouse_probe[1].get("warehouses", []):
         if warehouse.get("enable_serverless_compute") or warehouse.get("warehouse_type") == "PRO":
             warehouse_id = warehouse.get("id", "")
+            discovered_warehouse_id = True
             break
-if warehouse_id and not re.fullmatch(r"[A-Za-z0-9]+", warehouse_id):
+if discovered_warehouse_id and not re.fullmatch(r"[A-Za-z0-9]+", warehouse_id):
+    manifest.add(
+        "warehouse-id",
+        "Use the discovered SQL warehouse",
+        "SQL Warehouses API",
+        "denied",
+        f"discovered warehouse id unusable: {warehouse_id!r}",
+    )
+    warehouse_id = ""
+elif warehouse_id and not re.fullmatch(r"[A-Za-z0-9]+", warehouse_id):
     raise SystemExit(
         "DATABRICKS_SQL_WAREHOUSE_ID must match [A-Za-z0-9]+: "
         f"{warehouse_id!r}"
