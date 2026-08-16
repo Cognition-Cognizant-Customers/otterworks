@@ -138,6 +138,18 @@ def empty_prefix(s3, bucket: str, prefix: str) -> int:
     return deleted
 
 
+def delete_keys(s3, bucket: str, keys: list[str]) -> int:
+    """Delete an arbitrary key set in S3 API-sized batches."""
+    deleted = 0
+    for start in range(0, len(keys), 1000):
+        response = s3.delete_objects(
+            Bucket=bucket,
+            Delete={"Objects": [{"Key": key} for key in keys[start : start + 1000]]},
+        )
+        deleted += len(response.get("Deleted", []))
+    return deleted
+
+
 def build(ns: str) -> dict:
     s3 = _client("s3")
     for bucket in (FILE_STORAGE_BUCKET, QUARANTINE_BUCKET):
@@ -163,10 +175,7 @@ def build(ns: str) -> dict:
             if obj["Key"] in planted_keys
         )
     if file_stale:
-        response = s3.delete_objects(
-            Bucket=FILE_STORAGE_BUCKET, Delete={"Objects": file_stale}
-        )
-        removed += len(response.get("Deleted", []))
+        removed += delete_keys(s3, FILE_STORAGE_BUCKET, [item["Key"] for item in file_stale])
 
     # The legacy script appends the source key after its date prefix. Remove
     # only quarantine copies ending in this namespace's planted source keys.
@@ -180,10 +189,9 @@ def build(ns: str) -> dict:
             if any(obj["Key"].endswith(key) for key in planted_keys)
         )
     if quarantine_stale:
-        response = s3.delete_objects(
-            Bucket=QUARANTINE_BUCKET, Delete={"Objects": quarantine_stale}
+        removed += delete_keys(
+            s3, QUARANTINE_BUCKET, [item["Key"] for item in quarantine_stale]
         )
-        removed += len(response.get("Deleted", []))
 
     items = scan_metadata(ns)
     live_keys = sorted({i["storage_key"] for i in items if "/files/" in i["storage_key"]})
