@@ -210,7 +210,8 @@ def main() -> int:
     print(f"[recon] report written: {out}")
     print(f"[recon] checks: {len(checks) - len(failed)}/{len(checks)} pass"
           + (f" (FAILED: {', '.join(failed)})" if failed else ""))
-    return 1 if failed else 0
+    print(f"[recon] idempotency_rerun: result={idem['result']}")
+    return 1 if (failed or idem["result"] != "pass") else 0
 
 
 if __name__ == "__main__":

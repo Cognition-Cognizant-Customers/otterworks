@@ -8,10 +8,10 @@ ow_tp_mongodb_<ns>_quarantine.invoice_lines_quarantine — never dropped and nev
 embedded under a fabricated header. NULL source columns are omitted fields;
 a NULL amount is attributed, never coerced to 0.
 
-Deterministic and idempotent: documents are keyed on the source primary keys
-(deterministic md5-uuids), reruns upsert and prune only ids that vanished from
-the same namespace's source batch, and no wall-clock values are embedded.
-An empty/absent source namespace is a strict no-op.
+Deterministic and idempotent: documents are keyed on uuid5 ids derived from
+the source primary keys, reruns upsert in place, prior target output is never
+removed, and no wall-clock values are embedded. An empty/absent source
+namespace is a strict no-op.
 """
 
 import argparse
@@ -106,8 +106,8 @@ def main() -> int:
               "no-op, target left untouched")
         return 0
 
-    # --- Mongo sinks: buffered idempotent upserts + stale-id prune at the end,
-    # so memory stays bounded regardless of namespace scale ---
+    # --- Mongo sinks: buffered idempotent upserts (never deletes), so memory
+    # stays bounded regardless of namespace scale ---
     client = MongoClient(tp_common.mongo_uri(args.run_mode))
     invoices = client[tp_common.target_db_name(ns)]["invoices"]
     qcoll = client[tp_common.quarantine_db_name(ns)]["invoice_lines_quarantine"]
@@ -124,15 +124,10 @@ def main() -> int:
                 self.coll.bulk_write(self.buf, ordered=False)
                 self.buf.clear()
 
-        def finish(self) -> int:
+        def finish(self):
             if self.buf:
                 self.coll.bulk_write(self.buf, ordered=False)
                 self.buf.clear()
-            existing = {d["_id"] for d in self.coll.find({"ns": ns}, {"_id": 1})}
-            stale = sorted(existing - self.ids)
-            if stale:
-                self.coll.delete_many({"_id": {"$in": stale}, "ns": ns})
-            return len(stale)
 
     inv_sink, q_sink = Sink(invoices), Sink(qcoll)
     q_reasons: dict[str, int] = {}
@@ -236,12 +231,12 @@ def main() -> int:
     for doc in headers.values():  # headers with no lines at all
         inv_sink.add(doc)
 
-    stale = inv_sink.finish() + q_sink.finish()
+    inv_sink.finish()
+    q_sink.finish()
     n_quarantined = sum(q_reasons.values())
     print(f"[migrate] ns={ns} invoices={inv_sink.count} embedded_lines={n_embedded} "
           f"quarantined={n_quarantined} "
-          f"(orphaned_line={q_reasons.get('orphaned_line', 0)}) "
-          f"pruned_stale={stale}")
+          f"(orphaned_line={q_reasons.get('orphaned_line', 0)})")
     client.close()
     return 0
 
