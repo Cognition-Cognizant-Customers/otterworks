@@ -161,6 +161,7 @@ def cleanup_all():
 
 def handle_signal(signum, _frame):
     cleanup_all()
+    manifest.write("databricks")
     raise SystemExit(128 + signum)
 
 

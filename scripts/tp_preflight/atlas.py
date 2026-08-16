@@ -239,6 +239,7 @@ def cleanup_entries():
 
 def handle_signal(signum, _frame):
     cleanup_entries()
+    m.write("atlas")
     raise SystemExit(128 + signum)
 
 

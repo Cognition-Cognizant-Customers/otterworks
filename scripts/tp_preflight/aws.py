@@ -155,7 +155,26 @@ for service, args, desc in [
 
 role = f"{name_prefix}preflight-{uuid.uuid4().hex[:12]}"
 trust = json.dumps({"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}, "Action": "sts:AssumeRole"}]})
+create_succeeded = False
 def reconcile_role():
+    if create_succeeded:
+        deleted, delete_detail = aws(
+            "iam-role-delete",
+            "Delete the temporary IAM role",
+            ["iam", "delete-role", "--role-name", role],
+            required=False,
+            record=False,
+        )
+        if deleted:
+            m.add("iam-role-delete", "Delete the temporary IAM role",
+                  "iam:DeleteRole", "verified", "command succeeded")
+        elif "NoSuchEntity" in delete_detail or "not found" in delete_detail.lower():
+            m.add("iam-role-delete", "Delete the temporary IAM role",
+                  "iam:DeleteRole", "verified", "role was already absent")
+        else:
+            m.add("iam-role-delete", "Delete the temporary IAM role",
+                  "iam:DeleteRole", "denied", "role may still exist; manual IAM cleanup may be required")
+        return
     found, lookup_detail = aws(
         "iam-role-reconcile",
         "Reconcile the temporary IAM role",
@@ -178,8 +197,10 @@ def reconcile_role():
 
 cleanup_registry["iam-role"] = reconcile_role
 try:
-    aws("iam-role-create", "Create a temporary IAM role to prove role creation permission",
-        ["iam", "create-role", "--role-name", role, "--assume-role-policy-document", trust])
+    create_succeeded, _ = aws(
+        "iam-role-create", "Create a temporary IAM role to prove role creation permission",
+        ["iam", "create-role", "--role-name", role, "--assume-role-policy-document", trust],
+    )
 finally:
     cleanup_all()
 
