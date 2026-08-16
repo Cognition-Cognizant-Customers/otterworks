@@ -47,6 +47,38 @@ Shared rules:
 - `mongo_files/` — DynamoDB `otterworks-file-metadata`
   → `ow_tp_mongodb_<ns>.files` with orphaned/malformed metadata quarantined
   into `ow_tp_mongodb_<ns>_quarantine.files_quarantine`.
+- `mongo_customers/` — Oracle
+  `OW_BILLING.CUSTOMER_MASTER` (155 cols) + `ENTITY_ATTR_VALUE` →
+  `ow_tp_mongodb_<ns>.customers`, with malformed CSV lists and dirty
+  `SIGNUP_DT` values quarantined into
+  `ow_tp_mongodb_<ns>_quarantine.customers_quarantine` (contract:
+  `docs/tech-partnerships/contracts/mongo_customers.json`).
+
+## mongo_customers usage
+
+```bash
+# Legacy source (deterministic seed):
+make oracle-billing-up && make oracle-billing-seed NS=demo
+
+# Local MongoDB fixture (any local mongod works), e.g.:
+#   atlas deployments setup <name> --type local --port 27717 --force
+export MONGODB_URI=mongodb://localhost:27717   # live runs: MONGODB_ATLAS_URI
+
+# Migrate + prove idempotency by rerun + emit the recon report:
+uv run --no-project --with oracledb==3.1.1 --with pymongo==4.11.3 \
+  python3 migrations/mongodb/mongo_customers/verify_customers_fixture.py \
+  --ns demo --run-mode fixture \
+  --out docs/tech-partnerships/recon/mongo_customers.demo.fixture.recon.json
+
+# Validate the report against the recon schema:
+make tp-validate-recon FILE=docs/tech-partnerships/recon/mongo_customers.demo.fixture.recon.json
+```
+
+`mongo_customers/migrate_customers.py` and `mongo_customers/recon_customers.py`
+are also runnable standalone; the recon generator recomputes every value from
+the target MongoDB, never from migration-time memory, and (like `mongo_files`)
+only emits a committable report when given `--compare <baseline>` rerun
+evidence.
 
 ## mongo_files (DynamoDB `otterworks-file-metadata` → `files`)
 
