@@ -1,0 +1,85 @@
+{
+  "kind": "recon-report",
+  "unit": "aws-parser",
+  "namespace": "demo",
+  "generated_at": "2026-08-16T18:30:00Z",
+  "run_mode": "fixture",
+  "checks": [
+    {
+      "id": "byte-identical-psv",
+      "expected": {
+        "CUSTBILL_DEMO_001.psv": "29f0e7a8bc25eb444c050b3f1e8e8a9d",
+        "CUSTBILL_DEMO_002.psv": "665fee687aaaa0be43f3db23021e340a",
+        "CUSTBILL_DEMO_ANOM.psv": "b098ae00d55d3974f40133b0d607a1b8"
+      },
+      "actual": {
+        "CUSTBILL_DEMO_001.psv": "29f0e7a8bc25eb444c050b3f1e8e8a9d",
+        "CUSTBILL_DEMO_002.psv": "665fee687aaaa0be43f3db23021e340a",
+        "CUSTBILL_DEMO_ANOM.psv": "b098ae00d55d3974f40133b0d607a1b8"
+      },
+      "source_of_truth": "md5 of parser_core.parse_custbill output over regenerated deterministic inputs (input md5s f304679dff6190de3206ccc15466428c / 5153ba871c74d8d2d518021f63b36d07 / 11eb3d1a3cf99ad46d66d3c65c0add01), asserted by services/serverless-ingest/parser/tests/test_parser_core.py",
+      "result": "pass"
+    },
+    {
+      "id": "anomaly-ledger",
+      "expected": ["A-invalid-date", "A-nonutf8-byte", "A-short-record", "A-trailer-mismatch"],
+      "actual": ["A-invalid-date", "A-nonutf8-byte", "A-short-record", "A-trailer-mismatch"],
+      "source_of_truth": "fake-DynamoDB items written for CUSTBILL_DEMO_ANOM (pk=anomaly#demo) in tests/test_handler.py::test_parses_object_and_writes_ledger; clean files write zero anomaly items",
+      "result": "pass"
+    },
+    {
+      "id": "trailer-reconciliation",
+      "expected": {"CUSTBILL_DEMO_001": [50, 50], "CUSTBILL_DEMO_002": [50, 50], "CUSTBILL_DEMO_ANOM": [3, 5]},
+      "actual": {"CUSTBILL_DEMO_001": [50, 50], "CUSTBILL_DEMO_002": [50, 50], "CUSTBILL_DEMO_ANOM": [3, 5]},
+      "source_of_truth": "[record_count, trailer_count] stored in pk=file#demo ledger items; mismatch recorded as A-trailer-mismatch, never a failure",
+      "result": "pass"
+    },
+    {
+      "id": "idempotent-reprocess",
+      "expected": "second delivery of the same SQS message rewrites identical S3 bytes and identical ledger items (5 items total, no duplicates)",
+      "actual": "identical object map and item map after rerun; 5 items",
+      "source_of_truth": "tests/test_handler.py::test_idempotent_reprocess_rewrites_identical_state (actual rerun, not inference)",
+      "result": "pass"
+    },
+    {
+      "id": "poison-to-dlq",
+      "expected": "unfetchable object raises out of the handler so SQS redelivers; no ledger writes on failure",
+      "actual": "RuntimeError propagated, zero put_item calls",
+      "source_of_truth": "tests/test_handler.py::test_poison_message_raises_for_dlq_redrive; live redrive to ow-tp-demo-events-dlq after 3 receives is parent-verified",
+      "result": "pass"
+    },
+    {
+      "id": "no-temp-state",
+      "expected": "no temp files or lock files",
+      "actual": "parse is a pure in-memory bytes function; no filesystem writes in handler or core",
+      "source_of_truth": "services/serverless-ingest/parser/{handler.py,parser_core.py} (no open()/tempfile/lock usage)",
+      "result": "pass"
+    },
+    {
+      "id": "least-privilege",
+      "expected": "role ow-tp-<ns>-parser-role: s3:GetObject on incoming/* only, s3:PutObject on parsed/* only, dynamodb PutItem/Query on batch-state, SQS consume on events queue, logs scoped to its own log group; Lambda trust carries aws:SourceAccount",
+      "actual": "policy statements in infrastructure/terraform-tp-aws/parser.tf match exactly; terraform validate + tflint clean (one pre-existing warning: shared versions.tf lacks an archive provider constraint and must not be edited by components)",
+      "source_of_truth": "infrastructure/terraform-tp-aws/parser.tf; mise exec terraform validate / tflint 0.64.0",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "tests/test_handler.py::test_idempotent_reprocess_rewrites_identical_state delivers the same SQS message twice against the same fixture state and asserts byte- and item-level equality"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": ["A-invalid-date", "A-nonutf8-byte", "A-short-record", "A-trailer-mismatch"],
+    "actual_set": ["A-invalid-date", "A-nonutf8-byte", "A-short-record", "A-trailer-mismatch"],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "live aws_lambda_event_source_mapping creation and IAM role validation against the real ow-tp-<ns>-events queue",
+    "real EventBridge S3 'Object Created' envelope shape end-to-end (fixture uses a hand-built envelope matching the documented detail schema)",
+    "actual DLQ drain: 3 real SQS receives redriving a poison message to ow-tp-<ns>-events-dlq",
+    "cross-service permission resolution (S3 read/write, DynamoDB writes) under the live parser role",
+    "CloudWatch log group wiring and Lambda cold-start behaviour of the packaged zip (archive_file build only plan-validated)"
+  ]
+}

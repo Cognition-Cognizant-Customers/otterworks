@@ -1,0 +1,5 @@
+HDR CUSTBILL EXTRACT NS=DEMO       FILE=ANOM                     
+C000000901BADDATE CORP                  20241385000000010000USD01
+C000000902STERLING £ LTD                20240601000000020000GBP01
+C000000903SHORTY GMBH                   
+TRL0000000005                                                    
