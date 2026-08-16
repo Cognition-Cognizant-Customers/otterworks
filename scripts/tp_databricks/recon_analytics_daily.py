@@ -339,6 +339,12 @@ def check_3(ns: str, catalog: str, baseline: dict, source_table: str | None) -> 
     probe_ns = f"{PROBE_NS_PREFIX}_{ns}"
     try:
         return _check_3_body(check, ns, catalog, baseline, source_table, probe_ns)
+    except Exception as exc:  # noqa: BLE001 - preserve cleanup evidence on check failure
+        check.block(
+            f"check_3(ns={ns!r}, catalog={catalog!r})",
+            f"{type(exc).__name__}: {exc}",
+        )
+        return check
     finally:
         _cleanup_check_3_probe(check, probe_ns, catalog, source_table)
 
