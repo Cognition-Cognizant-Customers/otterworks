@@ -204,7 +204,7 @@ def _resolve_capture_date(
         raise SystemExit(
             f"legacy report date mismatch: expected={effective.isoformat()} "
             f"actual={report.get('report_date')!r} evidence={evidence!r}"
-    )
+        )
     stdout_dates = set(
         re.findall(r"to s3://[^/\s]+/quarantined/(\d{4}-\d{2}-\d{2})/", stdout)
     )
