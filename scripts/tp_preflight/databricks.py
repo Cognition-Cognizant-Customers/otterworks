@@ -4,8 +4,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import signal
-import sys
 import time
 import urllib.error
 import urllib.request
@@ -13,14 +11,19 @@ import uuid
 import urllib.parse
 from dataclasses import dataclass
 
-from common import Manifest, exception_detail, require_env
+from common import (
+    CleanupRegistry,
+    Manifest,
+    exception_detail,
+    install_failure_handlers,
+    require_env,
+    validate_https_endpoint,
+)
 
 
 require_env("DATABRICKS_DEMO_HOST", "DATABRICKS_DEMO_TOKEN")
 raw_host = os.environ["DATABRICKS_DEMO_HOST"]
-parsed_host = urllib.parse.urlparse(raw_host)
-if parsed_host.scheme != "https" or not parsed_host.hostname or parsed_host.username or parsed_host.password:
-    raise SystemExit("DATABRICKS_DEMO_HOST must be an HTTPS URL with a valid host")
+parsed_host = validate_https_endpoint(raw_host, "DATABRICKS_DEMO_HOST")
 valid_databricks_host = (
     parsed_host.hostname == "cloud.databricks.com"
     or parsed_host.hostname.endswith(".cloud.databricks.com")
@@ -53,18 +56,6 @@ if not re.fullmatch(r"[A-Za-z0-9_]+", landing_catalog) or landing_catalog != cat
         f"{catalog!r}: {landing!r}"
     )
 manifest = Manifest("databricks")
-
-
-def handle_uncaught(exc_type, exc, traceback):
-    try:
-        manifest.add("internal-error", "Unhandled preflight failure", "preflight runtime",
-                     "denied", exception_detail(exc))
-        manifest.write("databricks")
-    finally:
-        sys.__excepthook__(exc_type, exc, traceback)
-
-
-sys.excepthook = handle_uncaught
 
 
 @dataclass(frozen=True)
@@ -164,31 +155,10 @@ def http_error_detail(error):
     return response_detail(error.code, body)
 
 
-cleanup_registry = {}
-
-
-def register_cleanup(name, callback):
-    cleanup_registry[name] = callback
-
-
-def cleanup_all():
-    for name, callback in list(cleanup_registry.items()):
-        try:
-            callback()
-        except Exception as exc:
-            manifest.add(f"{name}-cleanup", f"Cleanup temporary {name}", "Databricks cleanup",
-                         "denied", exception_detail(exc))
-        cleanup_registry.pop(name, None)
-
-
-def handle_signal(signum, _frame):
-    cleanup_all()
-    manifest.write("databricks")
-    raise SystemExit(128 + signum)
-
-
-signal.signal(signal.SIGINT, handle_signal)
-signal.signal(signal.SIGTERM, handle_signal)
+registry = CleanupRegistry(manifest, "Databricks")
+register_cleanup = registry.register
+cleanup_all = registry.run_all
+install_failure_handlers(manifest, "databricks", cleanup_all)
 
 
 def probe(pid, description, api, action, cleanup=None):

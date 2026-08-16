@@ -5,9 +5,12 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
 import sys
+import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 
 class Manifest:
@@ -102,6 +105,70 @@ def require_env(*names: str) -> None:
     if missing:
         print(f"missing required environment variable(s): {', '.join(missing)}", file=sys.stderr)
         raise SystemExit(2)
+
+
+class CleanupRegistry:
+    """Named cleanup callbacks recorded before each mutation and run to completion."""
+
+    def __init__(self, manifest: Manifest, platform_label: str) -> None:
+        self._manifest = manifest
+        self._platform_label = platform_label
+        self._callbacks: dict[str, Callable[[], None]] = {}
+
+    def register(self, name: str, callback: Callable[[], None]) -> None:
+        self._callbacks[name] = callback
+
+    def run_all(self) -> None:
+        for name, callback in list(self._callbacks.items()):
+            try:
+                callback()
+            except Exception as exc:
+                self._manifest.add(f"{name}-cleanup", f"Cleanup temporary {name}",
+                                   f"{self._platform_label} cleanup", "denied",
+                                   exception_detail(exc))
+            self._callbacks.pop(name, None)
+
+
+def install_excepthook(manifest: Manifest, platform: str) -> None:
+    """Persist the manifest when the preflight dies on an uncaught exception."""
+
+    def handle_uncaught(exc_type, exc, traceback):
+        try:
+            manifest.add("internal-error", "Unhandled preflight failure", "preflight runtime",
+                         "denied", exception_detail(exc))
+            manifest.write(platform)
+        finally:
+            sys.__excepthook__(exc_type, exc, traceback)
+
+    sys.excepthook = handle_uncaught
+
+
+def install_signal_handlers(manifest: Manifest, platform: str,
+                            cleanup: Callable[[], None]) -> None:
+    """Run cleanup and persist the manifest on SIGINT/SIGTERM."""
+
+    def handle_signal(signum, _frame):
+        cleanup()
+        manifest.write(platform)
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGTERM, handle_signal)
+
+
+def install_failure_handlers(manifest: Manifest, platform: str,
+                             cleanup: Callable[[], None]) -> None:
+    """Persist the manifest on uncaught exceptions and on SIGINT/SIGTERM."""
+    install_excepthook(manifest, platform)
+    install_signal_handlers(manifest, platform, cleanup)
+
+
+def validate_https_endpoint(value: str, env_var: str) -> urllib.parse.ParseResult:
+    """Require an https URL with a real host and no embedded credentials."""
+    parsed = urllib.parse.urlparse(value)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+        raise SystemExit(f"{env_var} must be an HTTPS URL with a valid host")
+    return parsed
 
 
 def exception_detail(exc: Exception) -> str:

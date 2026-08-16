@@ -4,14 +4,19 @@ from __future__ import annotations
 import os
 import ipaddress
 import re
-import signal
-import sys
 import urllib.parse
 import uuid
 from requests import delete, get, post
 from requests.auth import HTTPDigestAuth
 
-from common import Manifest, exception_detail, require_env
+from common import (
+    Manifest,
+    exception_detail,
+    install_excepthook,
+    install_signal_handlers,
+    require_env,
+    validate_https_endpoint,
+)
 
 
 def validate_probe_ip(value):
@@ -46,9 +51,7 @@ def validate_probe_ip(value):
 require_env("MONGODB_ATLAS_PUBLIC_KEY", "MONGODB_ATLAS_PRIVATE_KEY", "MONGODB_ATLAS_PROJECT_ID")
 probe_ip = validate_probe_ip(os.environ.get("TP_ATLAS_TEST_IP", "203.0.113.254"))
 raw_base = os.environ.get("TP_ATLAS_API_BASE", "https://cloud.mongodb.com/api/atlas/v2")
-parsed_base = urllib.parse.urlparse(raw_base)
-if parsed_base.scheme != "https" or not parsed_base.hostname or parsed_base.username or parsed_base.password:
-    raise SystemExit("TP_ATLAS_API_BASE must be an HTTPS URL with a valid host")
+parsed_base = validate_https_endpoint(raw_base, "TP_ATLAS_API_BASE")
 if parsed_base.hostname != "cloud.mongodb.com":
     raise SystemExit("TP_ATLAS_API_BASE must use cloud.mongodb.com")
 base = raw_base.rstrip("/")
@@ -58,19 +61,8 @@ if not re.fullmatch(r"[A-Za-z0-9_-]+", project):
 auth = HTTPDigestAuth(os.environ["MONGODB_ATLAS_PUBLIC_KEY"], os.environ["MONGODB_ATLAS_PRIVATE_KEY"])
 headers = {"Accept": "application/vnd.atlas.2024-08-05+json", "Content-Type": "application/json"}
 m = Manifest("atlas")
+install_excepthook(m, "atlas")
 run_marker = f"otterworks preflight {uuid.uuid4().hex}"
-
-
-def handle_uncaught(exc_type, exc, traceback):
-    try:
-        m.add("internal-error", "Unhandled preflight failure", "preflight runtime",
-              "denied", exception_detail(exc))
-        m.write("atlas")
-    finally:
-        sys.__excepthook__(exc_type, exc, traceback)
-
-
-sys.excepthook = handle_uncaught
 
 
 def check(pid, description, method, url, **kwargs):
@@ -267,14 +259,7 @@ def cleanup_entries():
         cleanup_registry.pop(key, None)
 
 
-def handle_signal(signum, _frame):
-    cleanup_entries()
-    m.write("atlas")
-    raise SystemExit(128 + signum)
-
-
-signal.signal(signal.SIGINT, handle_signal)
-signal.signal(signal.SIGTERM, handle_signal)
+install_signal_handlers(m, "atlas", cleanup_entries)
 try:
     if probe_ip in listed or f"{probe_ip}/32" in listed:
         m.add("access-list-post", "Create a temporary API access-list entry",

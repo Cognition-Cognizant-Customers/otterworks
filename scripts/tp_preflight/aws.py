@@ -4,52 +4,22 @@ from __future__ import annotations
 import json
 import os
 import re
-import signal
 import subprocess
-import sys
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from common import Manifest, exception_detail
+from common import CleanupRegistry, Manifest, exception_detail, install_failure_handlers
 
 m = Manifest("aws")
-cleanup_registry = {}
+registry = CleanupRegistry(m, "AWS")
+cleanup_all = registry.run_all
 max_preflight_age_seconds = int(os.environ.get("TP_AWS_MAX_PREFLIGHT_RUNTIME_SECONDS", str(45 * 16)))
 if max_preflight_age_seconds <= 0:
     raise SystemExit("TP_AWS_MAX_PREFLIGHT_RUNTIME_SECONDS must be positive")
 debris_cutoff = datetime.now(timezone.utc) - timedelta(seconds=max_preflight_age_seconds)
 
 
-def handle_uncaught(exc_type, exc, traceback):
-    try:
-        m.add("internal-error", "Unhandled preflight failure", "preflight runtime",
-              "denied", exception_detail(exc))
-        m.write("aws")
-    finally:
-        sys.__excepthook__(exc_type, exc, traceback)
-
-
-sys.excepthook = handle_uncaught
-
-
-def cleanup_all():
-    for name, callback in list(cleanup_registry.items()):
-        try:
-            callback()
-        except Exception as exc:
-            m.add(f"{name}-cleanup", f"Cleanup temporary {name}", "AWS cleanup",
-                  "denied", exception_detail(exc))
-        cleanup_registry.pop(name, None)
-
-
-def handle_signal(signum, _frame):
-    cleanup_all()
-    m.write("aws")
-    raise SystemExit(128 + signum)
-
-
-signal.signal(signal.SIGINT, handle_signal)
-signal.signal(signal.SIGTERM, handle_signal)
+install_failure_handlers(m, "aws", cleanup_all)
 configured_region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
 name_prefix = os.environ.get("TP_AWS_NAME_PREFIX", "ow-tp-")
 tag_key = os.environ.get("TP_AWS_PROJECT_TAG_KEY", "Project")
@@ -319,7 +289,7 @@ def reconcile_role():
               f"role {role} may exist; manual IAM cleanup may be required")
 
 
-cleanup_registry["iam-role"] = reconcile_role
+registry.register("iam-role", reconcile_role)
 try:
     create_succeeded, _ = aws(
         "iam-role-create", "Create a temporary IAM role to prove role creation permission",
