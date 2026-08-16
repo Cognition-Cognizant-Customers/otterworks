@@ -230,6 +230,11 @@ resource "aws_sfn_state_machine" "chain" {
       # any count (including zero) is valid: the report Lambda writes a
       # header-only report and the execution succeeds, matching the legacy
       # exit-0 behaviour.
+      #
+      # Best-effort gate: KeyCount reflects a single unpaginated listing
+      # (max 1000 keys) over the whole parsed/ prefix, including objects
+      # the report Lambda ignores; a batch-accurate gate needs
+      # batch-scoped parser output, which this layout does not have.
       ParsedInputsSatisfyExpectation = {
         Type = "Choice"
         Choices = [
