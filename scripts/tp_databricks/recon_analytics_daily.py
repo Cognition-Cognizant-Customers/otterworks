@@ -111,6 +111,11 @@ def load_baseline(directory: Path) -> dict:
     by_type: dict[str, int] = {}
     for (_hour, event_type), count in by_hour_type.items():
         by_type[event_type] = by_type.get(event_type, 0) + count
+    user_actions = {
+        (user["user_id"], event_type): int(count)
+        for user in users
+        for event_type, count in user.get("actions", {}).items()
+    }
     artifacts = [summary, *users]
     date_fields = sorted({
         field
@@ -132,6 +137,7 @@ def load_baseline(directory: Path) -> dict:
         "by_hour_type": by_hour_type,
         "by_type": by_type,
         "users": {user["user_id"]: int(user["total"]) for user in users},
+        "user_actions": user_actions,
         "hours": sorted({hour for hour, _ in by_hour_type}),
         "date_fields": date_fields,
         "dates": dates,
@@ -157,6 +163,13 @@ def converted_facts(ns: str, catalog: str) -> dict:
             f"FROM {catalog}.gold.analytics_daily_summary WHERE ns = '{ns}' GROUP BY 1, 2"
         )
     }
+    user_by_type = {
+        (row[0], row[1]): int(row[2])
+        for row in dbx.sql(
+            f"SELECT user_id, event_type, count(*) FROM {catalog}.silver.analytics_events "
+            f"WHERE ns = '{ns}' GROUP BY user_id, event_type"
+        )
+    }
     shape = dbx.sql(
         "SELECT count(*), count(DISTINCT summary_date), count(DISTINCT hour), count(DISTINCT user_id), "
         f"count(DISTINCT document_id), count(DISTINCT file_id) FROM {catalog}.gold.analytics_daily_summary "
@@ -174,6 +187,7 @@ def converted_facts(ns: str, catalog: str) -> dict:
         "counts": counts,
         "by_type": by_type,
         "by_hour_type": by_hour_type,
+        "user_by_type": user_by_type,
         "gold_rows": int(shape[0]),
         "dates": int(shape[1]),
         "hours": int(shape[2]),
@@ -212,7 +226,7 @@ def check_1(baseline: dict, converted: dict) -> Check:
 
 
 def check_2(baseline: dict, converted: dict) -> Check:
-    check = Check(2, "Aggregate parity on (summary_date, hour, user_id, document_id, event_type)")
+    check = Check(2, "Aggregate parity on (hour, user_id, event_type) — legacy-comparable grain")
     baseline_groups = set(baseline["by_hour_type"])
     converted_groups = set(converted["by_hour_type"])
     exact = baseline["by_hour_type"] == converted["by_hour_type"]
@@ -224,6 +238,12 @@ def check_2(baseline: dict, converted: dict) -> Check:
     check.record("distinct summary_date count", len(baseline["dates"]), converted["dates"], must_match=False)
     check.note(
         f"legacy top-100 user sample for the defect signature: {sorted(baseline['users'])}"
+    )
+    check.note("contract dimensions unavailable in legacy artifacts: summary_date, document_id, file_id")
+    user_comparable = check.record(
+        "(user_id, event_type) totals — legacy top-100 sample",
+        baseline["user_actions"],
+        converted["user_by_type"],
     )
     check.note(
         f"legacy artifact date-bearing fields: {baseline['date_fields']} "
@@ -246,7 +266,7 @@ def check_2(baseline: dict, converted: dict) -> Check:
         f"user_ids={sorted(baseline['users'])} (top-100 sample), date_fields={baseline['date_fields']}"
     )
 
-    if exact:
+    if exact and user_comparable:
         check.resolve(True)
     elif comparable and legacy_signature:
         # The hour/user divergence is the legacy field-name defect: the 2014 script parses
