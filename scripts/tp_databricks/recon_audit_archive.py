@@ -84,7 +84,12 @@ def read_baseline(baseline_dir: str) -> dict:
                     record = json.loads(line)
                     event_ids.append(record["event_id"])
                     timestamps.append(record["timestamp"])
-    except (OSError, EOFError, ValueError, KeyError) as exc:
+    except Exception as exc:
+        # Deliberately broad: corruption reaches here as more than the obvious
+        # OSError/ValueError -- a damaged deflate stream surfaces as zlib.error and a
+        # line that is valid JSON but not an object as TypeError, both deriving
+        # straight from Exception. Any unusable artifact is a verdict to report, and
+        # an unreported traceback here is the one outcome this tool must not produce.
         errors.append(f"{archive}: {type(exc).__name__}: {exc}")
     try:
         with open(report_path, encoding="utf-8") as handle:
