@@ -284,7 +284,7 @@ warehouse_id = configured_warehouse_id
 discovered_warehouse_id = False
 if not warehouse_id and 200 <= warehouse_probe[0] < 300 and isinstance(warehouse_probe[1], dict):
     for warehouse in warehouse_probe[1].get("warehouses", []):
-        if warehouse.get("enable_serverless_compute") or warehouse.get("warehouse_type") == "PRO":
+        if warehouse.get("enable_serverless_compute"):
             warehouse_id = warehouse.get("id", "")
             discovered_warehouse_id = True
             break
