@@ -314,8 +314,7 @@ def _cleanup_check_3_probe(check: Check, probe_ns: str, catalog: str, source_tab
         f"{catalog}.silver.analytics_events",
         f"{catalog}.silver.analytics_events_rejects",
         f"{catalog}.gold.analytics_daily_summary",
-        runner.stage_table(catalog),
-    )
+    ) + ((runner.stage_table(catalog),) if source_table is not None else ())
     for table in tables:
         try:
             dbx.sql(f"DELETE FROM {table} WHERE ns = '{probe_ns}'")
