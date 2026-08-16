@@ -173,7 +173,11 @@ def handler(event, context):
             **{f"{name}_key": {"S": dest} for name, dest in dispositions.items()},
         },
     )
-    _s3.delete_object(Bucket=bucket, Key=key)
+    # Guarded delete, mirroring the redelivery branch: if a newer same-named
+    # object has overwritten the key since the copy, leave it for its own
+    # event rather than destroying it.
+    if _head_etag(bucket, key) == etag:
+        _s3.delete_object(Bucket=bucket, Key=key)
 
     return {
         "status": status,
