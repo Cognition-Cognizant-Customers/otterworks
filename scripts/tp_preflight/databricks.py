@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
 import sys
 import time
 import urllib.error
@@ -126,6 +127,32 @@ def response_detail(status, body):
     return f"HTTP {status}"
 
 
+cleanup_registry = {}
+
+
+def register_cleanup(name, callback):
+    cleanup_registry[name] = callback
+
+
+def cleanup_all():
+    for name, callback in list(cleanup_registry.items()):
+        try:
+            callback()
+        except Exception as exc:
+            manifest.add(f"{name}-cleanup", f"Cleanup temporary {name}", "Databricks cleanup",
+                         "denied", exception_detail(exc))
+        cleanup_registry.pop(name, None)
+
+
+def handle_signal(signum, _frame):
+    cleanup_all()
+    raise SystemExit(128 + signum)
+
+
+signal.signal(signal.SIGINT, handle_signal)
+signal.signal(signal.SIGTERM, handle_signal)
+
+
 def probe(pid, description, api, action, cleanup=None):
     try:
         status, detail = action()
@@ -192,40 +219,113 @@ if not warehouse_id and 200 <= warehouse_probe[0] < 300 and isinstance(warehouse
             warehouse_id = warehouse.get("id", "")
             break
 schema = f"ow_tp_preflight_{uuid.uuid4().hex[:12]}"
-created_schema = sql_call(f"CREATE SCHEMA {catalog}.{schema}", warehouse_id)
-create_accepted = created_schema.accepted
-create_succeeded = create_accepted and created_schema.state == "SUCCEEDED"
-if create_succeeded:
-    listed_schema = call("GET", f"/api/2.1/unity-catalog/schemas?catalog_name={urllib.parse.quote(catalog)}")
-    manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema", "SQL Statement + Unity Catalog APIs", "verified" if 200 <= listed_schema[0] < 300 else "denied", f"{sql_detail(created_schema)}; list HTTP {listed_schema[0]}")
-else:
-    manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema", "SQL Statement + Unity Catalog APIs", "denied", sql_detail(created_schema))
-if create_accepted:
-    dropped_schema = sql_call(f"DROP SCHEMA IF EXISTS {catalog}.{schema} CASCADE", warehouse_id)
-    manifest.add("uc-schema-delete", "Delete the temporary Unity Catalog schema", "SQL Statement", "verified" if dropped_schema.accepted and dropped_schema.state == "SUCCEEDED" else "denied", sql_detail(dropped_schema))
-else:
-    manifest.add("uc-schema-delete", "Delete the temporary Unity Catalog schema", "SQL Statement", "skipped", "schema was not created")
+schema_result = None
+
+
+def reconcile_schema():
+    if schema_result is not None and schema_result.accepted and schema_result.status != 0:
+        dropped = sql_call(f"DROP SCHEMA IF EXISTS {catalog}.{schema} CASCADE", warehouse_id)
+        manifest.add("uc-schema-delete", "Delete the temporary Unity Catalog schema",
+                     "SQL Statement", "verified" if dropped.state == "SUCCEEDED" else "denied",
+                     sql_detail(dropped))
+        return
+    lookup = sql_call(f"SHOW SCHEMAS IN {catalog}", warehouse_id)
+    if lookup.state != "SUCCEEDED":
+        manifest.add("uc-schema-delete", "Reconcile the temporary Unity Catalog schema",
+                     "SQL Statement", "denied", sql_detail(lookup))
+        return
+    result = lookup.body.get("result", {})
+    rows = result.get("data_array", []) if isinstance(result, dict) else []
+    present = any(row and row[0] == schema for row in rows if isinstance(row, list))
+    if not present:
+        manifest.add("uc-schema-delete", "Reconcile the temporary Unity Catalog schema",
+                     "SQL Statement", "verified", f"{schema} was absent after create")
+        return
+    dropped = sql_call(f"DROP SCHEMA IF EXISTS {catalog}.{schema} CASCADE", warehouse_id)
+    manifest.add("uc-schema-delete", "Delete the temporary Unity Catalog schema",
+                 "SQL Statement", "verified" if dropped.state == "SUCCEEDED" else "denied",
+                 sql_detail(dropped))
+
+
+register_cleanup("schema", reconcile_schema)
+try:
+    schema_result = sql_call(f"CREATE SCHEMA {catalog}.{schema}", warehouse_id)
+    if schema_result.state == "SUCCEEDED":
+        listed_schema = call("GET", f"/api/2.1/unity-catalog/schemas?catalog_name={urllib.parse.quote(catalog)}")
+        manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema",
+                     "SQL Statement + Unity Catalog APIs",
+                     "verified" if 200 <= listed_schema[0] < 300 else "denied",
+                     f"{sql_detail(schema_result)}; list HTTP {listed_schema[0]}")
+    else:
+        manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema",
+                     "SQL Statement + Unity Catalog APIs", "denied", sql_detail(schema_result))
+finally:
+    cleanup_all()
 
 job_name = f"ow_tp_preflight_{uuid.uuid4().hex[:8]}"
-job = call("POST", "/api/2.1/jobs/create", {"name": job_name, "tasks": [{"task_key": "noop", "notebook_task": {"notebook_path": "/Shared/ow_tp/preflight"}}]})
-if 200 <= job[0] < 300:
-    listed_jobs = call("GET", "/api/2.1/jobs/list?name=" + job_name)
-    manifest.add("jobs-create-list", "Create and list a temporary job", "Jobs API 2.1", "verified" if 200 <= listed_jobs[0] < 300 else "denied", f"create HTTP {job[0]}, list HTTP {listed_jobs[0]}")
-    deleted_job = call("POST", "/api/2.0/jobs/delete", {"job_id": job[1].get("job_id")})
-    manifest.add("jobs-delete", "Delete the temporary job", "Jobs API 2.0", "verified" if 200 <= deleted_job[0] < 300 else "denied", f"HTTP {deleted_job[0]}")
-else:
-    manifest.add("jobs-create-list", "Create and list a temporary job", "Jobs API 2.1", "denied", response_detail(job[0], job[1]))
-    manifest.add("jobs-delete", "Delete the temporary job", "Jobs API 2.0", "skipped", "job was not created")
+job = None
+
+
+def reconcile_job():
+    listed = call("GET", "/api/2.1/jobs/list?name=" + urllib.parse.quote(job_name))
+    if not (200 <= listed[0] < 300) or not isinstance(listed[1], dict):
+        manifest.add("jobs-delete", "Reconcile the temporary job", "Jobs API 2.1", "denied",
+                     response_detail(listed[0], listed[1]))
+        return
+    matches = [item for item in listed[1].get("jobs", []) if item.get("settings", {}).get("name") == job_name]
+    if not matches:
+        manifest.add("jobs-delete", "Reconcile the temporary job", "Jobs API 2.1", "verified", f"{job_name} was absent after create")
+        return
+    deleted = call("POST", "/api/2.0/jobs/delete", {"job_id": matches[0].get("job_id")})
+    manifest.add("jobs-delete", "Delete the temporary job", "Jobs API 2.0",
+                 "verified" if 200 <= deleted[0] < 300 else "denied", response_detail(deleted[0], deleted[1]))
+
+
+register_cleanup("job", reconcile_job)
+try:
+    job = call("POST", "/api/2.1/jobs/create", {"name": job_name, "tasks": [{"task_key": "noop", "notebook_task": {"notebook_path": "/Shared/ow_tp/preflight"}}]})
+    if 200 <= job[0] < 300:
+        listed_jobs = call("GET", "/api/2.1/jobs/list?name=" + job_name)
+        manifest.add("jobs-create-list", "Create and list a temporary job", "Jobs API 2.1",
+                     "verified" if 200 <= listed_jobs[0] < 300 else "denied",
+                     f"create HTTP {job[0]}, list HTTP {listed_jobs[0]}")
+    else:
+        manifest.add("jobs-create-list", "Create and list a temporary job", "Jobs API 2.1", "denied",
+                     response_detail(job[0], job[1]))
+finally:
+    cleanup_all()
 
 scope_name = f"ow_tp_preflight_{uuid.uuid4().hex[:8]}"
-scope = call("POST", "/api/2.0/secrets/scopes/create", {"scope": scope_name})
-if 200 <= scope[0] < 300:
-    manifest.add("secret-scope", "Create and delete a temporary secret scope", "Secrets API 2.0", "verified", f"create HTTP {scope[0]}")
-    deleted_scope = call("POST", "/api/2.0/secrets/scopes/delete", {"scope": scope_name})
-    manifest.add("secret-scope-delete", "Delete the temporary secret scope", "Secrets API 2.0", "verified" if 200 <= deleted_scope[0] < 300 else "denied", f"HTTP {deleted_scope[0]}")
-else:
-    manifest.add("secret-scope", "Create and delete a temporary secret scope", "Secrets API 2.0", "denied", response_detail(scope[0], scope[1]))
-    manifest.add("secret-scope-delete", "Delete the temporary secret scope", "Secrets API 2.0", "skipped", "scope was not created")
+scope = None
+
+
+def reconcile_scope():
+    listed = call("GET", "/api/2.0/secrets/scopes/list")
+    if not (200 <= listed[0] < 300) or not isinstance(listed[1], dict):
+        manifest.add("secret-scope-delete", "Reconcile the temporary secret scope", "Secrets API 2.0",
+                     "denied", response_detail(listed[0], listed[1]))
+        return
+    matches = [item for item in listed[1].get("scopes", []) if item.get("name") == scope_name]
+    if not matches:
+        manifest.add("secret-scope-delete", "Reconcile the temporary secret scope", "Secrets API 2.0",
+                     "verified", f"{scope_name} was absent after create")
+        return
+    deleted = call("POST", "/api/2.0/secrets/scopes/delete", {"scope": scope_name})
+    manifest.add("secret-scope-delete", "Delete the temporary secret scope", "Secrets API 2.0",
+                 "verified" if 200 <= deleted[0] < 300 else "denied", response_detail(deleted[0], deleted[1]))
+
+
+register_cleanup("scope", reconcile_scope)
+try:
+    scope = call("POST", "/api/2.0/secrets/scopes/create", {"scope": scope_name})
+    if 200 <= scope[0] < 300:
+        manifest.add("secret-scope", "Create and delete a temporary secret scope", "Secrets API 2.0",
+                     "verified", f"create HTTP {scope[0]}")
+    else:
+        manifest.add("secret-scope", "Create and delete a temporary secret scope", "Secrets API 2.0",
+                     "denied", response_detail(scope[0], scope[1]))
+finally:
+    cleanup_all()
 
 if 200 <= warehouse_probe[0] < 300 and isinstance(warehouse_probe[1], dict):
     serverless = [w for w in warehouse_probe[1].get("warehouses", []) if w.get("enable_serverless_compute") or w.get("warehouse_type") == "PRO"]

@@ -20,11 +20,12 @@ class Manifest:
         }
 
     def add(self, probe_id: str, description: str, api: str, result: str, detail: str) -> None:
-        detail = self._redact(str(detail))
-        self.data["probes"].append(
-            {"id": probe_id, "description": description, "api": api,
-             "result": result, "detail": detail}
-        )
+        probe = {"id": probe_id, "description": description, "api": api,
+                 "result": result, "detail": detail}
+        for key, value in probe.items():
+            if isinstance(value, str):
+                probe[key] = self._redact(value)
+        self.data["probes"].append(probe)
         print(f"[{result.upper():8}] {probe_id}: {detail}")
 
     @staticmethod

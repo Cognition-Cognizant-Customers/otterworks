@@ -249,7 +249,7 @@ try:
             reconcile_ambiguous(created_entry)
     if covers(ip, listed):
         m.add("vm-ip-listed", "The VM public IP is present in the Atlas access list",
-              "Atlas accessList GET", "verified", f"VM IP {ip}; entries={listed}")
+              "Atlas accessList GET", "verified", f"VM IP {ip}; covered by {len(listed)} access-list entr{'y' if len(listed) == 1 else 'ies'}")
         if os.environ.get("MONGODB_ATLAS_URI"):
             db_user_write()
         else:
@@ -273,7 +273,7 @@ try:
             else:
                 reconcile_ambiguous(own_entry)
                 m.add("vm-ip-listed", "The VM public IP is present or can be self-healed in the Atlas access list",
-                      "Atlas accessList POST/DELETE", "denied", f"VM IP {ip}; entries={listed}")
+                      "Atlas accessList POST/DELETE", "denied", f"VM IP {ip}; access-list entries checked={len(listed)}")
         finally:
             cleanup_entries()
 finally:
