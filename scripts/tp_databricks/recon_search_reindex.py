@@ -92,7 +92,7 @@ def meili(path: str) -> dict:
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
             return json.loads(response.read() or b"{}")
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError) as exc:
         raise Blocked(f"GET {base}{path} failed: {exc}") from exc
 
 
@@ -132,7 +132,10 @@ def sample_ids(ns: str, entity_type: str, ids: list[str]) -> list[str]:
 
 
 def sql_rows(statement: str) -> list[list[str | None]]:
-    return dbx.sql(statement)
+    try:
+        return dbx.sql(statement)
+    except dbx.DatabricksError as exc:
+        raise Blocked(str(exc)) from exc
 
 
 def serving_counts(ns: str) -> dict[str, int]:
@@ -192,7 +195,13 @@ def normalize(field: str, value, side: str):
     if field == "tags":
         if value in (None, ""):
             return []
-        parsed = json.loads(value) if isinstance(value, str) else value
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                return value
+        else:
+            parsed = value
         return list(parsed)
     if field == "size_bytes":
         return None if value in (None, "") else int(value)
