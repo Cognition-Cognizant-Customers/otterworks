@@ -66,14 +66,19 @@ if configured_region:
 if configured_region:
     region = configured_region
 else:
-    region_probe = subprocess.run(
-        ["aws", "configure", "get", "region"],
-        capture_output=True,
-        text=True,
-        timeout=45,
-        env=env,
-    )
-    region = (region_probe.stdout or "").strip() if region_probe.returncode == 0 else ""
+    region_error = None
+    try:
+        region_probe = subprocess.run(
+            ["aws", "configure", "get", "region"],
+            capture_output=True,
+            text=True,
+            timeout=45,
+            env=env,
+        )
+        region = (region_probe.stdout or "").strip() if region_probe.returncode == 0 else ""
+    except Exception as exc:
+        region = ""
+        region_error = exception_detail(exc)
     if region and not re.fullmatch(r"[A-Za-z0-9_-]+", region):
         region = ""
 if region:
@@ -83,7 +88,7 @@ if region:
 else:
     m.add("region", "Resolve the AWS region used by the preflight",
           "aws configure get region", "denied",
-          "no AWS region was provided or resolved from the active profile")
+          region_error or "no AWS region was provided or resolved from the active profile")
 
 
 def aws(pid, description, args, required=True, record=True):
