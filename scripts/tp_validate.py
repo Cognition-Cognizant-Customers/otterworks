@@ -39,15 +39,28 @@ def main() -> int:
         files = sorted((ROOT / "docs/tech-partnerships/contracts").glob("*.json"))
         legacy_prose = sorted((ROOT / "docs/tech-partnerships/contracts").glob("*.md"))
     else:
-        files = sorted((ROOT / "docs/tech-partnerships/recon").glob("*.json"))
+        files = []
         legacy_prose = []
+        for candidate in sorted((ROOT / "docs/tech-partnerships/recon").glob("*.json")):
+            try:
+                data = json.loads(candidate.read_text())
+            except Exception:
+                data = None
+            if isinstance(data, dict) and "unit" in data and (
+                "run_mode" in data or "checks" in data
+            ):
+                files.append(candidate)
+            else:
+                legacy_prose.append(candidate)
     kind = "contract" if args.kind == "contracts" else "recon"
     failures = [err for f in files for err in validate_file(f, schemas[kind])]
     print(f"validated {len(files)} {args.kind} file(s)")
     if legacy_prose:
-        print(f"informational: {len(legacy_prose)} legacy prose contract(s) are not yet migrated to JSON schema")
+        label = "legacy prose contract(s)" if args.kind == "contracts" else "unmigrated non-report JSON artifact(s)"
+        print(f"informational: {len(legacy_prose)} {label}")
         for path in legacy_prose:
-            print(f"  legacy prose: {path}")
+            prefix = "legacy prose" if args.kind == "contracts" else "unmigrated artifact"
+            print(f"  {prefix}: {path}")
     if not args.file and args.kind == "contracts" and not files:
         failures.append(
             "no JSON contract files found; migrate these legacy prose contracts to the schema:\n"
