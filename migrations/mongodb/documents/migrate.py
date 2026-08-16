@@ -17,6 +17,7 @@ Usage:
 import argparse
 import sys
 import time
+from contextlib import ExitStack, closing
 from datetime import datetime, timezone
 
 from extract import (
@@ -61,9 +62,9 @@ def migrate(ns: str, batch_size: int) -> dict:
         "version_gaps": 0,
     }
 
-    pg = connect(pg_config())
-    client = atlas_client()
-    try:
+    with ExitStack() as stack:
+        pg = stack.enter_context(closing(connect(pg_config())))
+        client = stack.enter_context(closing(atlas_client()))
         db = atlas_db(client)
         for batch in iter_document_batches(pg, schema, batch_size):
             mongo_docs = []
@@ -100,9 +101,6 @@ def migrate(ns: str, batch_size: int) -> dict:
             ]
             stats["orphaned_snapshots"] += upsert_documents(
                 db[COLL_SNAPSHOTS_ORPHANED], quarantined)
-    finally:
-        pg.close()
-        client.close()
     return stats
 
 
