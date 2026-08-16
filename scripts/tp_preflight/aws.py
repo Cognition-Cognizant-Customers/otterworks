@@ -95,8 +95,22 @@ def leftover_scan(pid, description, args, extractor):
         m.add(pid, description, "aws " + " ".join(args), "denied", detail)
         return False
     detail = json.dumps(matches) if matches else "none found"
-    m.add(pid, description, "aws " + " ".join(args), "denied" if matches else "verified", detail)
-    return not matches
+    preflight_matches = [
+        match for match in matches
+        if re.search(rf"{re.escape(name_prefix)}preflight-", str(match))
+    ]
+    if preflight_matches:
+        result = "denied"
+        detail = f"preflight debris ({len(preflight_matches)}): {json.dumps(preflight_matches)}"
+    elif matches and os.environ.get("TP_AWS_REQUIRE_CLEAN_ESTATE") == "1":
+        result = "denied"
+    elif matches:
+        result = "informational"
+        detail = f"{len(matches)} existing resource(s): {detail}"
+    else:
+        result = "verified"
+    m.add(pid, description, "aws " + " ".join(args), result, detail)
+    return result != "denied"
 
 
 def policy_source_arn(caller_arn):
