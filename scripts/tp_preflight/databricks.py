@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -47,6 +48,53 @@ def call(method: str, path: str, body=None):
         return 0, str(exc)
 
 
+def sql_call(statement: str, warehouse_id: str):
+    status, body = call(
+        "POST",
+        "/api/2.0/sql/statements",
+        {
+            "statement": statement,
+            "warehouse_id": warehouse_id,
+            "wait_timeout": "30s",
+            "on_wait_timeout": "CANCEL",
+        },
+    )
+    if 200 <= status < 300 and isinstance(body, dict):
+        statement_id = body.get("statement_id")
+        state = body.get("status", {}).get("state")
+        for _ in range(30):
+            if state in {"SUCCEEDED", "FAILED", "CANCELED"} or not statement_id:
+                break
+            time.sleep(1)
+            status, body = call("GET", f"/api/2.0/sql/statements/{statement_id}")
+            state = body.get("status", {}).get("state") if isinstance(body, dict) else None
+    return status, body
+
+
+def sql_detail(result):
+    status, body = result
+    if not isinstance(body, dict):
+        return f"HTTP {status}"
+    statement_status = body.get("status", {})
+    state = statement_status.get("state", "unknown")
+    error = statement_status.get("error", {})
+    message = error.get("message") if isinstance(error, dict) else error
+    return f"HTTP {status}, state={state}" + (f", error={message}" if message else "")
+
+
+def response_detail(status, body):
+    if isinstance(body, dict):
+        message = (
+            body.get("error_code")
+            or body.get("errorCode")
+            or body.get("message")
+            or body.get("detail")
+            or body.get("error")
+        )
+        return f"HTTP {status}" + (f": {message}" if message else "")
+    return f"HTTP {status}"
+
+
 def probe(pid, description, api, action, cleanup=None):
     try:
         status, detail = action()
@@ -68,7 +116,7 @@ if 200 <= identity_status < 300:
 else:
     manifest.data["credential_identity"] = "unavailable"
     manifest.add("authenticate", "PAT can identify the caller", "/api/2.0/current-user",
-                 "denied", f"HTTP {identity_status}: {identity_body}")
+                 "denied", f"HTTP {identity_status}")
 
 suffix = f"__tp_preflight_{uuid.uuid4().hex}"
 file_path = f"{landing}/{suffix}"
@@ -113,15 +161,15 @@ if not warehouse_id and 200 <= warehouse_probe[0] < 300:
             warehouse_id = warehouse.get("id", "")
             break
 schema = f"ow_tp_preflight_{uuid.uuid4().hex[:12]}"
-created_schema = call("POST", "/api/2.0/sql/statements", {"statement": f"CREATE SCHEMA {catalog}.{schema}", "warehouse_id": warehouse_id})
-if 200 <= created_schema[0] < 300:
+created_schema = sql_call(f"CREATE SCHEMA {catalog}.{schema}", warehouse_id)
+if created_schema[0] >= 200 and created_schema[0] < 300 and created_schema[1].get("status", {}).get("state") == "SUCCEEDED":
     listed_schema = call("GET", f"/api/2.1/unity-catalog/schemas?catalog_name={urllib.parse.quote(catalog)}")
-    manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema", "SQL Statement + Unity Catalog APIs", "verified" if 200 <= listed_schema[0] < 300 else "denied", f"create HTTP {created_schema[0]}, list HTTP {listed_schema[0]}")
+    manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema", "SQL Statement + Unity Catalog APIs", "verified" if 200 <= listed_schema[0] < 300 else "denied", f"{sql_detail(created_schema)}; list HTTP {listed_schema[0]}")
 else:
-    manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema", "SQL Statement + Unity Catalog APIs", "denied", f"HTTP {created_schema[0]}: {created_schema[1]}")
-if 200 <= created_schema[0] < 300:
-    dropped_schema = call("POST", "/api/2.0/sql/statements", {"statement": f"DROP SCHEMA IF EXISTS {catalog}.{schema} CASCADE", "warehouse_id": warehouse_id})
-    manifest.add("uc-schema-delete", "Delete the temporary Unity Catalog schema", "SQL Statement", "verified" if 200 <= dropped_schema[0] < 300 else "denied", f"HTTP {dropped_schema[0]}: {dropped_schema[1]}")
+    manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema", "SQL Statement + Unity Catalog APIs", "denied", sql_detail(created_schema))
+if created_schema[0] >= 200 and created_schema[0] < 300 and created_schema[1].get("status", {}).get("state") == "SUCCEEDED":
+    dropped_schema = sql_call(f"DROP SCHEMA IF EXISTS {catalog}.{schema} CASCADE", warehouse_id)
+    manifest.add("uc-schema-delete", "Delete the temporary Unity Catalog schema", "SQL Statement", "verified" if dropped_schema[0] >= 200 and dropped_schema[0] < 300 and dropped_schema[1].get("status", {}).get("state") == "SUCCEEDED" else "denied", sql_detail(dropped_schema))
 else:
     manifest.add("uc-schema-delete", "Delete the temporary Unity Catalog schema", "SQL Statement", "skipped", "schema was not created")
 
@@ -131,9 +179,9 @@ if 200 <= job[0] < 300:
     listed_jobs = call("GET", "/api/2.1/jobs/list?name=" + job_name)
     manifest.add("jobs-create-list", "Create and list a temporary job", "Jobs API 2.1", "verified" if 200 <= listed_jobs[0] < 300 else "denied", f"create HTTP {job[0]}, list HTTP {listed_jobs[0]}")
     deleted_job = call("POST", "/api/2.0/jobs/delete", {"job_id": job[1].get("job_id")})
-    manifest.add("jobs-delete", "Delete the temporary job", "Jobs API 2.0", "verified" if 200 <= deleted_job[0] < 300 else "denied", f"HTTP {deleted_job[0]}: {deleted_job[1]}")
+    manifest.add("jobs-delete", "Delete the temporary job", "Jobs API 2.0", "verified" if 200 <= deleted_job[0] < 300 else "denied", f"HTTP {deleted_job[0]}")
 else:
-    manifest.add("jobs-create-list", "Create and list a temporary job", "Jobs API 2.1", "denied", f"HTTP {job[0]}: {job[1]}")
+    manifest.add("jobs-create-list", "Create and list a temporary job", "Jobs API 2.1", "denied", response_detail(job[0], job[1]))
     manifest.add("jobs-delete", "Delete the temporary job", "Jobs API 2.0", "skipped", "job was not created")
 
 scope_name = f"ow_tp_preflight_{uuid.uuid4().hex[:8]}"
@@ -141,15 +189,16 @@ scope = call("POST", "/api/2.0/secrets/scopes/create", {"scope": scope_name})
 if 200 <= scope[0] < 300:
     manifest.add("secret-scope", "Create and delete a temporary secret scope", "Secrets API 2.0", "verified", f"create HTTP {scope[0]}")
     deleted_scope = call("POST", "/api/2.0/secrets/scopes/delete", {"scope": scope_name})
-    manifest.add("secret-scope-delete", "Delete the temporary secret scope", "Secrets API 2.0", "verified" if 200 <= deleted_scope[0] < 300 else "denied", f"HTTP {deleted_scope[0]}: {deleted_scope[1]}")
+    manifest.add("secret-scope-delete", "Delete the temporary secret scope", "Secrets API 2.0", "verified" if 200 <= deleted_scope[0] < 300 else "denied", f"HTTP {deleted_scope[0]}")
 else:
-    manifest.add("secret-scope", "Create and delete a temporary secret scope", "Secrets API 2.0", "denied", f"HTTP {scope[0]}: {scope[1]}")
+    manifest.add("secret-scope", "Create and delete a temporary secret scope", "Secrets API 2.0", "denied", response_detail(scope[0], scope[1]))
     manifest.add("secret-scope-delete", "Delete the temporary secret scope", "Secrets API 2.0", "skipped", "scope was not created")
 
 if 200 <= warehouse_probe[0] < 300:
     serverless = [w for w in warehouse_probe[1].get("warehouses", []) if w.get("enable_serverless_compute") or w.get("warehouse_type") == "PRO"]
-    manifest.add("serverless-warehouse", "An existing serverless SQL warehouse is available", "SQL Warehouses API", "verified" if serverless else "denied", json.dumps(serverless[:3]) if serverless else "no serverless warehouse")
+    summary = [{"id": w.get("id"), "name": w.get("name"), "state": w.get("state")} for w in serverless[:3]]
+    manifest.add("serverless-warehouse", "An existing serverless SQL warehouse is available", "SQL Warehouses API", "verified" if serverless else "denied", json.dumps(summary) if summary else "no serverless warehouse")
 else:
-    manifest.add("serverless-warehouse", "An existing serverless SQL warehouse is available", "SQL Warehouses API", "denied", f"HTTP {warehouse_probe[0]}: {warehouse_probe[1]}")
+    manifest.add("serverless-warehouse", "An existing serverless SQL warehouse is available", "SQL Warehouses API", "denied", f"HTTP {warehouse_probe[0]}")
 
 raise SystemExit(manifest.write("databricks"))

@@ -20,9 +20,17 @@ env = {**os.environ, "AWS_DEFAULT_REGION": region, "AWS_REGION": region}
 def aws(pid, description, args, required=True):
     try:
         p = subprocess.run(["aws", *args, "--output", "json"], capture_output=True, text=True, timeout=45, env=env)
-        detail = (p.stdout or p.stderr).strip().replace("\n", " ")[:1000]
+        raw = (p.stdout or p.stderr).strip()
+        if p.returncode == 0:
+            detail = "command succeeded"
+        else:
+            try:
+                error = json.loads(raw)
+                detail = error.get("message") or error.get("Message") or error.get("Code") or "command failed"
+            except json.JSONDecodeError:
+                detail = next((line.strip() for line in raw.splitlines() if line.strip()), "command failed")
         m.add(pid, description, "aws " + " ".join(args), "verified" if p.returncode == 0 else ("denied" if required else "skipped"), detail or "ok")
-        return p.returncode == 0, detail
+        return p.returncode == 0, raw
     except Exception as exc:
         m.add(pid, description, "aws " + " ".join(args), "denied", str(exc))
         return False, str(exc)
@@ -35,7 +43,6 @@ def simulate_permission(pid, description, caller_arn, action):
     ]
     try:
         p = subprocess.run(["aws", *args, "--output", "json"], capture_output=True, text=True, timeout=45, env=env)
-        detail = (p.stdout or p.stderr).strip().replace("\n", " ")[:1000]
         decision = None
         if p.stdout:
             try:
@@ -44,8 +51,8 @@ def simulate_permission(pid, description, caller_arn, action):
             except json.JSONDecodeError:
                 pass
         result = "verified" if decision == "allowed" else "denied"
-        m.add(pid, description, "aws " + " ".join(args), result,
-              f"decision={decision or 'unavailable'}; {detail or 'no response'}")
+        m.add(pid, description, "aws iam simulate-principal-policy --action-names " + action, result,
+              f"decision={decision or 'unavailable'}")
         return result == "verified"
     except Exception as exc:
         m.add(pid, description, "aws " + " ".join(args), "denied", str(exc))

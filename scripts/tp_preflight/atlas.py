@@ -22,7 +22,14 @@ def check(pid, description, method, url, **kwargs):
     try:
         r = method(url, auth=auth, headers=headers, timeout=30, **kwargs)
         result = "verified" if r.ok else "denied"
-        m.add(pid, description, url, result, f"HTTP {r.status_code}: {r.text[:500]}")
+        detail = f"HTTP {r.status_code}"
+        if not r.ok:
+            try:
+                body = r.json()
+                detail += f": {body.get('errorCode') or body.get('detail') or body.get('error') or body.get('message') or 'request failed'}"
+            except ValueError:
+                detail += ": request failed"
+        m.add(pid, description, url, result, detail)
         return r
     except Exception as exc:
         m.add(pid, description, url, "denied", str(exc))
@@ -90,7 +97,6 @@ created = check("access-list-post", "Create a temporary API access-list entry", 
 created_entry = None
 try:
     if created is not None and created.ok:
-        body = created.json()
         created_entry = {"ipAddress": probe_ip}
     if ip in listed:
         m.add("vm-ip-listed", "The VM public IP is present in the Atlas access list",
@@ -107,7 +113,6 @@ try:
         own_entry = None
         try:
             if own is not None and own.ok:
-                body = own.json()
                 own_entry = {"ipAddress": ip}
                 m.add("vm-ip-listed", "The VM public IP can be self-healed for the DB write path",
                       "Atlas accessList POST/DELETE", "verified", f"VM IP {ip} was absent and temporary add succeeded")
