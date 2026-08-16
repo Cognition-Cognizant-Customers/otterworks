@@ -84,10 +84,11 @@ def run_pipeline(ns: str, run_date: str, dry_run: bool, scenario: str) -> None:
 
 
 def orphan_keys(ns: str, scenario: str, confirmed: bool) -> set:
+    reason = " AND orphan_reason = 'no_metadata_row'" if confirmed else ""
     rows = dbx.sql(
         "SELECT bucket, key FROM ow_tp.silver.storage_orphans "
         f"WHERE ns = '{ns}' AND scenario = '{scenario}' "
-        f"AND metadata_read_ok = {'true' if confirmed else 'false'}"
+        f"AND metadata_read_ok = {'true' if confirmed else 'false'}{reason}"
     )
     return {(row[0], row[1]) for row in rows}
 
@@ -201,14 +202,14 @@ def legacy_metadata_keys() -> int:
     return int(match.group(1))
 
 
-def read_golden() -> tuple[dict, set, dict]:
+def read_golden(ns: str) -> tuple[dict, set, dict]:
     report = json.loads((GOLDEN / "legacy_report.json").read_text())
     keys = {
         (extract.FILE_STORAGE_BUCKET, line)
         for line in (GOLDEN / "quarantined_keys.txt").read_text().split()
         if line
     }
-    fixture = json.loads((GOLDEN / "fixture_manifest.json").read_text())
+    fixture = json.loads((GOLDEN / f"fixture_manifest_{ns}.json").read_text())
     return report, keys, fixture
 
 
@@ -278,6 +279,10 @@ def check_2(ns: str, run_date: str, report: dict, fixture: dict) -> Check:
         f"script listed only 'files/' and never saw the other "
         f"{gold['objects_scanned'] - legacy_scope} objects. Broader scope, identical orphan set."
     )
+    check.note(
+        "named legacy deficiency: un-attributed objects under the shared files/ prefix remain "
+        "visible but are never confirmed or quarantinable."
+    )
     return check
 
 
@@ -305,7 +310,11 @@ def check_3(ns: str, run_date: str, limit: int) -> Check:
         check.note(f"candidates recorded for review: {len(candidates)} (quarantined: 0)")
     check.compare(
         "candidate rows carry orphan_reason=candidate_unverified_metadata_read",
-        [[str(len(candidates))]],
+        [[str(len(candidates) - len(dbx.sql(
+            "SELECT bucket, key FROM ow_tp.silver.storage_orphans "
+            f"WHERE ns = '{ns}' AND scenario = '{scenario}' "
+            "AND metadata_read_ok = false AND orphan_reason = 'unattributable_legacy_prefix'"
+        )))]],
         dbx.sql(
             "SELECT COUNT(*) FROM ow_tp.silver.storage_orphans "
             f"WHERE ns = '{ns}' AND scenario = '{scenario}' "
@@ -346,6 +355,7 @@ def check_4(ns: str, run_date: str, golden_keys: set) -> Check:
         dbx.sql(
             "SELECT COUNT(*) FROM ow_tp.silver.storage_orphans "
             f"WHERE ns = '{ns}' AND scenario = 'nominal'"
+            " AND orphan_reason = 'no_metadata_row'"
         ),
     )
     return check
@@ -497,7 +507,7 @@ def main(argv: list[str]) -> int:
         _reload(args.ns, "nominal", metadata_limit=None)
         capture_golden(args.ns)
         _reload(args.ns, "nominal", metadata_limit=None)
-    report, golden_keys, fixture = read_golden()
+    report, golden_keys, fixture = read_golden(args.ns)
 
     checks = [check_structural()]
     run_pipeline(args.ns, args.run_date, dry_run=True, scenario="nominal")

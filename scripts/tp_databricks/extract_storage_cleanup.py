@@ -28,11 +28,13 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 import boto3
+from botocore.exceptions import ClientError
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dbx  # noqa: E402  (sibling module, same driver the recon uses)
@@ -42,7 +44,9 @@ REGION = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 DYNAMO_TABLE = "otterworks-file-metadata"
 FILE_STORAGE_BUCKET = "otterworks-file-storage"
 LEGACY_PREFIX = "files/"  # the un-namespaced prefix the legacy script hardcodes
+FIXTURE_MANIFEST_PREFIX = "fixture-manifests/"
 OUT_ROOT = Path(os.environ.get("TP_EXTRACT_ROOT", "/tmp/ow_tp_extracts"))
+_BUCKET = re.compile(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
 NOTEBOOK = Path(__file__).resolve().parents[2] / "databricks" / "notebooks" / "storage_cleanup_daily.py"
 
 
@@ -66,22 +70,35 @@ def _client(service: str):
     )
 
 
+def legacy_attributed_keys(bucket: str, ns: str) -> set[str]:
+    """Read fixture-only positive attribution for planted legacy-prefix keys."""
+    try:
+        body = _client("s3").get_object(
+            Bucket=bucket, Key=f"{FIXTURE_MANIFEST_PREFIX}{ns}.json"
+        )["Body"].read()
+        manifest = json.loads(body)
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") not in {"NoSuchKey", "404"}:
+            raise
+        return set()
+    return set(manifest.get("legacy_attributed_keys", []))
+
+
 def list_objects(bucket: str, ns: str) -> list[dict]:
-    """Inventory of everything this namespace owns, under every prefix it uses.
+    """Inventory under this namespace and the shared legacy prefix.
 
     Two prefixes, no more: `<ns>/` (namespaced keys, the tenancy boundary in the
     shared bucket) and the un-namespaced `files/` the legacy script hardcodes.
-    Wider than the legacy walk, which saw only `files/` and never reconciled
-    anything stored elsewhere -- but never wider than the namespace, because an
-    object listed here without a metadata row in *this* namespace is classified
-    as an orphan, and a false positive is a deleted customer file.
+    The latter is deliberately wider than the namespace: legacy-prefix objects
+    without positive attribution are visible but never quarantinable.
 
     Keys under the legacy prefix predate namespacing, so nothing in the key
-    attributes them to a tenant. Filtering keys claimed by another namespace
-    happens after the metadata scan, once both sides of the inventory have
-    been observed.
+    attributes them to a tenant. Fixture-only positive attribution is recorded
+    out of band; filtering keys claimed by another namespace happens after the
+    metadata scan.
     """
     s3 = _client("s3")
+    attributed = legacy_attributed_keys(bucket, ns)
     by_key: dict[str, dict] = {}
     for prefix in (f"{ns}/", LEGACY_PREFIX):
         for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix):
@@ -91,6 +108,7 @@ def list_objects(bucket: str, ns: str) -> list[dict]:
                     "key": obj["Key"],
                     "size_bytes": obj["Size"],
                     "last_modified": obj["LastModified"].astimezone(timezone.utc).isoformat(),
+                    "legacy_attributed": obj["Key"] in attributed,
                 }
     return [by_key[key] for key in sorted(by_key)]
 
@@ -197,13 +215,14 @@ def load_bronze(ns: str, scenario: str, objects: list[dict], metadata: list[dict
     listed_at = _ts(manifest["extracted_at"])
     _insert_rows(
         "ow_tp.bronze.storage_objects_raw",
-        "ns, bucket, key, size_bytes, last_modified, listed_at",
+        "ns, bucket, key, size_bytes, legacy_attributed, last_modified, listed_at",
         [
-            "({}, {}, {}, {}, TIMESTAMP {}, TIMESTAMP {})".format(
+            "({}, {}, {}, {}, {}, TIMESTAMP {}, TIMESTAMP {})".format(
                 _lit(ns),
                 _lit(o["bucket"]),
                 _lit(o["key"]),
                 _lit(o["size_bytes"]),
+                _lit(o["legacy_attributed"]),
                 _lit(_ts(o["last_modified"])),
                 _lit(listed_at),
             )
@@ -272,6 +291,7 @@ def main(argv: list[str]) -> int:
     try:
         args.ns = nb._checked("ns", args.ns)
         args.scenario = nb._checked("scenario", args.scenario)
+        args.bucket = nb._checked("bucket", args.bucket, _BUCKET)
     except ValueError as exc:
         parser.error(str(exc))
 

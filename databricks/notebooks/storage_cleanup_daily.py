@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS {catalog}.bronze.storage_objects_raw (
   bucket        STRING,
   key           STRING,
   size_bytes    BIGINT,
+  legacy_attributed BOOLEAN,
   last_modified TIMESTAMP,
   listed_at     TIMESTAMP
 )
@@ -133,7 +134,8 @@ SELECT
   o.bucket,
   o.key,
   o.size_bytes,
-  CASE WHEN g.metadata_read_ok THEN 'no_metadata_row'
+  CASE WHEN o.key LIKE 'files/%' AND NOT o.legacy_attributed THEN 'unattributable_legacy_prefix'
+       WHEN g.metadata_read_ok THEN 'no_metadata_row'
        ELSE 'candidate_unverified_metadata_read' END AS orphan_reason,
   current_timestamp() AS detected_at,
   g.metadata_read_ok,
@@ -156,7 +158,7 @@ orphans AS (
     COUNT_IF(metadata_read_ok) AS orphan_count,
     COALESCE(SUM(CASE WHEN metadata_read_ok THEN size_bytes ELSE 0 END), 0) AS orphan_bytes
   FROM {catalog}.silver.storage_orphans
-  WHERE ns = '{ns}' AND scenario = '{scenario}'
+  WHERE ns = '{ns}' AND scenario = '{scenario}' AND orphan_reason = 'no_metadata_row'
 )
 SELECT
   '{ns}' AS ns,

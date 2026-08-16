@@ -50,6 +50,7 @@ DYNAMO_TABLE = "otterworks-file-metadata"
 FILE_STORAGE_BUCKET = "otterworks-file-storage"
 QUARANTINE_BUCKET = "otterworks-file-quarantine"
 LEGACY_PREFIX = "files/"  # the prefix the legacy script lists, hardcoded
+FIXTURE_MANIFEST_PREFIX = "fixture-manifests/"
 PLANTED_ORPHANS = 25
 GOLDEN_ROOT = Path(os.environ.get("TP_GOLDEN_ROOT", "/home/ubuntu/tp-golden")) / "python" / "storage_cleanup_daily"
 
@@ -143,6 +144,8 @@ def build(ns: str) -> dict:
         ensure_bucket(s3, bucket)
     orphans = planted_orphans(ns)
     planted_keys = {orphan["key"] for orphan in orphans}
+    manifest_key = f"{FIXTURE_MANIFEST_PREFIX}{ns}.json"
+    s3.delete_object(Bucket=FILE_STORAGE_BUCKET, Key=manifest_key)
 
     # `<ns>/` covers the live keys and namespaced copies. The planted orphans
     # sit under the shared legacy prefix, so remove only their exact keys.
@@ -217,9 +220,20 @@ def build(ns: str) -> dict:
         "legacy_visible_prefix": LEGACY_PREFIX,
         "legacy_visible_objects": len(orphans),
         "planted_orphans": orphans,
+        "legacy_attributed_keys": sorted(planted_keys),
     }
+    s3.put_object(
+        Bucket=FILE_STORAGE_BUCKET,
+        Key=manifest_key,
+        Body=json.dumps(
+            {"ns": ns, "legacy_attributed_keys": sorted(planted_keys)}
+        ).encode(),
+        ContentType="application/json",
+    )
     GOLDEN_ROOT.mkdir(parents=True, exist_ok=True)
-    (GOLDEN_ROOT / "fixture_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    (GOLDEN_ROOT / f"fixture_manifest_{ns}.json").write_text(
+        json.dumps(manifest, indent=2) + "\n"
+    )
     return manifest
 
 
