@@ -112,11 +112,12 @@ def paginate(
     keys: tuple[str, ...],
     token: str | None,
     entity_type: str = "unknown",
+    completeness: dict[str, object] | None = None,
 ):
     """Yield source records page by page, mirroring the legacy pagination contract."""
     page = 1
     extracted = 0
-    reported_total = None
+    observed_totals: list[int] = []
     while True:
         body = get_json(url, {page_param: page, size_param: page_size}, token)
         present_key = next((key for key in keys if key in body), None)
@@ -136,14 +137,14 @@ def paginate(
                 raise RuntimeError(
                     f"{entity_type} response from {url} has invalid total"
                 ) from exc
-            if reported_total is None:
-                reported_total = page_total
+            observed_totals.append(page_total)
         if not records:
-            if reported_total is None:
+            if not observed_totals:
                 _log(logging.INFO, "completeness_unchecked", entity_type=entity_type, url=url)
-            elif extracted != reported_total:
+            elif extracted < min(observed_totals):
                 raise RuntimeError(
-                    f"{entity_type} extract count {extracted} does not match reported total {reported_total}"
+                    f"{entity_type} extract count {extracted} is short of the smallest "
+                    f"reported total {min(observed_totals)}"
                 )
             else:
                 _log(
@@ -151,7 +152,21 @@ def paginate(
                     "completeness_checked",
                     entity_type=entity_type,
                     extracted=extracted,
-                    reported_total=reported_total,
+                    observed_totals=observed_totals,
+                )
+            if completeness is not None:
+                completeness[entity_type] = {
+                    "observed_totals": observed_totals,
+                    "minimum_total": min(observed_totals) if observed_totals else None,
+                    "drifted": bool(observed_totals and observed_totals[0] != observed_totals[-1]),
+                }
+            if len(observed_totals) > 1 and observed_totals[0] != observed_totals[-1]:
+                _log(
+                    logging.WARNING,
+                    "reported_total_drift",
+                    entity_type=entity_type,
+                    first_total=observed_totals[0],
+                    last_total=observed_totals[-1],
                 )
             return
         _log(logging.INFO, "page_extracted", url=url, page=page, records=len(records))
@@ -195,6 +210,7 @@ def write_ndjson(path: Path, ns: str, entity_type: str, records, id_keys: tuple[
             }
             handle.write(json.dumps(envelope) + "\n")
             count += 1
+    path.chmod(0o600)
     _log(logging.INFO, "entity_extracted", entity_type=entity_type, records=count, path=str(path))
     return count
 
@@ -233,17 +249,18 @@ def main(argv: list[str] | None = None) -> int:
     extracted_at = datetime.now(timezone.utc).isoformat()
     _log(logging.INFO, "extract_started", ns=args.ns, page_size=page_size, extracted_at=extracted_at)
 
+    completeness: dict[str, object] = {}
     counts = {
         "document": write_ndjson(
             out_dir / "documents.ndjson", args.ns, "document",
             paginate(f"{document_service.rstrip('/')}/api/v1/documents", "page", "size", page_size,
-                     ("documents", "items"), token, "document"),
+                     ("documents", "items"), token, "document", completeness),
             ("document_id", "id"), extracted_at,
         ),
         "file": write_ndjson(
             out_dir / "files.ndjson", args.ns, "file",
             paginate(f"{file_service.rstrip('/')}/api/v1/files", "page", "page_size", page_size,
-                     ("files", "items"), token, "file"),
+                     ("files", "items"), token, "file", completeness),
             ("file_id", "id"), extracted_at,
         ),
     }
@@ -253,10 +270,12 @@ def main(argv: list[str] | None = None) -> int:
         "extracted_at": extracted_at,
         "page_size": page_size,
         "counts": counts,
+        "completeness": completeness,
         "sources": {"document": document_service, "file": file_service},
     }
     manifest_path = out_dir / "_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    manifest_path.chmod(0o600)
 
     if args.upload:
         for name in ("documents.ndjson", "files.ndjson", "_manifest.json"):

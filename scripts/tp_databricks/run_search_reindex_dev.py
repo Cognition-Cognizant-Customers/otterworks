@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -32,6 +33,10 @@ NOTEBOOKS = {
     "search_reindex_publish": REPO_ROOT / "databricks/notebooks/search_reindex_publish.py",
 }
 JOB_NAME = f"{dbx.PREFIX}_dev_search_reindex"
+RUN_TIMEOUT_S = 10800
+TEARDOWN_POLL_S = 2
+TEARDOWN_TIMEOUT_S = 600
+TERMINAL_STATES = {"TERMINATED", "SKIPPED", "INTERNAL_ERROR"}
 
 
 def deploy() -> dict[str, str]:
@@ -128,6 +133,42 @@ def teardown() -> bool:
     current = existing_job_id()
     if current is None:
         return False
+    runs = dbx.request(
+        "GET",
+        f"/api/2.2/jobs/runs/list?job_id={current}&limit=20",
+    ).get("runs", [])
+    active = [
+        run for run in runs
+        if run.get("state", {}).get("life_cycle_state") not in TERMINAL_STATES
+    ]
+    if active:
+        run = max(active, key=lambda item: item.get("start_time", 0))
+        run_id = run.get("run_id")
+        run_url = run.get("run_page_url")
+        if run_id is None:
+            raise dbx.DatabricksError(f"active run for {JOB_NAME} has no run_id")
+        print(
+            f"cancelling active run {run_id} ({run_url or 'no run URL'}) before deleting {JOB_NAME}",
+            file=sys.stderr,
+        )
+        dbx.request("POST", "/api/2.2/jobs/runs/cancel", {"run_id": run_id})
+        deadline = time.monotonic() + TEARDOWN_TIMEOUT_S
+        while True:
+            run = dbx.request("GET", f"/api/2.2/jobs/runs/get?run_id={run_id}")
+            state = run.get("state", {})
+            if state.get("life_cycle_state") in TERMINAL_STATES:
+                print(
+                    f"run {run_id} ({run.get('run_page_url') or run_url or 'no run URL'}) "
+                    f"reached terminal state {state.get('life_cycle_state')}",
+                    file=sys.stderr,
+                )
+                break
+            if time.monotonic() >= deadline:
+                raise dbx.DatabricksError(
+                    f"run {run_id} ({run.get('run_page_url') or run_url or 'no run URL'}) "
+                    f"did not reach terminal state before teardown timeout"
+                )
+            time.sleep(TEARDOWN_POLL_S)
     dbx.request("POST", "/api/2.2/jobs/delete", {"job_id": current})
     return True
 
@@ -155,7 +196,7 @@ def main(argv: list[str]) -> int:
     teardown_error = None
     try:
         ensure_job(task_keys)
-        run = dbx.run_job(JOB_NAME, params)
+        run = dbx.run_job(JOB_NAME, params, timeout_s=RUN_TIMEOUT_S)
         state = run.get("state", {})
         summary = {
             "job": JOB_NAME,
