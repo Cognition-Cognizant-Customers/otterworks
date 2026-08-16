@@ -31,6 +31,19 @@ Shared rules:
   with versions embedded as a bounded subarray and snapshots as references;
   orphaned snapshots quarantine into
   `ow_tp_mongodb_<ns>_quarantine.documents_quarantine`.
+- `mongo_invoices` (`migrate_invoices.py` / `recon_invoices.py` /
+  `verify_invoices.sh`) — Oracle `OW_BILLING.INVOICE_HEADER` + `INVOICE_LINE` →
+  `ow_tp_mongodb_<ns>.invoices` (lines embedded in their header); orphaned
+  lines (no matching header) →
+  `ow_tp_mongodb_<ns>_quarantine.invoice_lines_quarantine` with attribution,
+  never dropped and never embedded under a fabricated header.
+  - `make tp-mongo-migrate-invoices NS=<ns>` — run the migration.
+  - `make tp-mongo-verify-invoices NS=<ns>` — full migrate → rerun → recon
+    flow; writes `docs/tech-partnerships/recon/mongo_invoices.<ns>.recon.json`
+    with the idempotency rerun proof (validate with
+    `make tp-validate-recon FILE=<report>`).
+  - Fixture mode never consults `MONGODB_ATLAS_URI`; only an explicit
+    `--run-mode live` (the parent's window) does.
 - `mongo_files/` — DynamoDB `otterworks-file-metadata`
   → `ow_tp_mongodb_<ns>.files` with orphaned/malformed metadata quarantined
   into `ow_tp_mongodb_<ns>_quarantine.files_quarantine`.
