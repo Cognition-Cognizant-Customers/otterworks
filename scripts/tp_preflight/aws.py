@@ -8,11 +8,13 @@ import signal
 import subprocess
 import sys
 import uuid
+from datetime import datetime, timezone
 
 from common import Manifest, exception_detail
 
 m = Manifest("aws")
 cleanup_registry = {}
+run_started_at = datetime.now(timezone.utc)
 
 
 def handle_uncaught(exc_type, exc, traceback):
@@ -113,7 +115,7 @@ def aws(pid, description, args, required=True, record=True):
         return False, exception_detail(exc)
 
 
-def leftover_scan(pid, description, args, extractor):
+def leftover_scan(pid, description, args, extractor, own_role=None, classify_iam=False):
     ok, raw = aws(pid, description, args, required=True, record=False)
     if not ok:
         m.add(pid, description, "aws " + " ".join(args), "denied", "scan command failed")
@@ -125,14 +127,46 @@ def leftover_scan(pid, description, args, extractor):
         detail = f"unable to parse leftover scan output: {exc}; output={(raw or '<empty>')[:300]}"
         m.add(pid, description, "aws " + " ".join(args), "denied", detail)
         return False
+    if own_role:
+        matches = [match for match in matches if str(match) != own_role]
     detail = json.dumps(matches) if matches else "none found"
     preflight_matches = [
         match for match in matches
         if re.search(rf"{re.escape(name_prefix)}preflight-", str(match))
     ]
     if preflight_matches:
-        result = "denied"
-        detail = f"preflight debris ({len(preflight_matches)}): {json.dumps(preflight_matches)}"
+        if classify_iam:
+            concurrent = []
+            abandoned = []
+            for match in preflight_matches:
+                found, role_raw = aws(
+                    "iam-role-age",
+                    "Resolve the creation time of a concurrent preflight role",
+                    ["iam", "get-role", "--role-name", str(match)],
+                    required=False,
+                    record=False,
+                )
+                created_at = None
+                if found:
+                    try:
+                        role_body = json.loads(role_raw)
+                        created = role_body["Role"]["CreateDate"]
+                        created_at = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                        created_at = None
+                if created_at is not None and created_at > run_started_at:
+                    concurrent.append(match)
+                else:
+                    abandoned.append(match)
+            if abandoned:
+                result = "denied"
+                detail = f"preflight debris ({len(abandoned)}): {json.dumps(abandoned)}"
+            elif concurrent:
+                result = "informational"
+                detail = f"concurrent preflight role(s) in flight ({len(concurrent)}): {json.dumps(concurrent)}"
+        else:
+            result = "denied"
+            detail = f"preflight debris ({len(preflight_matches)}): {json.dumps(preflight_matches)}"
     elif matches and os.environ.get("TP_AWS_REQUIRE_CLEAN_ESTATE") == "1":
         result = "denied"
     elif matches:
@@ -293,5 +327,12 @@ for label, args, extractor in [
     ("leftover-s3-scan", ["s3api", "list-buckets", "--query", f"Buckets[?starts_with(Name,'{name_prefix}')].Name"], list_output),
     ("leftover-iam-scan", ["iam", "list-roles", "--query", f"Roles[?starts_with(RoleName,'{name_prefix}')].RoleName"], list_output),
 ]:
-    leftover_scan(label, f"Scan for leftover {name_prefix} resources", args, extractor)
+    leftover_scan(
+        label,
+        f"Scan for leftover {name_prefix} resources",
+        args,
+        extractor,
+        own_role=role if label == "leftover-iam-scan" else None,
+        classify_iam=label == "leftover-iam-scan",
+    )
 raise SystemExit(m.write("aws"))

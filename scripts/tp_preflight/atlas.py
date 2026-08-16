@@ -13,7 +13,38 @@ from requests.auth import HTTPDigestAuth
 
 from common import Manifest, exception_detail, require_env
 
+
+def validate_probe_ip(value):
+    try:
+        if "/" in value:
+            interface = ipaddress.ip_interface(value)
+            if interface.version != 4 or interface.network.prefixlen != 32:
+                raise ValueError
+            address = interface.ip
+        else:
+            address = ipaddress.ip_address(value)
+            if address.version != 4:
+                raise ValueError
+    except ValueError:
+        raise SystemExit(
+            "TP_ATLAS_TEST_IP must be an IPv4 host (optionally /32) in "
+            "192.0.2.0/24, 198.51.100.0/24, or 203.0.113.0/24"
+        )
+    allowed = (
+        ipaddress.ip_network("192.0.2.0/24"),
+        ipaddress.ip_network("198.51.100.0/24"),
+        ipaddress.ip_network("203.0.113.0/24"),
+    )
+    if not any(address in network for network in allowed):
+        raise SystemExit(
+            "TP_ATLAS_TEST_IP must be in 192.0.2.0/24, 198.51.100.0/24, "
+            "or 203.0.113.0/24"
+        )
+    return str(address)
+
+
 require_env("MONGODB_ATLAS_PUBLIC_KEY", "MONGODB_ATLAS_PRIVATE_KEY", "MONGODB_ATLAS_PROJECT_ID")
+probe_ip = validate_probe_ip(os.environ.get("TP_ATLAS_TEST_IP", "203.0.113.254"))
 raw_base = os.environ.get("TP_ATLAS_API_BASE", "https://cloud.mongodb.com/api/atlas/v2")
 parsed_base = urllib.parse.urlparse(raw_base)
 if parsed_base.scheme != "https" or not parsed_base.hostname or parsed_base.username or parsed_base.password:
@@ -181,35 +212,6 @@ def entry_matches(entry, target):
     return api_entry_ip(entry) == api_entry_ip(target)
 
 
-def validate_probe_ip(value):
-    try:
-        if "/" in value:
-            interface = ipaddress.ip_interface(value)
-            if interface.version != 4 or interface.network.prefixlen != 32:
-                raise ValueError
-            address = interface.ip
-        else:
-            address = ipaddress.ip_address(value)
-            if address.version != 4:
-                raise ValueError
-    except ValueError:
-        raise SystemExit(
-            "TP_ATLAS_TEST_IP must be an IPv4 host (optionally /32) in "
-            "192.0.2.0/24, 198.51.100.0/24, or 203.0.113.0/24"
-        )
-    allowed = (
-        ipaddress.ip_network("192.0.2.0/24"),
-        ipaddress.ip_network("198.51.100.0/24"),
-        ipaddress.ip_network("203.0.113.0/24"),
-    )
-    if not any(address in network for network in allowed):
-        raise SystemExit(
-            "TP_ATLAS_TEST_IP must be in 192.0.2.0/24, 198.51.100.0/24, "
-            "or 203.0.113.0/24"
-        )
-    return str(address)
-
-
 ip = None
 ip_lookup_error = None
 if os.environ.get("MONGODB_ATLAS_URI"):
@@ -223,7 +225,6 @@ if os.environ.get("MONGODB_ATLAS_URI"):
             ip_lookup_error = "public address was not IPv4"
     except Exception as exc:
         ip_lookup_error = exception_detail(exc)
-probe_ip = validate_probe_ip(os.environ.get("TP_ATLAS_TEST_IP", "203.0.113.254"))
 entry_records = access_list_snapshot()
 if entry_records is None:
     m.add("access-list-post", "Create a temporary API access-list entry",
