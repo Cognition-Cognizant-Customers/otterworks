@@ -115,7 +115,9 @@ def _sha256(path: Path) -> str:
 
 def read_golden(
     golden_dir: Path, ns: str
-) -> tuple[dict[tuple[str, int], dict[str, object]], list[str]]:
+) -> tuple[
+    dict[tuple[str, int], dict[str, object]], list[str], set[str]
+]:
     """Parse the legacy pipe-delimited output into keyed, typed rows.
 
     The legacy writer emits `account|name|YYYY-MM-DD|amount|currency|type`; the
@@ -124,10 +126,12 @@ def read_golden(
     """
     rows: dict[tuple[str, int], dict[str, object]] = {}
     errors: list[str] = []
+    matched_stems: set[str] = set()
     for psv in sorted(
         golden_dir.glob(f"CUSTBILL_{ns.upper()}_[0-9][0-9][0-9].psv")
     ):
         stem = psv.stem
+        matched_stems.add(stem)
         data_index = 0
         for index, line in enumerate(psv.read_text().splitlines(), start=1):
             if not line.strip():
@@ -161,7 +165,7 @@ def read_golden(
                 "currency": currency,
                 "record_type": record_type,
             }
-    return rows, errors
+    return rows, errors, matched_stems
 
 
 def read_converted(
@@ -225,12 +229,14 @@ def _display_converted_value(field: str, value: object) -> str:
     return repr(value)
 
 
-def _block_empty_golden(check: Check, golden_dir: Path, ns: str, golden) -> bool:
-    if golden:
+def _block_empty_golden(
+    check: Check, golden_dir: Path, ns: str, matched_stems: set[str]
+) -> bool:
+    if matched_stems:
         return False
     check.blocked(
         "golden output",
-        f"no rows loaded from {golden_dir} using "
+        f"no files matched in {golden_dir} using "
         f"CUSTBILL_{ns.upper()}_[0-9][0-9][0-9].psv",
     )
     return True
@@ -262,9 +268,17 @@ def check_baseline(ns: str, golden_dir: Path) -> Check:
     return check
 
 
-def check_row_parity(golden, converted, converted_error=None, *, golden_dir: Path, ns: str) -> Check:
+def check_row_parity(
+    golden,
+    converted,
+    converted_error=None,
+    *,
+    golden_dir: Path,
+    ns: str,
+    matched_stems: set[str],
+) -> Check:
     check = Check("1", "Row-level parity: every field of every row, keyed on (file, line_no)")
-    if _block_empty_golden(check, golden_dir, ns, golden):
+    if _block_empty_golden(check, golden_dir, ns, matched_stems):
         return check
     if converted_error:
         check.blocked(*converted_error)
@@ -293,14 +307,23 @@ def check_row_parity(golden, converted, converted_error=None, *, golden_dir: Pat
 
 
 def check_subtotals(
-    ns: str, golden, converted, converted_error=None, *, golden_dir: Path
+    ns: str,
+    golden,
+    converted,
+    converted_error=None,
+    *,
+    golden_dir: Path,
+    matched_stems: set[str],
 ) -> Check:
     check = Check("2", "Per-file subtotals per record type and currency, exact to the cent")
-    if _block_empty_golden(check, golden_dir, ns, golden):
+    if _block_empty_golden(check, golden_dir, ns, matched_stems):
         return check
     if converted_error:
         check.blocked(*converted_error)
         return check
+    if not golden and not converted:
+        check.note("golden rows: 0; converted rows: 0")
+        check.note("all 0 rows match; no subtotal groups to compare")
     golden_agg = subtotals(golden)
     converted_agg = subtotals(converted)
     keys = set(golden_agg) | set(converted_agg)
@@ -324,10 +347,14 @@ def check_subtotals(
 
 
 def check_file_recon(
-    ns: str, expected_files: int, *, golden_dir: Path, golden
+    ns: str,
+    expected_files: int,
+    *,
+    golden_dir: Path,
+    matched_stems: set[str],
 ) -> Check:
     check = Check("3", "Trailer reconciliation: declared_trailer_count = parsed + rejected, recon_ok")
-    golden_empty = _block_empty_golden(check, golden_dir, ns, golden)
+    golden_missing = _block_empty_golden(check, golden_dir, ns, matched_stems)
     ns_literal = custbill_parse_sql.quote_sql_literal(ns)
     statement = f"""
         SELECT file_name, declared_trailer_count, parsed_count, rejected_count, recon_ok
@@ -371,14 +398,16 @@ def check_file_recon(
             check.note(detail)
         else:
             check.fail(detail)
-    if not golden_empty and len(rows) != expected_files:
+    if not golden_missing and len(rows) != expected_files:
         check.fail(f"expected {expected_files} recon rows from namespace-scoped golden files, found {len(rows)}")
     return check
 
 
-def check_quarantine(ns: str, golden, *, golden_dir: Path) -> Check:
+def check_quarantine(
+    ns: str, golden, *, golden_dir: Path, matched_stems: set[str]
+) -> Check:
     check = Check("4", "Quarantine justified: nothing the legacy output contains is rejected")
-    if _block_empty_golden(check, golden_dir, ns, golden):
+    if _block_empty_golden(check, golden_dir, ns, matched_stems):
         return check
     exists_statement = f"SHOW TABLES IN {custbill_sql.CATALOG}.silver LIKE 'custbill_rejects'"
     try:
@@ -570,25 +599,46 @@ def main() -> int:
     args.ns = custbill_parse_sql.validate_namespace(args.ns)
 
     golden_dir = Path(args.golden)
-    golden, golden_errors = read_golden(golden_dir, args.ns)
+    golden, golden_errors, matched_stems = read_golden(golden_dir, args.ns)
     converted, converted_error = read_converted(args.ns)
     baseline_check = check_baseline(args.ns, golden_dir)
     for error in golden_errors:
         baseline_check.fail(error)
     checks = [baseline_check]
     checks.append(
-        check_row_parity(golden, converted, converted_error, golden_dir=golden_dir, ns=args.ns)
-    )
-    checks.append(
-        check_subtotals(args.ns, golden, converted, converted_error, golden_dir=golden_dir)
-    )
-    expected_files = len({stem for stem, _line_no in golden})
-    checks.append(
-        check_file_recon(
-            args.ns, expected_files, golden_dir=golden_dir, golden=golden
+        check_row_parity(
+            golden,
+            converted,
+            converted_error,
+            golden_dir=golden_dir,
+            ns=args.ns,
+            matched_stems=matched_stems,
         )
     )
-    checks.append(check_quarantine(args.ns, golden, golden_dir=golden_dir))
+    checks.append(
+        check_subtotals(
+            args.ns,
+            golden,
+            converted,
+            converted_error,
+            golden_dir=golden_dir,
+            matched_stems=matched_stems,
+        )
+    )
+    expected_files = len(matched_stems)
+    checks.append(
+        check_file_recon(
+            args.ns,
+            expected_files,
+            golden_dir=golden_dir,
+            matched_stems=matched_stems,
+        )
+    )
+    checks.append(
+        check_quarantine(
+            args.ns, golden, golden_dir=golden_dir, matched_stems=matched_stems
+        )
+    )
     if not args.skip_idempotency:
         checks.append(check_idempotency(args.ns, converted, converted_error))
 
