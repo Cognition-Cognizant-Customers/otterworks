@@ -37,6 +37,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
+from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dbx  # noqa: E402
@@ -50,6 +51,12 @@ RUN_TIMEOUT_S = 5400
 TEARDOWN_POLL_S = 2
 TEARDOWN_TIMEOUT_S = 600
 TERMINAL_STATES = {"TERMINATED", "SKIPPED", "INTERNAL_ERROR"}
+
+
+class TeardownResult(NamedTuple):
+    job: bool
+    notebook: bool
+    errors: dict[str, str]
 
 
 def _load(path: Path, name: str) -> ModuleType:
@@ -155,10 +162,10 @@ def ensure_job(settings: dict) -> int:
     return current
 
 
-def teardown() -> dict[str, object]:
-    result: dict[str, object] = {"job": False, "notebook": False, "errors": {}}
-    errors = result["errors"]
-    assert isinstance(errors, dict)
+def teardown() -> TeardownResult:
+    job_torn_down = False
+    notebook_torn_down = False
+    errors: dict[str, str] = {}
 
     try:
         current = existing_job_id()
@@ -181,20 +188,20 @@ def teardown() -> dict[str, object]:
                         )
                     time.sleep(TEARDOWN_POLL_S)
             dbx.request("POST", "/api/2.2/jobs/delete", {"job_id": current})
-            result["job"] = True
+            job_torn_down = True
     except Exception as exc:
         errors["job"] = str(exc)
 
     notebook_path = f"{dbx.PIPELINE_ROOT}/{NOTEBOOK_NAME}"
     try:
         dbx.request("POST", "/api/2.0/workspace/delete", {"path": notebook_path, "recursive": False})
-        result["notebook"] = True
+        notebook_torn_down = True
     except dbx.DatabricksError as exc:
         if exc.status != 404 and exc.error_code != "RESOURCE_DOES_NOT_EXIST":
             errors["notebook"] = str(exc)
     except Exception as exc:
         errors["notebook"] = str(exc)
-    return result
+    return TeardownResult(job_torn_down, notebook_torn_down, errors)
 
 
 def rollup_rows(ns: str, run_date: str) -> list[dict]:
@@ -213,7 +220,14 @@ def main(argv: list[str]) -> int:
     params = dict(arg.split("=", 1) for arg in argv[1:])
     if command == "teardown":
         deleted = teardown()
-        print(json.dumps({"deleted": deleted, "job": JOB_NAME}, indent=2))
+        print(json.dumps({
+            "deleted": {
+                "job": deleted.job,
+                "notebook": deleted.notebook,
+                "errors": deleted.errors,
+            },
+            "job": JOB_NAME,
+        }, indent=2))
         return 0
     if command != "run":
         print(__doc__, file=sys.stderr)
@@ -263,18 +277,18 @@ def main(argv: list[str]) -> int:
             "read_at": datetime.now(timezone.utc).isoformat(),
         }
     finally:
-        torn_down = {"job": False, "notebook": False, "errors": {}}
+        torn_down = TeardownResult(False, False, {})
         teardown_error = None
         if not keep:
             torn_down = teardown()
-            errors = torn_down["errors"]
-            assert isinstance(errors, dict)
-            if errors:
-                teardown_error = "; ".join(f"{resource}: {message}" for resource, message in errors.items())
+            if torn_down.errors:
+                teardown_error = "; ".join(
+                    f"{resource}: {message}" for resource, message in torn_down.errors.items()
+                )
                 print(f"warning: failed to tear down {JOB_NAME}: {teardown_error}", file=sys.stderr)
         if summary is not None:
-            summary["job_torn_down"] = torn_down["job"]
-            summary["notebook_torn_down"] = torn_down["notebook"]
+            summary["job_torn_down"] = torn_down.job
+            summary["notebook_torn_down"] = torn_down.notebook
             if teardown_error is not None:
                 summary["teardown_error"] = str(teardown_error)
 
