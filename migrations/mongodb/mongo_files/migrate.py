@@ -56,7 +56,7 @@ KNOWN_ATTRS = (
     "owner_id", "version", "is_trashed", "created_at", "updated_at",
 )
 INT_ATTRS = {"size_bytes", "version"}
-ORPHAN_MARKER = re.compile(r"(^|/)missing/")
+ORPHAN_MARKER = re.compile(r"/missing/")
 
 NS_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
 
