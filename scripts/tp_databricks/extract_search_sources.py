@@ -103,15 +103,58 @@ def get_json(url: str, params: dict[str, object], token: str | None) -> dict:
     raise RuntimeError(f"GET {target} failed after {MAX_ATTEMPTS} attempts: {last_error}")
 
 
-def paginate(url: str, page_param: str, size_param: str, page_size: int, keys: tuple[str, ...], token: str | None):
+def paginate(
+    url: str,
+    page_param: str,
+    size_param: str,
+    page_size: int,
+    keys: tuple[str, ...],
+    token: str | None,
+    entity_type: str = "unknown",
+):
     """Yield source records page by page, mirroring the legacy pagination contract."""
     page = 1
+    extracted = 0
+    reported_total = None
     while True:
         body = get_json(url, {page_param: page, size_param: page_size}, token)
-        records = next((body[key] for key in keys if isinstance(body.get(key), list)), [])
+        present_key = next((key for key in keys if key in body), None)
+        if present_key is None:
+            raise RuntimeError(
+                f"{entity_type} response from {url} has none of the expected record keys {keys!r}"
+            )
+        records = body[present_key]
+        if not isinstance(records, list):
+            raise RuntimeError(
+                f"{entity_type} response from {url} has non-list value for record key {present_key!r}"
+            )
+        if "total" in body and body["total"] is not None:
+            try:
+                page_total = int(body["total"])
+            except (TypeError, ValueError) as exc:
+                raise RuntimeError(
+                    f"{entity_type} response from {url} has invalid total"
+                ) from exc
+            if reported_total is None:
+                reported_total = page_total
         if not records:
+            if reported_total is None:
+                _log(logging.INFO, "completeness_unchecked", entity_type=entity_type, url=url)
+            elif extracted != reported_total:
+                raise RuntimeError(
+                    f"{entity_type} extract count {extracted} does not match reported total {reported_total}"
+                )
+            else:
+                _log(
+                    logging.INFO,
+                    "completeness_checked",
+                    entity_type=entity_type,
+                    extracted=extracted,
+                    reported_total=reported_total,
+                )
             return
         _log(logging.INFO, "page_extracted", url=url, page=page, records=len(records))
+        extracted += len(records)
         yield from records
         page += 1
 
@@ -192,13 +235,13 @@ def main(argv: list[str] | None = None) -> int:
         "document": write_ndjson(
             out_dir / "documents.ndjson", args.ns, "document",
             paginate(f"{document_service.rstrip('/')}/api/v1/documents", "page", "size", page_size,
-                     ("documents", "items"), token),
+                     ("documents", "items"), token, "document"),
             ("document_id", "id"), extracted_at,
         ),
         "file": write_ndjson(
             out_dir / "files.ndjson", args.ns, "file",
             paginate(f"{file_service.rstrip('/')}/api/v1/files", "page", "page_size", page_size,
-                     ("files", "items"), token),
+                     ("files", "items"), token, "file"),
             ("file_id", "id"), extracted_at,
         ),
     }
