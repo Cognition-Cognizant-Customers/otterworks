@@ -343,8 +343,11 @@ def _secret(scope: str, key: str) -> str | None:
         value = dbutils.secrets.get(scope=scope, key=key).strip()
     except Exception as exc:
         detail = str(exc)
-        missing_key_message = f"Failed to get secret {key} for scope {scope}."
-        if missing_key_message not in detail:
+        missing_key_messages = (
+            f"Failed to get secret {key} for scope {scope}.",
+            f"Secret does not exist with scope: {scope} and key: {key}",
+        )
+        if not any(message in detail for message in missing_key_messages):
             raise
         return None
     return value or None
