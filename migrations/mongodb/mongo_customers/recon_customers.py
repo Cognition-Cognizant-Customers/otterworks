@@ -264,6 +264,9 @@ def main() -> int:
     failed = [c["id"] for c in report["checks"] if c["result"] != "pass"]
     if not identical:
         failed.append("idempotency-rerun")
+    detections = report["planted_anomaly_detections"]
+    if detections["missing"] or detections["unexpected"]:
+        failed.append("planted-anomaly-detections")
     print(f"[{UNIT}] recon written to {args.out}; "
           f"{'FAIL: ' + ','.join(failed) if failed else 'all checks pass'}")
     return 1 if failed else 0
