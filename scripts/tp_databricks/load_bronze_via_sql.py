@@ -133,6 +133,22 @@ def main(argv: list[str] | None = None) -> int:
         ):
             raise RuntimeError(f"scratch bronze counts do not match the extract manifest: {loaded}")
 
+        if sum(expected.values()) == 0:
+            raise RuntimeError("extract manifest is empty; refusing to replace existing bronze rows")
+
+        rows = dbx.sql(
+            f"SELECT entity_type, COUNT(*) FROM {BRONZE_TABLE} "
+            f"WHERE ns = '{args.ns}' GROUP BY entity_type"
+        )
+        bronze_before_counts = {row[0]: int(row[1]) for row in rows}
+        would_erase = {
+            entity: count
+            for entity, count in bronze_before_counts.items()
+            if count > 0 and expected.get(entity, 0) == 0
+        }
+        if would_erase:
+            raise RuntimeError(f"extract would erase existing bronze entity types: {would_erase}")
+
         dbx.sql(
             f"""
             INSERT INTO {BRONZE_TABLE}
