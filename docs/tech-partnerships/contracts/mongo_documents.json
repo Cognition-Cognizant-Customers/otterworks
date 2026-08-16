@@ -1,0 +1,35 @@
+{
+  "unit": "mongo_documents",
+  "source_artifact_path": "Postgres schema otterworks_<ns> (documents, document_versions, document_snapshots), seeded by testdata/legacy/seed.py via make seed-legacy",
+  "target_objects": [
+    "ow_tp_mongodb_<ns>.documents",
+    "ow_tp_mongodb_<ns>_quarantine.documents_quarantine"
+  ],
+  "golden_baseline_location": "testdata/legacy/manifests/<ns>.json (targets postgres.otterworks_demo.documents rows=2000 checksum=e70001cf6110014dab6e1d80adb40285, document_versions rows=13876 checksum=13bc033b2780a0569d7f2217e85d7303, document_snapshots rows=390 checksum=abe69084205723d6ad79e825b8c752dd at NS=demo)",
+  "acceptance_checks": [
+    { "id": "documents-count", "description": "documents collection holds exactly the manifest documents row count (2000 at NS=demo)." },
+    { "id": "versions-embedded", "description": "versions embed as a bounded subarray (or bucketed collection) on their document; total embedded versions equals the manifest document_versions row count (13876 at NS=demo)." },
+    { "id": "checksums", "description": "order-independent md5 checksums recomputed from the target for documents, versions, and snapshot references match all three manifest checksums." },
+    { "id": "version-gaps-reported", "description": "documents with non-contiguous version numbers are detected and enumerated (not repaired, not renumbered)." },
+    { "id": "orphaned-snapshots-reported", "description": "snapshots referencing missing documents/versions are quarantined with attribution and enumerated." }
+  ],
+  "encoding_policy": {
+    "input_encoding": "UTF-8 (Postgres server encoding)",
+    "byte_transparency": "document content carried byte-for-byte, including any embedded control characters",
+    "invalid_bytes": "not expected from Postgres UTF-8; if encountered the record quarantines with attribution"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "tolerate-and-attribute",
+    "details": "NULL columns become omitted fields; version gaps and orphaned snapshots are surfaced as anomalies, never silently patched."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "a run against an empty/absent source schema writes nothing and leaves prior target output untouched."
+  },
+  "trigger_granularity": "per-batch",
+  "planted_anomalies": [
+    { "id": "version_gaps", "description": "10 document version gaps (manifest kind=version_gaps)", "status": "must-detect" },
+    { "id": "orphaned_snapshots", "description": "6 orphaned document_snapshots rows (manifest kind=orphaned_snapshots)", "status": "must-detect" }
+  ]
+}
