@@ -28,7 +28,7 @@ import os
 import re
 import subprocess
 import sys
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -131,6 +131,91 @@ def savings(ns: str, scenario: str, run_date: str) -> dict:
 # --------------------------------------------------------------------------- golden
 
 
+def _utcnow() -> datetime:
+    return datetime.now(tz=timezone.utc)
+
+
+def _quarantine_keys(s3, bucket: str, capture_date: date) -> set[str]:
+    prefix = f"quarantined/{capture_date.isoformat()}/"
+    keys = set()
+    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            keys.add(obj["Key"][len(prefix) :])
+    return keys
+
+
+def _report_identity(s3, bucket: str, capture_date: date) -> dict | None:
+    key = f"reports/storage-cleanup/{capture_date.isoformat()}/report.json"
+    try:
+        head = s3.head_object(Bucket=bucket, Key=key)
+    except s3.exceptions.ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
+            return None
+        raise
+    return {
+        "etag": head.get("ETag"),
+        "last_modified": head.get("LastModified").isoformat(),
+    }
+
+
+def _capture_candidates(date_before: date) -> list[date]:
+    return [date_before, date_before + timedelta(days=1)]
+
+
+def _resolve_capture_date(
+    s3,
+    report_bucket: str,
+    candidates: list[date],
+    pre_existing: dict[date, set[str]],
+    report_before: dict[date, dict | None],
+    stdout: str,
+    date_before: date,
+    date_after: date,
+) -> tuple[date, dict]:
+    if date_after - date_before > timedelta(days=1):
+        raise SystemExit(
+            f"legacy run crossed more than one UTC day: before={date_before} after={date_after}"
+        )
+    report_after = {
+        capture_date: _report_identity(s3, report_bucket, capture_date)
+        for capture_date in candidates
+    }
+    changed = [
+        capture_date
+        for capture_date in candidates
+        if report_after[capture_date] != report_before[capture_date]
+    ]
+    evidence = {
+        "candidates": [capture_date.isoformat() for capture_date in candidates],
+        "report_before": {
+            capture_date.isoformat(): report_before[capture_date] for capture_date in candidates
+        },
+        "report_after": {
+            capture_date.isoformat(): report_after[capture_date] for capture_date in candidates
+        },
+        "stdout_tail": stdout[-2000:],
+    }
+    if len(changed) != 1:
+        raise SystemExit(f"could not resolve one changed legacy report: {evidence!r}")
+    effective = changed[0]
+    key = f"reports/storage-cleanup/{effective.isoformat()}/report.json"
+    report = json.loads(s3.get_object(Bucket=report_bucket, Key=key)["Body"].read())
+    if report.get("report_date") != effective.isoformat():
+        raise SystemExit(
+            f"legacy report date mismatch: expected={effective.isoformat()} "
+            f"actual={report.get('report_date')!r} evidence={evidence!r}"
+    )
+    stdout_dates = set(
+        re.findall(r"to s3://[^/\s]+/quarantined/(\d{4}-\d{2}-\d{2})/", stdout)
+    )
+    if stdout_dates and stdout_dates != {effective.isoformat()}:
+        raise SystemExit(
+            f"legacy quarantine date mismatch: effective={effective.isoformat()} "
+            f"stdout_dates={sorted(stdout_dates)!r} evidence={evidence!r}"
+        )
+    return effective, report
+
+
 def capture_golden(ns: str) -> None:
     """Run the unedited legacy script and record what it actually quarantined."""
     env = dict(os.environ)
@@ -139,22 +224,19 @@ def capture_golden(ns: str) -> None:
     env.setdefault("AWS_SECRET_ACCESS_KEY", "test")
     env.setdefault("AWS_DEFAULT_REGION", extract.REGION)
     GOLDEN.mkdir(parents=True, exist_ok=True)
-    capture_date = datetime.now(tz=timezone.utc).date().isoformat()
-    prefix = f"quarantined/{capture_date}/"
     quarantine = "otterworks-file-quarantine"
+    report_bucket = "otterworks-data-lake"
     s3 = extract._client("s3")
-
-    def quarantine_keys() -> set[str]:
-        keys = set()
-        for page in s3.get_paginator("list_objects_v2").paginate(Bucket=quarantine, Prefix=prefix):
-            for obj in page.get("Contents", []):
-                keys.add(obj["Key"][len(prefix) :])
-        return keys
-
-    pre_existing = quarantine_keys()
-    (GOLDEN / "quarantined_preexisting_keys.txt").write_text(
-        "\n".join(sorted(pre_existing)) + ("\n" if pre_existing else "")
-    )
+    date_before = _utcnow().date()
+    candidates = _capture_candidates(date_before)
+    pre_existing = {
+        capture_date: _quarantine_keys(s3, quarantine, capture_date)
+        for capture_date in candidates
+    }
+    report_before = {
+        capture_date: _report_identity(s3, report_bucket, capture_date)
+        for capture_date in candidates
+    }
 
     proc = subprocess.run(
         [sys.executable, str(REPO / "etl" / "scripts" / "storage_cleanup_daily.py")],
@@ -171,14 +253,26 @@ def capture_golden(ns: str) -> None:
             + (proc.stdout + proc.stderr)[-2000:]
         )
 
-    captured = quarantine_keys() - pre_existing
+    capture_date, report = _resolve_capture_date(
+        s3,
+        report_bucket,
+        candidates,
+        pre_existing,
+        report_before,
+        proc.stdout + proc.stderr,
+        date_before,
+        _utcnow().date(),
+    )
+    pre_existing_keys = pre_existing[capture_date]
+    captured = _quarantine_keys(s3, quarantine, capture_date) - pre_existing_keys
+    (GOLDEN / "quarantined_preexisting_keys.txt").write_text(
+        "\n".join(sorted(pre_existing_keys)) + ("\n" if pre_existing_keys else "")
+    )
     (GOLDEN / "quarantined_keys.txt").write_text(
         "\n".join(sorted(captured)) + ("\n" if captured else "")
     )
 
-    report_key = f"reports/storage-cleanup/{capture_date}/report.json"
-    body = s3.get_object(Bucket="otterworks-data-lake", Key=report_key)["Body"].read()
-    (GOLDEN / "legacy_report.json").write_bytes(body)
+    (GOLDEN / "legacy_report.json").write_text(json.dumps(report, indent=2))
 
 
 def legacy_metadata_keys() -> int:
