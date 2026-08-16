@@ -64,11 +64,24 @@ def surrogate_passthrough_handler(cursor, metadata):
                           encoding_errors="surrogateescape")
 
 
-def ensure_utf8(value):
-    """Raise UnicodeEncodeError if the value carries surrogate-escaped bytes
-    (i.e. the source bytes were not valid UTF-8)."""
+class InvalidUtf8(Exception):
+    """A source value carries surrogate-escaped bytes (not valid UTF-8)."""
+
+    def __init__(self, field: str, value: str):
+        super().__init__(f"value in {field.upper()} does not decode as UTF-8")
+        self.field = field
+        self.value = value
+
+
+def ensure_utf8(value, field: str):
+    """Raise InvalidUtf8 (with the offending field and value) if the value
+    carries surrogate-escaped bytes (i.e. the source bytes were not valid
+    UTF-8)."""
     if isinstance(value, str):
-        value.encode("utf-8")
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError as exc:
+            raise InvalidUtf8(field, value) from exc
     return value
 
 
@@ -112,13 +125,13 @@ def quarantine_doc(ns: str, cust_id: str, field: str, kind: str, reason: str,
 
 def build_doc(ns: str, columns, row, attributes, quarantine_out) -> dict:
     raw = dict(zip(columns, row))
-    cust_id = ensure_utf8(raw["cust_id"])
+    cust_id = ensure_utf8(raw["cust_id"], "cust_id")
     doc = {"_id": mongo_common.det_id(ns, "customer", cust_id)}
     field_quarantine: list = []
     for field, value in raw.items():
         if value is None:
             continue  # NULL/missing source values are omitted, never defaulted
-        ensure_utf8(value)
+        ensure_utf8(value, field)
         if field in DATE_FIELDS:
             parsed = parse_legacy_date(value)
             if parsed is None:
@@ -141,7 +154,7 @@ def build_doc(ns: str, columns, row, attributes, quarantine_out) -> dict:
     if folded:
         for entry in folded:
             for v in entry.values():
-                ensure_utf8(v)
+                ensure_utf8(v, "attributes")
         doc["attributes"] = folded
     # Only attribute field-level quarantine entries once the record itself is
     # accepted; a record rejected wholesale must not also be filed per-field.
@@ -209,13 +222,16 @@ def migrate(ns: str) -> int:
         for row in rows:
             try:
                 doc = build_doc(ns, columns, row, attributes, q_docs)
-            except (UnicodeDecodeError, UnicodeError) as exc:
-                # Invalid bytes never fail open into a valid-looking document.
+            except InvalidUtf8 as exc:
+                # Invalid bytes never fail open into a valid-looking document;
+                # keep a deterministic escaped rendering for remediation.
                 raw_pk = row[columns.index("cust_id")]
                 safe_pk = str(raw_pk).encode("utf-8", "backslashreplace").decode()
+                safe_value = str(exc.value).encode(
+                    "utf-8", "backslashreplace").decode()
                 q_docs.append(quarantine_doc(
-                    ns, safe_pk, "*", "invalid_utf8",
-                    f"record does not decode as UTF-8: {exc}", None))
+                    ns, safe_pk, exc.field, "invalid_utf8", str(exc),
+                    safe_value))
                 quarantined_records += 1
                 continue
             doc_ops.append(ReplaceOne({"_id": doc["_id"]}, doc, upsert=True))

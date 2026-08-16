@@ -11,6 +11,7 @@ Usage: python3 verify_customers_fixture.py --ns demo --out <report.recon.json>
 
 import argparse
 import json
+import re
 import sys
 
 import migrate_customers
@@ -23,6 +24,9 @@ def main() -> int:
     ap.add_argument("--run-mode", choices=["fixture", "live"], default="fixture")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
+    if not re.fullmatch(r"[A-Za-z0-9_]+", args.ns):
+        print("NS must match ^[A-Za-z0-9_]+$", file=sys.stderr)
+        return 2
 
     migrate_customers.migrate(args.ns)
     first = recon_customers.compute(args.ns)
