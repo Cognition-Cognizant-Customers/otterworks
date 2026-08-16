@@ -292,8 +292,48 @@ def check_2(baseline: dict, converted: dict) -> Check:
     return check
 
 
+def _cleanup_check_3_probe(check: Check, probe_ns: str, catalog: str, source_table: str | None) -> None:
+    tables = (
+        f"{catalog}.bronze.analytics_events_raw",
+        f"{catalog}.silver.analytics_events",
+        f"{catalog}.silver.analytics_events_rejects",
+        f"{catalog}.gold.analytics_daily_summary",
+        runner.stage_table(catalog),
+    )
+    for table in tables:
+        try:
+            dbx.sql(f"DELETE FROM {table} WHERE ns = '{probe_ns}'")
+        except Exception as exc:  # noqa: BLE001 - cleanup must not mask the check verdict
+            check.note(f"probe cleanup failed for {table}: {type(exc).__name__}: {exc}")
+
+    if source_table is None:
+        probe_events = f"/Volumes/{catalog}/bronze/landing/{runner.volume_prefix(probe_ns)}/events"
+        try:
+            runner._clear_landing_events(probe_events)
+        except Exception as exc:  # noqa: BLE001 - Files API is intentionally unverified here
+            check.note(
+                f"probe landing cleanup failed for {probe_events}: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+
 def check_3(ns: str, catalog: str, baseline: dict, source_table: str | None) -> Check:
     check = Check(3, "Retry deficiency retired: a failing/empty source fails the run")
+    probe_ns = f"{PROBE_NS_PREFIX}_{ns}"
+    try:
+        return _check_3_body(check, ns, catalog, baseline, source_table, probe_ns)
+    finally:
+        _cleanup_check_3_probe(check, probe_ns, catalog, source_table)
+
+
+def _check_3_body(
+    check: Check,
+    ns: str,
+    catalog: str,
+    baseline: dict,
+    source_table: str | None,
+    probe_ns: str,
+) -> Check:
     probe_ns = f"{PROBE_NS_PREFIX}_{ns}"
     missing_table = f"{catalog}.bronze.analytics_daily_stage_missing"
     outcomes: list[bool] = []
