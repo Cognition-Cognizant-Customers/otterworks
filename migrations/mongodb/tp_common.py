@@ -71,9 +71,3 @@ def amount_str(value) -> str:
         return "None"
     return f"{value:.2f}"
 
-
-def utf8_clean(row: dict) -> None:
-    """Assert every string field round-trips as UTF-8; raises UnicodeError."""
-    for v in row.values():
-        if isinstance(v, str):
-            v.encode("utf-8", errors="strict")

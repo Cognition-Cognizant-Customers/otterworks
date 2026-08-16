@@ -35,18 +35,37 @@ LINE_COLS = ["line_id", "invoice_no", "invoice_id", "cust_id", "cust_no",
 DECIMAL_COLS = {"total_amt", "qty", "unit_price", "amount", "tax_amt"}
 
 
-def number_as_decimal(cursor, metadata):
+def raw_fetch_handler(cursor, metadata):
+    """NUMBERs come back as exact Decimal; character data is decoded with
+    surrogateescape so invalid-UTF-8 source bytes survive the fetch and can be
+    quarantined per-row instead of aborting the whole migration."""
     if metadata.type_code is oracledb.DB_TYPE_NUMBER:
         return cursor.var(decimal.Decimal, arraysize=cursor.arraysize)
+    if metadata.type_code in (oracledb.DB_TYPE_VARCHAR, oracledb.DB_TYPE_CHAR,
+                              oracledb.DB_TYPE_NVARCHAR, oracledb.DB_TYPE_NCHAR,
+                              oracledb.DB_TYPE_LONG):
+        return cursor.var(str, size=metadata.internal_size or 4000,
+                          arraysize=cursor.arraysize,
+                          encoding_errors="surrogateescape")
     return None
 
 
+def pk_str(val) -> str:
+    """Primary keys must always be representable, even on a quarantined row."""
+    if isinstance(val, str):
+        return val.encode("utf-8", "backslashreplace").decode("utf-8")
+    return str(val)
+
+
 def to_doc(cols, row) -> dict:
-    """NULL columns are omitted; NUMBER amounts become exact Decimal128."""
+    """NULL columns are omitted; NUMBER amounts become exact Decimal128;
+    strings carrying surrogate-escaped invalid source bytes raise UnicodeError."""
     doc = {}
     for col, val in zip(cols, row):
         if val is None:
             continue
+        if isinstance(val, str):
+            val.encode("utf-8", errors="strict")  # raises on escaped bad bytes
         if col in DECIMAL_COLS:
             val = Decimal128(val)
         elif isinstance(val, decimal.Decimal):
@@ -75,7 +94,7 @@ def main() -> int:
     conn = oracledb.connect(user=args.user, password=args.password,
                             host=args.host, port=args.port,
                             service_name=args.service)
-    conn.outputtypehandler = number_as_decimal
+    conn.outputtypehandler = raw_fetch_handler
     cur = conn.cursor()
 
     cur.execute("SELECT COUNT(*) FROM invoice_header WHERE batch_no = :1", [batch])
@@ -94,12 +113,11 @@ def main() -> int:
                 "WHERE batch_no = :1", [batch])
     while rows := cur.fetchmany(5000):
         for row in rows:
-            doc = to_doc(HEADER_COLS, row)
             try:
-                tp_common.utf8_clean(doc)
+                doc = to_doc(HEADER_COLS, row)
             except UnicodeError:
                 quarantined_headers.append(
-                    {"_id": row[0], "unit": "mongo_invoices", "ns": ns,
+                    {"_id": pk_str(row[0]), "unit": "mongo_invoices", "ns": ns,
                      "reason": "invalid_utf8", "record_type": "invoice_header",
                      "raw_repr": repr(row)})
                 continue
@@ -115,18 +133,18 @@ def main() -> int:
     n_embedded = 0
     while rows := cur.fetchmany(10000):
         for row in rows:
-            line_id, invoice_id = row[0], row[2]
+            line_id, invoice_id = pk_str(row[0]), pk_str(row[2])
             base = {"_id": line_id, "unit": "mongo_invoices", "ns": ns}
             try:
                 line = to_doc(LINE_COLS, row)
-            except Exception:
-                quarantine.append({**base, "reason": "invalid_record",
-                                   "raw_repr": repr(row)})
-                continue
-            try:
-                tp_common.utf8_clean(line)
             except UnicodeError:
                 quarantine.append({**base, "reason": "invalid_utf8",
+                                   "raw_repr": repr(row),
+                                   "attribution": "source bytes do not decode "
+                                                  "as UTF-8; quarantined raw"})
+                continue
+            except Exception:
+                quarantine.append({**base, "reason": "invalid_record",
                                    "raw_repr": repr(row)})
                 continue
             if invoice_id not in headers:

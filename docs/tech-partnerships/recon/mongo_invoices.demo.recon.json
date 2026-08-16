@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_invoices",
   "namespace": "demo",
-  "generated_at": "2026-08-16T18:36:17Z",
+  "generated_at": "2026-08-16T18:44:26Z",
   "run_mode": "fixture",
   "checks": [
     {
@@ -16,7 +16,7 @@
       "id": "lines-embedded",
       "expected": 149963,
       "actual": 149963,
-      "source_of_truth": "manifest testdata/legacy/manifests/demo.json (INVOICE_LINE.rows minus quarantined orphans) vs recomputed from target MongoDB collections",
+      "source_of_truth": "manifest testdata/legacy/manifests/demo.json (INVOICE_LINE.rows minus all quarantined line records, recomputed from target) vs recomputed from target MongoDB collections",
       "result": "pass"
     },
     {
@@ -51,7 +51,7 @@
   "idempotency_rerun": {
     "performed": true,
     "result": "pass",
-    "evidence": "migration rerun for ns=demo: state fingerprint de4e33100d4ad71146d855941eda4f79 (run 1) vs de4e33100d4ad71146d855941eda4f79 (run 2), identical counts/checksums/quarantine sets recomputed from the target"
+    "evidence": "migration rerun for ns=demo: state fingerprint c353502b6a07cf0c8048f55012ca5654 (run 1) vs c353502b6a07cf0c8048f55012ca5654 (run 2), identical counts/checksums/quarantine sets recomputed from the target"
   },
   "planted_anomaly_detections": {
     "expected_set": [

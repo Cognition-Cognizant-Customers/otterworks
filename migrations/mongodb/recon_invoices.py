@@ -48,10 +48,12 @@ def compute_state(client, ns: str) -> dict:
 
     quarantined = list(qcoll.find({"ns": ns, "unit": UNIT}))
     q_by_reason: dict[str, list[str]] = {}
+    n_quarantined_lines = 0
     for q in quarantined:
         q_by_reason.setdefault(q["reason"], []).append(q["_id"])
         if q.get("record_type") == "invoice_header":
             continue  # header-level quarantine never contributes a line
+        n_quarantined_lines += 1
         pairs.append((q["_id"], dec_str(q.get("line", {}).get("amount"))))
 
     line_ids = [pk for pk, _ in pairs]
@@ -65,6 +67,7 @@ def compute_state(client, ns: str) -> dict:
         "invoices": n_invoices,
         "embedded_lines": n_embedded,
         "quarantined_total": len(quarantined),
+        "quarantined_line_records": n_quarantined_lines,
         "quarantined_by_reason": {k: len(v) for k, v in sorted(q_by_reason.items())},
         "orphaned_line_ids_md5": hashlib.md5(
             "\n".join(orphan_ids).encode()).hexdigest(),
@@ -125,10 +128,13 @@ def main() -> int:
          "actual": state["invoices"],
          "source_of_truth": f"{src} (INVOICE_HEADER.rows) vs {tgt}",
          "result": "pass" if state["invoices"] == exp_headers else "fail"},
-        {"id": "lines-embedded", "expected": exp_lines - orphan_count,
+        {"id": "lines-embedded",
+         "expected": exp_lines - state["quarantined_line_records"],
          "actual": state["embedded_lines"],
-         "source_of_truth": f"{src} (INVOICE_LINE.rows minus quarantined orphans) vs {tgt}",
-         "result": "pass" if state["embedded_lines"] == exp_lines - orphan_count
+         "source_of_truth": f"{src} (INVOICE_LINE.rows minus all quarantined "
+                            f"line records, recomputed from target) vs {tgt}",
+         "result": "pass"
+         if state["embedded_lines"] == exp_lines - state["quarantined_line_records"]
          else "fail"},
         {"id": "lines-checksum",
          "expected": {"checksum": exp_checksum, "rows": exp_lines},
