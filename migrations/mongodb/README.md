@@ -31,25 +31,25 @@ Shared rules:
   with versions embedded as a bounded subarray and snapshots as references;
   orphaned snapshots quarantine into
   `ow_tp_mongodb_<ns>_quarantine.documents_quarantine`.
-- `migrate_files.py` / `recon_files.py` — DynamoDB `otterworks-file-metadata`
+- `mongo_files/` — DynamoDB `otterworks-file-metadata`
   → `ow_tp_mongodb_<ns>.files` with orphaned/malformed metadata quarantined
   into `ow_tp_mongodb_<ns>_quarantine.files_quarantine`.
 
 ## mongo_files (DynamoDB `otterworks-file-metadata` → `files`)
 
 ```bash
-uv run migrations/mongodb/migrate_files.py --ns demo \
+uv run migrations/mongodb/mongo_files/migrate.py --ns demo \
     --mongodb-uri "mongodb://localhost:27778/?directConnection=true"
 
 # baseline (intermediate, NOT committable — idempotency not yet proven)
-uv run migrations/mongodb/recon_files.py --ns demo \
+uv run migrations/mongodb/mongo_files/recon.py --ns demo \
     --mongodb-uri "mongodb://localhost:27778/?directConnection=true" \
     --out /tmp/mongo_files.baseline.json
 
 # rerun the migration, then the committable report with rerun evidence
-uv run migrations/mongodb/migrate_files.py --ns demo \
+uv run migrations/mongodb/mongo_files/migrate.py --ns demo \
     --mongodb-uri "mongodb://localhost:27778/?directConnection=true"
-uv run migrations/mongodb/recon_files.py --ns demo \
+uv run migrations/mongodb/mongo_files/recon.py --ns demo \
     --mongodb-uri "mongodb://localhost:27778/?directConnection=true" \
     --compare /tmp/mongo_files.baseline.json \
     --out docs/tech-partnerships/recon/mongo_files.demo.recon.json

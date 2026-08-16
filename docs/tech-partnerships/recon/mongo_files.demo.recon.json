@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_files",
   "namespace": "demo",
-  "generated_at": "2026-08-16T18:30:26Z",
+  "generated_at": "2026-08-16T18:48:47Z",
   "run_mode": "fixture",
   "checks": [
     {
@@ -31,7 +31,7 @@
   "idempotency_rerun": {
     "performed": true,
     "result": "pass",
-    "evidence": "identical values recomputed from the target after a full rerun of migrate_files.py: files-count=10000, files-checksum=db614663b2c6d41141cae82261b416d5, orphaned-metadata-reported=40"
+    "evidence": "identical values recomputed from the target after a full rerun of mongo_files/migrate.py: files-count=10000, files-checksum=db614663b2c6d41141cae82261b416d5, orphaned-metadata-reported=40"
   },
   "planted_anomaly_detections": {
     "expected_set": [
@@ -85,6 +85,7 @@
     "fed95d77-150e-4587-a75b-2f2b23bb0e1c",
     "ff00ab82-f830-4c99-97bf-710c23d16fe6"
   ],
+  "tolerated_quarantine_counts": {},
   "coverage_gaps": [
     {
       "id": "missing_hours",

@@ -80,7 +80,7 @@ def main() -> int:
         return 2
     ns = args.ns
 
-    repo_root = Path(__file__).resolve().parents[2]
+    repo_root = Path(__file__).resolve().parents[3]
     manifest_path = Path(args.manifest) if args.manifest else (
         repo_root / "testdata" / "legacy" / "manifests" / f"{ns}.json")
     manifest = json.loads(manifest_path.read_text())
@@ -140,7 +140,11 @@ def main() -> int:
     detected = []
     if orphan_ids:
         detected.append("orphaned_metadata")
-    detected.extend(sorted(set(other_quarantine)))
+    # tolerated malformed-record quarantines (missing_critical_attribute,
+    # invalid_attribute) are attribution, not planted anomalies
+    tolerated_quarantine_counts = {
+        r: other_quarantine.count(r) for r in sorted(set(other_quarantine))
+    }
 
     idempotency = {"performed": False, "result": "fail",
                    "evidence": "baseline run: no --compare supplied; rerun "
@@ -161,7 +165,7 @@ def main() -> int:
             "performed": True,
             "result": "pass" if not drift else "fail",
             "evidence": ("identical values recomputed from the target after a "
-                         "full rerun of migrate_files.py: "
+                         "full rerun of mongo_files/migrate.py: "
                          + ", ".join(f"{c['id']}={c['actual']}" for c in checks))
                         if not drift else f"drift after rerun: {drift}",
         }
@@ -183,6 +187,7 @@ def main() -> int:
             "unexpected": sorted(set(detected) - {"orphaned_metadata"}),
         },
         "orphaned_metadata_enumeration": orphan_ids,
+        "tolerated_quarantine_counts": tolerated_quarantine_counts,
         "coverage_gaps": [
             {
                 "id": "missing_hours",
@@ -219,7 +224,7 @@ def main() -> int:
               file=sys.stderr)
         return 1
     if not args.compare:
-        print(f"[{UNIT}-recon] baseline only — rerun migrate_files.py and "
+        print(f"[{UNIT}-recon] baseline only — rerun mongo_files/migrate.py and "
               f"regenerate with --compare {out} for a committable report")
         return 0
     print(f"[{UNIT}-recon] PASS")
