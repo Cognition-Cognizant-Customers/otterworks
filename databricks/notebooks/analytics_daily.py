@@ -296,12 +296,27 @@ def _execute_with_retry(
     sleep: Callable[[float], None],
     log: Callable[[str], None],
 ) -> None:
+    def retryable_failure(exc: Exception) -> bool:
+        message = str(exc)
+        if message.startswith("statement failed ("):
+            return True
+        # A rejected POST proves no statement was accepted. A transport error while
+        # polling is ambiguous because the server-side write may still be running.
+        return (
+            exc.__class__.__name__ == "DatabricksError"
+            and message.startswith("POST ")
+            and 400 <= int(getattr(exc, "status", 0) or 0) < 500
+        )
+
     attempts = max_attempts if statement["retryable"] else 1
     for attempt in range(1, attempts + 1):
         try:
             execute(statement["sql"])
             return
         except Exception as exc:  # noqa: BLE001 - re-raised below; the point is the bounded retry
+            if not retryable_failure(exc):
+                log(f"{statement['name']}: ambiguous execution failure; not retrying: {exc}")
+                raise
             if attempt == attempts:
                 # The legacy script swallowed this and continued with zero events.
                 log(f"{statement['name']}: failed after {attempt} attempt(s): {exc}")
