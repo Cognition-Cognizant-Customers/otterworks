@@ -8,6 +8,12 @@ are trimmed from fields 1/2/5 only, the implied-decimal amount is emitted as
 reformatted YYYYMMDD -> YYYY-MM-DD with no validity check. Malformed records
 pass through; anomalies are attributed on the side, never in the bytes.
 
+The legacy chain pastes the six cut streams with '|' and re-splits with
+awk -F'|', so a '|' byte already inside a fixed-width field shifts awk's
+field numbering (the date/amount transforms land on the wrong columns and
+extra columns are emitted). That re-split is emulated exactly, and such
+records are attributed as A-extra-delimiter in the ledger.
+
 All processing is on raw bytes: input is a mainframe extract and is not
 guaranteed to be valid UTF-8.
 """
@@ -87,15 +93,17 @@ def parse_custbill(data: bytes) -> ParseResult:
         if f3 != b"" and not _valid_date(f3):
             anomalies.add("A-invalid-date")
 
-        amount = _awk_num(f4) / 100
-        rendered = b"|".join([
-            _rtrim_spaces(f1),
-            _rtrim_spaces(f2),
-            f3[0:4] + b"-" + f3[4:6] + b"-" + f3[6:8],
-            b"%.2f" % amount,
-            _rtrim_spaces(f5),
-            f6,
-        ])
+        # paste -d'|' then awk -F'|': embedded pipes shift the field numbering.
+        fields = b"|".join([f1, f2, f3, f4, f5, f6]).split(b"|")
+        if len(fields) != 6:
+            anomalies.add("A-extra-delimiter")
+        fields[0] = _rtrim_spaces(fields[0])
+        fields[1] = _rtrim_spaces(fields[1])
+        fields[4] = _rtrim_spaces(fields[4])
+        fields[3] = b"%.2f" % (_awk_num(fields[3]) / 100)
+        d = fields[2]
+        fields[2] = d[0:4] + b"-" + d[4:6] + b"-" + d[6:8]
+        rendered = b"|".join(fields)
         out.append(rendered + b"\n")
         if rendered != b"":  # grep -c . semantics
             result.record_count += 1

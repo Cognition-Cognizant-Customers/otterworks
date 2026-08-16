@@ -117,4 +117,8 @@ resource "aws_lambda_event_source_mapping" "parser_events" {
   event_source_arn = aws_sqs_queue.events.arn
   function_name    = aws_lambda_function.parser.arn
   batch_size       = 1
+
+  # The mapping polls SQS with the function role's credentials; make sure the
+  # inline policy grants exist before Lambda validates the mapping.
+  depends_on = [aws_iam_role_policy.parser]
 }

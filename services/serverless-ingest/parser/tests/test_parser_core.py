@@ -87,6 +87,26 @@ def test_empty_body_hdr_trl_only_writes_empty_psv():
     assert result.anomalies == []
 
 
+def test_embedded_pipe_reproduces_legacy_awk_resplit():
+    # Recorded from the legacy chain: paste -d'|' | awk -F'|' re-splits an
+    # embedded '|' so field numbering shifts and 7 columns come out.
+    hdr = b"HDR CUSTBILL EXTRACT NS=PIPE      FILE=001"
+    hdr = hdr + b" " * (65 - len(hdr)) + b"\n"
+    r1 = (b"C000000801" + b"PIPE|CO   LTD".ljust(30) + b"20240102"
+          + b"000000012345" + b"USD" + b"01" + b"\n")
+    r2 = (b"C000000802" + b"NORMAL CORP".ljust(30) + b"20240103"
+          + b"000000054321" + b"EUR" + b"02" + b"\n")
+    trl = b"TRL0000000002" + b" " * 52 + b"\n"
+    result = parse_custbill(hdr + r1 + r2 + trl)
+    assert result.psv == (
+        b"C000000801|PIPE|CO  - L-TD|202401.02|000000012345|USD|01\n"
+        b"C000000802|NORMAL CORP|2024-01-03|543.21|EUR|02\n"
+    )
+    assert result.anomalies == ["A-extra-delimiter"]
+    assert result.record_count == 2
+    assert result.trailer_count == 2
+
+
 def test_parse_is_deterministic_on_rerun():
     data = (FIXTURES / "CUSTBILL_DEMO_ANOM.dat").read_bytes()
     first = parse_custbill(data)
