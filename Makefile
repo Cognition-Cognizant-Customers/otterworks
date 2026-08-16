@@ -1,9 +1,44 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean
 
 SHELL := /bin/bash
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+tp-preflight: ## Check platform capabilities (PLATFORM=databricks|atlas|aws)
+	@test "$(PLATFORM)" = databricks -o "$(PLATFORM)" = atlas -o "$(PLATFORM)" = aws || { echo "PLATFORM must be databricks, atlas, or aws" >&2; exit 2; }
+	@case "$(PLATFORM)" in \
+		databricks) $(MAKE) tp-preflight-databricks ;; \
+		atlas) $(MAKE) tp-preflight-atlas ;; \
+		aws) $(MAKE) tp-preflight-aws ;; \
+	esac
+
+tp-preflight-databricks: ## Check Databricks capability paths and emit a manifest
+	scripts/tp-preflight-databricks.sh
+
+tp-preflight-atlas: ## Check MongoDB Atlas capability paths and emit a manifest
+	scripts/tp-preflight-atlas.sh
+
+tp-preflight-aws: ## Check AWS capability paths and leftovers
+	scripts/tp-preflight-aws.sh
+
+tp-validate-schemas: ## Validate the contract/recon schemas themselves against their metaschema
+	uv run --no-project --with check-jsonschema==0.38.0 check-jsonschema --check-metaschema docs/tech-partnerships/contracts/schema/*.schema.json
+
+tp-validate-contracts: ## Validate JSON contracts (intentionally fails until prose contracts are migrated)
+	uv run --no-project --with jsonschema==4.25.1 --with rfc3339-validator==0.1.4 python3 scripts/tp_validate.py contracts
+
+tp-validate-recon: ## Validate recon reports (FILE=<path>; no reports is valid, other JSON is informational)
+	uv run --no-project --with jsonschema==4.25.1 --with rfc3339-validator==0.1.4 python3 scripts/tp_validate.py recon $(FILE)
+
+tp-fixture-land: ## Land source artifacts in the local Databricks transport fixture (NS=<ns>)
+	python3 scripts/tp_databricks/local_fixture.py land --ns $${NS:-fixture} --source $${FIXTURE_SOURCE:-etl/legacy-extra}
+
+tp-fixture-verify: ## Verify local fixture bytes and checksums (NS=<ns>)
+	python3 scripts/tp_databricks/local_fixture.py verify --ns $${NS:-fixture}
+
+tp-fixture-clean: ## Remove local Databricks transport fixture (NS=<ns>)
+	python3 scripts/tp_databricks/local_fixture.py clean --ns $${NS:-fixture}
 
 PROCS_COMPOSE = docker compose -f docker-compose.procs.yml -p otterworks-procs-$(NS)
 PROCS_UV = uv run --with psycopg[binary]==3.2.9 --with pyyaml==6.0.2
