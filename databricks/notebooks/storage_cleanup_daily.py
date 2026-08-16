@@ -48,6 +48,11 @@ CREATE TABLE IF NOT EXISTS {catalog}.bronze.storage_objects_raw (
   listed_at     TIMESTAMP
 )
 -- @statement
+-- Databricks SQL does not support IF NOT EXISTS for ADD COLUMNS; the job
+-- treats FIELD_ALREADY_EXISTS as the idempotent no-op for this migration.
+ALTER TABLE {catalog}.bronze.storage_objects_raw
+ADD COLUMNS (legacy_attributed BOOLEAN)
+-- @statement
 CREATE TABLE IF NOT EXISTS {catalog}.bronze.file_metadata_raw (
   ns          STRING,
   file_id     STRING,
@@ -258,7 +263,16 @@ if _in_databricks():  # pragma: no cover -- exercised by the job, not locally
     )
     for statement in statements:
         print(statement.splitlines()[0][:110])
-        spark.sql(statement)  # noqa: F821
+        try:
+            spark.sql(statement)  # noqa: F821
+        except Exception as exc:  # noqa: BLE001
+            if (
+                stage == "ddl"
+                and "ADD COLUMNS (legacy_attributed BOOLEAN)" in statement
+                and "FIELD_ALREADY_EXISTS" in str(exc)
+            ):
+                continue
+            raise
 
     if stage != "ddl":
         report = spark.sql(  # noqa: F821

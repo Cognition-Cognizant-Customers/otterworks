@@ -27,6 +27,13 @@ COMMENT 'Object inventory replacing the legacy per-object list_objects_v2 walk.'
 
 -- @statement
 
+-- Databricks SQL does not support IF NOT EXISTS for ADD COLUMNS; the notebook
+-- treats FIELD_ALREADY_EXISTS as the idempotent no-op for this migration.
+ALTER TABLE ow_tp.bronze.storage_objects_raw
+ADD COLUMNS (legacy_attributed BOOLEAN);
+
+-- @statement
+
 CREATE TABLE IF NOT EXISTS ow_tp.bronze.file_metadata_raw (
   ns          STRING,
   file_id     STRING,
