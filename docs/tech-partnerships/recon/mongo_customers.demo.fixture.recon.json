@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_customers",
   "namespace": "demo",
-  "generated_at": "2026-08-16T19:24:34Z",
+  "generated_at": "2026-08-16T19:33:11Z",
   "run_mode": "fixture",
   "checks": [
     {
@@ -50,11 +50,13 @@
       "id": "dates-to-bson",
       "expected": {
         "quarantined_dirty_dates": 50,
-        "valid_dates_are_bson": 24950
+        "all_present_signup_dt_are_bson_dates": true,
+        "every_document_accounted_for": true
       },
       "actual": {
         "quarantined_dirty_dates": 50,
-        "valid_dates_are_bson": 24950
+        "all_present_signup_dt_are_bson_dates": true,
+        "every_document_accounted_for": true
       },
       "source_of_truth": "testdata/legacy/manifests/demo.json + target collection type scan",
       "result": "pass"

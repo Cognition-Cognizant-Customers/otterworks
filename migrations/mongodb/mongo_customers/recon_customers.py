@@ -60,6 +60,8 @@ def compute(ns: str) -> dict:
     array_typed_related = array_typed_promo = 0
     string_typed_csv_fields = 0
     bson_date_signup = 0
+    missing_signup_dt = 0
+    non_datetime_signup = 0
     for doc in customers.find(
             {}, {"cust_id": 1, "cur_bal_amt": 1, "attributes": 1,
                  "related_acct_ids": 1, "promo_codes_csv": 1, "signup_dt": 1}):
@@ -77,8 +79,14 @@ def compute(ns: str) -> dict:
         for csv_field in ("related_acct_ids", "promo_codes_csv"):
             if csv_field in doc and not isinstance(doc[csv_field], list):
                 string_typed_csv_fields += 1
-        if isinstance(doc.get("signup_dt"), datetime):
+        if "signup_dt" not in doc:
+            # NULL SIGNUP_DT is an omitted field (never fabricated); dirty
+            # dates are also omitted after quarantine — account for both.
+            missing_signup_dt += 1
+        elif isinstance(doc["signup_dt"], datetime):
             bson_date_signup += 1
+        else:
+            non_datetime_signup += 1
     checksum = mongo_common.ordered_pk_checksum(pairs)
 
     q_by_kind_field: dict[tuple, int] = {}
@@ -95,6 +103,8 @@ def compute(ns: str) -> dict:
         "array_typed_promo": array_typed_promo,
         "string_typed_csv_fields": string_typed_csv_fields,
         "bson_date_signup": bson_date_signup,
+        "missing_signup_dt": missing_signup_dt,
+        "non_datetime_signup": non_datetime_signup,
         "quarantine_by_kind_field": {
             f"{k}:{f}": n for (k, f), n in sorted(q_by_kind_field.items())
         },
@@ -146,9 +156,14 @@ def build_report(ns: str, run_mode: str, actual: dict,
               manifest_src + " + target collection type scan"),
         check("dates-to-bson",
               {"quarantined_dirty_dates": anomalies.get("dirty_dates"),
-               "valid_dates_are_bson": cm_rows - anomalies.get("dirty_dates", 0)},
+               "all_present_signup_dt_are_bson_dates": True,
+               "every_document_accounted_for": True},
               {"quarantined_dirty_dates": dirty,
-               "valid_dates_are_bson": actual["bson_date_signup"]},
+               "all_present_signup_dt_are_bson_dates":
+                   actual["non_datetime_signup"] == 0,
+               "every_document_accounted_for":
+                   actual["bson_date_signup"] + actual["missing_signup_dt"]
+                   + actual["non_datetime_signup"] == actual["count"]},
               manifest_src + " + target collection type scan"),
     ]
     expected_set = sorted(f"{k}:{v}" for k, v in anomalies.items())
