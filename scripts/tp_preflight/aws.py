@@ -142,6 +142,8 @@ def leftover_scan(pid, description, args, extractor, own_role=None, classify_iam
             concurrent = []
             abandoned = []
             unknown_age = []
+            active_preflight_matches = []
+            gone_preflight_matches = []
             for match in preflight_matches:
                 found, role_raw = aws(
                     "iam-role-age",
@@ -150,6 +152,12 @@ def leftover_scan(pid, description, args, extractor, own_role=None, classify_iam
                     required=False,
                     record=False,
                 )
+                if not found and (
+                    "NoSuchEntity" in role_raw or "not found" in role_raw.lower()
+                ):
+                    gone_preflight_matches.append(match)
+                    continue
+                active_preflight_matches.append(match)
                 created_at = None
                 if found:
                     try:
@@ -164,7 +172,12 @@ def leftover_scan(pid, description, args, extractor, own_role=None, classify_iam
                     concurrent.append(match)
                 else:
                     abandoned.append(match)
-            if abandoned or unknown_age:
+            preflight_matches = active_preflight_matches
+            matches = [match for match in matches if match not in gone_preflight_matches]
+            if not preflight_matches:
+                result = "verified"
+                detail = "none found"
+            elif abandoned or unknown_age:
                 result = "denied"
                 detail_parts = []
                 if abandoned:
