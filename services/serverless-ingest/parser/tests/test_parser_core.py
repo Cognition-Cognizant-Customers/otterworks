@@ -107,6 +107,17 @@ def test_embedded_pipe_reproduces_legacy_awk_resplit():
     assert result.trailer_count == 2
 
 
+def test_space_padded_trailer_count_reconciles():
+    hdr = b"HDR CUSTBILL EXTRACT" + b" " * 45 + b"\n"
+    rec = (b"C000000801" + b"NORMAL CORP".ljust(30) + b"20240103"
+           + b"000000054321" + b"EUR" + b"02" + b"\n")
+    trl = b"TRL         1" + b" " * 52 + b"\n"
+    result = parse_custbill(hdr + rec + trl)
+    assert result.trailer_count == 1
+    assert result.record_count == 1
+    assert result.anomalies == []
+
+
 def test_parse_is_deterministic_on_rerun():
     data = (FIXTURES / "CUSTBILL_DEMO_ANOM.dat").read_bytes()
     first = parse_custbill(data)

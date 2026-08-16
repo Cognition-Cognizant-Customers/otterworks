@@ -110,7 +110,9 @@ def parse_custbill(data: bytes) -> ParseResult:
 
     result.psv = b"".join(out)
     if trailer_raw is not None:
-        result.trailer_count = int(trailer_raw) if trailer_raw.isdigit() else 0
+        # legacy echoes ${ntrl} unquoted, so surrounding whitespace word-splits away
+        trailer_digits = trailer_raw.strip()
+        result.trailer_count = int(trailer_digits) if trailer_digits.isdigit() else 0
         if result.trailer_count != result.record_count:
             anomalies.add("A-trailer-mismatch")
     result.anomalies = sorted(anomalies)
