@@ -56,6 +56,7 @@ class Check:
         self.title = title
         self.status = "BLOCKED"
         self.lines: list[str] = []
+        self.cleanup_failures: list[str] = []
 
     def record(self, label: str, baseline: object, converted: object, *, must_match: bool = True) -> bool:
         equal = baseline == converted
@@ -319,7 +320,9 @@ def _cleanup_check_3_probe(check: Check, probe_ns: str, catalog: str, source_tab
         try:
             dbx.sql(f"DELETE FROM {table} WHERE ns = '{probe_ns}'")
         except Exception as exc:  # noqa: BLE001 - cleanup must not mask the check verdict
-            check.note(f"probe cleanup failed for {table}: {type(exc).__name__}: {exc}")
+            failure = f"{table}: {type(exc).__name__}: {exc}"
+            check.cleanup_failures.append(failure)
+            check.note(f"probe cleanup failed for {failure}")
 
     if source_table is None:
         probe_events = f"/Volumes/{catalog}/bronze/landing/{runner.volume_prefix(probe_ns)}/events"
@@ -402,7 +405,12 @@ def _check_3_body(
     # (b) reachable but empty source: no zero-event "success". In volume mode, first create
     # and remove a sentinel so the probe directory exists without any source files.
     if source_table:
-        dbx.sql(f"DELETE FROM {source_table} WHERE ns = '{probe_ns}'")
+        empty_source_cleanup = f"DELETE FROM {source_table} WHERE ns = '{probe_ns}'"
+        try:
+            dbx.sql(empty_source_cleanup)
+        except Exception as exc:  # noqa: BLE001 - the empty-source probe could not execute
+            check.block(empty_source_cleanup, f"{type(exc).__name__}: {exc}")
+            return check
     else:
         probe_events = f"/Volumes/{catalog}/bronze/landing/{runner.volume_prefix(probe_ns)}/events"
         sentinel = f"{probe_events}/.recon-empty"
@@ -501,6 +509,19 @@ def render(checks: list[Check], ns: str, catalog: str, baseline_dir: Path, conve
         lines += [f"## {check.number}. {check.title} — **{check.status}**", "", "```text"]
         lines += check.lines
         lines += ["```", ""]
+    cleanup_failures = [
+        failure
+        for check in checks
+        for failure in check.cleanup_failures
+    ]
+    if cleanup_failures:
+        lines += [
+            "## Probe cleanup — **FAILURE**",
+            "",
+            "The check verdicts below reflect the observed semantics, but probe rows may remain:",
+            *[f"- {failure}" for failure in cleanup_failures],
+            "",
+        ]
     return "\n".join(lines)
 
 
@@ -580,7 +601,8 @@ def main(argv: list[str] | None = None) -> int:
         REPORT_PATH.write_text(report, encoding="utf-8")
         print(f"wrote {REPORT_PATH}", file=sys.stderr)
     # A documented deviation is not a failure; FAIL and BLOCKED are.
-    return 0 if all(check.status in ("PASS", "DEVIATION") for check in checks) else 1
+    cleanup_failed = any(check.cleanup_failures for check in checks)
+    return 0 if not cleanup_failed and all(check.status in ("PASS", "DEVIATION") for check in checks) else 1
 
 
 if __name__ == "__main__":
