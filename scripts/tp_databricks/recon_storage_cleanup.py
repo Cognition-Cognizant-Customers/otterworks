@@ -76,7 +76,24 @@ class Check:
         self.lines.append(f"FAIL {text}")
 
 
+def _validate_query_inputs(
+    *,
+    ns: str | None = None,
+    scenario: str | None = None,
+    run_date: str | None = None,
+    catalog: str = "ow_tp",
+) -> None:
+    if ns is not None:
+        nb._checked("ns", ns)
+    if scenario is not None:
+        nb._checked("scenario", scenario)
+    if run_date is not None:
+        nb._checked("run_date", run_date, nb._ISO_DATE)
+    nb._checked("catalog", catalog)
+
+
 def run_pipeline(ns: str, run_date: str, dry_run: bool, scenario: str) -> None:
+    _validate_query_inputs(ns=ns, scenario=scenario, run_date=run_date)
     for statement in nb.pipeline_statements(
         ns=ns, run_date=run_date, dry_run=dry_run, scenario=scenario
     ):
@@ -84,6 +101,7 @@ def run_pipeline(ns: str, run_date: str, dry_run: bool, scenario: str) -> None:
 
 
 def orphan_keys(ns: str, scenario: str, confirmed: bool) -> set:
+    _validate_query_inputs(ns=ns, scenario=scenario)
     reason = " AND orphan_reason = 'no_metadata_row'" if confirmed else ""
     rows = dbx.sql(
         "SELECT bucket, key FROM ow_tp.silver.storage_orphans "
@@ -94,6 +112,7 @@ def orphan_keys(ns: str, scenario: str, confirmed: bool) -> set:
 
 
 def savings(ns: str, scenario: str, run_date: str) -> dict:
+    _validate_query_inputs(ns=ns, scenario=scenario, run_date=run_date)
     columns = [
         "objects_scanned",
         "metadata_rows",
@@ -252,6 +271,7 @@ def check_1(ns: str, golden_keys: set, fixture: dict) -> Check:
 
 
 def check_2(ns: str, run_date: str, report: dict, fixture: dict) -> Check:
+    _validate_query_inputs(ns=ns, scenario="nominal", run_date=run_date)
     check = Check(2, "Byte and count parity against the legacy report")
     gold = savings(ns, "nominal", run_date)
     check.compare("orphan_bytes", report["orphans"]["orphaned_bytes"], gold["orphan_bytes"])
@@ -289,6 +309,7 @@ def check_2(ns: str, run_date: str, report: dict, fixture: dict) -> Check:
 def check_3(ns: str, run_date: str, limit: int) -> Check:
     check = Check(3, "Safety guard: an incomplete metadata read quarantines nothing")
     scenario = "metadata_read_incomplete"
+    _validate_query_inputs(ns=ns, scenario=scenario, run_date=run_date)
     objects, metadata, complete = _reload(ns, scenario, metadata_limit=limit)
     check.compare("extract marks the metadata read incomplete", False, complete)
     check.compare("metadata rows loaded", limit, len(metadata))
@@ -331,6 +352,7 @@ def check_3(ns: str, run_date: str, limit: int) -> Check:
 
 def check_4(ns: str, run_date: str, golden_keys: set) -> Check:
     check = Check(4, "Idempotency: a re-run leaves the orphan set and totals unchanged")
+    _validate_query_inputs(ns=ns, scenario="nominal", run_date=run_date)
     _reload(ns, "nominal", metadata_limit=None)
     run_pipeline(ns, run_date, dry_run=True, scenario="nominal")
     first = savings(ns, "nominal", run_date)

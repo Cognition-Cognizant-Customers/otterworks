@@ -292,6 +292,7 @@ def main(argv: list[str]) -> int:
         args.ns = nb._checked("ns", args.ns)
         args.scenario = nb._checked("scenario", args.scenario)
         args.bucket = nb._checked("bucket", args.bucket, _BUCKET)
+        args.input_dir = nb._checked("input_dir", args.input_dir)
     except ValueError as exc:
         parser.error(str(exc))
 
