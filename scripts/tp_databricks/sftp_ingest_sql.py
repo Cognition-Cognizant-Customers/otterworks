@@ -40,6 +40,24 @@ DDL_FILE = (
 )
 
 
+# What counts as a delivery, mirroring the legacy job's `for f in $SFTP_DROP/CUSTBILL*.dat`.
+# Without it every artifact in the drop directory is judged as a CUSTBILL file, so an
+# aborted transfer's `.filepart`, a checksum sidecar or an operator's note fails the
+# completeness gate — and since landing is the archive, nothing removes it and the run
+# fails forever after. Files outside the pattern are not this job's to read or report on.
+#
+# Applied as a predicate rather than as the reader's own `pathGlobFilter`: when a glob
+# matches nothing, `read_files` resolves to a schema without `_metadata` and the query
+# fails with UNRESOLVED_COLUMN instead of returning no rows, which would turn "the drop
+# directory holds nothing this job owns" into an error rather than the no-op it is.
+# `[^/]*` and `[.]`, so it anchors on the file name and cannot span a subdirectory.
+DELIVERY_NAME_RE = "/CUSTBILL[^/]*[.]dat$"
+
+
+def _is_delivery(path_expr: str) -> str:
+    return f"{path_expr} RLIKE '{DELIVERY_NAME_RE}'"
+
+
 def default_landing_root(catalog: str) -> str:
     """The landing volume of `catalog`, so the read side follows the write side.
 
@@ -115,6 +133,7 @@ WITH bytes AS (
     octet_length(content)                                      AS size_bytes,
     sha2(content, 256)                                         AS sha256
   FROM read_files('{landing_root}/{ns}/custbill/', format => 'binaryFile')
+  WHERE {_is_delivery('path')}
 ),
 raw AS (
   SELECT
@@ -132,6 +151,7 @@ raw AS (
   -- for (`absent_drop_path_message`) rather than swallowing it, and any other read
   -- failure still fails the run.
   FROM read_files('{landing_root}/{ns}/custbill/', format => 'text', wholeText => true)
+  WHERE {_is_delivery('_metadata.file_path')}
 ),
 lines AS (
   SELECT raw.source_path, raw.file_name, l.pos + 1 AS line_no, l.line AS raw_line
@@ -373,11 +393,16 @@ def drop_path(ns: str, landing_root: str) -> str:
 
 
 def landed_files_query(ns: str, catalog: str, landing_root: str) -> str:
-    """File names the ingest's own source scan sees, in delivery-name order."""
+    """File names the ingest's own source scan sees, in delivery-name order.
+
+    Same `DELIVERY_NAME_RE` as the ingest, so "what this run will read" and "what this
+    run did read" cannot disagree about which artifacts are deliveries.
+    """
     ns, _catalog, landing_root = _validated(ns, catalog, landing_root)
     return (
         "SELECT DISTINCT regexp_extract(_metadata.file_path, '([^/]+)$', 1) AS file_name "
         f"FROM read_files('{drop_path(ns, landing_root)}', format => 'text', wholeText => true) "
+        f"WHERE {_is_delivery('_metadata.file_path')} "
         "ORDER BY file_name"
     )
 
