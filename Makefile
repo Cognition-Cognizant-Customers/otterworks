@@ -7,7 +7,11 @@ help: ## Show this help
 
 tp-preflight: ## Check platform capabilities (PLATFORM=databricks|atlas|aws)
 	@test "$(PLATFORM)" = databricks -o "$(PLATFORM)" = atlas -o "$(PLATFORM)" = aws || { echo "PLATFORM must be databricks, atlas, or aws" >&2; exit 2; }
-	scripts/tp-preflight-$(PLATFORM).sh
+	@case "$(PLATFORM)" in \
+		databricks) $(MAKE) tp-preflight-databricks ;; \
+		atlas) $(MAKE) tp-preflight-atlas ;; \
+		aws) $(MAKE) tp-preflight-aws ;; \
+	esac
 
 tp-preflight-databricks: ## Check Databricks capability paths and emit a manifest
 	scripts/tp-preflight-databricks.sh

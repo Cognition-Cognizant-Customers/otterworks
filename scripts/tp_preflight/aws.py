@@ -89,10 +89,11 @@ else:
 def aws(pid, description, args, required=True, record=True):
     try:
         p = subprocess.run(["aws", *args, "--output", "json"], capture_output=True, text=True, timeout=45, env=env)
-        raw = (p.stdout or p.stderr).strip()
         if p.returncode == 0:
+            raw = (p.stdout or "").strip()
             detail = "command succeeded"
         else:
+            raw = (p.stdout or p.stderr).strip()
             try:
                 error = json.loads(raw)
                 detail = error.get("message") or error.get("Message") or error.get("Code") or "command failed"
