@@ -48,11 +48,6 @@ CREATE TABLE IF NOT EXISTS {catalog}.bronze.storage_objects_raw (
   listed_at     TIMESTAMP
 )
 -- @statement
--- Databricks SQL does not support IF NOT EXISTS for ADD COLUMNS; the job
--- treats FIELD_ALREADY_EXISTS as the idempotent no-op for this migration.
-ALTER TABLE {catalog}.bronze.storage_objects_raw
-ADD COLUMNS (legacy_attributed BOOLEAN)
--- @statement
 CREATE TABLE IF NOT EXISTS {catalog}.bronze.file_metadata_raw (
   ns          STRING,
   file_id     STRING,
@@ -198,6 +193,29 @@ def ddl_statements(catalog: str = CATALOG) -> list:
     return _split(DDL_SQL.format(catalog=catalog))
 
 
+def ensure_legacy_attributed(
+    spark, catalog: str = CATALOG, table: str = "storage_objects_raw"
+) -> bool:
+    """Add the legacy attribution column only when the bronze table lacks it."""
+    catalog = _checked("catalog", catalog)
+    table = _checked("table", table)
+    columns = spark.sql(
+        f"""
+        SELECT column_name
+        FROM {catalog}.information_schema.columns
+        WHERE table_schema = 'bronze'
+          AND table_name = '{table}'
+        """
+    ).collect()
+    if any(row["column_name"] == "legacy_attributed" for row in columns):
+        return False
+    spark.sql(
+        f"ALTER TABLE {catalog}.bronze.{table} "
+        "ADD COLUMNS (legacy_attributed BOOLEAN)"
+    )
+    return True
+
+
 def pipeline_statements(
     ns: str,
     run_date: str,
@@ -263,16 +281,9 @@ if _in_databricks():  # pragma: no cover -- exercised by the job, not locally
     )
     for statement in statements:
         print(statement.splitlines()[0][:110])
-        try:
-            spark.sql(statement)  # noqa: F821
-        except Exception as exc:  # noqa: BLE001
-            if (
-                stage == "ddl"
-                and "ADD COLUMNS (legacy_attributed BOOLEAN)" in statement
-                and "FIELD_ALREADY_EXISTS" in str(exc)
-            ):
-                continue
-            raise
+        spark.sql(statement)  # noqa: F821
+    if stage == "ddl":
+        print("legacy_attributed_migration=", ensure_legacy_attributed(spark, catalog))
 
     if stage != "ddl":
         report = spark.sql(  # noqa: F821
