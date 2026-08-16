@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_customers",
   "namespace": "demo",
-  "generated_at": "2026-08-16T19:58:37Z",
+  "generated_at": "2026-08-16T20:12:45Z",
   "run_mode": "fixture",
   "checks": [
     {
@@ -55,12 +55,14 @@
       "expected": {
         "quarantined_dirty_dates": 50,
         "non_datetime_signup": 0,
+        "non_datetime_date_fields": 0,
         "bson_date_signup": 24950,
         "missing_signup_dt": 50
       },
       "actual": {
         "quarantined_dirty_dates": 50,
         "non_datetime_signup": 0,
+        "non_datetime_date_fields": 0,
         "bson_date_signup": 24950,
         "missing_signup_dt": 50
       },

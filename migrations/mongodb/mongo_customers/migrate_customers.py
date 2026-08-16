@@ -40,14 +40,16 @@ DATE_RE = re.compile(r"^(\d{2})-([A-Z]{3})-(\d{2})$")
 CSV_ID_TOKEN = re.compile(r"^\d+$")
 CSV_CODE_TOKEN = re.compile(r"^[A-Za-z0-9_]+$")
 
-# VARCHAR2 columns holding DD-MON-YY strings that must become BSON dates.
-DATE_FIELDS = ("signup_dt", "last_activity_dt")
+# VARCHAR2(9) columns holding DD-MON-YY strings that must become BSON dates
+# (all fifteen on CUSTOMER_MASTER — see schema/02_horror.sql).
+DATE_FIELDS = ("signup_dt", "last_activity_dt", "last_invoice_dt",
+               "last_payment_dt", "terminate_dt",
+               *(f"udf_dt_{i:02d}" for i in range(1, 11)))
 # CSV list columns that must become real arrays.
 CSV_FIELDS = {"related_acct_ids": CSV_ID_TOKEN, "promo_codes_csv": CSV_CODE_TOKEN}
 # Field -> planted-anomaly kind used for quarantine attribution.
 QUARANTINE_KINDS = {
-    "signup_dt": "dirty_dates",
-    "last_activity_dt": "dirty_dates",
+    **{f: "dirty_dates" for f in DATE_FIELDS},
     "related_acct_ids": "malformed_csv_lists",
     "promo_codes_csv": "malformed_csv_lists",
 }

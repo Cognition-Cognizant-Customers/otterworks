@@ -25,6 +25,7 @@ import sys
 from datetime import datetime, timezone
 
 import mongo_common
+from migrate_customers import DATE_FIELDS
 
 UNIT = "mongo_customers"
 CM_TARGET = "oracle.OW_BILLING.CUSTOMER_MASTER"
@@ -62,9 +63,11 @@ def compute(ns: str) -> dict:
     bson_date_signup = 0
     missing_signup_dt = 0
     non_datetime_signup = 0
-    for doc in customers.find(
-            {}, {"cust_id": 1, "cur_bal_amt": 1, "attributes": 1,
-                 "related_acct_ids": 1, "promo_codes_csv": 1, "signup_dt": 1}):
+    non_datetime_date_fields = 0
+    projection = {"cust_id": 1, "cur_bal_amt": 1, "attributes": 1,
+                  "related_acct_ids": 1, "promo_codes_csv": 1}
+    projection.update({f: 1 for f in DATE_FIELDS})
+    for doc in customers.find({}, projection):
         if "cust_id" in doc and "cur_bal_amt" in doc:
             pairs.append((doc["cust_id"], f"{doc['cur_bal_amt']:.2f}"))
         else:
@@ -87,6 +90,9 @@ def compute(ns: str) -> dict:
             bson_date_signup += 1
         else:
             non_datetime_signup += 1
+        for date_field in DATE_FIELDS:
+            if date_field in doc and not isinstance(doc[date_field], datetime):
+                non_datetime_date_fields += 1
     checksum = mongo_common.ordered_pk_checksum(pairs)
 
     q_by_kind_field: dict[tuple, int] = {}
@@ -105,6 +111,7 @@ def compute(ns: str) -> dict:
         "bson_date_signup": bson_date_signup,
         "missing_signup_dt": missing_signup_dt,
         "non_datetime_signup": non_datetime_signup,
+        "non_datetime_date_fields": non_datetime_date_fields,
         "quarantine_by_kind_field": {
             f"{k}:{f}": n for (k, f), n in sorted(q_by_kind_field.items())
         },
@@ -188,11 +195,14 @@ def build_report(ns: str, run_mode: str, actual: dict,
         check("dates-to-bson",
               {"quarantined_dirty_dates": anomalies.get("dirty_dates"),
                "non_datetime_signup": 0,
+               # any of the 15 DD-MON-YY columns left as a string in the target
+               "non_datetime_date_fields": 0,
                # every non-NULL, non-quarantined source date must be BSON
                "bson_date_signup": cm_rows - nulls["signup_dt"] - dirty,
                "missing_signup_dt": nulls["signup_dt"] + dirty},
               {"quarantined_dirty_dates": dirty,
                "non_datetime_signup": actual["non_datetime_signup"],
+               "non_datetime_date_fields": actual["non_datetime_date_fields"],
                "bson_date_signup": actual["bson_date_signup"],
                "missing_signup_dt": actual["missing_signup_dt"]},
               manifest_src + " + target collection type scan + source NULL "
