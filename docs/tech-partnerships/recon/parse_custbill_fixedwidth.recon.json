@@ -1,0 +1,152 @@
+{
+  "kind": "recon-report",
+  "unit": "parse_custbill_fixedwidth",
+  "namespace": "demo",
+  "generated_at": "2026-08-16T18:20:24.425437+00:00",
+  "run_mode": "fixture",
+  "checks": [
+    {
+      "id": "row-parity",
+      "expected": {
+        "total_rows": 100,
+        "files": {
+          "CUSTBILL_DEMO_001": {
+            "sha256": "7fc03e8ceb88ce807b18e3e0a8bb2450b7677108495bdcb883881887c09665bf",
+            "rows": 50
+          },
+          "CUSTBILL_DEMO_002": {
+            "sha256": "b576ad3de53b835643dc9096781cb491e6a03b3712c675c5598ab05f8c3c54a3",
+            "rows": 50
+          }
+        }
+      },
+      "actual": {
+        "total_rows": 100,
+        "files": {
+          "CUSTBILL_DEMO_001": {
+            "sha256": "7fc03e8ceb88ce807b18e3e0a8bb2450b7677108495bdcb883881887c09665bf",
+            "rows": 50
+          },
+          "CUSTBILL_DEMO_002": {
+            "sha256": "b576ad3de53b835643dc9096781cb491e6a03b3712c675c5598ab05f8c3c54a3",
+            "rows": 50
+          }
+        }
+      },
+      "source_of_truth": "contract golden sha256s (parent-recorded deterministic legacy run, NS=demo)",
+      "result": "pass"
+    },
+    {
+      "id": "typed-columns",
+      "expected": "amount Decimal(12,2) via implied-decimal conversion; billing_date strict date",
+      "actual": "100 records typed ok: True",
+      "source_of_truth": "parsing core type inspection (fixture)",
+      "result": "pass"
+    },
+    {
+      "id": "rescue-quarantine-invalid-date",
+      "expected": "billing_date 20261332 rescued with a date reject_reason; valid sibling loaded",
+      "actual": {
+        "records": 1,
+        "rescue_reasons": [
+          "invalid_date:not_a_calendar_date:20261332"
+        ]
+      },
+      "source_of_truth": "synthesized anomaly per contract planted_anomalies (fixture)",
+      "result": "pass"
+    },
+    {
+      "id": "rescue-quarantine-malformed-amount",
+      "expected": "non-numeric implied-decimal amount rescued; valid sibling loaded",
+      "actual": {
+        "records": 1,
+        "rescue_reasons": [
+          "malformed_amount:not_numeric:'0000ABC00000'"
+        ]
+      },
+      "source_of_truth": "synthesized anomaly per contract planted_anomalies (fixture)",
+      "result": "pass"
+    },
+    {
+      "id": "trailer-reconciled",
+      "expected": "trailer count 5 vs 2 body records: whole file rejected to rescue, zero silver rows",
+      "actual": {
+        "file_rejected": true,
+        "records": 0,
+        "rescues": 2
+      },
+      "source_of_truth": "synthesized anomaly per contract planted_anomalies (fixture)",
+      "result": "pass"
+    },
+    {
+      "id": "rescue-quarantine-conservation",
+      "expected": "records + rescues == body line count for every file",
+      "actual": true,
+      "source_of_truth": "parsing core accounting over demo inputs (fixture)",
+      "result": "pass"
+    },
+    {
+      "id": "empty-input-noop",
+      "expected": "empty/non-CUSTBILL listings select no pending files; populated state left untouched",
+      "actual": {
+        "empty_selection": [],
+        "noise_selection": [],
+        "state_unchanged": true
+      },
+      "source_of_truth": "select_pending (production selection logic) driven with empty and non-CUSTBILL listings (fixture)",
+      "result": "pass"
+    },
+    {
+      "id": "no-temp-orphans-idempotent-rerun",
+      "expected": "double-apply of every file still yields 100 rows and identical state; no temp files created",
+      "actual": {
+        "rows_after_double_apply": 100,
+        "state_identical": true
+      },
+      "source_of_truth": "delete-then-insert state simulation of the notebook write path (fixture)",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": false,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "every demo file applied twice through the per-(ns,file) delete-then-insert path; row counts and state identical"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      "invalid-date",
+      "malformed-amount",
+      "trailer-mismatch"
+    ],
+    "actual_set": [
+      "invalid-date",
+      "malformed-amount",
+      "trailer-mismatch"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "SQL execution on the serverless warehouse (CREATE TABLE IF NOT EXISTS, DELETE, append writes)",
+    "Delta table semantics and DECIMAL(12,2)/DATE schema enforcement in Unity Catalog",
+    "Files API volume transport to /Volumes/ow_tp/bronze/landing (fixture stands in locally)",
+    "Unity Catalog permissions and catalog/schema resolution",
+    "serverless notebook-task job execution (job:ow_tp_parse_custbill_fixedwidth)",
+    "dbutils.fs archive move semantics on the live volume",
+    "live planted anomalies (parent plants them during live validation; fixture used synthesized equivalents)"
+  ],
+  "transport_manifest": [
+    {
+      "file": "CUSTBILL_DEMO_001.dat",
+      "sha256": "c70f30ca08842885fe2bc96c3902d463609d05be95a96c01875b825a88aa336c",
+      "bytes": 3430
+    },
+    {
+      "file": "CUSTBILL_DEMO_002.dat",
+      "sha256": "652974b8bb3a168483c8f63fb9f2db440a6ff606f4563cd0800f15914b344f48",
+      "bytes": 3430
+    }
+  ],
+  "fixture_landing": ".tp-preflight/databricks-fixture/landing/demo/parse_custbill_fixedwidth/incoming"
+}
