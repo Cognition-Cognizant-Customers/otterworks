@@ -28,6 +28,7 @@ import dbx  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SERVING_TABLE = f"{dbx.CATALOG}.silver.search_index_documents"
 NOTEBOOKS = {
+    "landing_prefix": REPO_ROOT / "scripts/tp_databricks/landing_prefix.py",
     "search_reindex_ingest": REPO_ROOT / "databricks/notebooks/search_reindex_ingest.py",
     "search_reindex_publish": REPO_ROOT / "databricks/notebooks/search_reindex_publish.py",
 }

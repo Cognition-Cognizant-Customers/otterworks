@@ -41,6 +41,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dbx  # noqa: E402
+from landing_prefix import normalize_landing_prefix  # noqa: E402
 
 NS_PATTERN = re.compile(r"^[a-z0-9_]+$")
 MAX_ATTEMPTS = 5
@@ -205,6 +206,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--landing-prefix", default="search_reindex")
     parser.add_argument("--upload", action="store_true", help="upload the extract to the landing volume")
     args = parser.parse_args(argv)
+    args.landing_prefix = normalize_landing_prefix(args.landing_prefix)
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JsonFormatter())
