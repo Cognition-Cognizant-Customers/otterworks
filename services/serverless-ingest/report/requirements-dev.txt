@@ -1,0 +1,4 @@
+# Test/recon dependencies (the Lambda itself needs only boto3, provided by the runtime)
+pytest
+boto3
+moto[s3]
