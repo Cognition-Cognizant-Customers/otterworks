@@ -79,7 +79,8 @@ def main() -> int:
                     help="documents per bulk_write")
     args = ap.parse_args()
 
-    batch_no = args.batch_no or manifest_batch_no(args.ns)
+    batch_no = (manifest_batch_no(args.ns) if args.batch_no is None
+                else args.batch_no)
     db = atlas.database(args.ns)
     conn = extract.connect()
     print(f"[migrate] ns={args.ns} batch={batch_no} target={db.name}")
