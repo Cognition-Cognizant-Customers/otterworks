@@ -280,9 +280,11 @@ def main() -> int:
         dbx.sql(statement)
 
     landed_names: set[str] | None = None
+    landed_counts: dict[str, int] | None = None
     if not args.skip_landing:
         landed = _land_drops(ns, args.source_dir)
         landed_names = {name for name, _ in landed}
+        landed_counts = dict(landed)
         for name, count in landed:
             print(f"landed {name}: {count} lines")
 
@@ -302,11 +304,20 @@ def main() -> int:
         recon_names = {row[0] for row in recon}
         missing = sorted(landed_names - recon_names)
         if missing:
-            print(
-                "trailer reconciliation missing landed files: "
-                + ", ".join(missing),
-                file=sys.stderr,
-            )
+            empty = [name for name in missing if landed_counts[name] == 0]
+            nonempty = [name for name in missing if landed_counts[name] > 0]
+            if empty:
+                print(
+                    "landed files with no lines; no trailer exists, so they are "
+                    "unreconcilable: " + ", ".join(empty),
+                    file=sys.stderr,
+                )
+            if nonempty:
+                print(
+                    "landed files with lines but no reconciliation row: "
+                    + ", ".join(nonempty),
+                    file=sys.stderr,
+                )
             return 1
     bad = [r for r in recon if str(r[4]).lower() != "true"]
     if bad or not recon:
