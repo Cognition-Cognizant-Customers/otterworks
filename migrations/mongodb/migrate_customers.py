@@ -139,6 +139,9 @@ def build_doc(ns: str, columns, row, attributes, quarantine_out) -> dict:
             doc[field] = value
     folded = attributes.get(cust_id)
     if folded:
+        for entry in folded:
+            for v in entry.values():
+                ensure_utf8(v)
         doc["attributes"] = folded
     # Only attribute field-level quarantine entries once the record itself is
     # accepted; a record rejected wholesale must not also be filed per-field.
@@ -146,8 +149,10 @@ def build_doc(ns: str, columns, row, attributes, quarantine_out) -> dict:
     return doc
 
 
-def load_attributes(cur, batch_no: int) -> dict:
+def load_attributes(conn, batch_no: int) -> dict:
     """ENTITY_ATTR_VALUE rows keyed by owning customer, ordered by eav_id."""
+    cur = conn.cursor()
+    cur.outputtypehandler = surrogate_passthrough_handler
     cur.execute(
         """SELECT eav_id, entity_id, attr_name, attr_value, attr_type, created_dt
              FROM entity_attr_value
@@ -166,6 +171,7 @@ def load_attributes(cur, batch_no: int) -> dict:
         if created_dt is not None:
             entry["created_dt_raw"] = created_dt
         attributes.setdefault(entity_id, []).append(entry)
+    cur.close()
     return attributes
 
 
@@ -183,7 +189,7 @@ def migrate(ns: str) -> int:
         print(f"[{UNIT}] ns={ns}: source namespace is empty; no-op")
         return 0
 
-    attributes = load_attributes(cur, batch_no)
+    attributes = load_attributes(conn, batch_no)
     client = mongo_common.mongo_client()
     customers = client[mongo_common.target_db_name(ns)]["customers"]
     quarantine = client[mongo_common.quarantine_db_name(ns)]["customers_quarantine"]
