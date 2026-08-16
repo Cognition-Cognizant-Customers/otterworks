@@ -633,8 +633,14 @@ def _main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     # The recon builds SQL text too, so its `ns` goes through the same gate the
-    # statement module applies rather than being trusted from the command line.
-    sftp_ingest_sql.validated(args.ns, CATALOG, args.landing_root)
+    # statement module applies rather than being trusted from the command line. The
+    # normalized root is what gets used, not the argument as typed: the gate strips a
+    # trailing slash, and comparing a path built from the unstripped one against a
+    # `source_path` the statements wrote from the stripped one is a mismatch the
+    # pipeline did not cause.
+    args.ns, _catalog, args.landing_root = sftp_ingest_sql.validated(
+        args.ns, CATALOG, args.landing_root
+    )
 
     golden = load_golden(Path(args.golden_root))
     # `--no-rerun` is the read-only pass, so it writes nothing at all, probe included.
