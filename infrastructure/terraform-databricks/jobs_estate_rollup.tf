@@ -57,7 +57,6 @@ resource "databricks_job" "estate_rollup" {
   # A rerun replaces only its (ns, run_date) slice, so serialization retires
   # the legacy overlapping-run risk without making reconciliation non-idempotent.
   max_concurrent_runs = 1
-  timeout_seconds     = 3600
 
   queue {
     enabled = true
@@ -108,7 +107,8 @@ resource "databricks_job" "estate_rollup" {
 
     # The notebook applies the idempotent DDL, records the estate evidence, and
     # raises on a non-green unit; bounded retries are safe for its replacement
-    # writes and retire the legacy silent-failure behavior.
+    # writes and retire the legacy silent-failure behavior. The timeout is per
+    # task attempt, so the configured retries remain reachable.
     max_retries               = 2
     min_retry_interval_millis = 60000
     retry_on_timeout          = true
@@ -307,11 +307,13 @@ resource "databricks_job" "estate_orchestrator" {
         job_id = databricks_job.estate_rollup[0].id
 
         job_parameters = {
-          ns         = "{{job.parameters.ns}}"
-          catalog    = "{{job.parameters.catalog}}"
-          run_date   = "{{job.parameters.run_date}}"
-          job_run_id = "{{job.run_id}}"
+          ns       = "{{job.parameters.ns}}"
+          catalog  = "{{job.parameters.catalog}}"
+          run_date = "{{job.parameters.run_date}}"
         }
+
+        # Do not forward job_run_id: the child job must use its own run id for
+        # the gold evidence row rather than recording the orchestrator run.
       }
     }
   }
