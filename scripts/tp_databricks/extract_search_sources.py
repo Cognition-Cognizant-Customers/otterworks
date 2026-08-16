@@ -197,20 +197,51 @@ def entity_id_of(record: dict, id_keys: tuple[str, ...], entity_type: str = "unk
     raise RuntimeError(f"source record of type {entity_type!r} has no id in keys {id_keys!r}")
 
 
-def write_ndjson(path: Path, ns: str, entity_type: str, records, id_keys: tuple[str, ...], extracted_at: str) -> int:
+def write_ndjson(
+    path: Path,
+    ns: str,
+    entity_type: str,
+    records,
+    id_keys: tuple[str, ...],
+    extracted_at: str,
+    completeness: dict[str, object],
+) -> int:
     count = 0
+    seen_ids: set[str] = set()
+    duplicate_ids: set[str] = set()
     with path.open("w", encoding="utf-8") as handle:
         for record in records:
+            entity_id = entity_id_of(record, id_keys, entity_type)
+            if entity_id in seen_ids:
+                duplicate_ids.add(entity_id)
+            seen_ids.add(entity_id)
             envelope = {
                 "ns": ns,
                 "entity_type": entity_type,
-                "entity_id": entity_id_of(record, id_keys, entity_type),
+                "entity_id": entity_id,
                 "extracted_at": extracted_at,
                 "payload": json.dumps(record, sort_keys=True),
             }
             handle.write(json.dumps(envelope) + "\n")
             count += 1
     path.chmod(0o600)
+    metadata = completeness.setdefault(entity_type, {})
+    metadata.update({
+        "rows": count,
+        "distinct_ids": len(seen_ids),
+        "duplicate_count": len(duplicate_ids),
+        "duplicate_ids": sorted(duplicate_ids),
+    })
+    if duplicate_ids:
+        raise RuntimeError(
+            f"{entity_type} extract contains duplicate entity ids: {sorted(duplicate_ids)!r}"
+        )
+    minimum_total = metadata.get("minimum_total")
+    if minimum_total is not None and len(seen_ids) < minimum_total:
+        raise RuntimeError(
+            f"{entity_type} distinct id count {len(seen_ids)} is short of the smallest "
+            f"reported total {minimum_total}"
+        )
     _log(logging.INFO, "entity_extracted", entity_type=entity_type, records=count, path=str(path))
     return count
 
@@ -255,13 +286,13 @@ def main(argv: list[str] | None = None) -> int:
             out_dir / "documents.ndjson", args.ns, "document",
             paginate(f"{document_service.rstrip('/')}/api/v1/documents", "page", "size", page_size,
                      ("documents", "items"), token, "document", completeness),
-            ("document_id", "id"), extracted_at,
+            ("document_id", "id"), extracted_at, completeness,
         ),
         "file": write_ndjson(
             out_dir / "files.ndjson", args.ns, "file",
             paginate(f"{file_service.rstrip('/')}/api/v1/files", "page", "page_size", page_size,
                      ("files", "items"), token, "file", completeness),
-            ("file_id", "id"), extracted_at,
+            ("file_id", "id"), extracted_at, completeness,
         ),
     }
 
