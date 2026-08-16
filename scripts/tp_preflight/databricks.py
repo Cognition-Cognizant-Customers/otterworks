@@ -36,6 +36,12 @@ HOST = raw_host.rstrip("/")
 TOKEN = os.environ["DATABRICKS_DEMO_TOKEN"]
 catalog = os.environ.get("TP_DATABRICKS_CATALOG", "ow_tp")
 landing = os.environ.get("TP_DATABRICKS_LANDING_PATH", f"/Volumes/{catalog}/bronze/landing")
+configured_warehouse_id = os.environ.get("DATABRICKS_SQL_WAREHOUSE_ID", "")
+if configured_warehouse_id and not re.fullmatch(r"[A-Za-z0-9]+", configured_warehouse_id):
+    raise SystemExit(
+        "DATABRICKS_SQL_WAREHOUSE_ID must match [A-Za-z0-9]+: "
+        f"{configured_warehouse_id!r}"
+    )
 if not re.fullmatch(r"[A-Za-z0-9_]+", catalog):
     raise SystemExit(f"TP_DATABRICKS_CATALOG must match [A-Za-z0-9_]+: {catalog!r}")
 if not landing.startswith("/Volumes/") or ".." in landing.split("/"):
@@ -118,7 +124,8 @@ def sql_call(statement: str, warehouse_id: str):
             if state in {"SUCCEEDED", "FAILED", "CANCELED"} or not statement_id:
                 break
             time.sleep(1)
-            status, polled_body = call("GET", f"/api/2.0/sql/statements/{statement_id}")
+            quoted_statement_id = urllib.parse.quote(str(statement_id), safe="")
+            status, polled_body = call("GET", f"/api/2.0/sql/statements/{quoted_statement_id}")
             body = polled_body if isinstance(polled_body, dict) else {"_raw_error": str(polled_body)[:300]}
             state = body.get("status", {}).get("state") if isinstance(body.get("status"), dict) else "unknown"
     return SqlResult(status, body, accepted, state)
@@ -195,8 +202,8 @@ if 200 <= identity_status < 300 and isinstance(identity_body, dict):
     manifest.data["credential_identity"] = identity_body.get("userName", "available")
 else:
     manifest.data["credential_identity"] = "unavailable"
-    manifest.add("authenticate", "PAT can identify the caller", "/api/2.0/current-user",
-                 "denied", f"HTTP {identity_status}")
+    manifest.add("authenticate", "PAT can identify the caller", "GET /api/2.0/preview/scim/v2/Me",
+                 "denied", response_detail(identity_status, identity_body))
 
 suffix = f"__tp_preflight_{uuid.uuid4().hex}"
 file_path = f"{landing}/{suffix}"
@@ -249,12 +256,17 @@ finally:
     cleanup_all()
 
 warehouse_probe = call("GET", "/api/2.0/sql/warehouses")
-warehouse_id = os.environ.get("DATABRICKS_SQL_WAREHOUSE_ID", "")
+warehouse_id = configured_warehouse_id
 if not warehouse_id and 200 <= warehouse_probe[0] < 300 and isinstance(warehouse_probe[1], dict):
     for warehouse in warehouse_probe[1].get("warehouses", []):
         if warehouse.get("enable_serverless_compute") or warehouse.get("warehouse_type") == "PRO":
             warehouse_id = warehouse.get("id", "")
             break
+if warehouse_id and not re.fullmatch(r"[A-Za-z0-9]+", warehouse_id):
+    raise SystemExit(
+        "DATABRICKS_SQL_WAREHOUSE_ID must match [A-Za-z0-9]+: "
+        f"{warehouse_id!r}"
+    )
 schema = f"ow_tp_preflight_{uuid.uuid4().hex[:12]}"
 schema_result = None
 
