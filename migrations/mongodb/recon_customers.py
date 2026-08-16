@@ -11,6 +11,7 @@ Usage: python3 recon_customers.py --ns demo --run-mode fixture --out <path>
 
 import argparse
 import json
+import re
 import sys
 from datetime import datetime, timezone
 
@@ -178,6 +179,9 @@ def main() -> int:
                     required=True)
     ap.add_argument("--idempotency-evidence", required=True)
     args = ap.parse_args()
+    if not re.fullmatch(r"[A-Za-z0-9_]+", args.ns):
+        print("NS must match ^[A-Za-z0-9_]+$", file=sys.stderr)
+        return 2
     report = build_report(
         args.ns, args.run_mode, compute(args.ns),
         {"performed": True, "result": args.idempotency_result,

@@ -241,6 +241,9 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--ns", required=True)
     args = ap.parse_args()
+    if not re.fullmatch(r"[A-Za-z0-9_]+", args.ns):
+        print("NS must match ^[A-Za-z0-9_]+$", file=sys.stderr)
+        return 2
     return migrate(args.ns)
 
 
