@@ -1,0 +1,91 @@
+{
+  "kind": "recon-report",
+  "unit": "aws-report",
+  "namespace": "demo",
+  "generated_at": "2026-08-16T18:33:36.431662+00:00",
+  "run_mode": "fixture",
+  "checks": [
+    {
+      "id": "byte-identical-report",
+      "expected": "300862b738fdb8b6add8d1007362c0e0",
+      "actual": "300862b738fdb8b6add8d1007362c0e0",
+      "source_of_truth": "S3 object bytes read back from fixture bucket vs regenerated golden legacy report",
+      "result": "pass"
+    },
+    {
+      "id": "xls-copy",
+      "expected": "300862b738fdb8b6add8d1007362c0e0",
+      "actual": "300862b738fdb8b6add8d1007362c0e0",
+      "source_of_truth": "S3 .xls object bytes vs S3 .csv object bytes (and golden .xls md5 300862b738fdb8b6add8d1007362c0e0)",
+      "result": "pass"
+    },
+    {
+      "id": "report-date-parameter",
+      "expected": [
+        "reports/finance_billing_19990101.csv",
+        "reports/finance_billing_19990101.xls",
+        "reports/finance_billing_20260115.csv",
+        "reports/finance_billing_20260115.xls"
+      ],
+      "actual": [
+        "reports/finance_billing_19990101.csv",
+        "reports/finance_billing_19990101.xls",
+        "reports/finance_billing_20260115.csv",
+        "reports/finance_billing_20260115.xls"
+      ],
+      "source_of_truth": "two fixture invocations with different event report_date values; S3 reports/ listing and handler csv_key read back",
+      "result": "pass"
+    },
+    {
+      "id": "idempotent-rerun",
+      "expected": "rerun rewrites identical bytes; exactly 2 report objects",
+      "actual": "rerun bytes identical=True; report objects=['reports/finance_billing_20260115.csv', 'reports/finance_billing_20260115.xls']",
+      "source_of_truth": "second handler invocation with the same input; S3 listing + bytes read back",
+      "result": "pass"
+    },
+    {
+      "id": "empty-input-header-only",
+      "expected": "Currency,RecordType,RecordCount,TotalAmount\n",
+      "actual": "Currency,RecordType,RecordCount,TotalAmount\n",
+      "source_of_truth": "handler invocation against a bucket with zero parsed/ objects; bytes read back",
+      "result": "pass"
+    },
+    {
+      "id": "state-machine-orchestration",
+      "expected": "ow-tp-<ns>-chain verifies parsed inputs (s3:listObjectsV2), invokes only the report Lambda, fails visibly",
+      "actual": "ASL definition in report.tf: VerifyParsedInputs -> RunFinanceReport, no Catch-and-swallow; terraform validate green",
+      "source_of_truth": "static review of infrastructure/terraform-tp-aws/report.tf (live execution is parent-verified)",
+      "result": "skipped"
+    },
+    {
+      "id": "least-privilege",
+      "expected": "report role: ListBucket(prefix parsed/), GetObject parsed/*, PutObject reports/* only; chain role invokes only the report Lambda; trust conditioned on aws:SourceAccount",
+      "actual": "policy documents in report.tf match; no bucket-wide write; log-delivery actions are account-scoped as AWS requires",
+      "source_of_truth": "static review of report.tf IAM policy documents (live enforcement is parent-verified)",
+      "result": "skipped"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "second handler invocation with identical input produced byte-identical csv/xls and no extra objects"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      "A-short-record"
+    ],
+    "actual_set": [
+      "A-short-record"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "live terraform apply of report.tf (Lambda, IAM roles, log groups, state machine)",
+    "real Step Functions execution of ow-tp-<ns>-chain (aws-sdk s3:listObjectsV2 task, lambda:invoke integration, visible failure semantics)",
+    "IAM least-privilege enforcement against live S3 (parsed/ read-only, reports/ write-only, invoke-only state-machine role)",
+    "Step Functions CloudWatch log delivery",
+    "sendmail/report delivery replacement (out of scope per contract; legacy delivery is a silent no-op)"
+  ]
+}
