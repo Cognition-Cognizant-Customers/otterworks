@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS ow_tp.bronze.storage_objects_raw (
   bucket        STRING    COMMENT 'source bucket the object was listed from',
   key           STRING    COMMENT 'object key, as listed',
   size_bytes    BIGINT,
+  legacy_attributed BOOLEAN COMMENT 'positive fixture attribution for a legacy-prefix key',
   last_modified TIMESTAMP,
   listed_at     TIMESTAMP COMMENT 'when the inventory extract ran'
 )
@@ -67,7 +68,7 @@ CREATE TABLE IF NOT EXISTS ow_tp.silver.storage_orphans (
   bucket           STRING,
   key              STRING,
   size_bytes       BIGINT,
-  orphan_reason    STRING  COMMENT 'no_metadata_row (confirmed) or candidate_unverified_metadata_read (not actionable)',
+  orphan_reason    STRING  COMMENT 'no_metadata_row, unattributable_legacy_prefix, or candidate_unverified_metadata_read',
   detected_at      TIMESTAMP,
   metadata_read_ok BOOLEAN COMMENT 'FALSE => candidate only; nothing may be quarantined from this run',
   scenario         STRING  COMMENT 'nominal | metadata_read_incomplete (safety-guard demonstration)'

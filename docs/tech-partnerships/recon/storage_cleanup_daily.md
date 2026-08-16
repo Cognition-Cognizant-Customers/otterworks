@@ -1,0 +1,172 @@
+baseline: legacy output
+
+# Recon: `storage_cleanup_daily.py` -> `ow_tp_storage_cleanup` (`ns=demo`)
+
+Generated 2026-08-16T02:22:38.641233+00:00 by `scripts/tp_databricks/recon_storage_cleanup.py`.
+
+**Result: green** -- 5/5 checks passed.
+
+## Baseline provenance
+
+Tier 1. The legacy script names `s3://otterworks-file-storage/files/`, which no local
+fixture provided (`NoSuchBucket`). What had to be stood up on this VM:
+
+- `make infra-up` plus the documented workaround for the occupied host port 5432 (namespace `demo`):
+  Postgres runs in container `otterworks-postgres-alt` on 55432 (`DB_PORT=55432`).
+- `make seed-legacy NS=demo` and `make seed-legacy-validate NS=demo` (15/15 checks).
+- `scripts/tp_databricks/fixture_storage_cleanup.py build --ns demo`: creates the missing
+  `otterworks-file-storage` and `otterworks-file-quarantine` buckets,
+  writes 9960 live objects from the seeded metadata keys, and
+  plants 25 objects with no metadata row
+  (635837 bytes) under the `files/` prefix the script lists.
+- Then the **unedited** `etl/scripts/storage_cleanup_daily.py` was run for `demo` (nothing under `etl/`
+  was modified) and what it moved into the quarantine bucket is the golden orphan set:
+  `/home/ubuntu/tp-golden/python/storage_cleanup_daily/demo/legacy_stdout.txt`, `legacy_report.json`, `quarantined_keys.txt`.
+- Because the legacy `files/` prefix is shared, the golden quarantine set is restricted to the planted keys recorded for `demo`; mixed-namespace keys are never used as its baseline.
+
+Legacy run, for the record:
+
+```json
+{
+  "report_type": "storage_cleanup",
+  "report_date": "2026-08-16",
+  "generated_at": "2026-08-16T02:04:35.035132+00:00",
+  "inventory": {
+    "total_objects": 25,
+    "total_size_bytes": 635837,
+    "total_size_gb": 0.0006
+  },
+  "orphans": {
+    "orphaned_objects": 25,
+    "orphaned_bytes": 635837,
+    "orphaned_size_gb": 0.0006,
+    "orphan_percentage": 100.0
+  },
+  "cleanup": {
+    "objects_quarantined": 25,
+    "objects_failed": 0,
+    "quarantine_bucket": "otterworks-file-quarantine"
+  },
+  "savings": {
+    "storage_freed_gb": 0.0006,
+    "estimated_monthly_savings_usd": 0.0
+  },
+  "capture_namespace": "demo"
+}
+```
+
+## Landing transport: UNVERIFIED
+
+The documented bronze landing path -- writing extracts to the volume
+`/Volumes/ow_tp/bronze/landing` via `dbx.py upload` -- is **UNVERIFIED by this recon**.
+The demo PAT lacks the `files` scope, so every upload attempt returned, verbatim:
+
+```text
+403: {"error_code":403,"message":"Provided access token does not have required scopes: files"}
+```
+
+The in-Databricks landing this recon actually used is `INSERT` statements executed on the
+existing serverless SQL warehouse by `scripts/tp_databricks/extract_storage_cleanup.py`,
+which produce the same bronze rows. That is a workaround for a missing token scope and is
+**not** presented as the production transport: the volume path stays the documented one and
+remains untested here. No acceptance check below was weakened, relaxed or skipped because of
+this -- the checks compare the same bronze contents either way.
+
+## Acceptance checks
+
+### 0. Notebook DDL and the committed DDL file are the same statements -- PASS
+
+```text
+PASS DDL statements: baseline=['CREATE TABLE IF NOT EXISTS ow_tp.bronze.storage_objects_raw ( ns STRING, bucket STRING, key STRING, size_bytes BIGINT, legacy_attributed BOOLEAN, last_modified TIMESTAMP, listed_at TIMESTAMP)', 'CREATE TABLE IF NOT EXISTS ow_tp.bronze.file_metadata_raw ( ns STRING, file_id STRING, storage_key STRING, owner_id STRING, size_bytes BIGINT, created_at TIMESTAMP)', 'CREATE TABLE IF NOT EXISTS ow_tp.bronze.storage_extract_manifest ( ns STRING, scenario STRING, source_bucket STRING, source_table STRING, objects_expected BIGINT, objects_bytes BIGINT, metadata_expected BIGINT, metadata_read_complete BOOLEAN, extracted_at TIMESTAMP, loaded_at TIMESTAMP)', 'CREATE TABLE IF NOT EXISTS ow_tp.silver.storage_orphans ( ns STRING, bucket STRING, key STRING, size_bytes BIGINT, orphan_reason STRING, detected_at TIMESTAMP, metadata_read_ok BOOLEAN, scenario STRING)', 'CREATE TABLE IF NOT EXISTS ow_tp.gold.storage_cleanup_savings ( ns STRING, run_date DATE, objects_scanned BIGINT, metadata_rows BIGINT, orphan_count BIGINT, orphan_bytes BIGINT, quarantined_count BIGINT, dry_run BOOLEAN, scenario STRING, metadata_read_ok BOOLEAN, generated_at TIMESTAMP)'] converted=['CREATE TABLE IF NOT EXISTS ow_tp.bronze.storage_objects_raw ( ns STRING, bucket STRING, key STRING, size_bytes BIGINT, legacy_attributed BOOLEAN, last_modified TIMESTAMP, listed_at TIMESTAMP)', 'CREATE TABLE IF NOT EXISTS ow_tp.bronze.file_metadata_raw ( ns STRING, file_id STRING, storage_key STRING, owner_id STRING, size_bytes BIGINT, created_at TIMESTAMP)', 'CREATE TABLE IF NOT EXISTS ow_tp.bronze.storage_extract_manifest ( ns STRING, scenario STRING, source_bucket STRING, source_table STRING, objects_expected BIGINT, objects_bytes BIGINT, metadata_expected BIGINT, metadata_read_complete BOOLEAN, extracted_at TIMESTAMP, loaded_at TIMESTAMP)', 'CREATE TABLE IF NOT EXISTS ow_tp.silver.storage_orphans ( ns STRING, bucket STRING, key STRING, size_bytes BIGINT, orphan_reason STRING, detected_at TIMESTAMP, metadata_read_ok BOOLEAN, scenario STRING)', 'CREATE TABLE IF NOT EXISTS ow_tp.gold.storage_cleanup_savings ( ns STRING, run_date DATE, objects_scanned BIGINT, metadata_rows BIGINT, orphan_count BIGINT, orphan_bytes BIGINT, quarantined_count BIGINT, dry_run BOOLEAN, scenario STRING, metadata_read_ok BOOLEAN, generated_at TIMESTAMP)']
+```
+
+### 1. Orphan-set parity: exact (bucket, key) set equality -- PASS
+
+```text
+PASS planted set == legacy quarantined set: baseline={('otterworks-file-storage', 'files/375be158-62fb-4f84-b789-08de2ede41e9/b8481879-6871-4d2a-b6d6-b346dea8846c'), ('otterworks-file-storage', 'files/55841ad0-37ff-4705-9e95-a32df32a3196/e5053e35-d260-4a19-994a-65b1fb94305d'), ('otterworks-file-storage', 'files/d51ba131-9906-4128-ad7d-c0ed0d8b0367/65f049d3-4b09-400f-aba7-8ae592a79568'), ('otterworks-file-storage', 'files/e8b8a9fe-500c-44c5-8e72-93b229d5fa4c/8755d2c4-d7e7-47ed-a888-0b10c01a5cce'), ('otterworks-file-storage', 'files/83eabf79-84de-4ba4-bd8b-9655c8e766a4/1d55849b-8ef5-4a6a-88e8-e7596a320977'), ('otterworks-file-storage', 'files/ace9c018-1315-4bbc-9e21-d9e5900a907b/b5f23f85-c42e-4b1e-bcb0-161df81d9127'), ('otterworks-file-storage', 'files/0b554a95-263a-4d3b-a21d-c1c02f6a0258/66a27ea1-fbc0-4d0e-9cfc-3d01d6b2297b'), ('otterworks-file-storage', 'files/f55038e8-c5ef-48a6-8e84-01d1627224a5/85a6db5a-5c1b-4ec5-811d-d780c6cfc1c5'), ('otterworks-file-storage', 'files/43e4e26d-59c7-4e1c-a29c-84413634e5e5/3c2efa47-d38b-4abc-98db-761c29afabcb'), ('otterworks-file-storage', 'files/460f24b8-5328-494d-9426-f2615467976b/18dc39ef-e377-4c1b-89b2-72faf34afc55'), ('otterworks-file-storage', 'files/cb951454-600a-459e-96e3-50cd74f9dfaf/ef6ec1d2-73a1-48a5-98ac-da162aae5c3a'), ('otterworks-file-storage', 'files/00aa6538-8651-450a-a444-d20fd8ebf46b/8978a9e7-4780-40c8-8a04-9bf090836a89'), ('otterworks-file-storage', 'files/88adafab-7f59-419a-ab68-7ed850b31201/31387716-29eb-4eab-b0db-00342bb0898b'), ('otterworks-file-storage', 'files/d0451c10-89c0-40f4-a56d-b0afab85b0e2/8f7a4897-e57b-4ecb-978a-74811f4cb71b'), ('otterworks-file-storage', 'files/f2062dba-61d1-425a-9e7d-efd1f3c7b04a/65b7bba4-ae0f-44e5-859c-cb7f1853aac5'), ('otterworks-file-storage', 'files/53128dde-59ca-4082-9503-992db1f788b7/4f0e84fa-05f6-4b03-9952-d6b93612a1d1'), ('otterworks-file-storage', 'files/1f38312c-c725-44fb-b440-0e21df1a115c/ac9ca237-9999-4965-b980-d1223a0b233f'), ('otterworks-file-storage', 'files/502e3a5f-fe69-4186-950f-a91d39ed9150/7a5f253f-b421-4b49-a485-c774d8847a11'), ('otterworks-file-storage', 'files/262d3f60-7359-44c6-83df-1169752614e4/3f593eca-6c44-4ec8-962f-c5c4657758bd'), ('otterworks-file-storage', 'files/90338296-47ac-4943-9e72-25bf0807e3a4/a761ee97-bf8d-4126-ab39-165150acb302'), ('otterworks-file-storage', 'files/7a2c5e40-2389-4b70-bea0-5803ec5dc6e4/ef19d9ef-6953-437c-880f-c53ef16dcaf1'), ('otterworks-file-storage', 'files/2ce1ad33-c76e-45ed-aab0-fa72a81cb62b/10766d40-49c5-4db0-abb9-5fc38c03a75f'), ('otterworks-file-storage', 'files/3e972cae-da9c-42da-a956-6dcc790785bc/007c2a54-fb64-4f7b-aca2-d63def141274'), ('otterworks-file-storage', 'files/945624f4-beb7-463b-b60c-7a115382993a/4c908afa-d77e-461c-b1fa-ba0e2f10ca91'), ('otterworks-file-storage', 'files/5d7941cb-7eac-4990-8135-f065c28e691c/62798a28-4440-4423-bf95-6c849e7222e2')} converted={('otterworks-file-storage', 'files/375be158-62fb-4f84-b789-08de2ede41e9/b8481879-6871-4d2a-b6d6-b346dea8846c'), ('otterworks-file-storage', 'files/55841ad0-37ff-4705-9e95-a32df32a3196/e5053e35-d260-4a19-994a-65b1fb94305d'), ('otterworks-file-storage', 'files/d51ba131-9906-4128-ad7d-c0ed0d8b0367/65f049d3-4b09-400f-aba7-8ae592a79568'), ('otterworks-file-storage', 'files/e8b8a9fe-500c-44c5-8e72-93b229d5fa4c/8755d2c4-d7e7-47ed-a888-0b10c01a5cce'), ('otterworks-file-storage', 'files/83eabf79-84de-4ba4-bd8b-9655c8e766a4/1d55849b-8ef5-4a6a-88e8-e7596a320977'), ('otterworks-file-storage', 'files/ace9c018-1315-4bbc-9e21-d9e5900a907b/b5f23f85-c42e-4b1e-bcb0-161df81d9127'), ('otterworks-file-storage', 'files/0b554a95-263a-4d3b-a21d-c1c02f6a0258/66a27ea1-fbc0-4d0e-9cfc-3d01d6b2297b'), ('otterworks-file-storage', 'files/f55038e8-c5ef-48a6-8e84-01d1627224a5/85a6db5a-5c1b-4ec5-811d-d780c6cfc1c5'), ('otterworks-file-storage', 'files/43e4e26d-59c7-4e1c-a29c-84413634e5e5/3c2efa47-d38b-4abc-98db-761c29afabcb'), ('otterworks-file-storage', 'files/460f24b8-5328-494d-9426-f2615467976b/18dc39ef-e377-4c1b-89b2-72faf34afc55'), ('otterworks-file-storage', 'files/cb951454-600a-459e-96e3-50cd74f9dfaf/ef6ec1d2-73a1-48a5-98ac-da162aae5c3a'), ('otterworks-file-storage', 'files/00aa6538-8651-450a-a444-d20fd8ebf46b/8978a9e7-4780-40c8-8a04-9bf090836a89'), ('otterworks-file-storage', 'files/88adafab-7f59-419a-ab68-7ed850b31201/31387716-29eb-4eab-b0db-00342bb0898b'), ('otterworks-file-storage', 'files/d0451c10-89c0-40f4-a56d-b0afab85b0e2/8f7a4897-e57b-4ecb-978a-74811f4cb71b'), ('otterworks-file-storage', 'files/f2062dba-61d1-425a-9e7d-efd1f3c7b04a/65b7bba4-ae0f-44e5-859c-cb7f1853aac5'), ('otterworks-file-storage', 'files/53128dde-59ca-4082-9503-992db1f788b7/4f0e84fa-05f6-4b03-9952-d6b93612a1d1'), ('otterworks-file-storage', 'files/1f38312c-c725-44fb-b440-0e21df1a115c/ac9ca237-9999-4965-b980-d1223a0b233f'), ('otterworks-file-storage', 'files/502e3a5f-fe69-4186-950f-a91d39ed9150/7a5f253f-b421-4b49-a485-c774d8847a11'), ('otterworks-file-storage', 'files/262d3f60-7359-44c6-83df-1169752614e4/3f593eca-6c44-4ec8-962f-c5c4657758bd'), ('otterworks-file-storage', 'files/90338296-47ac-4943-9e72-25bf0807e3a4/a761ee97-bf8d-4126-ab39-165150acb302'), ('otterworks-file-storage', 'files/7a2c5e40-2389-4b70-bea0-5803ec5dc6e4/ef19d9ef-6953-437c-880f-c53ef16dcaf1'), ('otterworks-file-storage', 'files/2ce1ad33-c76e-45ed-aab0-fa72a81cb62b/10766d40-49c5-4db0-abb9-5fc38c03a75f'), ('otterworks-file-storage', 'files/3e972cae-da9c-42da-a956-6dcc790785bc/007c2a54-fb64-4f7b-aca2-d63def141274'), ('otterworks-file-storage', 'files/945624f4-beb7-463b-b60c-7a115382993a/4c908afa-d77e-461c-b1fa-ba0e2f10ca91'), ('otterworks-file-storage', 'files/5d7941cb-7eac-4990-8135-f065c28e691c/62798a28-4440-4423-bf95-6c849e7222e2')}
+PASS legacy quarantined set == silver confirmed orphans: baseline={('otterworks-file-storage', 'files/375be158-62fb-4f84-b789-08de2ede41e9/b8481879-6871-4d2a-b6d6-b346dea8846c'), ('otterworks-file-storage', 'files/55841ad0-37ff-4705-9e95-a32df32a3196/e5053e35-d260-4a19-994a-65b1fb94305d'), ('otterworks-file-storage', 'files/d51ba131-9906-4128-ad7d-c0ed0d8b0367/65f049d3-4b09-400f-aba7-8ae592a79568'), ('otterworks-file-storage', 'files/e8b8a9fe-500c-44c5-8e72-93b229d5fa4c/8755d2c4-d7e7-47ed-a888-0b10c01a5cce'), ('otterworks-file-storage', 'files/83eabf79-84de-4ba4-bd8b-9655c8e766a4/1d55849b-8ef5-4a6a-88e8-e7596a320977'), ('otterworks-file-storage', 'files/ace9c018-1315-4bbc-9e21-d9e5900a907b/b5f23f85-c42e-4b1e-bcb0-161df81d9127'), ('otterworks-file-storage', 'files/0b554a95-263a-4d3b-a21d-c1c02f6a0258/66a27ea1-fbc0-4d0e-9cfc-3d01d6b2297b'), ('otterworks-file-storage', 'files/f55038e8-c5ef-48a6-8e84-01d1627224a5/85a6db5a-5c1b-4ec5-811d-d780c6cfc1c5'), ('otterworks-file-storage', 'files/43e4e26d-59c7-4e1c-a29c-84413634e5e5/3c2efa47-d38b-4abc-98db-761c29afabcb'), ('otterworks-file-storage', 'files/460f24b8-5328-494d-9426-f2615467976b/18dc39ef-e377-4c1b-89b2-72faf34afc55'), ('otterworks-file-storage', 'files/cb951454-600a-459e-96e3-50cd74f9dfaf/ef6ec1d2-73a1-48a5-98ac-da162aae5c3a'), ('otterworks-file-storage', 'files/00aa6538-8651-450a-a444-d20fd8ebf46b/8978a9e7-4780-40c8-8a04-9bf090836a89'), ('otterworks-file-storage', 'files/88adafab-7f59-419a-ab68-7ed850b31201/31387716-29eb-4eab-b0db-00342bb0898b'), ('otterworks-file-storage', 'files/d0451c10-89c0-40f4-a56d-b0afab85b0e2/8f7a4897-e57b-4ecb-978a-74811f4cb71b'), ('otterworks-file-storage', 'files/f2062dba-61d1-425a-9e7d-efd1f3c7b04a/65b7bba4-ae0f-44e5-859c-cb7f1853aac5'), ('otterworks-file-storage', 'files/53128dde-59ca-4082-9503-992db1f788b7/4f0e84fa-05f6-4b03-9952-d6b93612a1d1'), ('otterworks-file-storage', 'files/1f38312c-c725-44fb-b440-0e21df1a115c/ac9ca237-9999-4965-b980-d1223a0b233f'), ('otterworks-file-storage', 'files/502e3a5f-fe69-4186-950f-a91d39ed9150/7a5f253f-b421-4b49-a485-c774d8847a11'), ('otterworks-file-storage', 'files/262d3f60-7359-44c6-83df-1169752614e4/3f593eca-6c44-4ec8-962f-c5c4657758bd'), ('otterworks-file-storage', 'files/90338296-47ac-4943-9e72-25bf0807e3a4/a761ee97-bf8d-4126-ab39-165150acb302'), ('otterworks-file-storage', 'files/7a2c5e40-2389-4b70-bea0-5803ec5dc6e4/ef19d9ef-6953-437c-880f-c53ef16dcaf1'), ('otterworks-file-storage', 'files/2ce1ad33-c76e-45ed-aab0-fa72a81cb62b/10766d40-49c5-4db0-abb9-5fc38c03a75f'), ('otterworks-file-storage', 'files/3e972cae-da9c-42da-a956-6dcc790785bc/007c2a54-fb64-4f7b-aca2-d63def141274'), ('otterworks-file-storage', 'files/945624f4-beb7-463b-b60c-7a115382993a/4c908afa-d77e-461c-b1fa-ba0e2f10ca91'), ('otterworks-file-storage', 'files/5d7941cb-7eac-4990-8135-f065c28e691c/62798a28-4440-4423-bf95-6c849e7222e2')} converted={('otterworks-file-storage', 'files/375be158-62fb-4f84-b789-08de2ede41e9/b8481879-6871-4d2a-b6d6-b346dea8846c'), ('otterworks-file-storage', 'files/55841ad0-37ff-4705-9e95-a32df32a3196/e5053e35-d260-4a19-994a-65b1fb94305d'), ('otterworks-file-storage', 'files/d51ba131-9906-4128-ad7d-c0ed0d8b0367/65f049d3-4b09-400f-aba7-8ae592a79568'), ('otterworks-file-storage', 'files/e8b8a9fe-500c-44c5-8e72-93b229d5fa4c/8755d2c4-d7e7-47ed-a888-0b10c01a5cce'), ('otterworks-file-storage', 'files/83eabf79-84de-4ba4-bd8b-9655c8e766a4/1d55849b-8ef5-4a6a-88e8-e7596a320977'), ('otterworks-file-storage', 'files/ace9c018-1315-4bbc-9e21-d9e5900a907b/b5f23f85-c42e-4b1e-bcb0-161df81d9127'), ('otterworks-file-storage', 'files/0b554a95-263a-4d3b-a21d-c1c02f6a0258/66a27ea1-fbc0-4d0e-9cfc-3d01d6b2297b'), ('otterworks-file-storage', 'files/f55038e8-c5ef-48a6-8e84-01d1627224a5/85a6db5a-5c1b-4ec5-811d-d780c6cfc1c5'), ('otterworks-file-storage', 'files/43e4e26d-59c7-4e1c-a29c-84413634e5e5/3c2efa47-d38b-4abc-98db-761c29afabcb'), ('otterworks-file-storage', 'files/460f24b8-5328-494d-9426-f2615467976b/18dc39ef-e377-4c1b-89b2-72faf34afc55'), ('otterworks-file-storage', 'files/cb951454-600a-459e-96e3-50cd74f9dfaf/ef6ec1d2-73a1-48a5-98ac-da162aae5c3a'), ('otterworks-file-storage', 'files/00aa6538-8651-450a-a444-d20fd8ebf46b/8978a9e7-4780-40c8-8a04-9bf090836a89'), ('otterworks-file-storage', 'files/88adafab-7f59-419a-ab68-7ed850b31201/31387716-29eb-4eab-b0db-00342bb0898b'), ('otterworks-file-storage', 'files/d0451c10-89c0-40f4-a56d-b0afab85b0e2/8f7a4897-e57b-4ecb-978a-74811f4cb71b'), ('otterworks-file-storage', 'files/f2062dba-61d1-425a-9e7d-efd1f3c7b04a/65b7bba4-ae0f-44e5-859c-cb7f1853aac5'), ('otterworks-file-storage', 'files/53128dde-59ca-4082-9503-992db1f788b7/4f0e84fa-05f6-4b03-9952-d6b93612a1d1'), ('otterworks-file-storage', 'files/1f38312c-c725-44fb-b440-0e21df1a115c/ac9ca237-9999-4965-b980-d1223a0b233f'), ('otterworks-file-storage', 'files/502e3a5f-fe69-4186-950f-a91d39ed9150/7a5f253f-b421-4b49-a485-c774d8847a11'), ('otterworks-file-storage', 'files/262d3f60-7359-44c6-83df-1169752614e4/3f593eca-6c44-4ec8-962f-c5c4657758bd'), ('otterworks-file-storage', 'files/90338296-47ac-4943-9e72-25bf0807e3a4/a761ee97-bf8d-4126-ab39-165150acb302'), ('otterworks-file-storage', 'files/7a2c5e40-2389-4b70-bea0-5803ec5dc6e4/ef19d9ef-6953-437c-880f-c53ef16dcaf1'), ('otterworks-file-storage', 'files/2ce1ad33-c76e-45ed-aab0-fa72a81cb62b/10766d40-49c5-4db0-abb9-5fc38c03a75f'), ('otterworks-file-storage', 'files/3e972cae-da9c-42da-a956-6dcc790785bc/007c2a54-fb64-4f7b-aca2-d63def141274'), ('otterworks-file-storage', 'files/945624f4-beb7-463b-b60c-7a115382993a/4c908afa-d77e-461c-b1fa-ba0e2f10ca91'), ('otterworks-file-storage', 'files/5d7941cb-7eac-4990-8135-f065c28e691c/62798a28-4440-4423-bf95-6c849e7222e2')}
+note extras (would be deleted customer files): 0 []
+note missing (orphans left behind): 0 []
+```
+
+### 2. Byte and count parity against the legacy report -- PASS
+
+```text
+PASS orphan_bytes: baseline=635837 converted=635837
+PASS orphan_count: baseline=25 converted=25
+PASS orphan_bytes == summed planted sizes: baseline=635837 converted=635837
+PASS metadata_rows: baseline=10000 converted=10000
+note legacy stdout reported 10000 metadata keys globally; the namespace-scoped baseline for `demo` is 10000 seeded items.
+PASS objects_scanned under the legacy 'files/' prefix: baseline=25 converted=25
+note converted objects_scanned is 9985 for the whole bucket: the legacy script listed only 'files/' and never saw the other 9960 objects. Broader scope, identical orphan set.
+note named legacy deficiency: un-attributed objects under the shared files/ prefix remain visible but are never confirmed or quarantinable.
+```
+
+### 3. Safety guard: an incomplete metadata read quarantines nothing -- PASS
+
+```text
+PASS extract marks the metadata read incomplete: baseline=False converted=False
+PASS metadata rows loaded: baseline=4000 converted=4000
+PASS dry_run: baseline=False converted=False
+PASS metadata_read_ok: baseline=False converted=False
+PASS quarantined_count: baseline=0 converted=0
+PASS confirmed orphan_count: baseline=0 converted=0
+PASS confirmed orphan_bytes: baseline=0 converted=0
+PASS rows reported as confirmed orphans: baseline=set() converted=set()
+note candidates recorded for review: 6003 (quarantined: 0)
+PASS candidate rows carry orphan_reason=candidate_unverified_metadata_read: baseline=[['6003']] converted=[['6003']]
+note legacy counterfactual, same defect, unedited script: with 100 of 200 metadata items unread it reported 100 orphans and quarantined 100 live customer files (see /home/ubuntu/tp-golden/python/storage_cleanup_daily/counterfactual/)
+```
+
+### 4. Idempotency: a re-run leaves the orphan set and totals unchanged -- PASS
+
+```text
+PASS orphan set across re-runs: baseline={('otterworks-file-storage', 'files/375be158-62fb-4f84-b789-08de2ede41e9/b8481879-6871-4d2a-b6d6-b346dea8846c'), ('otterworks-file-storage', 'files/55841ad0-37ff-4705-9e95-a32df32a3196/e5053e35-d260-4a19-994a-65b1fb94305d'), ('otterworks-file-storage', 'files/d51ba131-9906-4128-ad7d-c0ed0d8b0367/65f049d3-4b09-400f-aba7-8ae592a79568'), ('otterworks-file-storage', 'files/e8b8a9fe-500c-44c5-8e72-93b229d5fa4c/8755d2c4-d7e7-47ed-a888-0b10c01a5cce'), ('otterworks-file-storage', 'files/83eabf79-84de-4ba4-bd8b-9655c8e766a4/1d55849b-8ef5-4a6a-88e8-e7596a320977'), ('otterworks-file-storage', 'files/ace9c018-1315-4bbc-9e21-d9e5900a907b/b5f23f85-c42e-4b1e-bcb0-161df81d9127'), ('otterworks-file-storage', 'files/0b554a95-263a-4d3b-a21d-c1c02f6a0258/66a27ea1-fbc0-4d0e-9cfc-3d01d6b2297b'), ('otterworks-file-storage', 'files/f55038e8-c5ef-48a6-8e84-01d1627224a5/85a6db5a-5c1b-4ec5-811d-d780c6cfc1c5'), ('otterworks-file-storage', 'files/43e4e26d-59c7-4e1c-a29c-84413634e5e5/3c2efa47-d38b-4abc-98db-761c29afabcb'), ('otterworks-file-storage', 'files/460f24b8-5328-494d-9426-f2615467976b/18dc39ef-e377-4c1b-89b2-72faf34afc55'), ('otterworks-file-storage', 'files/cb951454-600a-459e-96e3-50cd74f9dfaf/ef6ec1d2-73a1-48a5-98ac-da162aae5c3a'), ('otterworks-file-storage', 'files/00aa6538-8651-450a-a444-d20fd8ebf46b/8978a9e7-4780-40c8-8a04-9bf090836a89'), ('otterworks-file-storage', 'files/88adafab-7f59-419a-ab68-7ed850b31201/31387716-29eb-4eab-b0db-00342bb0898b'), ('otterworks-file-storage', 'files/d0451c10-89c0-40f4-a56d-b0afab85b0e2/8f7a4897-e57b-4ecb-978a-74811f4cb71b'), ('otterworks-file-storage', 'files/f2062dba-61d1-425a-9e7d-efd1f3c7b04a/65b7bba4-ae0f-44e5-859c-cb7f1853aac5'), ('otterworks-file-storage', 'files/53128dde-59ca-4082-9503-992db1f788b7/4f0e84fa-05f6-4b03-9952-d6b93612a1d1'), ('otterworks-file-storage', 'files/1f38312c-c725-44fb-b440-0e21df1a115c/ac9ca237-9999-4965-b980-d1223a0b233f'), ('otterworks-file-storage', 'files/502e3a5f-fe69-4186-950f-a91d39ed9150/7a5f253f-b421-4b49-a485-c774d8847a11'), ('otterworks-file-storage', 'files/262d3f60-7359-44c6-83df-1169752614e4/3f593eca-6c44-4ec8-962f-c5c4657758bd'), ('otterworks-file-storage', 'files/90338296-47ac-4943-9e72-25bf0807e3a4/a761ee97-bf8d-4126-ab39-165150acb302'), ('otterworks-file-storage', 'files/7a2c5e40-2389-4b70-bea0-5803ec5dc6e4/ef19d9ef-6953-437c-880f-c53ef16dcaf1'), ('otterworks-file-storage', 'files/2ce1ad33-c76e-45ed-aab0-fa72a81cb62b/10766d40-49c5-4db0-abb9-5fc38c03a75f'), ('otterworks-file-storage', 'files/3e972cae-da9c-42da-a956-6dcc790785bc/007c2a54-fb64-4f7b-aca2-d63def141274'), ('otterworks-file-storage', 'files/945624f4-beb7-463b-b60c-7a115382993a/4c908afa-d77e-461c-b1fa-ba0e2f10ca91'), ('otterworks-file-storage', 'files/5d7941cb-7eac-4990-8135-f065c28e691c/62798a28-4440-4423-bf95-6c849e7222e2')} converted={('otterworks-file-storage', 'files/375be158-62fb-4f84-b789-08de2ede41e9/b8481879-6871-4d2a-b6d6-b346dea8846c'), ('otterworks-file-storage', 'files/55841ad0-37ff-4705-9e95-a32df32a3196/e5053e35-d260-4a19-994a-65b1fb94305d'), ('otterworks-file-storage', 'files/d51ba131-9906-4128-ad7d-c0ed0d8b0367/65f049d3-4b09-400f-aba7-8ae592a79568'), ('otterworks-file-storage', 'files/e8b8a9fe-500c-44c5-8e72-93b229d5fa4c/8755d2c4-d7e7-47ed-a888-0b10c01a5cce'), ('otterworks-file-storage', 'files/83eabf79-84de-4ba4-bd8b-9655c8e766a4/1d55849b-8ef5-4a6a-88e8-e7596a320977'), ('otterworks-file-storage', 'files/ace9c018-1315-4bbc-9e21-d9e5900a907b/b5f23f85-c42e-4b1e-bcb0-161df81d9127'), ('otterworks-file-storage', 'files/0b554a95-263a-4d3b-a21d-c1c02f6a0258/66a27ea1-fbc0-4d0e-9cfc-3d01d6b2297b'), ('otterworks-file-storage', 'files/f55038e8-c5ef-48a6-8e84-01d1627224a5/85a6db5a-5c1b-4ec5-811d-d780c6cfc1c5'), ('otterworks-file-storage', 'files/43e4e26d-59c7-4e1c-a29c-84413634e5e5/3c2efa47-d38b-4abc-98db-761c29afabcb'), ('otterworks-file-storage', 'files/460f24b8-5328-494d-9426-f2615467976b/18dc39ef-e377-4c1b-89b2-72faf34afc55'), ('otterworks-file-storage', 'files/cb951454-600a-459e-96e3-50cd74f9dfaf/ef6ec1d2-73a1-48a5-98ac-da162aae5c3a'), ('otterworks-file-storage', 'files/00aa6538-8651-450a-a444-d20fd8ebf46b/8978a9e7-4780-40c8-8a04-9bf090836a89'), ('otterworks-file-storage', 'files/88adafab-7f59-419a-ab68-7ed850b31201/31387716-29eb-4eab-b0db-00342bb0898b'), ('otterworks-file-storage', 'files/d0451c10-89c0-40f4-a56d-b0afab85b0e2/8f7a4897-e57b-4ecb-978a-74811f4cb71b'), ('otterworks-file-storage', 'files/f2062dba-61d1-425a-9e7d-efd1f3c7b04a/65b7bba4-ae0f-44e5-859c-cb7f1853aac5'), ('otterworks-file-storage', 'files/53128dde-59ca-4082-9503-992db1f788b7/4f0e84fa-05f6-4b03-9952-d6b93612a1d1'), ('otterworks-file-storage', 'files/1f38312c-c725-44fb-b440-0e21df1a115c/ac9ca237-9999-4965-b980-d1223a0b233f'), ('otterworks-file-storage', 'files/502e3a5f-fe69-4186-950f-a91d39ed9150/7a5f253f-b421-4b49-a485-c774d8847a11'), ('otterworks-file-storage', 'files/262d3f60-7359-44c6-83df-1169752614e4/3f593eca-6c44-4ec8-962f-c5c4657758bd'), ('otterworks-file-storage', 'files/90338296-47ac-4943-9e72-25bf0807e3a4/a761ee97-bf8d-4126-ab39-165150acb302'), ('otterworks-file-storage', 'files/7a2c5e40-2389-4b70-bea0-5803ec5dc6e4/ef19d9ef-6953-437c-880f-c53ef16dcaf1'), ('otterworks-file-storage', 'files/2ce1ad33-c76e-45ed-aab0-fa72a81cb62b/10766d40-49c5-4db0-abb9-5fc38c03a75f'), ('otterworks-file-storage', 'files/3e972cae-da9c-42da-a956-6dcc790785bc/007c2a54-fb64-4f7b-aca2-d63def141274'), ('otterworks-file-storage', 'files/945624f4-beb7-463b-b60c-7a115382993a/4c908afa-d77e-461c-b1fa-ba0e2f10ca91'), ('otterworks-file-storage', 'files/5d7941cb-7eac-4990-8135-f065c28e691c/62798a28-4440-4423-bf95-6c849e7222e2')}
+PASS orphan set still equals the baseline set: baseline={('otterworks-file-storage', 'files/375be158-62fb-4f84-b789-08de2ede41e9/b8481879-6871-4d2a-b6d6-b346dea8846c'), ('otterworks-file-storage', 'files/55841ad0-37ff-4705-9e95-a32df32a3196/e5053e35-d260-4a19-994a-65b1fb94305d'), ('otterworks-file-storage', 'files/d51ba131-9906-4128-ad7d-c0ed0d8b0367/65f049d3-4b09-400f-aba7-8ae592a79568'), ('otterworks-file-storage', 'files/e8b8a9fe-500c-44c5-8e72-93b229d5fa4c/8755d2c4-d7e7-47ed-a888-0b10c01a5cce'), ('otterworks-file-storage', 'files/83eabf79-84de-4ba4-bd8b-9655c8e766a4/1d55849b-8ef5-4a6a-88e8-e7596a320977'), ('otterworks-file-storage', 'files/ace9c018-1315-4bbc-9e21-d9e5900a907b/b5f23f85-c42e-4b1e-bcb0-161df81d9127'), ('otterworks-file-storage', 'files/0b554a95-263a-4d3b-a21d-c1c02f6a0258/66a27ea1-fbc0-4d0e-9cfc-3d01d6b2297b'), ('otterworks-file-storage', 'files/f55038e8-c5ef-48a6-8e84-01d1627224a5/85a6db5a-5c1b-4ec5-811d-d780c6cfc1c5'), ('otterworks-file-storage', 'files/43e4e26d-59c7-4e1c-a29c-84413634e5e5/3c2efa47-d38b-4abc-98db-761c29afabcb'), ('otterworks-file-storage', 'files/460f24b8-5328-494d-9426-f2615467976b/18dc39ef-e377-4c1b-89b2-72faf34afc55'), ('otterworks-file-storage', 'files/cb951454-600a-459e-96e3-50cd74f9dfaf/ef6ec1d2-73a1-48a5-98ac-da162aae5c3a'), ('otterworks-file-storage', 'files/00aa6538-8651-450a-a444-d20fd8ebf46b/8978a9e7-4780-40c8-8a04-9bf090836a89'), ('otterworks-file-storage', 'files/88adafab-7f59-419a-ab68-7ed850b31201/31387716-29eb-4eab-b0db-00342bb0898b'), ('otterworks-file-storage', 'files/d0451c10-89c0-40f4-a56d-b0afab85b0e2/8f7a4897-e57b-4ecb-978a-74811f4cb71b'), ('otterworks-file-storage', 'files/f2062dba-61d1-425a-9e7d-efd1f3c7b04a/65b7bba4-ae0f-44e5-859c-cb7f1853aac5'), ('otterworks-file-storage', 'files/53128dde-59ca-4082-9503-992db1f788b7/4f0e84fa-05f6-4b03-9952-d6b93612a1d1'), ('otterworks-file-storage', 'files/1f38312c-c725-44fb-b440-0e21df1a115c/ac9ca237-9999-4965-b980-d1223a0b233f'), ('otterworks-file-storage', 'files/502e3a5f-fe69-4186-950f-a91d39ed9150/7a5f253f-b421-4b49-a485-c774d8847a11'), ('otterworks-file-storage', 'files/262d3f60-7359-44c6-83df-1169752614e4/3f593eca-6c44-4ec8-962f-c5c4657758bd'), ('otterworks-file-storage', 'files/90338296-47ac-4943-9e72-25bf0807e3a4/a761ee97-bf8d-4126-ab39-165150acb302'), ('otterworks-file-storage', 'files/7a2c5e40-2389-4b70-bea0-5803ec5dc6e4/ef19d9ef-6953-437c-880f-c53ef16dcaf1'), ('otterworks-file-storage', 'files/2ce1ad33-c76e-45ed-aab0-fa72a81cb62b/10766d40-49c5-4db0-abb9-5fc38c03a75f'), ('otterworks-file-storage', 'files/3e972cae-da9c-42da-a956-6dcc790785bc/007c2a54-fb64-4f7b-aca2-d63def141274'), ('otterworks-file-storage', 'files/945624f4-beb7-463b-b60c-7a115382993a/4c908afa-d77e-461c-b1fa-ba0e2f10ca91'), ('otterworks-file-storage', 'files/5d7941cb-7eac-4990-8135-f065c28e691c/62798a28-4440-4423-bf95-6c849e7222e2')} converted={('otterworks-file-storage', 'files/375be158-62fb-4f84-b789-08de2ede41e9/b8481879-6871-4d2a-b6d6-b346dea8846c'), ('otterworks-file-storage', 'files/55841ad0-37ff-4705-9e95-a32df32a3196/e5053e35-d260-4a19-994a-65b1fb94305d'), ('otterworks-file-storage', 'files/d51ba131-9906-4128-ad7d-c0ed0d8b0367/65f049d3-4b09-400f-aba7-8ae592a79568'), ('otterworks-file-storage', 'files/e8b8a9fe-500c-44c5-8e72-93b229d5fa4c/8755d2c4-d7e7-47ed-a888-0b10c01a5cce'), ('otterworks-file-storage', 'files/83eabf79-84de-4ba4-bd8b-9655c8e766a4/1d55849b-8ef5-4a6a-88e8-e7596a320977'), ('otterworks-file-storage', 'files/ace9c018-1315-4bbc-9e21-d9e5900a907b/b5f23f85-c42e-4b1e-bcb0-161df81d9127'), ('otterworks-file-storage', 'files/0b554a95-263a-4d3b-a21d-c1c02f6a0258/66a27ea1-fbc0-4d0e-9cfc-3d01d6b2297b'), ('otterworks-file-storage', 'files/f55038e8-c5ef-48a6-8e84-01d1627224a5/85a6db5a-5c1b-4ec5-811d-d780c6cfc1c5'), ('otterworks-file-storage', 'files/43e4e26d-59c7-4e1c-a29c-84413634e5e5/3c2efa47-d38b-4abc-98db-761c29afabcb'), ('otterworks-file-storage', 'files/460f24b8-5328-494d-9426-f2615467976b/18dc39ef-e377-4c1b-89b2-72faf34afc55'), ('otterworks-file-storage', 'files/cb951454-600a-459e-96e3-50cd74f9dfaf/ef6ec1d2-73a1-48a5-98ac-da162aae5c3a'), ('otterworks-file-storage', 'files/00aa6538-8651-450a-a444-d20fd8ebf46b/8978a9e7-4780-40c8-8a04-9bf090836a89'), ('otterworks-file-storage', 'files/88adafab-7f59-419a-ab68-7ed850b31201/31387716-29eb-4eab-b0db-00342bb0898b'), ('otterworks-file-storage', 'files/d0451c10-89c0-40f4-a56d-b0afab85b0e2/8f7a4897-e57b-4ecb-978a-74811f4cb71b'), ('otterworks-file-storage', 'files/f2062dba-61d1-425a-9e7d-efd1f3c7b04a/65b7bba4-ae0f-44e5-859c-cb7f1853aac5'), ('otterworks-file-storage', 'files/53128dde-59ca-4082-9503-992db1f788b7/4f0e84fa-05f6-4b03-9952-d6b93612a1d1'), ('otterworks-file-storage', 'files/1f38312c-c725-44fb-b440-0e21df1a115c/ac9ca237-9999-4965-b980-d1223a0b233f'), ('otterworks-file-storage', 'files/502e3a5f-fe69-4186-950f-a91d39ed9150/7a5f253f-b421-4b49-a485-c774d8847a11'), ('otterworks-file-storage', 'files/262d3f60-7359-44c6-83df-1169752614e4/3f593eca-6c44-4ec8-962f-c5c4657758bd'), ('otterworks-file-storage', 'files/90338296-47ac-4943-9e72-25bf0807e3a4/a761ee97-bf8d-4126-ab39-165150acb302'), ('otterworks-file-storage', 'files/7a2c5e40-2389-4b70-bea0-5803ec5dc6e4/ef19d9ef-6953-437c-880f-c53ef16dcaf1'), ('otterworks-file-storage', 'files/2ce1ad33-c76e-45ed-aab0-fa72a81cb62b/10766d40-49c5-4db0-abb9-5fc38c03a75f'), ('otterworks-file-storage', 'files/3e972cae-da9c-42da-a956-6dcc790785bc/007c2a54-fb64-4f7b-aca2-d63def141274'), ('otterworks-file-storage', 'files/945624f4-beb7-463b-b60c-7a115382993a/4c908afa-d77e-461c-b1fa-ba0e2f10ca91'), ('otterworks-file-storage', 'files/5d7941cb-7eac-4990-8135-f065c28e691c/62798a28-4440-4423-bf95-6c849e7222e2')}
+PASS gold row after re-run: baseline={'objects_scanned': 9985, 'metadata_rows': 10000, 'orphan_count': 25, 'orphan_bytes': 635837, 'quarantined_count': 0, 'dry_run': True, 'metadata_read_ok': True} converted={'objects_scanned': 9985, 'metadata_rows': 10000, 'orphan_count': 25, 'orphan_bytes': 635837, 'quarantined_count': 0, 'dry_run': True, 'metadata_read_ok': True}
+PASS gold rows for this (ns, scenario, run_date): baseline=[['1']] converted=[['1']]
+PASS silver rows for this (ns, scenario): baseline=[['25']] converted=[['25']]
+```
+
+## Planted orphan set (the expected answer)
+
+25 objects, 635837 bytes total,
+deterministic per namespace:
+
+| bucket | key | size_bytes |
+|---|---|---|
+| `otterworks-file-storage` | `files/00aa6538-8651-450a-a444-d20fd8ebf46b/8978a9e7-4780-40c8-8a04-9bf090836a89` | 48674 |
+| `otterworks-file-storage` | `files/0b554a95-263a-4d3b-a21d-c1c02f6a0258/66a27ea1-fbc0-4d0e-9cfc-3d01d6b2297b` | 18044 |
+| `otterworks-file-storage` | `files/1f38312c-c725-44fb-b440-0e21df1a115c/ac9ca237-9999-4965-b980-d1223a0b233f` | 34909 |
+| `otterworks-file-storage` | `files/262d3f60-7359-44c6-83df-1169752614e4/3f593eca-6c44-4ec8-962f-c5c4657758bd` | 37986 |
+| `otterworks-file-storage` | `files/2ce1ad33-c76e-45ed-aab0-fa72a81cb62b/10766d40-49c5-4db0-abb9-5fc38c03a75f` | 60665 |
+| `otterworks-file-storage` | `files/375be158-62fb-4f84-b789-08de2ede41e9/b8481879-6871-4d2a-b6d6-b346dea8846c` | 38848 |
+| `otterworks-file-storage` | `files/3e972cae-da9c-42da-a956-6dcc790785bc/007c2a54-fb64-4f7b-aca2-d63def141274` | 48028 |
+| `otterworks-file-storage` | `files/43e4e26d-59c7-4e1c-a29c-84413634e5e5/3c2efa47-d38b-4abc-98db-761c29afabcb` | 1361 |
+| `otterworks-file-storage` | `files/460f24b8-5328-494d-9426-f2615467976b/18dc39ef-e377-4c1b-89b2-72faf34afc55` | 22189 |
+| `otterworks-file-storage` | `files/502e3a5f-fe69-4186-950f-a91d39ed9150/7a5f253f-b421-4b49-a485-c774d8847a11` | 24561 |
+| `otterworks-file-storage` | `files/53128dde-59ca-4082-9503-992db1f788b7/4f0e84fa-05f6-4b03-9952-d6b93612a1d1` | 1315 |
+| `otterworks-file-storage` | `files/55841ad0-37ff-4705-9e95-a32df32a3196/e5053e35-d260-4a19-994a-65b1fb94305d` | 30540 |
+| `otterworks-file-storage` | `files/5d7941cb-7eac-4990-8135-f065c28e691c/62798a28-4440-4423-bf95-6c849e7222e2` | 13563 |
+| `otterworks-file-storage` | `files/7a2c5e40-2389-4b70-bea0-5803ec5dc6e4/ef19d9ef-6953-437c-880f-c53ef16dcaf1` | 33611 |
+| `otterworks-file-storage` | `files/83eabf79-84de-4ba4-bd8b-9655c8e766a4/1d55849b-8ef5-4a6a-88e8-e7596a320977` | 12634 |
+| `otterworks-file-storage` | `files/88adafab-7f59-419a-ab68-7ed850b31201/31387716-29eb-4eab-b0db-00342bb0898b` | 29382 |
+| `otterworks-file-storage` | `files/90338296-47ac-4943-9e72-25bf0807e3a4/a761ee97-bf8d-4126-ab39-165150acb302` | 27889 |
+| `otterworks-file-storage` | `files/945624f4-beb7-463b-b60c-7a115382993a/4c908afa-d77e-461c-b1fa-ba0e2f10ca91` | 2335 |
+| `otterworks-file-storage` | `files/ace9c018-1315-4bbc-9e21-d9e5900a907b/b5f23f85-c42e-4b1e-bcb0-161df81d9127` | 9583 |
+| `otterworks-file-storage` | `files/cb951454-600a-459e-96e3-50cd74f9dfaf/ef6ec1d2-73a1-48a5-98ac-da162aae5c3a` | 2784 |
+| `otterworks-file-storage` | `files/d0451c10-89c0-40f4-a56d-b0afab85b0e2/8f7a4897-e57b-4ecb-978a-74811f4cb71b` | 6314 |
+| `otterworks-file-storage` | `files/d51ba131-9906-4128-ad7d-c0ed0d8b0367/65f049d3-4b09-400f-aba7-8ae592a79568` | 6731 |
+| `otterworks-file-storage` | `files/e8b8a9fe-500c-44c5-8e72-93b229d5fa4c/8755d2c4-d7e7-47ed-a888-0b10c01a5cce` | 41885 |
+| `otterworks-file-storage` | `files/f2062dba-61d1-425a-9e7d-efd1f3c7b04a/65b7bba4-ae0f-44e5-859c-cb7f1853aac5` | 48018 |
+| `otterworks-file-storage` | `files/f55038e8-c5ef-48a6-8e84-01d1627224a5/85a6db5a-5c1b-4ec5-811d-d780c6cfc1c5` | 33988 |
+
+## Reproducing
+
+```bash
+make infra-up && make seed-legacy NS=demo && make seed-legacy-validate NS=demo
+python3 scripts/tp_databricks/fixture_storage_cleanup.py build --ns demo
+python3 scripts/tp_databricks/extract_storage_cleanup.py --ns demo --load --scenario nominal
+python3 scripts/tp_databricks/recon_storage_cleanup.py --ns demo --run-date 2026-08-15 \
+    --capture-golden
+```

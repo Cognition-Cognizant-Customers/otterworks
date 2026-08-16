@@ -129,6 +129,7 @@ def sql(
     catalog: str | None = None,
     schema: str | None = None,
     timeout_s: int = 1800,
+    parameters: list[dict] | None = None,
 ) -> list[list[str]]:
     """Execute one statement on the serverless warehouse and return its rows."""
     body = {
@@ -141,6 +142,8 @@ def sql(
         body["catalog"] = catalog
     if schema:
         body["schema"] = schema
+    if parameters is not None:
+        body["parameters"] = parameters
     result = request("POST", "/api/2.0/sql/statements", body)
     statement_id = result["statement_id"]
     deadline = time.time() + timeout_s
