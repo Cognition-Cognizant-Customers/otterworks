@@ -518,7 +518,7 @@ def render(checks: list[Check], ns: str, catalog: str, baseline_dir: Path, conve
         lines += [
             "## Probe cleanup — **FAILURE**",
             "",
-            "The check verdicts below reflect the observed semantics, but probe rows may remain:",
+            "The check verdicts above reflect the observed semantics, but probe rows may remain:",
             *[f"- {failure}" for failure in cleanup_failures],
             "",
         ]
