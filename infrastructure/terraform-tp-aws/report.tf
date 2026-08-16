@@ -7,15 +7,10 @@
 # are visible (no dependency guessing by sleeping), invokes the report
 # Lambda, and fails visibly on any error (no 2>/dev/null || true).
 
-terraform {
-  required_providers {
-    archive = {
-      source  = "hashicorp/archive"
-      version = "~> 2.4"
-    }
-  }
-}
-
+# The hashicorp/archive provider requirement belongs in the shared
+# versions.tf, which components must not edit; terraform init resolves the
+# implied requirement from this data source.
+# tflint-ignore: terraform_required_providers
 data "archive_file" "report_lambda" {
   type        = "zip"
   source_file = "${path.module}/../../services/serverless-ingest/report/handler.py"
