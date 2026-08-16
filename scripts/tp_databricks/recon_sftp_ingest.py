@@ -463,8 +463,8 @@ def check6_gate(gate_ns: str, landing_root: str, attempt: bool) -> Check:
     the other checks reconcile, and the rows are deleted again afterwards.
 
     The fixtures cannot be staged from here: `dbx.upload` is refused by this token (no
-    `files` scope, see the upload probe), so their absence is reported as BLOCKED with
-    the command that stages them rather than being quietly passed over.
+    `files` scope, see the upload probe), so their absence is reported as BLOCKED — and
+    exits non-zero — rather than being quietly passed over.
     """
     check = Check(6, "a half-written file neither lands nor blocks the complete files")
     if not attempt:
@@ -479,65 +479,74 @@ def check6_gate(gate_ns: str, landing_root: str, attempt: bool) -> Check:
     check.detail.append(f"fixtures under {drop}: {landed or 'NONE'}")
     check.detail.append(f"the gate calls incomplete: {incomplete or 'none'}; complete: {complete or 'none'}")
     if not incomplete or not complete:
-        check.detail.append(
-            f"fixtures for the mixed case are not staged under {drop} — this needs one complete "
+        # BLOCKED *with* an error, so the run exits non-zero: only `--no-gate-probe` is a
+        # deliberate skip. Unstaged fixtures mean this behaviour went unverified, and a
+        # green exit code on unverified evidence is the failure this recon exists to avoid.
+        check.error = (
+            f"fixtures for the mixed case are not staged under {drop}: this needs one complete "
             "and one truncated CUSTBILL drop, and the recon cannot put them there itself "
-            "(dbx.upload is refused: no `files` scope)"
+            "(dbx.upload is refused: no `files` scope). Stage them and re-run, or skip the "
+            "check explicitly with --no-gate-probe"
         )
+        check.detail.append(f"could not be run: {check.error}")
         return check
     for row in incomplete_rows:
         check.detail.append(f"observed vs declared: {sftp_ingest_sql.describe_incomplete(row)}")
 
+    # This is the one check that writes, so its rows are removed even when it fails partway:
+    # the tables are shared with the other checks and with every later run.
     _gate_cleanup(gate_ns)
-    raised: Exception | None = None
     try:
-        sftp_ingest_sql.run(ns=gate_ns, catalog=CATALOG, landing_root=landing_root, create_tables=False)
-    except sftp_ingest_sql.IncompleteDropError as exc:
-        raised = exc
-    failed_loudly = raised is not None
-    check.detail.append(
-        f"run over the mixed drop: {'failed, as required: ' + str(raised) if failed_loudly else 'SUCCEEDED — the half-written file was passed over silently'}"
-    )
-    named = failed_loudly and all(name in str(raised) for name in incomplete)
-    check.detail.append(f"error names every refused file {incomplete}: {'ok' if named else 'MISMATCH'}")
-
-    manifest = sorted(_manifest_rows(gate_ns))
-    lines = _ingested_lines(gate_ns)
-    manifest_ok = manifest == sorted(complete)
-    lines_ok = sorted(lines) == sorted(complete)
-    check.detail.append(f"manifest rows after the run: {manifest} expected={sorted(complete)} [{'ok' if manifest_ok else 'MISMATCH'}]")
-    check.detail.append(
-        f"files with raw lines after the run: {sorted(lines)} expected={sorted(complete)} "
-        f"[{'ok' if lines_ok else 'MISMATCH'}]"
-    )
-    for name in incomplete:
-        check.detail.append(f"{name}: manifest rows=0 lines=0 [{'ok' if name not in manifest and name not in lines else 'MISMATCH'}]")
-
-    # The complete file is judged on its own content, not on the gate's verdict about it:
-    # exactly one HDR, one TRL, and a TRL-declared count equal to the detail lines that
-    # landed. Otherwise this check would only be asserting that the gate agrees with itself.
-    structural_ok = True
-    for name in complete:
-        got = lines.get(name, [])
-        headers = [line for line in got if line.startswith("HDR")]
-        trailers = [line for line in got if line.startswith("TRL")]
-        details = [line for line in got if not line.startswith(("HDR", "TRL"))]
-        declared = int(trailers[0][3:13]) if len(trailers) == 1 else None
-        this_ok = len(headers) == 1 and len(trailers) == 1 and declared == len(details)
-        structural_ok = structural_ok and this_ok
+        raised: Exception | None = None
+        try:
+            sftp_ingest_sql.run(ns=gate_ns, catalog=CATALOG, landing_root=landing_root, create_tables=False)
+        except sftp_ingest_sql.IncompleteDropError as exc:
+            raised = exc
+        failed_loudly = raised is not None
         check.detail.append(
-            f"{name}: ingested whole — hdr={len(headers)} trl={len(trailers)} detail={len(details)} "
-            f"TRL declares={declared} [{'ok' if this_ok else 'MISMATCH'}]"
+            f"run over the mixed drop: {'failed, as required: ' + str(raised) if failed_loudly else 'SUCCEEDED — the half-written file was passed over silently'}"
         )
+        named = failed_loudly and all(name in str(raised) for name in incomplete)
+        check.detail.append(f"error names every refused file {incomplete}: {'ok' if named else 'MISMATCH'}")
 
-    # Left unconsumed, per the retention decision: the drop path still holds both files,
-    # so a re-delivery of the complete file replaces it and the partial one is still there
-    # to be re-checked once the sender finishes it.
-    still_there = sorted(_landed_files(gate_ns, landing_root))
-    retained_ok = still_there == landed
-    check.detail.append(f"drop path after the run: {still_there} expected={landed} [{'ok' if retained_ok else 'MISMATCH'}]")
+        manifest = sorted(_manifest_rows(gate_ns))
+        lines = _ingested_lines(gate_ns)
+        manifest_ok = manifest == sorted(complete)
+        lines_ok = sorted(lines) == sorted(complete)
+        check.detail.append(f"manifest rows after the run: {manifest} expected={sorted(complete)} [{'ok' if manifest_ok else 'MISMATCH'}]")
+        check.detail.append(
+            f"files with raw lines after the run: {sorted(lines)} expected={sorted(complete)} "
+            f"[{'ok' if lines_ok else 'MISMATCH'}]"
+        )
+        for name in incomplete:
+            check.detail.append(f"{name}: manifest rows=0 lines=0 [{'ok' if name not in manifest and name not in lines else 'MISMATCH'}]")
 
-    _gate_cleanup(gate_ns)
+        # The complete file is judged on its own content, not on the gate's verdict about it:
+        # exactly one HDR, one TRL, and a TRL-declared count equal to the detail lines that
+        # landed. Otherwise this check would only be asserting that the gate agrees with itself.
+        structural_ok = True
+        for name in complete:
+            got = lines.get(name, [])
+            headers = [line for line in got if line.startswith("HDR")]
+            trailers = [line for line in got if line.startswith("TRL")]
+            details = [line for line in got if not line.startswith(("HDR", "TRL"))]
+            declared = int(trailers[0][3:13]) if len(trailers) == 1 else None
+            this_ok = len(headers) == 1 and len(trailers) == 1 and declared == len(details)
+            structural_ok = structural_ok and this_ok
+            check.detail.append(
+                f"{name}: ingested whole — hdr={len(headers)} trl={len(trailers)} detail={len(details)} "
+                f"TRL declares={declared} [{'ok' if this_ok else 'MISMATCH'}]"
+            )
+
+        # Left unconsumed, per the retention decision: the drop path still holds both files,
+        # so a re-delivery of the complete file replaces it and the partial one is still there
+        # to be re-checked once the sender finishes it.
+        still_there = sorted(_landed_files(gate_ns, landing_root))
+        retained_ok = still_there == landed
+        check.detail.append(f"drop path after the run: {still_there} expected={landed} [{'ok' if retained_ok else 'MISMATCH'}]")
+    finally:
+        _gate_cleanup(gate_ns)
+
     left = sorted(_manifest_rows(gate_ns)) + sorted(_ingested_lines(gate_ns))
     check.detail.append(f"probe rows removed again: {'ok' if not left else 'STILL PRESENT: ' + str(left)}")
     check.passed = (
@@ -550,9 +559,9 @@ def _contained(number: int, name: str, check_fn, *args) -> Check:
     """Run one check, turning a crash into a BLOCKED result instead of a traceback.
 
     The report is the artifact of record, so a warehouse error or a missing landing
-    path must not take the other four checks' evidence with it. BLOCKED is not a
-    pass: it exits 0 only where the run deliberately declined to check (`--no-rerun`),
-    and it says on its face that the check could not be run.
+    path must not take the other checks' evidence with it. BLOCKED is not a pass: it
+    exits 0 only where the run deliberately declined to check (`--no-rerun`,
+    `--no-gate-probe`), and it says on its face that the check could not be run.
     """
     try:
         return check_fn(*args)
