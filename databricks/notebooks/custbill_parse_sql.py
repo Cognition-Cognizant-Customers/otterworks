@@ -360,11 +360,15 @@ def recon_gate_statements(ns: str, staged: bool = False) -> list[tuple[str, str]
                     WHERE ns = {lit}
                 ) p
                 CROSS JOIN (
-                    SELECT count(*) AS staged_count
-                    FROM {STAGING_RECORDS}
-                    WHERE ns = {lit}
+                    SELECT
+                        (SELECT count(*) FROM {STAGING_RECORDS} WHERE ns = {lit}) AS staged_records,
+                        (SELECT count(*) FROM {STAGING_REJECTS} WHERE ns = {lit}) AS staged_rejects,
+                        (SELECT count(*) FROM {STAGING_FILE_RECON} WHERE ns = {lit}) AS staged_recon
                 ) s
-                WHERE p.published_count > 0 AND s.staged_count = 0
+                WHERE p.published_count > 0
+                  AND s.staged_records = 0
+                  AND s.staged_rejects = 0
+                  AND s.staged_recon = 0
                 """,
             )
         )
