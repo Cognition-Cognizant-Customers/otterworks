@@ -207,19 +207,19 @@ def load_bronze(ns: str, scenario: str, objects: list[dict], metadata: list[dict
 
     Why INSERT rather than the landing volume: the demo PAT is not granted the
     Files API (`files`) scope, so `dbx.upload` -- and therefore COPY INTO from
-    /Volumes/ow_tp/bronze/landing -- returns 403 in this workspace. The SQL path
+    /Volumes/<catalog>/bronze/landing -- returns 403 in this workspace. The SQL path
     needs no extra scope and lands identical rows.
     """
-    nb.ensure_legacy_attributed(dbx.sql, "ow_tp")
+    nb.ensure_legacy_attributed(dbx.sql, dbx.CATALOG)
     for table in ("bronze.storage_objects_raw", "bronze.file_metadata_raw", "bronze.storage_extract_manifest"):
         dbx.sql(
-            f"DELETE FROM ow_tp.{table} WHERE ns = :ns",
+            f"DELETE FROM {dbx.CATALOG}.{table} WHERE ns = :ns",
             parameters=[{"name": "ns", "value": ns, "type": "STRING"}],
         )
 
     listed_at = _ts(manifest["extracted_at"])
     _insert_json_rows(
-        "ow_tp.bronze.storage_objects_raw",
+        f"{dbx.CATALOG}.bronze.storage_objects_raw",
         "ns, bucket, key, size_bytes, legacy_attributed, last_modified, listed_at",
         "array<struct<ns:string,bucket:string,key:string,size_bytes:bigint,legacy_attributed:boolean,last_modified:string,listed_at:string>>",
         "r.ns, r.bucket, r.key, r.size_bytes, r.legacy_attributed, "
@@ -238,7 +238,7 @@ def load_bronze(ns: str, scenario: str, objects: list[dict], metadata: list[dict
         ],
     )
     _insert_json_rows(
-        "ow_tp.bronze.file_metadata_raw",
+        f"{dbx.CATALOG}.bronze.file_metadata_raw",
         "ns, file_id, storage_key, owner_id, size_bytes, created_at",
         "array<struct<ns:string,file_id:string,storage_key:string,owner_id:string,size_bytes:bigint,created_at:string>>",
         "r.ns, r.file_id, r.storage_key, r.owner_id, r.size_bytes, "
@@ -256,7 +256,7 @@ def load_bronze(ns: str, scenario: str, objects: list[dict], metadata: list[dict
         ],
     )
     _insert_json_rows(
-        "ow_tp.bronze.storage_extract_manifest",
+        f"{dbx.CATALOG}.bronze.storage_extract_manifest",
         "ns, scenario, source_bucket, source_table, objects_expected, objects_bytes, "
         "metadata_expected, metadata_read_complete, extracted_at, loaded_at",
         "array<struct<ns:string,scenario:string,source_bucket:string,source_table:string,objects_expected:bigint,objects_bytes:bigint,metadata_expected:bigint,metadata_read_complete:boolean,extracted_at:string>>",
@@ -302,7 +302,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument(
         "--load",
         action="store_true",
-        help="also load the extract into ow_tp bronze via the serverless SQL warehouse",
+        help=f"also load the extract into {dbx.CATALOG} bronze via the serverless SQL warehouse",
     )
     args = parser.parse_args(argv)
     try:
@@ -342,7 +342,7 @@ def main(argv: list[str]) -> int:
     manifest["scenario"] = args.scenario
     if args.load:
         load_bronze(args.ns, args.scenario, objects, metadata, manifest)
-        manifest["loaded"] = "ow_tp.bronze"
+        manifest["loaded"] = f"{dbx.CATALOG}.bronze"
 
     print(json.dumps(manifest, indent=2, sort_keys=True))
     return 0

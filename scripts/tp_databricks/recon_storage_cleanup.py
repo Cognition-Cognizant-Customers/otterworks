@@ -81,7 +81,7 @@ def _validate_query_inputs(
     ns: str | None = None,
     scenario: str | None = None,
     run_date: str | None = None,
-    catalog: str = "ow_tp",
+    catalog: str = dbx.CATALOG,
 ) -> None:
     if ns is not None:
         nb._checked("ns", ns)
@@ -95,7 +95,11 @@ def _validate_query_inputs(
 def run_pipeline(ns: str, run_date: str, dry_run: bool, scenario: str) -> None:
     _validate_query_inputs(ns=ns, scenario=scenario, run_date=run_date)
     for statement in nb.pipeline_statements(
-        ns=ns, run_date=run_date, dry_run=dry_run, scenario=scenario
+        ns=ns,
+        run_date=run_date,
+        dry_run=dry_run,
+        scenario=scenario,
+        catalog=dbx.CATALOG,
     ):
         dbx.sql(statement)
 
@@ -104,7 +108,7 @@ def orphan_keys(ns: str, scenario: str, confirmed: bool) -> set:
     _validate_query_inputs(ns=ns, scenario=scenario)
     reason = " AND orphan_reason = 'no_metadata_row'" if confirmed else ""
     rows = dbx.sql(
-        "SELECT bucket, key FROM ow_tp.silver.storage_orphans "
+        f"SELECT bucket, key FROM {dbx.CATALOG}.silver.storage_orphans "
         f"WHERE ns = '{ns}' AND scenario = '{scenario}' "
         f"AND metadata_read_ok = {'true' if confirmed else 'false'}{reason}"
     )
@@ -123,7 +127,7 @@ def savings(ns: str, scenario: str, run_date: str) -> dict:
         "metadata_read_ok",
     ]
     rows = dbx.sql(
-        f"SELECT {', '.join(columns)} FROM ow_tp.gold.storage_cleanup_savings "
+        f"SELECT {', '.join(columns)} FROM {dbx.CATALOG}.gold.storage_cleanup_savings "
         f"WHERE ns = '{ns}' AND scenario = '{scenario}' AND run_date = DATE '{run_date}'"
     )
     if len(rows) != 1:
@@ -234,7 +238,7 @@ def capture_golden(ns: str) -> None:
 
 
 def legacy_metadata_keys(ns: str) -> int:
-    """The metadata key count the legacy run itself reported (never assumed)."""
+    """The global metadata key count the legacy run itself reported."""
     text = (GOLDEN / ns / "legacy_stdout.txt").read_text()
     match = re.search(r"Found (\d+) S3 keys referenced in metadata", text)
     if not match:
@@ -287,7 +291,11 @@ def check_structural() -> Check:
                 statements.append(body)
         return statements
 
-    check.compare("DDL statements", normalise(DDL_FILE.read_text()), normalise(nb.DDL_SQL.format(catalog="ow_tp")))
+    check.compare(
+        "DDL statements",
+        normalise(DDL_FILE.read_text()),
+        normalise(nb.DDL_SQL.format(catalog=dbx.CATALOG)),
+    )
     return check
 
 
@@ -315,11 +323,15 @@ def check_2(ns: str, run_date: str, report: dict, fixture: dict) -> Check:
         sum(o["size_bytes"] for o in fixture["planted_orphans"]),
         gold["orphan_bytes"],
     )
-    check.compare("metadata_rows", legacy_metadata_keys(ns), gold["metadata_rows"])
+    check.compare("metadata_rows", fixture["metadata_items"], gold["metadata_rows"])
+    check.note(
+        f"legacy stdout reported {legacy_metadata_keys(ns)} metadata keys globally; "
+        f"the namespace-scoped baseline for `{ns}` is {fixture['metadata_items']} seeded items."
+    )
 
     legacy_scope = int(
         dbx.sql(
-            "SELECT COUNT(*) FROM ow_tp.bronze.storage_objects_raw "
+            f"SELECT COUNT(*) FROM {dbx.CATALOG}.bronze.storage_objects_raw "
             f"WHERE ns = '{ns}' AND key LIKE 'files/%'"
         )[0][0]
     )
@@ -366,12 +378,12 @@ def check_3(ns: str, run_date: str, limit: int) -> Check:
     check.compare(
         "candidate rows carry orphan_reason=candidate_unverified_metadata_read",
         [[str(len(candidates) - len(dbx.sql(
-            "SELECT bucket, key FROM ow_tp.silver.storage_orphans "
+            f"SELECT bucket, key FROM {dbx.CATALOG}.silver.storage_orphans "
             f"WHERE ns = '{ns}' AND scenario = '{scenario}' "
             "AND metadata_read_ok = false AND orphan_reason = 'unattributable_legacy_prefix'"
         )))]],
         dbx.sql(
-            "SELECT COUNT(*) FROM ow_tp.silver.storage_orphans "
+            f"SELECT COUNT(*) FROM {dbx.CATALOG}.silver.storage_orphans "
             f"WHERE ns = '{ns}' AND scenario = '{scenario}' "
             "AND orphan_reason = 'candidate_unverified_metadata_read'"
         ),
@@ -401,7 +413,7 @@ def check_4(ns: str, run_date: str, golden_keys: set) -> Check:
         "gold rows for this (ns, scenario, run_date)",
         [["1"]],
         dbx.sql(
-            "SELECT COUNT(*) FROM ow_tp.gold.storage_cleanup_savings "
+            f"SELECT COUNT(*) FROM {dbx.CATALOG}.gold.storage_cleanup_savings "
             f"WHERE ns = '{ns}' AND scenario = 'nominal' AND run_date = DATE '{run_date}'"
         ),
     )
@@ -409,7 +421,7 @@ def check_4(ns: str, run_date: str, golden_keys: set) -> Check:
         "silver rows for this (ns, scenario)",
         [[str(len(second_keys))]],
         dbx.sql(
-            "SELECT COUNT(*) FROM ow_tp.silver.storage_orphans "
+            f"SELECT COUNT(*) FROM {dbx.CATALOG}.silver.storage_orphans "
             f"WHERE ns = '{ns}' AND scenario = 'nominal'"
             " AND orphan_reason = 'no_metadata_row'"
         ),
@@ -449,7 +461,7 @@ def write_report(path: Path, ns: str, run_date: str, checks: list, fixture: dict
     lines = [
         f"{TIER_PHRASE}",
         "",
-        f"# Recon: `storage_cleanup_daily.py` -> `ow_tp_storage_cleanup` (`ns={ns}`)",
+        f"# Recon: `storage_cleanup_daily.py` -> `{dbx.CATALOG}_storage_cleanup` (`ns={ns}`)",
         "",
         f"Generated {datetime.now(tz=timezone.utc).isoformat()} by "
         "`scripts/tp_databricks/recon_storage_cleanup.py`.",
@@ -485,7 +497,7 @@ def write_report(path: Path, ns: str, run_date: str, checks: list, fixture: dict
         "## Landing transport: UNVERIFIED",
         "",
         "The documented bronze landing path -- writing extracts to the volume",
-        "`/Volumes/ow_tp/bronze/landing` via `dbx.py upload` -- is **UNVERIFIED by this recon**.",
+        f"`/Volumes/{dbx.CATALOG}/bronze/landing` via `dbx.py upload` -- is **UNVERIFIED by this recon**.",
         "The demo PAT lacks the `files` scope, so every upload attempt returned, verbatim:",
         "",
         "```text",
