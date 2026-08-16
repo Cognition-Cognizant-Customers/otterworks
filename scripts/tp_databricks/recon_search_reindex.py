@@ -209,7 +209,12 @@ def normalize(field: str, value, side: str):
             parsed = value
         return list(parsed)
     if field == "size_bytes":
-        return None if value in (None, "") else int(value)
+        if value in (None, ""):
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError) as exc:
+            raise Blocked(f"cannot parse size_bytes value {value!r}") from exc
     if value is None:
         return ""
     return str(value)
