@@ -197,9 +197,10 @@ def main() -> int:
                           "this track ingests the events prefix.",
             },
         ],
-        "unverified_paths": [
+        "unverified_paths": ([
             "live Atlas run (this report is run_mode=fixture; the parent owns "
             "the live validation window)",
+        ] if args.run_mode == "fixture" else []) + [
             "s3.data-lake/events/<ns>/ missing_hours anomaly (contractual "
             "coverage gap, not ingested by this unit)",
         ],

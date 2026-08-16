@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_files",
   "namespace": "demo",
-  "generated_at": "2026-08-16T20:41:09Z",
+  "generated_at": "2026-08-16T20:46:58Z",
   "run_mode": "live",
   "checks": [
     {
@@ -93,7 +93,6 @@
     }
   ],
   "unverified_paths": [
-    "live Atlas run (this report is run_mode=fixture; the parent owns the live validation window)",
     "s3.data-lake/events/<ns>/ missing_hours anomaly (contractual coverage gap, not ingested by this unit)"
   ]
 }

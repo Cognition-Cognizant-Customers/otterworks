@@ -24,7 +24,7 @@ Baseline `testdata/legacy/manifests/demo.json` plants: 31 malformed CSV lists,
 - Declared coverage gap: `missing_hours` (1 missing S3 hour) — no unit ingests
   S3 events; declared in `contracts/mongo_files.json` as a coverage_gap.
 
-## Unverified paths disclosed by units
+## Unverified paths (live-report `unverified_paths` plus unit fixture-phase disclosures)
 
 - customers: invalid-UTF-8 quarantine path not exercised by the seeded fixture;
   some nullable date columns unpopulated by the demo seed.

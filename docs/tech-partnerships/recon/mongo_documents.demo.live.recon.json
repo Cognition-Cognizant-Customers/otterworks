@@ -100,7 +100,7 @@
       "source_of_truth": "recomputed from MongoDB ow_tp_mongodb_demo / ow_tp_mongodb_demo_quarantine"
     }
   ],
-  "generated_at": "2026-08-16T20:40:07Z",
+  "generated_at": "2026-08-16T20:47:22Z",
   "idempotency_rerun": {
     "evidence": "rerun of migrate.py followed by a fresh recompute produced identical counts, checksums, and anomaly enumerations",
     "performed": true,
@@ -183,6 +183,9 @@
   },
   "run_mode": "live",
   "unit": "mongo_documents",
-  "unverified_paths": [],
+  "unverified_paths": [
+    "invalid-byte quarantine path (not expected from Postgres UTF-8; exercised only by unit policy, no such rows exist in the seeded estate)",
+    "full-scale memory behavior (validated only at M0/demo scale)"
+  ],
   "values_recomputed_from_target": true
 }
