@@ -8,6 +8,24 @@ itself against the same deterministic seed manifests.
 This runbook composes the three standalone tracks — read them first:
 `runbook-mongodb.md`, `runbook-databricks.md`, `runbook-aws.md`.
 
+## Branch topology and determinism
+
+- `tech-partnerships` is the legacy **before**-state only. It is never a PR
+  target for migration work. Each rehearsal or live run cuts a fresh working
+  branch with `make tp-run-branch TRACK=<mongodb|databricks|aws>`
+  (`tp-run/<track>-<timestamp>`); every unit PR targets that branch. The
+  smoke gate runs on `tp-run/*` PRs too.
+- `tech-partnerships-solutions` is a fallback recording of a prior completed
+  run. Consult it only if a live run fails; never merge it into
+  `tech-partnerships`, and never treat it as the correctness reference — the
+  golden baselines and recon schema are.
+- Legacy jobs and golden recording run under `scripts/tp-run-deterministic.sh`
+  (pinned `TZ=UTC LC_ALL=C`; set `TP_FAKETIME='2026-01-15 00:00:00'` to
+  freeze the clock via libfaketime) so parity claims are byte-stable across
+  machines and reruns.
+- Tool versions are pinned in `mise.toml` (`mise install`) so a rehearsal and
+  demo day run identical terraform/CLI binaries.
+
 ## Pre-demo checklist (run the day before; first Oracle boot is slow)
 
 Namespace for the demo: `demo` (deterministic — all counts below reproduce

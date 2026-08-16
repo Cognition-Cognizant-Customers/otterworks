@@ -11,7 +11,7 @@ name: TP Golden-Path Smoke
 
 on:
   pull_request:
-    branches: [tech-partnerships]
+    branches: [tech-partnerships, 'tp-run/**']
 
 concurrency:
   group: tp-golden-smoke-${{ github.ref }}

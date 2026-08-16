@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean
 
 SHELL := /bin/bash
 
@@ -61,13 +61,13 @@ procs-down: procs-validate ## Stop the legacy billing stored-procedure stack (NS
 	$(PROCS_ENV) $(PROCS_COMPOSE) down -v
 
 procs-record: procs-validate ## Record legacy billing transcripts (NS=<namespace>, MODULE and OUTPUT_DIR optional)
-	$(PROCS_ENV) DB_NAME=billing_$(NS) DB_PORT=$(PROCS_DB_PORT) $(PROCS_UV) procs/harness/record.py $(if $(MODULE),--module $(MODULE),) $(if $(OUTPUT_DIR),--output-dir $(OUTPUT_DIR),) $(if $(ALLOW_RERECORD),--allow-rerecord,) $(if $(RERECORD_REASON),--rerecord-reason $(RERECORD_REASON),)
+	TZ=UTC LC_ALL=C $(PROCS_ENV) DB_NAME=billing_$(NS) DB_PORT=$(PROCS_DB_PORT) $(PROCS_UV) procs/harness/record.py $(if $(MODULE),--module $(MODULE),) $(if $(OUTPUT_DIR),--output-dir $(OUTPUT_DIR),) $(if $(ALLOW_RERECORD),--allow-rerecord,) $(if $(RERECORD_REASON),--rerecord-reason $(RERECORD_REASON),)
 
 procs-list: ## List stored-procedure modules and scenarios
 	$(PROCS_UV) procs/harness/list.py $(if $(MODULE),--module $(MODULE),)
 
 procs-parity: procs-validate ## Replay extracted billing scenarios (NS=<namespace>, MODULE and SCENARIO optional)
-	$(PROCS_ENV) BILLING_SVC_URL=$${BILLING_SVC_URL:-http://localhost:$(PROCS_TARGET_PORT)} $(PROCS_UV) procs/harness/replay.py $(if $(MODULE),--module $(MODULE),) $(if $(SCENARIO),--scenario $(SCENARIO),)
+	TZ=UTC LC_ALL=C $(PROCS_ENV) BILLING_SVC_URL=$${BILLING_SVC_URL:-http://localhost:$(PROCS_TARGET_PORT)} $(PROCS_UV) procs/harness/replay.py $(if $(MODULE),--module $(MODULE),) $(if $(SCENARIO),--scenario $(SCENARIO),)
 
 procs-rules-gate: ## Validate the approved HITL rule ledger (MODULE=<module> or ALL=1)
 	@test -n "$(MODULE)$(ALL)" || (echo "MODULE or ALL=1 is required" >&2; exit 2)
@@ -113,15 +113,15 @@ ORACLE_PARITY_UV = uv run --with oracledb==2.5.1 --with pyyaml==6.0.2
 ORACLE_PARITY_RUN = procs/reports/oracle-parity-run
 
 oracle-record: ## Record immutable Oracle billing transcripts (requires oracle-billing-up; MODULE optional)
-	DB_PORT=$(ORACLE_BILLING_DB_PORT) $(ORACLE_PARITY_UV) procs/harness/oracle_record.py $(if $(MODULE),--module $(MODULE),) $(if $(ALLOW_RERECORD),--allow-rerecord,)
+	TZ=UTC LC_ALL=C DB_PORT=$(ORACLE_BILLING_DB_PORT) $(ORACLE_PARITY_UV) procs/harness/oracle_record.py $(if $(MODULE),--module $(MODULE),) $(if $(ALLOW_RERECORD),--allow-rerecord,)
 
 oracle-parity: procs-validate ## Oracle vs Postgres parity run (NS=<namespace>; requires procs-up and oracle-billing-up)
 	$(call validate_ns)
 	DB_PORT=$(ORACLE_BILLING_DB_PORT) $(ORACLE_BILLING_UV) testdata/legacy/oracle_billing_seed.py --ns $(NS) --scale $(or $(SCALE),demo)
 	rm -rf $(ORACLE_PARITY_RUN)/$(NS)
-	$(PROCS_ENV) DB_NAME=billing_$(NS) DB_PORT=$(PROCS_DB_PORT) $(PROCS_UV) procs/harness/record.py --output-dir $(ORACLE_PARITY_RUN)/$(NS)/postgres
-	DB_PORT=$(ORACLE_BILLING_DB_PORT) $(ORACLE_PARITY_UV) procs/harness/oracle_record.py --output-dir $(ORACLE_PARITY_RUN)/$(NS)/oracle
-	uv run procs/harness/oracle_parity.py --postgres-dir $(ORACLE_PARITY_RUN)/$(NS)/postgres --oracle-dir $(ORACLE_PARITY_RUN)/$(NS)/oracle --namespace $(NS)
+	TZ=UTC LC_ALL=C $(PROCS_ENV) DB_NAME=billing_$(NS) DB_PORT=$(PROCS_DB_PORT) $(PROCS_UV) procs/harness/record.py --output-dir $(ORACLE_PARITY_RUN)/$(NS)/postgres
+	TZ=UTC LC_ALL=C DB_PORT=$(ORACLE_BILLING_DB_PORT) $(ORACLE_PARITY_UV) procs/harness/oracle_record.py --output-dir $(ORACLE_PARITY_RUN)/$(NS)/oracle
+	TZ=UTC LC_ALL=C uv run procs/harness/oracle_parity.py --postgres-dir $(ORACLE_PARITY_RUN)/$(NS)/postgres --oracle-dir $(ORACLE_PARITY_RUN)/$(NS)/oracle --namespace $(NS)
 
 # --- Local Development ---
 
@@ -269,6 +269,9 @@ tp-smoke: ## Golden-path smoke gate for tech-partnerships (mirrors .github/workf
 	@echo "=== Search Service (Python) ==="
 	cd services/search-service && uv run --no-project --with-requirements requirements-dev.txt python -m pytest
 	@echo "tp-smoke: all checks passed"
+
+tp-run-branch: ## Cut and push the per-run working branch for a rehearsal (TRACK=mongodb|databricks|aws)
+	@scripts/tp-run-branch.sh $(TRACK)
 
 test-api-flows: ## Run black-box API flow tests against the local API gateway
 	UV_PROJECT_ENVIRONMENT=.venv uv run python -m pytest tests/api
@@ -465,16 +468,21 @@ legacy-etl-list: ## List the legacy polyglot batch jobs (etl/legacy-extra/)
 	@echo "  run_all                   bash  full chain, sleep-based 'dependency management'"
 	@echo "Sample input: make legacy-etl-gen-data [NS=dev]"
 
+# Deterministic-run wrapper: pins TZ/LC_ALL (and, with TP_FAKETIME set, the
+# clock) so golden recordings and byte-identical parity claims are stable
+# across machines and reruns.
+TP_DET := scripts/tp-run-deterministic.sh
+
 legacy-etl-gen-data: ## Generate deterministic CUSTBILL sample input (NS=<ns>)
-	perl etl/legacy-extra/tools/gen_sample_data.pl $${NS:-dev}
+	$(TP_DET) perl etl/legacy-extra/tools/gen_sample_data.pl $${NS:-dev}
 
 legacy-etl-run: ## Run one legacy batch job (JOB=<name>, see legacy-etl-list)
 	@test -n "$(JOB)" || { echo "usage: make legacy-etl-run JOB=<name>"; exit 1; }
 	@case "$(JOB)" in \
-	  sftp_ingest_poll)           command -v ksh >/dev/null || { echo "ksh required (sudo apt-get install -y ksh)"; exit 1; }; etl/legacy-extra/jobs/sftp_ingest_poll.ksh ;; \
-	  parse_custbill_fixedwidth)  etl/legacy-extra/jobs/parse_custbill_fixedwidth.sh ;; \
-	  finance_excel_report)       perl etl/legacy-extra/jobs/finance_excel_report.pl ;; \
-	  run_all)                    command -v ksh >/dev/null || { echo "ksh required (sudo apt-get install -y ksh)"; exit 1; }; RUN_ALL_SLEEP=$${RUN_ALL_SLEEP:-0} etl/legacy-extra/run_all.sh ;; \
+	  sftp_ingest_poll)           command -v ksh >/dev/null || { echo "ksh required (sudo apt-get install -y ksh)"; exit 1; }; $(TP_DET) etl/legacy-extra/jobs/sftp_ingest_poll.ksh ;; \
+	  parse_custbill_fixedwidth)  $(TP_DET) etl/legacy-extra/jobs/parse_custbill_fixedwidth.sh ;; \
+	  finance_excel_report)       $(TP_DET) perl etl/legacy-extra/jobs/finance_excel_report.pl ;; \
+	  run_all)                    command -v ksh >/dev/null || { echo "ksh required (sudo apt-get install -y ksh)"; exit 1; }; RUN_ALL_SLEEP=$${RUN_ALL_SLEEP:-0} $(TP_DET) etl/legacy-extra/run_all.sh ;; \
 	  *) echo "unknown JOB '$(JOB)' (see: make legacy-etl-list)"; exit 1 ;; \
 	esac
 

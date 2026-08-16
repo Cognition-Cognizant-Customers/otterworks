@@ -1,0 +1,8 @@
+[tools]
+"aqua:databricks/cli" = "1.12.1"
+aws-cli = { version = "2.36.24", symlink_bins = "true" }
+"pipx:check-jsonschema" = "0.38.0"
+"pipx:checkov" = "3.3.11"
+terraform = "1.15.8"
+tflint = "0.64.0"
+"ubi:mongodb/mongodb-atlas-cli" = { version = "atlascli/v1.58.0", exe = "atlas" }
