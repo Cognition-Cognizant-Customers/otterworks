@@ -24,6 +24,7 @@ def main() -> int:
     p.add_argument("kind", choices=["contracts", "recon"])
     p.add_argument("file", nargs="?")
     args = p.parse_args()
+    legacy_prose: list[Path] = []
     if args.file:
         files = [Path(args.file)]
     elif args.kind == "contracts":
