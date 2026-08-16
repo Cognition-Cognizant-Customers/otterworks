@@ -49,6 +49,19 @@ def validate_landing(landing: str) -> Path:
     return resolved
 
 
+def validate_source(source: str) -> Path:
+    repo_root = Path(__file__).resolve().parents[2]
+    resolved = Path(source).resolve()
+    if resolved != repo_root and repo_root not in resolved.parents:
+        raise SystemExit(
+            "--source must resolve beneath the repository root "
+            f"({repo_root})"
+        )
+    if not resolved.exists() or not resolved.is_dir():
+        raise SystemExit(f"--source must be an existing directory: {resolved}")
+    return resolved
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("action", choices=["land", "verify", "clean"])
@@ -58,14 +71,12 @@ def main() -> int:
     args = p.parse_args()
     validate_namespace(args.ns)
     landing = validate_landing(args.landing) / args.ns
-    source = Path(args.source)
     if args.action == "clean":
         shutil.rmtree(landing, ignore_errors=True)
         print(f"fixture cleaned: {landing}")
         return 0
     if args.action == "land":
-        if not source.exists():
-            raise SystemExit(f"source does not exist: {source}")
+        source = validate_source(args.source)
         shutil.rmtree(landing, ignore_errors=True)
         landing.mkdir(parents=True, exist_ok=True)
         copied = []

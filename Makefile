@@ -23,10 +23,10 @@ tp-preflight-aws: ## Check AWS capability paths and leftovers
 	scripts/tp-preflight-aws.sh
 
 tp-validate-contracts: ## Validate JSON contracts (intentionally fails until prose contracts are migrated)
-	uv run --no-project --with jsonschema==4.25.1 python3 scripts/tp_validate.py contracts
+	uv run --no-project --with jsonschema==4.25.1 --with rfc3339-validator==0.1.4 python3 scripts/tp_validate.py contracts
 
 tp-validate-recon: ## Validate recon reports (FILE=<path>; no reports is valid, other JSON is informational)
-	uv run --no-project --with jsonschema==4.25.1 python3 scripts/tp_validate.py recon $(FILE)
+	uv run --no-project --with jsonschema==4.25.1 --with rfc3339-validator==0.1.4 python3 scripts/tp_validate.py recon $(FILE)
 
 tp-fixture-land: ## Land source artifacts in the local Databricks transport fixture (NS=<ns>)
 	python3 scripts/tp_databricks/local_fixture.py land --ns $${NS:-fixture} --source $${FIXTURE_SOURCE:-etl/legacy-extra}

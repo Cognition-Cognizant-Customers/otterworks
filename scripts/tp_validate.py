@@ -16,7 +16,8 @@ def validate_file(path: Path, schema: dict) -> list[str]:
         data = json.loads(path.read_text())
     except Exception as exc:
         return [f"{path}: not valid JSON ({exc})"]
-    errors = sorted(Draft202012Validator(schema).iter_errors(data), key=lambda e: list(e.path))
+    validator = Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER)
+    errors = sorted(validator.iter_errors(data), key=lambda e: list(e.path))
     return [f"{path}: {'.'.join(map(str, e.path)) or '<root>'}: {e.message}" for e in errors]
 
 def main() -> int:
