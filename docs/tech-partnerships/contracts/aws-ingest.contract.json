@@ -1,0 +1,42 @@
+{
+  "unit": "aws-ingest",
+  "source_artifact_path": "etl/legacy-extra/jobs/sftp_ingest_poll.ksh",
+  "target_objects": [
+    "infrastructure/terraform-tp-aws/ingest.tf",
+    "services/serverless-ingest/ingest/",
+    "lambda ow-tp-<ns>-ingest (EventBridge rule ow-tp-<ns>-landing-object-created -> Lambda)",
+    "s3://ow-tp-<ns>-pipeline-<account>/incoming/<file>",
+    "s3://ow-tp-<ns>-pipeline-<account>/archive/<file>"
+  ],
+  "golden_baseline_location": "parent session, /home/ubuntu/tp-aws-golden/inputs/ (md5: CUSTBILL_DEMO_001.dat f304679dff6190de3206ccc15466428c, CUSTBILL_DEMO_002.dat 5153ba871c74d8d2d518021f63b36d07, CUSTBILL_DEMO_ANOM.dat 11eb3d1a3cf99ad46d66d3c65c0add01); regenerate with TP_FAKETIME='2026-01-15 00:00:00' make legacy-etl-gen-data NS=demo + scripts/tp_aws/gen_anomaly_file.py demo",
+  "acceptance_checks": [
+    {"id": "byte-transparent-copy", "description": "Object staged to incoming/<basename> is byte-identical to the landed object (S3 copy, no decode step anywhere)."},
+    {"id": "archive-copy", "description": "Object also copied to archive/<basename>; no embedded wall-clock timestamp in the key (deterministic keys, unlike the legacy .YYYYMMDDHHMMSS suffix)."},
+    {"id": "landing-deleted", "description": "Landed object deleted from landing/ after successful staging (parity with the legacy drop-dir rm; replaces the size-settle hack: S3 Object Created only fires on complete objects)."},
+    {"id": "name-validation", "description": "Only keys matching landing/CUSTBILL*.dat are staged; anything else is moved to quarantine/ and recorded in the DynamoDB ledger, never silently dropped."},
+    {"id": "idempotent-redelivery", "description": "Re-delivery of the same object (EventBridge at-least-once) produces the same incoming/ and archive/ state, no duplicates or failures."},
+    {"id": "least-privilege", "description": "Role ow-tp-<ns>-ingest-role: read+delete on landing/*, write on incoming/*, archive/*, quarantine/* only; no bucket-wide write; trust policy conditioned on source account."},
+    {"id": "errors-surfaced", "description": "Failures raise (no 2>/dev/null || true equivalent); Lambda retries then surfaces via the rule's DLQ path. No lock files."}
+  ],
+  "encoding_policy": {
+    "input_encoding": "binary (mainframe extract; not guaranteed UTF-8)",
+    "byte_transparency": "full: ingest never decodes object bodies; S3 server-side copy only",
+    "invalid_bytes": "pass through untouched (byte 0xA3 in CUSTBILL_DEMO_ANOM.dat must survive to incoming/ bit-for-bit)"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "tolerate-and-attribute",
+    "details": "Ingest is record-agnostic transport: it must not inspect or reject record content; content-level anomalies are the parser's to surface."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "No landed objects means no events and no invocations; nothing is written and nothing fails (legacy poll exits 0 on an empty drop dir)."
+  },
+  "trigger_granularity": "per-file",
+  "planted_anomalies": [
+    {"id": "A-invalid-date", "status": "coverage_gap", "reason": "Content-level anomaly; ingest is byte-transparent transport and must pass it through for the parser to detect."},
+    {"id": "A-nonutf8-byte", "status": "coverage_gap", "reason": "Content-level anomaly; ingest must not decode bodies, so detection belongs to the parser. Ingest's obligation is bit-for-bit survival (covered by byte-transparent-copy)."},
+    {"id": "A-short-record", "status": "coverage_gap", "reason": "Content-level anomaly; parser's to detect."},
+    {"id": "A-trailer-mismatch", "status": "coverage_gap", "reason": "Requires parsing the trailer; parser's to detect."}
+  ]
+}

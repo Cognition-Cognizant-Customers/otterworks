@@ -1,0 +1,43 @@
+{
+  "unit": "aws-report",
+  "source_artifact_path": "etl/legacy-extra/jobs/finance_excel_report.pl (+ etl/legacy-extra/run_all.sh orchestration)",
+  "target_objects": [
+    "infrastructure/terraform-tp-aws/report.tf",
+    "services/serverless-ingest/report/",
+    "lambda ow-tp-<ns>-report",
+    "stepfunctions state machine ow-tp-<ns>-chain (replaces run_all.sh sleep-600 orchestration)",
+    "s3://ow-tp-<ns>-pipeline-<account>/reports/finance_billing_<report_date>.csv",
+    "s3://ow-tp-<ns>-pipeline-<account>/reports/finance_billing_<report_date>.xls"
+  ],
+  "golden_baseline_location": "parent session, /home/ubuntu/tp-aws-golden/reports/ (md5 finance_billing_20260115.csv == .xls == 300862b738fdb8b6add8d1007362c0e0); recorded via TP_FAKETIME='2026-01-15 00:00:00' deterministic legacy run",
+  "acceptance_checks": [
+    {"id": "byte-identical-report", "description": "reports/finance_billing_<report_date>.csv byte-identical to golden: header Currency,RecordType,RecordCount,TotalAmount; totals per ccy|rectype from all parsed/CUSTBILL*.psv; keys sorted with LC_ALL=C semantics (empty/pipe key sorts last as ',UNKNOWN(),1,0.00'); %d count and %.2f total formatting; rt 01->INVOICE, 02->CREDIT, else UNKNOWN(<rt>); rows with empty first field skipped."},
+    {"id": "xls-copy", "description": ".xls is a byte-identical copy of the .csv (the 2004 'conversion'), preserved for parity."},
+    {"id": "report-date-parameter", "description": "Report date comes from the state-machine input (report_date), never from wall clock, so golden comparison is deterministic; no embedded timestamps anywhere in artifact bytes."},
+    {"id": "state-machine-orchestration", "description": "ow-tp-<ns>-chain runs the report per batch on explicit start with {ns, report_date}: verifies parsed inputs exist (no sleep-600 dependency guessing), invokes the report Lambda, fails visibly on error (no 2>/dev/null || true)."},
+    {"id": "idempotent-rerun", "description": "Re-executing the state machine with the same input rewrites identical report bytes; no duplicate or drifting output."},
+    {"id": "empty-input-header-only", "description": "With zero parsed/*.psv objects the execution still succeeds and writes a header-only report (legacy exits 0 with header-only CSV)."},
+    {"id": "least-privilege", "description": "Role ow-tp-<ns>-report-role: read on parsed/*, write on reports/* only; state-machine role may invoke only ow-tp-<ns>-report; trust conditioned on source account. No sendmail replacement in scope (legacy delivery is a silent no-op; replacement is out of scope and must be listed as an unverified path if claimed)."}
+  ],
+  "encoding_policy": {
+    "input_encoding": "binary .psv as written by the parser (may contain non-UTF-8 bytes in name fields)",
+    "byte_transparency": "full: split on the pipe byte without a UTF-8 decode layer; only fields 1 (cust), 4 (amt), 5 (ccy), 6 (rt) are interpreted",
+    "invalid_bytes": "never raise; non-UTF-8 name bytes are irrelevant to aggregation and must not fail the run"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "tolerate-and-attribute",
+    "details": "Match perl split semantics: extra pipe-delimited fields beyond 6 are silently dropped; empty amt coerces to 0 (+= on non-numeric string is numeric 0); empty ccy/rt attribute to the ',UNKNOWN()' bucket, present in the golden report. Never fail open."
+  },
+  "empty_input_semantics": {
+    "action": "write-empty-result",
+    "details": "Header-only CSV (and identical .xls) written; execution succeeds."
+  },
+  "trigger_granularity": "per-batch",
+  "planted_anomalies": [
+    {"id": "A-invalid-date", "status": "coverage_gap", "reason": "Report never inspects the date field (field 3); detection is the parser's, and the misdated row still aggregates into its ccy|rt bucket per golden bytes."},
+    {"id": "A-nonutf8-byte", "status": "coverage_gap", "reason": "Name bytes are never decoded or used in aggregation; parser detects."},
+    {"id": "A-short-record", "status": "must-detect", "description": "The short record surfaces in the report as the ',UNKNOWN(),1,0.00' row — its presence in the golden bytes is the report-level assertion for this anomaly."},
+    {"id": "A-trailer-mismatch", "status": "coverage_gap", "reason": "Trailer records are stripped by the parser and never reach the report; parser detects and ledgers it."}
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "unit": "aws-parser",
+  "source_artifact_path": "etl/legacy-extra/jobs/parse_custbill_fixedwidth.sh",
+  "target_objects": [
+    "infrastructure/terraform-tp-aws/parser.tf",
+    "services/serverless-ingest/parser/",
+    "lambda ow-tp-<ns>-parser (SQS event-source mapping on ow-tp-<ns>-events)",
+    "s3://ow-tp-<ns>-pipeline-<account>/parsed/<basename>.psv",
+    "dynamodb ow-tp-<ns>-batch-state items pk=file#<ns> sk=<basename>.psv {record_count, trailer_count}",
+    "dynamodb ow-tp-<ns>-batch-state items pk=anomaly#<ns> sk=<basename>#<anomaly_id> {anomaly_id}"
+  ],
+  "golden_baseline_location": "parent session, /home/ubuntu/tp-aws-golden/parsed/ (md5: CUSTBILL_DEMO_001.psv 29f0e7a8bc25eb444c050b3f1e8e8a9d, CUSTBILL_DEMO_002.psv 665fee687aaaa0be43f3db23021e340a, CUSTBILL_DEMO_ANOM.psv b098ae00d55d3974f40133b0d607a1b8); recorded via TP_FAKETIME='2026-01-15 00:00:00' deterministic legacy run",
+  "acceptance_checks": [
+    {"id": "byte-identical-psv", "description": "parsed/<basename>.psv is byte-identical to the legacy golden output for every input, including the anomaly file: HDR/TRL stripped, copybook CBCUST01 slices (1-10,11-40,41-48,49-60,61-63,64-65), trailing-space trim on fields 1/2/5, implied decimal amt/100 as %.2f, date reformat YYYYMMDD -> YYYY-MM-DD with no validity check, records passed through even when malformed."},
+    {"id": "anomaly-ledger", "description": "Detects and records exactly the planted anomaly set to pk=anomaly#<ns> (invalid calendar date, non-UTF-8 byte, short record, trailer/record-count mismatch) while STILL emitting the legacy pass-through bytes. Detection is a side channel, never a change to the .psv bytes."},
+    {"id": "trailer-reconciliation", "description": "record_count and trailer_count stored per file in the ledger (retires the never-implemented ETL-0187); mismatch recorded as A-trailer-mismatch, not a failure."},
+    {"id": "idempotent-reprocess", "description": "Reprocessing the same object (SQS at-least-once) rewrites identical bytes and does not duplicate ledger items (deterministic keys, PutItem overwrite semantics)."},
+    {"id": "poison-to-dlq", "description": "A message whose object cannot be fetched fails loudly and lands on ow-tp-<ns>-events-dlq after 3 receives; no silent-suppression equivalent of 2>/dev/null || true."},
+    {"id": "no-temp-state", "description": "No orphaned temp state (/tmp/cb_body.$$ equivalent) and no lock files."},
+    {"id": "least-privilege", "description": "Role ow-tp-<ns>-parser-role: read on incoming/*, write on parsed/* only, dynamodb PutItem/Query on the batch-state table, SQS consume on the events queue; no bucket-wide write."}
+  ],
+  "encoding_policy": {
+    "input_encoding": "binary (mainframe extract; not guaranteed UTF-8)",
+    "byte_transparency": "full: process record bytes without a UTF-8 decode layer (latin-1 or bytes API); output bytes re-emit input bytes exactly as the legacy cut/awk chain does",
+    "invalid_bytes": "never raise; byte 0xA3 passes through to parsed/ unchanged AND is recorded as A-nonutf8-byte in the ledger"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "tolerate-and-attribute",
+    "details": "Match legacy tolerate semantics byte-for-byte: short records slice to empty fields (amt becomes 0.00, date becomes '--'), nothing is rejected or quarantined from the .psv; anomalies are attributed in the DynamoDB ledger instead. Never fail open on NULL/missing values: they must be attributed, and golden bytes are the arbiter."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "No incoming/ object events means no invocations; an empty body (HDR+TRL only) writes an empty .psv, matching legacy."
+  },
+  "trigger_granularity": "per-file",
+  "planted_anomalies": [
+    {"id": "A-invalid-date", "description": "BILL-DATE 20241385 in CUSTBILL_DEMO_ANOM.dat record 1; legacy reformats it to 2024-13-85 without checking", "status": "must-detect"},
+    {"id": "A-nonutf8-byte", "description": "byte 0xA3 in CUST-NAME of record 2; a naive .decode('utf-8') raises here", "status": "must-detect"},
+    {"id": "A-short-record", "description": "record 3 truncated to 40 bytes (copybook needs 65); legacy slices it into empty fields", "status": "must-detect"},
+    {"id": "A-trailer-mismatch", "description": "TRL claims 5 records, body holds 3; legacy logs and ignores", "status": "must-detect"}
+  ]
+}

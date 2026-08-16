@@ -273,6 +273,28 @@ tp-smoke: ## Golden-path smoke gate for tech-partnerships (mirrors .github/workf
 tp-run-branch: ## Cut and push the per-run working branch for a rehearsal (TRACK=mongodb|databricks|aws)
 	@scripts/tp-run-branch.sh $(TRACK)
 
+TP_AWS_TF := infrastructure/terraform-tp-aws
+
+aws-tp-plan: ## Plan the AWS serverless-track stack (parent-run only)
+	terraform -chdir=$(TP_AWS_TF) init -input=false
+	terraform -chdir=$(TP_AWS_TF) plan -detailed-exitcode -var ns=$${NS:-demo}
+
+aws-tp-apply: ## Apply the AWS serverless-track stack (parent-run only)
+	terraform -chdir=$(TP_AWS_TF) init -input=false
+	terraform -chdir=$(TP_AWS_TF) apply -auto-approve -var ns=$${NS:-demo}
+
+aws-tp-destroy: ## Destroy the AWS serverless-track stack (parent-run only)
+	terraform -chdir=$(TP_AWS_TF) destroy -auto-approve -var ns=$${NS:-demo}
+
+aws-tp-scan: ## Negative teardown verification: scan by tag and ow-tp- prefix
+	scripts/tp_aws/aws_tp_scan.sh
+
+aws-tp-run: ## Land golden inputs and run one batch through the pipeline (NS=<ns>)
+	NS=$${NS:-demo} scripts/tp_aws/aws_tp_run.sh
+
+aws-tp-verify: ## Recompute end-to-end parity from the deployed pipeline (NS=<ns> GOLDEN=<dir>)
+	python3 scripts/tp_aws/aws_tp_verify.py --ns $${NS:-demo} --golden $${GOLDEN:?set GOLDEN=<golden baseline dir>} $(VERIFY_FLAGS)
+
 test-api-flows: ## Run black-box API flow tests against the local API gateway
 	UV_PROJECT_ENVIRONMENT=.venv uv run python -m pytest tests/api
 
