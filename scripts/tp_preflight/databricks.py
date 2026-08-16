@@ -263,9 +263,6 @@ finally:
     cleanup_all()
 
 job_name = f"ow_tp_preflight_{uuid.uuid4().hex[:8]}"
-job = None
-
-
 def reconcile_job():
     listed = call("GET", "/api/2.1/jobs/list?name=" + urllib.parse.quote(job_name))
     if not (200 <= listed[0] < 300) or not isinstance(listed[1], dict):
@@ -285,7 +282,7 @@ register_cleanup("job", reconcile_job)
 try:
     job = call("POST", "/api/2.1/jobs/create", {"name": job_name, "tasks": [{"task_key": "noop", "notebook_task": {"notebook_path": "/Shared/ow_tp/preflight"}}]})
     if 200 <= job[0] < 300:
-        listed_jobs = call("GET", "/api/2.1/jobs/list?name=" + job_name)
+        listed_jobs = call("GET", "/api/2.1/jobs/list?name=" + urllib.parse.quote(job_name))
         manifest.add("jobs-create-list", "Create and list a temporary job", "Jobs API 2.1",
                      "verified" if 200 <= listed_jobs[0] < 300 else "denied",
                      f"create HTTP {job[0]}, list HTTP {listed_jobs[0]}")
@@ -296,9 +293,6 @@ finally:
     cleanup_all()
 
 scope_name = f"ow_tp_preflight_{uuid.uuid4().hex[:8]}"
-scope = None
-
-
 def reconcile_scope():
     listed = call("GET", "/api/2.0/secrets/scopes/list")
     if not (200 <= listed[0] < 300) or not isinstance(listed[1], dict):
