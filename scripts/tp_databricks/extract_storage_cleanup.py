@@ -209,6 +209,7 @@ def load_bronze(ns: str, scenario: str, objects: list[dict], metadata: list[dict
     /Volumes/ow_tp/bronze/landing -- returns 403 in this workspace. The SQL path
     needs no extra scope and lands identical rows.
     """
+    nb.ensure_legacy_attributed(dbx.sql, "ow_tp")
     for table in ("bronze.storage_objects_raw", "bronze.file_metadata_raw", "bronze.storage_extract_manifest"):
         dbx.sql(f"DELETE FROM ow_tp.{table} WHERE ns = {_lit(ns)}")
 

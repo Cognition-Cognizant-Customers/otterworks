@@ -194,22 +194,25 @@ def ddl_statements(catalog: str = CATALOG) -> list:
 
 
 def ensure_legacy_attributed(
-    spark, catalog: str = CATALOG, table: str = "storage_objects_raw"
+    execute, catalog: str = CATALOG, table: str = "storage_objects_raw"
 ) -> bool:
     """Add the legacy attribution column only when the bronze table lacks it."""
     catalog = _checked("catalog", catalog)
     table = _checked("table", table)
-    columns = spark.sql(
+    columns = execute(
         f"""
         SELECT column_name
         FROM {catalog}.information_schema.columns
         WHERE table_schema = 'bronze'
           AND table_name = '{table}'
         """
-    ).collect()
-    if any(row["column_name"] == "legacy_attributed" for row in columns):
+    )
+    if any(
+        (row["column_name"] if isinstance(row, dict) else row[0]) == "legacy_attributed"
+        for row in columns
+    ):
         return False
-    spark.sql(
+    execute(
         f"ALTER TABLE {catalog}.bronze.{table} "
         "ADD COLUMNS (legacy_attributed BOOLEAN)"
     )
@@ -283,7 +286,10 @@ if _in_databricks():  # pragma: no cover -- exercised by the job, not locally
         print(statement.splitlines()[0][:110])
         spark.sql(statement)  # noqa: F821
     if stage == "ddl":
-        print("legacy_attributed_migration=", ensure_legacy_attributed(spark, catalog))
+        print(
+            "legacy_attributed_migration=",
+            ensure_legacy_attributed(lambda query: spark.sql(query).collect(), catalog),
+        )
 
     if stage != "ddl":
         report = spark.sql(  # noqa: F821
