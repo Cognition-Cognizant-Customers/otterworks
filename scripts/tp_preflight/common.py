@@ -85,12 +85,14 @@ def validate_manifest_dir() -> Path:
     repo_root = Path(__file__).resolve().parents[2]
     sandbox = (repo_root / ".tp-preflight").resolve()
     configured = os.environ.get("TP_PREFLIGHT_DIR")
+    if configured and not Path(configured).is_absolute():
+        raise SystemExit("TP_PREFLIGHT_DIR must be an absolute path when set")
     resolved = Path(configured).resolve() if configured else sandbox
     if resolved == repo_root or repo_root in resolved.parents:
         if resolved != sandbox and sandbox not in resolved.parents:
             raise SystemExit(
-                "TP_PREFLIGHT_DIR must resolve beneath the repository .tp-preflight "
-                f"sandbox, not {resolved}"
+                "TP_PREFLIGHT_DIR resolves inside the repository outside the "
+                f".tp-preflight sandbox ({resolved}); out-of-tree destinations are allowed"
             )
     return resolved
 
