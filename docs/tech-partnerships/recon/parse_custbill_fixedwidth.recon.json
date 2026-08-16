@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "parse_custbill_fixedwidth",
   "namespace": "demo",
-  "generated_at": "2026-08-16T18:15:31.392028+00:00",
+  "generated_at": "2026-08-16T18:20:24.425437+00:00",
   "run_mode": "fixture",
   "checks": [
     {
@@ -87,9 +87,13 @@
     },
     {
       "id": "empty-input-noop",
-      "expected": "no unprocessed files -> silver untouched, success exit",
-      "actual": true,
-      "source_of_truth": "state comparison with no pending files (fixture); notebook returns before any write",
+      "expected": "empty/non-CUSTBILL listings select no pending files; populated state left untouched",
+      "actual": {
+        "empty_selection": [],
+        "noise_selection": [],
+        "state_unchanged": true
+      },
+      "source_of_truth": "select_pending (production selection logic) driven with empty and non-CUSTBILL listings (fixture)",
       "result": "pass"
     },
     {

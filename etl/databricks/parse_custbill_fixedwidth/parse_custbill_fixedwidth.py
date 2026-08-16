@@ -204,6 +204,15 @@ def legacy_psv_line(rec: ParsedRecord) -> str:
     )
 
 
+def select_pending(names) -> list:
+    """Pending-file selection used by the driver: unprocessed CUSTBILL drops
+    only. An empty selection means the run is a no-op and silver is left
+    untouched (legacy: parser exits quietly when incoming/ is empty)."""
+    return sorted(
+        n for n in names if n.startswith("CUSTBILL") and n.endswith(".dat")
+    )
+
+
 def apply_to_state(state: dict, ns: str, result: FileResult) -> None:
     """Delete-then-insert per (ns, file_name): the idempotent write the Spark
     driver performs with DELETE + append. Used by the recon fixture to prove
@@ -275,11 +284,7 @@ def run_pipeline(spark, dbutils) -> None:
             return
         raise
 
-    pending = sorted(
-        e.name
-        for e in entries
-        if e.name.startswith("CUSTBILL") and e.name.endswith(".dat")
-    )
+    pending = select_pending(e.name for e in entries)
     if not pending:
         print(f"no unprocessed CUSTBILL*.dat files in {incoming}; exiting (no-op)")
         return

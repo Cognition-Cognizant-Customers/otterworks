@@ -198,14 +198,29 @@ def main() -> int:
         "result": "pass" if conservation else "fail",
     })
 
-    # --- empty-input no-op: parsing nothing leaves prior state untouched.
+    # --- empty-input no-op: run the driver's pending-file selection against
+    # empty and non-CUSTBILL listings (the notebook returns before any write
+    # when the selection is empty), then simulate that run against the
+    # populated state and assert it is non-empty and unchanged.
     before = {k: dict(v) for k, v in state.items()}
-    empty_noop = state == before  # no files parsed, no state mutation path invoked
+    empty_selection = parser.select_pending([])
+    noise_selection = parser.select_pending(
+        ["fixture-manifest.json", "notes.txt", "CUSTBILL_DEMO_003.dat.done"]
+    )
+    for name in empty_selection + noise_selection:  # no pending files: no work
+        parser.apply_to_state(state, NS, parser.parse_file(name, inputs[name]))
+    empty_noop = (
+        empty_selection == [] and noise_selection == []
+        and state == before
+        and sum(len(v) for v in state["custbill_records"].values()) == total_rows
+    )
     checks.append({
         "id": "empty-input-noop",
-        "expected": "no unprocessed files -> silver untouched, success exit",
-        "actual": empty_noop,
-        "source_of_truth": "state comparison with no pending files (fixture); notebook returns before any write",
+        "expected": "empty/non-CUSTBILL listings select no pending files; populated state left untouched",
+        "actual": {"empty_selection": empty_selection,
+                   "noise_selection": noise_selection,
+                   "state_unchanged": state == before},
+        "source_of_truth": "select_pending (production selection logic) driven with empty and non-CUSTBILL listings (fixture)",
         "result": "pass" if empty_noop else "fail",
     })
 
