@@ -281,11 +281,23 @@ def check_summary(ns: str) -> dict:
     if not rows:
         raise Blocked(f"{SUMMARY_TABLE} holds no rows for ns={ns}")
     latest = [r for r in rows if r[0] == rows[0][0]]
-    parsed = [
-        {"run_date": r[0], "entity_type": r[1], "source_count": int(r[2]), "indexed_count": int(r[3]),
-         "counts_match": str(r[4]).lower() == "true", "swap_completed": str(r[5]).lower() == "true"}
-        for r in latest
-    ]
+    parsed = []
+    for r in latest:
+        try:
+            source_count = int(r[2])
+        except (TypeError, ValueError) as exc:
+            raise Blocked(
+                f"{SUMMARY_TABLE} has unusable source_count {r[2]!r} "
+                f"for entity_type {r[1]!r}"
+            ) from exc
+        parsed.append({
+            "run_date": r[0],
+            "entity_type": r[1],
+            "source_count": source_count,
+            "indexed_count": int(r[3]),
+            "counts_match": str(r[4]).lower() == "true",
+            "swap_completed": str(r[5]).lower() == "true",
+        })
     return {
         "passed": all(p["counts_match"] and p["swap_completed"] for p in parsed),
         "rows": parsed,
@@ -296,7 +308,10 @@ def load_run(golden_dir: Path, name: str) -> dict:
     path = golden_dir / name
     if not path.exists():
         raise Blocked(f"run artifact {path} is missing")
-    return json.loads(path.read_text())
+    try:
+        return json.loads(path.read_text())
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise Blocked(f"run artifact {path} is unreadable: {exc}") from exc
 
 
 def run_snapshot(run: dict, name: str) -> dict[str, int]:
@@ -308,7 +323,15 @@ def run_snapshot(run: dict, name: str) -> dict[str, int]:
             "re-run it with the current run_search_reindex_dev.py so the count is captured "
             "at run time rather than compared against itself at report time"
         )
-    return {entity: int(count) for entity, count in snapshot.items()}
+    parsed = {}
+    for entity, count in snapshot.items():
+        try:
+            parsed[entity] = int(count)
+        except (TypeError, ValueError) as exc:
+            raise Blocked(
+                f"{name} has unusable serving snapshot count {count!r} for entity_type {entity!r}"
+            ) from exc
+    return parsed
 
 
 def check_forced_failure(golden_dir: Path, legacy: dict[str, int], converted_now: dict[str, int]) -> dict:
@@ -403,7 +426,7 @@ def disclosures(transport: str) -> list[str]:
         "## Disclosures",
         "",
         f"- **Transport**: {TRANSPORT_NOTES[transport]}",
-        "- **Guards not exercised by this corpus**: five defensive paths are reasoned and reviewed but never entered by a run on this data, and none of them contributes to any PASS below -- the empty-extract guard and the erase-an-existing-entity-type guard in `ingest_bronze`, the shrink-to-zero guard in `publish_index`, and the corresponding empty-manifest and erase-an-existing-entity-type guards in the SQL fallback loader. They fire only on a degenerate extract, which the seeded fixture does not produce; the checks below all ran on a full 1,933 / 9,461 corpus.",
+        "- **Guards not exercised by this corpus**: eight defensive paths are reasoned and reviewed but never entered by a run on this data, and none of them contributes to any PASS below -- the empty-extract guard and the erase-an-existing-entity-type guard in `ingest_bronze`, the shrink-to-zero guard in `publish_index`, the corresponding empty-manifest and erase-an-existing-entity-type guards in the SQL fallback loader, wait-timeout cancellation and terminal-state teardown in `run_search_reindex_dev.py`, and the minimum-observed-total completeness and 0600 artifact-mode guards in `extract_search_sources.py`. They fire only on a degenerate extract or lifecycle edge case, which the seeded fixture does not produce; the checks below all ran on a full 1,933 / 9,461 corpus.",
         "- **Sample selection (check 2)**: ids are drawn from the legacy index itself using "
         "`random.Random(int(sha256('search_reindex_weekly:<ns>:<entity_type>').hexdigest()[:16], 16))` over "
         "the lexicographically sorted id list, 50 per entity type. Fixed seed, fixed ordering, fixed before "
