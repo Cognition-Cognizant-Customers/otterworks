@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -87,11 +88,18 @@ def main() -> int:
         return result == "pass"
 
     # 1. Regenerate deterministic legacy inputs (byte-identical per contract).
+    # The generator's output is clock-independent (NS-seeded RNG), so only
+    # forward TP_FAKETIME when libfaketime is actually usable; the wrapper
+    # hard-fails when TP_FAKETIME is set without libfaketime installed.
     shutil.rmtree(LEGACY_ROOT, ignore_errors=True)
+    gen_env = {**os.environ, "OTTERWORKS_LEGACY_ROOT": str(LEGACY_ROOT)}
+    if shutil.which("faketime"):
+        gen_env["TP_FAKETIME"] = TP_FAKETIME
+    else:
+        gen_env.pop("TP_FAKETIME", None)
     subprocess.run(
         ["make", "legacy-etl-gen-data", f"NS={NS}"], cwd=REPO, check=True,
-        env={**__import__("os").environ, "OTTERWORKS_LEGACY_ROOT": str(LEGACY_ROOT),
-             "TP_FAKETIME": TP_FAKETIME},
+        env=gen_env,
     )
     drop_src = LEGACY_ROOT / "sftp-drop/upload"
 
