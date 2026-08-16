@@ -1,0 +1,34 @@
+{
+  "unit": "run_all_orchestration",
+  "source_artifact_path": "etl/legacy-extra/run_all.sh",
+  "target_objects": [
+    "job:ow_tp_custbill_estate",
+    "ow_tp.gold.estate_run_log"
+  ],
+  "golden_baseline_location": "parent-run deterministic legacy chain (NS=demo, TP_FAKETIME=2026-01-15, RUN_ALL_SLEEP=0): end-state after run_all.sh = 2 archived .dat files, 100 silver-equivalent parsed rows, 6 golden report aggregate rows; manifest at parent path tp-golden/databricks-20260816T175547Z/SHA256SUMS",
+  "acceptance_checks": [
+    {"id": "dag-dependencies", "description": "ow_tp_custbill_estate is a single Databricks multi-task job wiring ingest -> parse -> finance via task dependencies — no sleep-based sequencing anywhere."},
+    {"id": "single-active-run", "description": "max_concurrent_runs=1 on the estate job so overlapping schedules cannot interleave (retires the crontab overlap deficiency)."},
+    {"id": "end-state-parity", "description": "One estate run from a clean ns slice reproduces the full golden end-state: registered raw files, 100 silver rows, six cent-exact gold aggregates."},
+    {"id": "errors-surfaced", "description": "A failing task fails the run visibly (downstream tasks skipped, run result FAILED) — no blanket 2>/dev/null || true suppression; estate_run_log records per-task outcome."}
+  ],
+  "planted_anomalies": [
+    {"id": "upstream-failure-propagation", "status": "must-detect", "description": "Parent triggers an estate run against a deliberately trailer-mismatched drop; the parse task must fail/quarantine and the run log must show the estate run attributing it — never a green run over partial data."},
+    {"id": "overlap-suppression", "status": "coverage_gap", "reason": "Provoking two genuinely concurrent scheduled runs in the shared workspace within the demo window is not reliably reproducible; max_concurrent_runs=1 is asserted from the job definition instead."}
+  ],
+  "encoding_policy": {
+    "input_encoding": "binary",
+    "byte_transparency": "Orchestration moves no data itself; it must not introduce any decoding layer between tasks — each task's own contract governs its bytes.",
+    "invalid_bytes": "delegated to the task contracts"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "fail",
+    "null_attribution": "fail",
+    "details": "The estate run log must never record a task as succeeded with NULL/missing outcome fields; unknown task state is a run failure, not a plausible-looking success row."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "An estate run over an empty landing slice completes with all tasks no-op successful and prior outputs untouched (legacy: run_all.sh over an empty drop exits 0 having changed nothing)."
+  },
+  "trigger_granularity": "per-batch"
+}

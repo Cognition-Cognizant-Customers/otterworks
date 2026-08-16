@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean
+.PHONY: dbx-destroy dbx-verify-teardown help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean
 
 SHELL := /bin/bash
 
@@ -39,6 +39,12 @@ tp-fixture-verify: ## Verify local fixture bytes and checksums (NS=<ns>)
 
 tp-fixture-clean: ## Remove local Databricks transport fixture (NS=<ns>)
 	python3 scripts/tp_databricks/local_fixture.py clean --ns $${NS:-fixture}
+
+dbx-destroy: ## Destroy the parent-owned shared Databricks stack (Terraform + SQL catalog drop)
+	cd infrastructure/terraform-databricks && terraform destroy -auto-approve && ./catalog.sh drop $${PREFIX:-ow_tp}
+
+dbx-verify-teardown: ## Negative scan: assert zero prefixed objects remain (PREFIX=ow_tp)
+	python3 scripts/tp_databricks/verify_teardown.py $${PREFIX:-ow_tp}
 
 PROCS_COMPOSE = docker compose -f docker-compose.procs.yml -p otterworks-procs-$(NS)
 PROCS_UV = uv run --with psycopg[binary]==3.2.9 --with pyyaml==6.0.2

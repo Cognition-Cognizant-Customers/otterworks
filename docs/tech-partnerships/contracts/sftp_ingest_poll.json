@@ -1,0 +1,35 @@
+{
+  "unit": "sftp_ingest_poll",
+  "source_artifact_path": "etl/legacy-extra/jobs/sftp_ingest_poll.ksh",
+  "target_objects": [
+    "/Volumes/ow_tp/bronze/landing/<ns>/sftp_ingest_poll/",
+    "ow_tp.bronze.custbill_raw_files",
+    "job:ow_tp_sftp_ingest_poll"
+  ],
+  "golden_baseline_location": "parent-run deterministic legacy output (NS=demo, TP_FAKETIME=2026-01-15): incoming/CUSTBILL_DEMO_001.dat.done sha256=c70f30ca08842885fe2bc96c3902d463609d05be95a96c01875b825a88aa336c, incoming/CUSTBILL_DEMO_002.dat.done sha256=652974b8bb3a168483c8f63fb9f2db440a6ff606f4563cd0800f15914b344f48 (3430 bytes each); manifest at parent path tp-golden/databricks-20260816T175547Z/SHA256SUMS",
+  "acceptance_checks": [
+    {"id": "byte-parity", "description": "Every landed file in the volume is byte-identical (sha256) to the legacy-archived original; no size-compared-twice 'settle' heuristic — atomic Files API PUT only."},
+    {"id": "registry-row-per-file", "description": "ow_tp.bronze.custbill_raw_files has exactly one row per landed file with ns, file_name, byte_count, sha256, landed_at; counts reconcile with the volume listing."},
+    {"id": "no-lock-poison", "description": "Reruns are idempotent with no lock files; a rerun re-registers nothing and duplicates nothing."},
+    {"id": "no-hostname-branching", "description": "No hostname if-blocks; all paths derive from ns + volume root parameters."}
+  ],
+  "planted_anomalies": [
+    {"id": "duplicate-redrop", "status": "must-detect", "description": "Parent re-lands an already-registered file byte-identically during live validation; the job must not create a second registry row (idempotent skip, attributed in run output)."},
+    {"id": "half-written-file", "status": "coverage_gap", "reason": "The legacy in-flight/half-written SFTP transfer race cannot be reproduced through the Files API transport, which is atomic per PUT; the deficiency is retired by construction rather than detected."}
+  ],
+  "encoding_policy": {
+    "input_encoding": "binary",
+    "byte_transparency": "Ingest is byte-transparent end-to-end: files are moved and checksummed as opaque bytes, never decoded. EBCDIC-adjacent or invalid-UTF8 bytes must not fail ingest.",
+    "invalid_bytes": "pass-through untouched; decoding is the parser's concern"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "fail",
+    "details": "Ingest does not inspect records; 'records' are not parsed here. A file with a NULL/empty name or zero-byte body must fail loudly, never be registered as a plausible-looking row."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "A run with no new files in the landing drop leaves the registry and volume untouched and exits success (legacy behavior: poll finds nothing, exits 0)."
+  },
+  "trigger_granularity": "per-file"
+}

@@ -1,0 +1,37 @@
+{
+  "unit": "parse_custbill_fixedwidth",
+  "source_artifact_path": "etl/legacy-extra/jobs/parse_custbill_fixedwidth.sh",
+  "target_objects": [
+    "ow_tp.silver.custbill_records",
+    "ow_tp.silver.custbill_rescue",
+    "job:ow_tp_parse_custbill_fixedwidth"
+  ],
+  "golden_baseline_location": "parent-run deterministic legacy output (NS=demo, TP_FAKETIME=2026-01-15): parsed/CUSTBILL_DEMO_001.psv sha256=7fc03e8ceb88ce807b18e3e0a8bb2450b7677108495bdcb883881887c09665bf (50 rows), parsed/CUSTBILL_DEMO_002.psv sha256=b576ad3de53b835643dc9096781cb491e6a03b3712c675c5598ab05f8c3c54a3 (50 rows); manifest at parent path tp-golden/databricks-20260816T175547Z/SHA256SUMS",
+  "acceptance_checks": [
+    {"id": "row-parity", "description": "For the clean demo drop, ow_tp.silver.custbill_records holds exactly 100 rows for ns=demo and every (account_id, record_type, currency, amount, billing_date) tuple matches the golden .psv rows to the cent."},
+    {"id": "typed-columns", "description": "amount is DECIMAL(12,2) via implied-decimal conversion; billing_date is DATE via strict validation — no string surgery survives into silver."},
+    {"id": "trailer-reconciled", "description": "The copybook trailer record count is enforced: a file whose parsed row count differs from its trailer count is rejected whole to rescue, not partially loaded."},
+    {"id": "rescue-quarantine", "description": "Records failing validation land in ow_tp.silver.custbill_rescue with file_name, raw_line, reject_reason; nothing is silently dropped and nothing invalid reaches custbill_records."},
+    {"id": "no-temp-orphans", "description": "No orphaned temp state on failure; reruns of the same file are idempotent (no duplicate rows)."}
+  ],
+  "planted_anomalies": [
+    {"id": "invalid-date", "status": "must-detect", "description": "Parent plants a record with billing_date 20261332 during live validation; it must appear in custbill_rescue with a date reject_reason and not in custbill_records."},
+    {"id": "malformed-amount", "status": "must-detect", "description": "Parent plants a record with a non-numeric implied-decimal amount field; must be quarantined to rescue."},
+    {"id": "trailer-mismatch", "status": "must-detect", "description": "Parent plants a file whose trailer count disagrees with its record count; the whole file must be rejected to rescue, zero rows in custbill_records."}
+  ],
+  "encoding_policy": {
+    "input_encoding": "ascii",
+    "byte_transparency": "Input files are read as bytes; fixed-width slicing operates on byte offsets exactly as the legacy cut/sed/awk chain does. Decoding to text happens per-field after slicing.",
+    "invalid_bytes": "a field containing bytes outside printable ASCII is a validation failure routed to rescue, never a job crash"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "fail",
+    "null_attribution": "fail",
+    "details": "Fixed-width input has no delimiters: a line whose length differs from copybook CBCUST01 is malformed and goes to rescue. NULL/blank mandatory fields (account, amount, date, currency, type) must never fail open into a plausible-looking silver row — they go to rescue with the reason."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "No unprocessed bronze files means silver is left untouched and the run exits success; prior output is never truncated or rewritten (legacy: parser exits quietly when incoming/ is empty)."
+  },
+  "trigger_granularity": "per-file"
+}

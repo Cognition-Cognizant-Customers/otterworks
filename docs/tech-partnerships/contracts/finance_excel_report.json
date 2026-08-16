@@ -1,0 +1,35 @@
+{
+  "unit": "finance_excel_report",
+  "source_artifact_path": "etl/legacy-extra/jobs/finance_excel_report.pl",
+  "target_objects": [
+    "ow_tp.gold.finance_billing_summary",
+    "/Volumes/ow_tp/bronze/landing/<ns>/finance_excel_report/exports/",
+    "job:ow_tp_finance_excel_report"
+  ],
+  "golden_baseline_location": "parent-run deterministic legacy output (NS=demo, TP_FAKETIME=2026-01-15): reports/finance_billing_20260115.csv sha256=c8923a71ab5a2d8048ad06ae91840631c009551e9082755fa4672e034a15627e — 6 aggregate rows: EUR/INVOICE 22 101554.41, EUR/CREDIT 6 33375.97, GBP/INVOICE 32 183113.58, GBP/CREDIT 5 28454.59, USD/INVOICE 28 130502.15, USD/CREDIT 7 33390.44; manifest at parent path tp-golden/databricks-20260816T175547Z/SHA256SUMS",
+  "acceptance_checks": [
+    {"id": "cent-parity", "description": "ow_tp.gold.finance_billing_summary for ns=demo reproduces the six golden (currency, record_type, record_count, total_amount) rows exactly to the cent, computed from ow_tp.silver.custbill_records."},
+    {"id": "real-artifact", "description": "The export is a genuine CSV artifact written to the exports volume path with a deterministic name — no CSV-renamed-to-.xls masquerade."},
+    {"id": "rescue-excluded", "description": "Quarantined rescue records are excluded from gold totals; totals plus rescue attribution reconcile with silver row counts."},
+    {"id": "no-silent-delivery", "description": "Delivery is observable and verifiable (export file exists in the volume, job run result records it); no silent sendmail no-op and no hardcoded stale recipients in code."}
+  ],
+  "planted_anomalies": [
+    {"id": "quarantine-exclusion", "status": "must-detect", "description": "After the parent plants invalid records upstream, gold totals must remain equal to the golden clean totals — quarantined rows must not perturb any currency/type aggregate by even one cent."},
+    {"id": "email-delivery-verification", "status": "coverage_gap", "reason": "No mail transport exists in the demo workspace; delivery is verified as a volume artifact plus job run record instead of an SMTP round-trip."}
+  ],
+  "encoding_policy": {
+    "input_encoding": "utf-8",
+    "byte_transparency": "Reads typed silver Delta columns, not raw bytes; the export CSV is written UTF-8 with LF line endings and no BOM to match the golden CSV bytes.",
+    "invalid_bytes": "not applicable upstream of silver typing; export must be deterministic bytes"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "fail",
+    "null_attribution": "fail",
+    "details": "Silver rows with NULL currency, record_type, or amount must never be aggregated into a plausible-looking total; their presence for the target ns fails the run with attribution (they indicate an upstream contract breach)."
+  },
+  "empty_input_semantics": {
+    "action": "write-empty-result",
+    "details": "Zero silver rows for the ns/date produces a header-only export and zero gold rows for that run key, replacing nothing else; prior dates' outputs are untouched."
+  },
+  "trigger_granularity": "per-batch"
+}
