@@ -57,21 +57,22 @@ print(f"ingesting ns={ns} catalog={catalog} landing_root={landing_root}")
 # MAGIC %md
 # MAGIC ## What landed
 # MAGIC
-# MAGIC Two conditions the legacy poller reported identically. An existing drop directory
-# MAGIC with nothing new in it is a no-op success, as the legacy poll finding nothing was.
-# MAGIC A drop directory that does not exist is a failure naming `ns` and the path it
-# MAGIC expected: that namespace was never staged, or the transport writes somewhere else,
-# MAGIC and reporting it as "no files today" is the habit this conversion retires.
+# MAGIC An empty drop directory and one that does not exist yet are both a no-op success,
+# MAGIC as the legacy poll finding nothing was: the directory appears with the first
+# MAGIC delivery, so a namespace nobody has delivered to is a valid empty estate. Neither
+# MAGIC is passed over silently — the run says which path it looked for — and any other
+# MAGIC read failure (an unreadable path, a permission error) still fails the run.
 
 # COMMAND ----------
 
 try:
     landed = [r.file_name for r in spark.sql(sftp_ingest_sql.landed_files_query(ns, catalog, landing_root)).collect()]
 except Exception as exc:
-    missing = sftp_ingest_sql.as_missing_drop_path(exc, ns, landing_root)
-    if missing is None:
+    if not sftp_ingest_sql.is_absent_drop_path(exc):
         raise
-    raise missing from exc
+    message = sftp_ingest_sql.absent_drop_path_message(ns, landing_root)
+    print(message)
+    dbutils.notebook.exit(f"no-op: {message}")
 
 if not landed:
     print(f"no files under {sftp_ingest_sql.drop_path(ns, landing_root)}: nothing to ingest (no-op)")
@@ -87,18 +88,20 @@ print(f"landed files: {landed}")
 # MAGIC TRL record, and a TRL-declared record count equal to the detail lines present.
 # MAGIC A half-written transfer fails this gate, and the run fails with it — the legacy
 # MAGIC job would have copied the partial file and moved on.
+# MAGIC
+# MAGIC The gate is evaluated here but raised *after* the merges below, so the files that
+# MAGIC did arrive whole still land. Landing is the archive, so nothing removes the bad
+# MAGIC file; failing first would mean one abandoned transfer blocked every later delivery
+# MAGIC for that namespace, indefinitely.
 
 # COMMAND ----------
 
 incomplete = spark.sql(sftp_ingest_sql.incomplete_files_query(ns, catalog, landing_root)).collect()
 if incomplete:
-    raise RuntimeError(
-        "completeness handshake failed, refusing to ingest half-written files: "
-        + "; ".join(
-            f"{r.file_name} (hdr={r.header_lines}, trl={r.trailer_lines}, "
-            f"detail={r.detail_lines}, declared={r.trailer_declared})"
-            for r in incomplete
-        )
+    print(
+        "completeness handshake failed for: "
+        + "; ".join(sftp_ingest_sql.describe_incomplete(list(r)) for r in incomplete)
+        + " — ingesting the complete files first, then failing the run"
     )
 
 # COMMAND ----------
@@ -141,3 +144,15 @@ if mismatched:
         + "; ".join(f"{r.file_name} manifest={r.record_count} lines={r.lines_ingested}" for r in mismatched)
     )
 print(f"ingest complete for ns={ns}: {summary.count()} file(s)")
+
+# COMMAND ----------
+
+# The deferred failure. The complete files are in bronze and reconciled; the incomplete
+# ones contributed nothing (every ingest statement joins `complete`) and are still in the
+# drop path, so the run ends non-zero naming them and what was observed versus declared.
+if incomplete:
+    incomplete_names = {r.file_name for r in incomplete}
+    raise sftp_ingest_sql.IncompleteDropError(
+        [list(r) for r in incomplete],
+        sorted(name for name in landed if name not in incomplete_names),
+    )

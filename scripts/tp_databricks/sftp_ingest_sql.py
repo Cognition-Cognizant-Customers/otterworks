@@ -16,7 +16,9 @@ What replaces what, relative to the legacy ksh job:
   content handshake: every landed file is read whole, hashed (SHA-256), and only
   ingested when it is *structurally complete* — exactly one HDR record, exactly
   one TRL record, and a TRL-declared record count equal to the detail lines
-  present. A half-written file fails that gate and is not ingested;
+  present. A half-written file fails that gate, is never ingested, and fails the
+  run — after the complete files have landed, so one abandoned transfer cannot
+  hold a namespace's good deliveries hostage;
 * `.done` renames and a never-removed lock file are replaced by MERGEs keyed on
   `(ns, file_name, line_no)` and `(ns, file_name)`, so re-running is a no-op;
 * hostname if-blocks are replaced by the `landing_root` parameter.
@@ -111,11 +113,12 @@ WITH raw AS (
     -- record is not mistaken for a 53rd empty one. Not a regex: Java's `$` also
     -- matches before a final terminator, so '\\n$' would eat a blank last record.
     CASE WHEN endswith(value, '\\n') THEN left(value, length(value) - 1) ELSE value END AS body
-  -- An existing-but-empty drop directory is a clean no-op. A directory that does not
-  -- exist fails the run (CF_PATH_DOES_NOT_EXIST_FOR_READ_FILES), deliberately: an
-  -- absent drop path means the namespace was never provisioned or the transport is
-  -- writing somewhere else, and reporting that as "no files today" is exactly the
-  -- `2>/dev/null || true` habit this conversion is retiring.
+  -- An empty drop directory and an absent one are both nothing to ingest: the
+  -- directory appears with the first delivery, so an estate nobody has delivered to
+  -- yet is a valid state. Callers turn the resulting
+  -- CF_PATH_DOES_NOT_EXIST_FOR_READ_FILES into a logged no-op naming the path looked
+  -- for (`absent_drop_path_message`) rather than swallowing it, and any other read
+  -- failure still fails the run.
   FROM read_files('{landing_root}/{ns}/custbill/', format => 'text', wholeText => true)
 ),
 lines AS (
@@ -144,13 +147,20 @@ complete AS (
 
 
 def incomplete_files_query(ns: str, catalog: str, landing_root: str) -> str:
-    """Files that fail the completeness handshake; a non-empty result fails the run."""
+    """Files that fail the completeness handshake; a non-empty result fails the run.
+
+    The observed byte count travels with each row, because "what the file says it is
+    versus what arrived" is the diagnosis an operator needs, and after the run fails
+    the file is still sitting in landing where those numbers can be checked.
+    """
     ns, catalog, landing_root = _validated(ns, catalog, landing_root)
     return f"""{_source_cte(ns, landing_root)}
-SELECT file_name, header_lines, trailer_lines, detail_lines, trailer_declared
-FROM audit
-WHERE file_name NOT IN (SELECT file_name FROM complete)
-ORDER BY file_name"""
+SELECT a.file_name, a.header_lines, a.trailer_lines, a.detail_lines, a.trailer_declared,
+       octet_length(r.content) AS size_bytes
+FROM audit a
+JOIN raw r USING (file_name)
+WHERE a.file_name NOT IN (SELECT file_name FROM complete)
+ORDER BY a.file_name"""
 
 
 def merge_lines(ns: str, catalog: str, landing_root: str) -> str:
@@ -297,8 +307,34 @@ def ingest_statements(ns: str, catalog: str, landing_root: str) -> list[str]:
     ]
 
 
-class MissingDropPathError(RuntimeError):
-    """The namespace's drop directory does not exist, so the run read nothing."""
+class IncompleteDropError(RuntimeError):
+    """Files in the drop path failed the completeness handshake and were not ingested.
+
+    Raised *after* the complete files have been ingested: a half-written delivery must
+    neither be ingested nor silently skipped, and it must not hold back the files that
+    did arrive whole. Landing is the archive, so nothing removes the offending file;
+    without this ordering one abandoned transfer would fail every later run before any
+    good file could land, which is a worse version of the failure mode being retired.
+    """
+
+    def __init__(self, rows: list[list[str]], ingested: list[str]) -> None:
+        super().__init__(
+            "completeness handshake failed; these files were NOT ingested and remain in "
+            "the drop path: " + "; ".join(describe_incomplete(row) for row in rows)
+            + f". Ingested this run: {ingested or 'none'}"
+        )
+        self.rows = rows
+        self.ingested = ingested
+
+
+def describe_incomplete(row: list[str]) -> str:
+    """One `incomplete_files_query` row as observed-versus-declared text."""
+    file_name, header_lines, trailer_lines, detail_lines, trailer_declared, size_bytes = row
+    declared = "none (no parseable TRL count)" if trailer_declared is None else trailer_declared
+    return (
+        f"{file_name} (observed {size_bytes} bytes, hdr={header_lines}, trl={trailer_lines}, "
+        f"detail={detail_lines}; TRL declares {declared})"
+    )
 
 
 def drop_path(ns: str, landing_root: str) -> str:
@@ -316,32 +352,33 @@ def landed_files_query(ns: str, catalog: str, landing_root: str) -> str:
     )
 
 
-def as_missing_drop_path(exc: Exception, ns: str, landing_root: str) -> MissingDropPathError | None:
-    """Translate an absent-drop-path failure into one that names ns and the path.
+def is_absent_drop_path(exc: Exception) -> bool:
+    """Whether this failure is `read_files` on a drop directory that does not exist."""
+    return "CF_PATH_DOES_NOT_EXIST_FOR_READ_FILES" in str(exc)
 
-    Two conditions the legacy poller conflated: an existing but empty directory is
-    nothing to do today, while a directory that does not exist means this namespace
-    was never staged (or the transport writes elsewhere) and the run has not
-    succeeded. Only the second is an error, and it should say which path it wanted
-    rather than leaving the operator to decode a source-format error code.
+
+def absent_drop_path_message(ns: str, landing_root: str) -> str:
+    """What to log when a namespace has no drop directory yet.
+
+    An estate nobody has delivered to is a valid state, not a failure: the directory
+    appears with the first delivery, and a namespace staged later must not need a
+    manual `mkdir` first. What is *not* acceptable is being quiet about it, so the run
+    says which path it looked for — an unreadable path still surfaces as itself.
     """
-    if "CF_PATH_DOES_NOT_EXIST_FOR_READ_FILES" not in str(exc):
-        return None
-    return MissingDropPathError(
-        f"drop path for ns={ns!r} does not exist: {drop_path(ns, landing_root)} — "
-        "the namespace was never staged, or the transport is writing somewhere else. "
-        "An existing but empty drop directory is a no-op; an absent one is not."
+    return (
+        f"no drop directory for ns={ns!r} at {drop_path(ns, landing_root)}: "
+        "nothing has been delivered for this namespace yet, so there is nothing to "
+        "ingest (no-op). If files were expected, the transport is writing elsewhere."
     )
 
 
-def _over_landing(dbx, statement: str, ns: str, landing_root: str) -> list[list[str]]:
-    """Run a statement that reads the drop path, naming the path if it is absent."""
+def _landed_or_absent(dbx, statement: str) -> list[list[str]] | None:
+    """Rows the drop-path scan returned, or None when the directory does not exist."""
     try:
         return dbx.sql(statement)
     except Exception as exc:
-        missing = as_missing_drop_path(exc, ns, landing_root)
-        if missing is not None:
-            raise missing from exc
+        if is_absent_drop_path(exc):
+            return None
         raise
 
 
@@ -358,22 +395,25 @@ def run(ns: str, catalog: str, landing_root: str, create_tables: bool = True) ->
         for statement in ddl_statements(catalog):
             dbx.sql(statement)
 
-    landed = _over_landing(dbx, landed_files_query(ns, catalog, landing_root), ns, landing_root)
+    landed = _landed_or_absent(dbx, landed_files_query(ns, catalog, landing_root))
+    if landed is None:
+        print(absent_drop_path_message(ns, landing_root))
+        return
     if not landed:
         print(f"no files under {drop_path(ns, landing_root)}: nothing to ingest (no-op)")
         return
 
     bad = dbx.sql(incomplete_files_query(ns, catalog, landing_root))
-    if bad:
-        raise RuntimeError(
-            "completeness handshake failed; refusing to ingest half-written files: "
-            + "; ".join(
-                f"{row[0]} (hdr={row[1]}, trl={row[2]}, detail={row[3]}, declared={row[4]})" for row in bad
-            )
-        )
 
+    # The complete files land first, then the run fails on the incomplete ones. Every
+    # ingest statement joins `complete`, so an incomplete file contributes no row to
+    # either table however often this runs.
     for statement in ingest_statements(ns, catalog, landing_root):
         dbx.sql(statement)
+
+    if bad:
+        incomplete = {row[0] for row in bad}
+        raise IncompleteDropError(bad, sorted(row[0] for row in landed if row[0] not in incomplete))
 
 
 def _main(argv: list[str]) -> int:
