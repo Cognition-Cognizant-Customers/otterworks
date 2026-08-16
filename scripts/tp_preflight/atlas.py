@@ -212,35 +212,18 @@ def validate_probe_ip(value):
 
 ip = None
 ip_lookup_error = None
-if not os.environ.get("MONGODB_ATLAS_URI"):
-    m.add("vm-ip-listed", "The VM public IP is present or can be self-healed in the Atlas access list",
-          "Atlas accessList GET", "skipped", "MONGODB_ATLAS_URI is not set")
-    m.add("db-user-write", "Insert and delete a temporary document with the DB user",
-          "MongoDB wire protocol", "skipped", "MONGODB_ATLAS_URI is not set")
-    raise SystemExit(m.write("atlas"))
-try:
-    response = get("https://api.ipify.org", timeout=10)
-    response.raise_for_status()
-    address = ipaddress.ip_address(response.text.strip())
-    if address.version == 4:
-        ip = str(address)
-    else:
-        ip_lookup_error = "public address was not IPv4"
-except Exception as exc:
-    ip_lookup_error = exception_detail(exc)
+if os.environ.get("MONGODB_ATLAS_URI"):
+    try:
+        response = get("https://api.ipify.org", timeout=10)
+        response.raise_for_status()
+        address = ipaddress.ip_address(response.text.strip())
+        if address.version == 4:
+            ip = str(address)
+        else:
+            ip_lookup_error = "public address was not IPv4"
+    except Exception as exc:
+        ip_lookup_error = exception_detail(exc)
 probe_ip = validate_probe_ip(os.environ.get("TP_ATLAS_TEST_IP", "203.0.113.254"))
-if ip is None:
-    m.add("vm-ip-listed", "The VM public IP is present or can be self-healed in the Atlas access list",
-          "Atlas accessList GET", "denied",
-          f"could not determine the VM public address: {ip_lookup_error or 'unknown lookup failure'}")
-    if os.environ.get("MONGODB_ATLAS_URI"):
-        m.add("db-user-write", "Insert and delete a temporary document with the DB user",
-              "MongoDB wire protocol", "denied",
-              f"could not determine the VM public address: {ip_lookup_error or 'unknown lookup failure'}")
-    else:
-        m.add("db-user-write", "Insert and delete a temporary document with the DB user",
-              "MongoDB wire protocol", "skipped", "MONGODB_ATLAS_URI is not set")
-    raise SystemExit(m.write("atlas"))
 entry_records = access_list_snapshot()
 if entry_records is None:
     m.add("access-list-post", "Create a temporary API access-list entry",
@@ -303,14 +286,22 @@ try:
                         json=[{"ipAddress": probe_ip, "comment": run_marker}])
         if created is None or not created.ok:
             reconcile_ambiguous(created_entry)
-    if covers(ip, listed):
+    if not os.environ.get("MONGODB_ATLAS_URI"):
+        m.add("vm-ip-listed", "The VM public IP is present or can be self-healed in the Atlas access list",
+              "Atlas accessList GET", "skipped", "MONGODB_ATLAS_URI is not set")
+        m.add("db-user-write", "Insert and delete a temporary document with the DB user",
+              "MongoDB wire protocol", "skipped", "MONGODB_ATLAS_URI is not set")
+    elif ip is None:
+        m.add("vm-ip-listed", "The VM public IP is present or can be self-healed in the Atlas access list",
+              "Atlas accessList GET", "denied",
+              f"could not determine the VM public address: {ip_lookup_error or 'unknown lookup failure'}")
+        m.add("db-user-write", "Insert and delete a temporary document with the DB user",
+              "MongoDB wire protocol", "denied",
+              f"could not determine the VM public address: {ip_lookup_error or 'unknown lookup failure'}")
+    elif covers(ip, listed):
         m.add("vm-ip-listed", "The VM public IP is present in the Atlas access list",
               "Atlas accessList GET", "verified", f"VM IP {ip}; covered by {len(listed)} access-list entr{'y' if len(listed) == 1 else 'ies'}")
-        if os.environ.get("MONGODB_ATLAS_URI"):
-            db_user_write()
-        else:
-            m.add("db-user-write", "Insert and delete a temporary document with the DB user",
-                  "MongoDB wire protocol", "skipped", "MONGODB_ATLAS_URI is not set")
+        db_user_write()
     else:
         own_entry = {"ipAddress": ip, "comment": run_marker}
         register_cleanup(own_entry)
@@ -321,11 +312,7 @@ try:
             if own is not None and own.ok:
                 m.add("vm-ip-listed", "The VM public IP can be self-healed for the DB write path",
                       "Atlas accessList POST/DELETE", "verified", f"VM IP {ip} was absent and temporary add succeeded")
-                if os.environ.get("MONGODB_ATLAS_URI"):
-                    db_user_write()
-                else:
-                    m.add("db-user-write", "Insert and delete a temporary document with the DB user",
-                          "MongoDB wire protocol", "skipped", "MONGODB_ATLAS_URI is not set")
+                db_user_write()
             else:
                 reconcile_ambiguous(own_entry)
                 m.add("vm-ip-listed", "The VM public IP is present or can be self-healed in the Atlas access list",
