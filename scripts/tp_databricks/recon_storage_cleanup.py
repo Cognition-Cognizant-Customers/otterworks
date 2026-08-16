@@ -127,6 +127,8 @@ def capture_golden(ns: str) -> None:
     env.setdefault("AWS_SECRET_ACCESS_KEY", "test")
     env.setdefault("AWS_DEFAULT_REGION", extract.REGION)
     GOLDEN.mkdir(parents=True, exist_ok=True)
+    started_at = datetime.now(tz=timezone.utc)
+    fallback_date = started_at.date().isoformat()
 
     proc = subprocess.run(
         [sys.executable, str(REPO / "etl" / "scripts" / "storage_cleanup_daily.py")],
@@ -145,7 +147,41 @@ def capture_golden(ns: str) -> None:
 
     s3 = extract._client("s3")
     quarantine = "otterworks-file-quarantine"
-    capture_date = datetime.now(tz=timezone.utc).date().isoformat()
+    report_objects = []
+    for page in s3.get_paginator("list_objects_v2").paginate(
+        Bucket="otterworks-data-lake", Prefix="reports/storage-cleanup/"
+    ):
+        report_objects.extend(page.get("Contents", []))
+
+    reports = []
+    for obj in report_objects:
+        match = re.search(r"reports/storage-cleanup/(\d{4}-\d{2}-\d{2})/report\.json$", obj["Key"])
+        if not match:
+            continue
+        body = s3.get_object(Bucket="otterworks-data-lake", Key=obj["Key"])["Body"].read()
+        try:
+            report = json.loads(body)
+            report_date = report["report_date"]
+            generated_at = datetime.fromisoformat(report["generated_at"].replace("Z", "+00:00"))
+        except (KeyError, ValueError, json.JSONDecodeError) as exc:
+            raise SystemExit(f"legacy report {obj['Key']} is not a valid dated report: {exc}") from exc
+        if report_date != match.group(1):
+            raise SystemExit(
+                f"legacy report {obj['Key']} has mismatched report_date {report_date!r}"
+            )
+        reports.append((generated_at, report_date, body))
+
+    current_reports = [candidate for candidate in reports if candidate[0] >= started_at]
+    if current_reports:
+        _, capture_date, report_body = max(current_reports, key=lambda candidate: candidate[0])
+    else:
+        fallback_reports = [candidate for candidate in reports if candidate[1] == fallback_date]
+        if not fallback_reports:
+            raise SystemExit(
+                f"could not resolve the legacy run date from a report generated after {started_at.isoformat()}"
+            )
+        _, capture_date, report_body = max(fallback_reports, key=lambda candidate: candidate[0])
+
     prefix = f"quarantined/{capture_date}/"
     keys = []
     for page in s3.get_paginator("list_objects_v2").paginate(Bucket=quarantine, Prefix=prefix):
@@ -153,9 +189,7 @@ def capture_golden(ns: str) -> None:
             keys.append(obj["Key"][len(prefix) :])
     (GOLDEN / "quarantined_keys.txt").write_text("\n".join(sorted(keys)) + "\n")
 
-    report_key = f"reports/storage-cleanup/{capture_date}/report.json"
-    body = s3.get_object(Bucket="otterworks-data-lake", Key=report_key)["Body"].read()
-    (GOLDEN / "legacy_report.json").write_bytes(body)
+    (GOLDEN / "legacy_report.json").write_bytes(report_body)
 
 
 def legacy_metadata_keys() -> int:
@@ -449,12 +483,20 @@ def main(argv: list[str]) -> int:
         default=str(REPO / "docs" / "tech-partnerships" / "recon" / "storage_cleanup_daily.md"),
     )
     args = parser.parse_args(argv)
+    try:
+        args.ns = nb._checked("ns", args.ns)
+        args.run_date = nb._checked("run_date", args.run_date, nb._ISO_DATE)
+        nb._checked("scenario", "nominal")
+        nb._checked("scenario", "metadata_read_incomplete")
+    except ValueError as exc:
+        parser.error(str(exc))
 
     if args.capture_golden:
         # Load bronze from the pre-quarantine inventory, then let the legacy
         # script run against that same state: both sides see identical input.
         _reload(args.ns, "nominal", metadata_limit=None)
         capture_golden(args.ns)
+        _reload(args.ns, "nominal", metadata_limit=None)
     report, golden_keys, fixture = read_golden()
 
     checks = [check_structural()]
