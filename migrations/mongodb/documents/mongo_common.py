@@ -40,6 +40,7 @@ __all__ = [
     "atlas_client",
     "atlas_db",
     "log",
+    "source_table",
 ]
 
 ATLAS_DB = "ow_tp_demo"
