@@ -31,7 +31,7 @@ class Manifest:
     def _redact(detail: str) -> str:
         secrets = [
             value for key, value in os.environ.items()
-            if value and (
+            if value and len(value) >= 12 and (
                 key in {
                     "MONGODB_ATLAS_PUBLIC_KEY",
                     "MONGODB_ATLAS_PRIVATE_KEY",
@@ -41,7 +41,10 @@ class Manifest:
                     "AWS_ACCESS_KEY_ID",
                     "AWS_SECRET_ACCESS_KEY",
                 }
-                or any(token in key.upper() for token in ("TOKEN", "SECRET", "PRIVATE_KEY", "ACCESS_KEY", "URI"))
+                or any(
+                    re.search(rf"(?:^|_){token}(?:$|_)", key.upper())
+                    for token in ("TOKEN", "SECRET", "PRIVATE_KEY", "ACCESS_KEY", "URI")
+                )
             )
         ]
         for secret in sorted(secrets, key=len, reverse=True):

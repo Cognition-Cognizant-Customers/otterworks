@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 import ipaddress
 import signal
-import socket
 import sys
 import urllib.parse
 import uuid
@@ -142,6 +141,10 @@ def access_list_snapshot():
     return entries
 
 
+def entry_matches(entry, target):
+    return api_entry_ip(entry) == api_entry_ip(target)
+
+
 def validate_probe_ip(value):
     try:
         if "/" in value:
@@ -173,11 +176,21 @@ def validate_probe_ip(value):
 
 ip = None
 try:
-    ip = get("https://api.ipify.org", timeout=10).text.strip()
+    response = get("https://api.ipify.org", timeout=10)
+    response.raise_for_status()
+    address = ipaddress.ip_address(response.text.strip())
+    if address.version == 4:
+        ip = str(address)
 except Exception:
-    ip = socket.gethostbyname(socket.gethostname())
-entry_records = access_list_snapshot()
+    ip = None
 probe_ip = validate_probe_ip(os.environ.get("TP_ATLAS_TEST_IP", "203.0.113.254"))
+if ip is None:
+    m.add("vm-ip-listed", "The VM public IP is present or can be self-healed in the Atlas access list",
+          "Atlas accessList GET", "skipped", "could not determine the VM public address")
+    m.add("db-user-write", "Insert and delete a temporary document with the DB user",
+          "MongoDB wire protocol", "skipped", "could not determine the VM public address")
+    raise SystemExit(m.write("atlas"))
+entry_records = access_list_snapshot()
 if entry_records is None:
     m.add("access-list-post", "Create a temporary API access-list entry",
           "Atlas accessList POST", "skipped", "access-list snapshot failed; no mutation attempted")
@@ -187,18 +200,32 @@ if entry_records is None:
           "MongoDB wire protocol", "skipped", "access-list snapshot failed; no mutation attempted")
     raise SystemExit(m.write("atlas"))
 listed = [api_entry_ip(entry) for entry in entry_records if api_entry_ip(entry)]
-created_entry = None
-own_entry = None
+cleanup_registry = {}
+
+
+def register_cleanup(entry):
+    cleanup_registry[api_entry_ip(entry)] = entry
+
+
+def reconcile_ambiguous(entry):
+    current = access_list_snapshot()
+    if current is None:
+        m.add("access-list-ambiguous-cleanup", "Reconcile an ambiguous access-list create",
+              "Atlas accessList GET", "denied",
+              f"{api_entry_ip(entry)} may have been created; manual access-list cleanup required")
+        return
+    if any(entry_matches(item, entry) for item in current):
+        delete_entry(entry)
+    else:
+        m.add("access-list-ambiguous-cleanup", "Reconcile an ambiguous access-list create",
+              "Atlas accessList GET", "verified", f"{api_entry_ip(entry)} was not present")
+    cleanup_registry.pop(api_entry_ip(entry), None)
 
 
 def cleanup_entries():
-    global created_entry, own_entry
-    if own_entry:
-        delete_entry(own_entry)
-        own_entry = None
-    if created_entry:
-        delete_entry(created_entry)
-        created_entry = None
+    for key, entry in list(cleanup_registry.items()):
+        delete_entry(entry)
+        cleanup_registry.pop(key, None)
 
 
 def handle_signal(signum, _frame):
@@ -213,11 +240,13 @@ try:
         m.add("access-list-post", "Create a temporary API access-list entry",
               "Atlas accessList POST", "skipped", f"{probe_ip} is already covered")
     else:
+        created_entry = {"ipAddress": probe_ip}
+        register_cleanup(created_entry)
         created = check("access-list-post", "Create a temporary API access-list entry", post,
                         f"{base}/groups/{project}/accessList",
                         json=[{"ipAddress": probe_ip, "comment": "otterworks preflight"}])
-        if created is not None and created.ok:
-            created_entry = {"ipAddress": probe_ip}
+        if created is None or not created.ok:
+            reconcile_ambiguous(created_entry)
     if covers(ip, listed):
         m.add("vm-ip-listed", "The VM public IP is present in the Atlas access list",
               "Atlas accessList GET", "verified", f"VM IP {ip}; entries={listed}")
@@ -227,12 +256,13 @@ try:
             m.add("db-user-write", "Insert and delete a temporary document with the DB user",
                   "MongoDB wire protocol", "skipped", "MONGODB_ATLAS_URI is not set")
     else:
+        own_entry = {"ipAddress": ip}
+        register_cleanup(own_entry)
         own = check("access-list-post-own-ip", "Temporarily add the VM IP for the DB write probe",
                     post, f"{base}/groups/{project}/accessList",
                     json=[{"ipAddress": ip, "comment": "otterworks preflight temporary access"}])
         try:
             if own is not None and own.ok:
-                own_entry = {"ipAddress": ip}
                 m.add("vm-ip-listed", "The VM public IP can be self-healed for the DB write path",
                       "Atlas accessList POST/DELETE", "verified", f"VM IP {ip} was absent and temporary add succeeded")
                 if os.environ.get("MONGODB_ATLAS_URI"):
@@ -241,12 +271,11 @@ try:
                     m.add("db-user-write", "Insert and delete a temporary document with the DB user",
                           "MongoDB wire protocol", "skipped", "MONGODB_ATLAS_URI is not set")
             else:
+                reconcile_ambiguous(own_entry)
                 m.add("vm-ip-listed", "The VM public IP is present or can be self-healed in the Atlas access list",
                       "Atlas accessList POST/DELETE", "denied", f"VM IP {ip}; entries={listed}")
         finally:
-            if own_entry:
-                delete_entry(own_entry)
-                own_entry = None
+            cleanup_entries()
 finally:
     cleanup_entries()
 raise SystemExit(m.write("atlas"))
