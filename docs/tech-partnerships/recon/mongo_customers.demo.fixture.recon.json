@@ -1,0 +1,78 @@
+{
+  "kind": "recon-report",
+  "unit": "mongo_customers",
+  "namespace": "demo",
+  "generated_at": "2026-08-16T18:19:04Z",
+  "run_mode": "fixture",
+  "checks": [
+    {
+      "id": "customers-count",
+      "expected": 25000,
+      "actual": 25000,
+      "source_of_truth": "testdata/legacy/manifests/demo.json",
+      "result": "pass"
+    },
+    {
+      "id": "customers-checksum",
+      "expected": "4f92feef2ad58dbab30e289957931928",
+      "actual": "4f92feef2ad58dbab30e289957931928",
+      "source_of_truth": "testdata/legacy/manifests/demo.json",
+      "result": "pass"
+    },
+    {
+      "id": "eav-folded",
+      "expected": 8333,
+      "actual": 8333,
+      "source_of_truth": "testdata/legacy/manifests/demo.json",
+      "result": "pass"
+    },
+    {
+      "id": "csv-to-arrays",
+      "expected": {
+        "quarantined_malformed_csv": 31,
+        "valid_lists_are_arrays": true
+      },
+      "actual": {
+        "quarantined_malformed_csv": 31,
+        "valid_lists_are_arrays": true
+      },
+      "source_of_truth": "testdata/legacy/manifests/demo.json + target collection type scan",
+      "result": "pass"
+    },
+    {
+      "id": "dates-to-bson",
+      "expected": {
+        "quarantined_dirty_dates": 50,
+        "valid_dates_are_bson": 24950
+      },
+      "actual": {
+        "quarantined_dirty_dates": 50,
+        "valid_dates_are_bson": 24950
+      },
+      "source_of_truth": "testdata/legacy/manifests/demo.json + target collection type scan",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "migration executed twice against the same target; recon values recomputed from the target after each run were identical"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      "dirty_dates:50",
+      "malformed_csv_lists:31"
+    ],
+    "actual_set": [
+      "dirty_dates:50",
+      "malformed_csv_lists:31"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "invalid_utf8 quarantine path: the seeded fixture plants no non-UTF-8 bytes, so this path is implemented but not exercised by fixture data",
+    "live Atlas transport: this report is run_mode=fixture; the parent session runs the live window"
+  ]
+}
