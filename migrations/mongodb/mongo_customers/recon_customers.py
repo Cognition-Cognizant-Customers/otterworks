@@ -111,6 +111,30 @@ def compute(ns: str) -> dict:
     }
 
 
+def source_null_counts(ns: str) -> dict:
+    """NULL counts per checked column, recomputed from the Oracle source.
+
+    The target alone cannot distinguish a legitimately-omitted NULL field
+    from a silently dropped value, so the acceptance checks reconcile
+    target field counts against source NULL counts (this is a cross-system
+    recount at recon time, never migration-time memory).
+    """
+    conn = mongo_common.oracle_connect()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT COUNT(CASE WHEN signup_dt IS NULL THEN 1 END),
+                  COUNT(CASE WHEN related_acct_ids IS NULL THEN 1 END),
+                  COUNT(CASE WHEN promo_codes_csv IS NULL THEN 1 END)
+             FROM customer_master
+            WHERE conversion_batch_no = :1""",
+        [mongo_common.oracle_batch_no(ns)])
+    signup, related, promo = cur.fetchone()
+    cur.close()
+    conn.close()
+    return {"signup_dt": signup, "related_acct_ids": related,
+            "promo_codes_csv": promo}
+
+
 def build_report(ns: str, run_mode: str, actual: dict,
                  idempotency: dict) -> dict:
     manifest = mongo_common.load_manifest(ns)
@@ -131,6 +155,8 @@ def build_report(ns: str, run_mode: str, actual: dict,
     q = actual["quarantine_by_kind_field"]
     dirty = q.get("dirty_dates:signup_dt", 0)
     badcsv = q.get("malformed_csv_lists:related_acct_ids", 0)
+    badcsv_promo = q.get("malformed_csv_lists:promo_codes_csv", 0)
+    nulls = source_null_counts(ns)
 
     def check(cid, expected, got, source):
         return {"id": cid, "expected": expected, "actual": got,
@@ -147,24 +173,30 @@ def build_report(ns: str, run_mode: str, actual: dict,
               "target collection scan (documents lacking cust_id/cur_bal_amt)"),
         check("csv-to-arrays",
               {"quarantined_malformed_csv": anomalies.get("malformed_csv_lists"),
-               "valid_lists_are_arrays": True},
+               "string_typed_csv_fields": 0,
+               # every non-NULL, non-quarantined source value must be an array
+               "array_typed_related": cm_rows - nulls["related_acct_ids"]
+               - badcsv,
+               "array_typed_promo": cm_rows - nulls["promo_codes_csv"]
+               - badcsv_promo},
               {"quarantined_malformed_csv": badcsv,
-               "valid_lists_are_arrays":
-                   actual["string_typed_csv_fields"] == 0
-                   and actual["array_typed_related"] > 0
-                   and actual["array_typed_promo"] > 0},
-              manifest_src + " + target collection type scan"),
+               "string_typed_csv_fields": actual["string_typed_csv_fields"],
+               "array_typed_related": actual["array_typed_related"],
+               "array_typed_promo": actual["array_typed_promo"]},
+              manifest_src + " + target collection type scan + source NULL "
+              "recount"),
         check("dates-to-bson",
               {"quarantined_dirty_dates": anomalies.get("dirty_dates"),
-               "all_present_signup_dt_are_bson_dates": True,
-               "every_document_accounted_for": True},
+               "non_datetime_signup": 0,
+               # every non-NULL, non-quarantined source date must be BSON
+               "bson_date_signup": cm_rows - nulls["signup_dt"] - dirty,
+               "missing_signup_dt": nulls["signup_dt"] + dirty},
               {"quarantined_dirty_dates": dirty,
-               "all_present_signup_dt_are_bson_dates":
-                   actual["non_datetime_signup"] == 0,
-               "every_document_accounted_for":
-                   actual["bson_date_signup"] + actual["missing_signup_dt"]
-                   + actual["non_datetime_signup"] == actual["count"]},
-              manifest_src + " + target collection type scan"),
+               "non_datetime_signup": actual["non_datetime_signup"],
+               "bson_date_signup": actual["bson_date_signup"],
+               "missing_signup_dt": actual["missing_signup_dt"]},
+              manifest_src + " + target collection type scan + source NULL "
+              "recount"),
     ]
     expected_set = sorted(f"{k}:{v}" for k, v in anomalies.items())
     # Aggregate everything actually quarantined, per kind across all fields,

@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_customers",
   "namespace": "demo",
-  "generated_at": "2026-08-16T19:42:06Z",
+  "generated_at": "2026-08-16T19:50:22Z",
   "run_mode": "fixture",
   "checks": [
     {
@@ -37,28 +37,34 @@
       "id": "csv-to-arrays",
       "expected": {
         "quarantined_malformed_csv": 31,
-        "valid_lists_are_arrays": true
+        "string_typed_csv_fields": 0,
+        "array_typed_related": 19985,
+        "array_typed_promo": 16727
       },
       "actual": {
         "quarantined_malformed_csv": 31,
-        "valid_lists_are_arrays": true
+        "string_typed_csv_fields": 0,
+        "array_typed_related": 19985,
+        "array_typed_promo": 16727
       },
-      "source_of_truth": "testdata/legacy/manifests/demo.json + target collection type scan",
+      "source_of_truth": "testdata/legacy/manifests/demo.json + target collection type scan + source NULL recount",
       "result": "pass"
     },
     {
       "id": "dates-to-bson",
       "expected": {
         "quarantined_dirty_dates": 50,
-        "all_present_signup_dt_are_bson_dates": true,
-        "every_document_accounted_for": true
+        "non_datetime_signup": 0,
+        "bson_date_signup": 24950,
+        "missing_signup_dt": 50
       },
       "actual": {
         "quarantined_dirty_dates": 50,
-        "all_present_signup_dt_are_bson_dates": true,
-        "every_document_accounted_for": true
+        "non_datetime_signup": 0,
+        "bson_date_signup": 24950,
+        "missing_signup_dt": 50
       },
-      "source_of_truth": "testdata/legacy/manifests/demo.json + target collection type scan",
+      "source_of_truth": "testdata/legacy/manifests/demo.json + target collection type scan + source NULL recount",
       "result": "pass"
     }
   ],
