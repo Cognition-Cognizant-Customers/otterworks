@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import base64
 import gzip
 import json
 import os
@@ -165,7 +166,13 @@ def converted_facts(ns: str, catalog: str, sample_users: set[str] | None = None)
     }
     user_filter = ""
     if sample_users:
-        quoted_users = ", ".join("'" + user.replace("'", "''") + "'" for user in sorted(sample_users))
+        encoded_users = (
+            "decode(unbase64('"
+            + base64.b64encode(user.encode("utf-8")).decode("ascii")
+            + "'), 'UTF-8')"
+            for user in sorted(sample_users)
+        )
+        quoted_users = ", ".join(encoded_users)
         user_filter = f" AND user_id IN ({quoted_users})"
     user_by_type = {
         (row[0], row[1]): int(row[2])
