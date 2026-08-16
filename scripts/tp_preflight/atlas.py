@@ -148,21 +148,53 @@ def delete_entry(entry):
     except Exception as exc:
         m.add("access-list-delete", "Delete a temporary API access-list entry",
               "Atlas accessList DELETE", "denied",
-              f"{label}; manual access-list cleanup required: {exc}")
+              f"{label}; manual access-list cleanup required: {exception_detail(exc)}")
     return False
 
 
+pending_collections = {}
+
+
+def reconcile_collections():
+    for name, (client, database) in list(pending_collections.items()):
+        try:
+            database.drop_collection(name)
+            m.add("db-user-write-cleanup", "Drop the temporary probe collection",
+                  "MongoDB wire protocol", "verified", f"{name} confirmed absent")
+        except Exception as exc:
+            m.add("db-user-write-cleanup", "Drop the temporary probe collection",
+                  "MongoDB wire protocol", "denied",
+                  f"{name} may remain in ow_tp_preflight; manual cleanup required: {exception_detail(exc)}")
+        finally:
+            pending_collections.pop(name, None)
+            try:
+                client.close()
+            except Exception:
+                pass
+
+
 def db_user_write():
+    client = None
     try:
         from pymongo import MongoClient
-        db = MongoClient(os.environ["MONGODB_ATLAS_URI"], serverSelectionTimeoutMS=10000)["ow_tp_preflight"]
+        client = MongoClient(os.environ["MONGODB_ATLAS_URI"], serverSelectionTimeoutMS=10000)
+        database = client["ow_tp_preflight"]
         name = f"ow_tp_preflight_{uuid.uuid4().hex}"
-        db[name].insert_one({"_id": "probe"})
-        db[name].delete_one({"_id": "probe"})
-        db.drop_collection(name)
+        pending_collections[name] = (client, database)
+        database[name].insert_one({"_id": "probe"})
+        database[name].delete_one({"_id": "probe"})
+        database.drop_collection(name)
+        pending_collections.pop(name, None)
         m.add("db-user-write", "Insert and delete a temporary document with the DB user", "MongoDB wire protocol", "verified", "temporary collection cleaned")
+        client.close()
     except Exception as exc:
         m.add("db-user-write", "Insert and delete a temporary document with the DB user", "MongoDB wire protocol", "denied", exception_detail(exc))
+        reconcile_collections()
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                pass
 
 
 def access_list_snapshot(record=True):
@@ -257,6 +289,7 @@ def cleanup_entries():
     for key, entry in list(cleanup_registry.items()):
         delete_entry(entry)
         cleanup_registry.pop(key, None)
+    reconcile_collections()
 
 
 install_signal_handlers(m, "atlas", cleanup_entries)
