@@ -25,13 +25,23 @@ Shared rules:
 uv run migrations/mongodb/migrate_files.py --ns demo \
     --mongodb-uri "mongodb://localhost:27778/?directConnection=true"
 
+# baseline (intermediate, NOT committable — idempotency not yet proven)
 uv run migrations/mongodb/recon_files.py --ns demo \
     --mongodb-uri "mongodb://localhost:27778/?directConnection=true" \
+    --out /tmp/mongo_files.baseline.json
+
+# rerun the migration, then the committable report with rerun evidence
+uv run migrations/mongodb/migrate_files.py --ns demo \
+    --mongodb-uri "mongodb://localhost:27778/?directConnection=true"
+uv run migrations/mongodb/recon_files.py --ns demo \
+    --mongodb-uri "mongodb://localhost:27778/?directConnection=true" \
+    --compare /tmp/mongo_files.baseline.json \
     --out docs/tech-partnerships/recon/mongo_files.demo.recon.json
 
 make tp-validate-recon FILE=docs/tech-partnerships/recon/mongo_files.demo.recon.json
 ```
 
-Idempotency proof: run migrate → recon (baseline), migrate again → recon with
-`--compare <baseline>`; the second report embeds the rerun evidence and fails
-if any recomputed value moved.
+Idempotency proof: the `--compare` report embeds the rerun evidence and exits
+non-zero if any recomputed value moved. Only `--compare` reports satisfy the
+recon schema (`idempotency_rerun.performed` must be `true`), so never commit
+the baseline.

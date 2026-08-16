@@ -143,7 +143,9 @@ def main() -> int:
     detected.extend(sorted(set(other_quarantine)))
 
     idempotency = {"performed": False, "result": "fail",
-                   "evidence": "no --compare baseline supplied"}
+                   "evidence": "baseline run: no --compare supplied; rerun "
+                               "comparison pending (this intermediate report "
+                               "is not schema-valid and must not be committed)"}
     if args.compare:
         baseline = json.loads(Path(args.compare).read_text())
         base_actuals = {c["id"]: c["actual"] for c in baseline["checks"]}
@@ -211,10 +213,15 @@ def main() -> int:
               f"(expected={c['expected']} actual={c['actual']})")
     print(f"[{UNIT}-recon] idempotency_rerun: "
           f"performed={idempotency['performed']} result={idempotency['result']}")
-    if failed or anomaly_gap:
-        print(f"[{UNIT}-recon] FAIL: checks={failed} anomaly_gap={anomaly_gap}",
+    if failed or anomaly_gap or (args.compare and idempotency["result"] != "pass"):
+        print(f"[{UNIT}-recon] FAIL: checks={failed} anomaly_gap={anomaly_gap} "
+              f"idempotency={idempotency['result']}",
               file=sys.stderr)
         return 1
+    if not args.compare:
+        print(f"[{UNIT}-recon] baseline only — rerun migrate_files.py and "
+              f"regenerate with --compare {out} for a committable report")
+        return 0
     print(f"[{UNIT}-recon] PASS")
     return 0
 
