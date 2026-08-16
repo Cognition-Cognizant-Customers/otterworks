@@ -32,7 +32,7 @@ procs-list: ## List stored-procedure modules and scenarios
 	$(PROCS_UV) procs/harness/list.py $(if $(MODULE),--module $(MODULE),)
 
 procs-parity: procs-validate ## Replay extracted billing scenarios (NS=<namespace>, MODULE and SCENARIO optional)
-	$(PROCS_ENV) BILLING_SVC_URL=$${BILLING_SVC_URL:-http://localhost:$(PROCS_TARGET_PORT)} $(PROCS_UV) procs/harness/replay.py $(if $(MODULE),--module $(MODULE),) $(if $(SCENARIO),--scenario $(SCENARIO),)
+	TZ=UTC LC_ALL=C $(PROCS_ENV) BILLING_SVC_URL=$${BILLING_SVC_URL:-http://localhost:$(PROCS_TARGET_PORT)} $(PROCS_UV) procs/harness/replay.py $(if $(MODULE),--module $(MODULE),) $(if $(SCENARIO),--scenario $(SCENARIO),)
 
 procs-rules-gate: ## Validate the approved HITL rule ledger (MODULE=<module> or ALL=1)
 	@test -n "$(MODULE)$(ALL)" || (echo "MODULE or ALL=1 is required" >&2; exit 2)
@@ -84,9 +84,9 @@ oracle-parity: procs-validate ## Oracle vs Postgres parity run (NS=<namespace>; 
 	$(call validate_ns)
 	DB_PORT=$(ORACLE_BILLING_DB_PORT) $(ORACLE_BILLING_UV) testdata/legacy/oracle_billing_seed.py --ns $(NS) --scale $(or $(SCALE),demo)
 	rm -rf $(ORACLE_PARITY_RUN)/$(NS)
-	$(PROCS_ENV) DB_NAME=billing_$(NS) DB_PORT=$(PROCS_DB_PORT) $(PROCS_UV) procs/harness/record.py --output-dir $(ORACLE_PARITY_RUN)/$(NS)/postgres
-	DB_PORT=$(ORACLE_BILLING_DB_PORT) $(ORACLE_PARITY_UV) procs/harness/oracle_record.py --output-dir $(ORACLE_PARITY_RUN)/$(NS)/oracle
-	uv run procs/harness/oracle_parity.py --postgres-dir $(ORACLE_PARITY_RUN)/$(NS)/postgres --oracle-dir $(ORACLE_PARITY_RUN)/$(NS)/oracle --namespace $(NS)
+	TZ=UTC LC_ALL=C $(PROCS_ENV) DB_NAME=billing_$(NS) DB_PORT=$(PROCS_DB_PORT) $(PROCS_UV) procs/harness/record.py --output-dir $(ORACLE_PARITY_RUN)/$(NS)/postgres
+	TZ=UTC LC_ALL=C DB_PORT=$(ORACLE_BILLING_DB_PORT) $(ORACLE_PARITY_UV) procs/harness/oracle_record.py --output-dir $(ORACLE_PARITY_RUN)/$(NS)/oracle
+	TZ=UTC LC_ALL=C uv run procs/harness/oracle_parity.py --postgres-dir $(ORACLE_PARITY_RUN)/$(NS)/postgres --oracle-dir $(ORACLE_PARITY_RUN)/$(NS)/oracle --namespace $(NS)
 
 # --- Local Development ---
 
