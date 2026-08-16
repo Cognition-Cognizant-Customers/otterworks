@@ -155,37 +155,46 @@ def ensure_job(settings: dict) -> int:
     return current
 
 
-def teardown() -> dict[str, bool]:
-    current = existing_job_id()
-    job_torn_down = False
-    if current is not None:
-        runs = dbx.request(
-            "GET", f"/api/2.2/jobs/runs/list?job_id={current}&limit=20"
-        ).get("runs", [])
-        active = [r for r in runs if r.get("state", {}).get("life_cycle_state") not in TERMINAL_STATES]
-        for run in active:
-            run_id = run.get("run_id")
-            dbx.request("POST", "/api/2.2/jobs/runs/cancel", {"run_id": run_id})
-            deadline = time.monotonic() + TEARDOWN_TIMEOUT_S
-            while True:
-                live = dbx.request("GET", f"/api/2.2/jobs/runs/get?run_id={run_id}")
-                if live.get("state", {}).get("life_cycle_state") in TERMINAL_STATES:
-                    break
-                if time.monotonic() >= deadline:
-                    raise dbx.DatabricksError(f"run {run_id} did not reach a terminal state before teardown timeout")
-                time.sleep(TEARDOWN_POLL_S)
-        dbx.request("POST", "/api/2.2/jobs/delete", {"job_id": current})
-        job_torn_down = True
+def teardown() -> dict[str, object]:
+    result: dict[str, object] = {"job": False, "notebook": False, "errors": {}}
+    errors = result["errors"]
+    assert isinstance(errors, dict)
 
-    notebook_torn_down = False
+    try:
+        current = existing_job_id()
+        if current is not None:
+            runs = dbx.request(
+                "GET", f"/api/2.2/jobs/runs/list?job_id={current}&limit=20"
+            ).get("runs", [])
+            active = [r for r in runs if r.get("state", {}).get("life_cycle_state") not in TERMINAL_STATES]
+            for run in active:
+                run_id = run.get("run_id")
+                dbx.request("POST", "/api/2.2/jobs/runs/cancel", {"run_id": run_id})
+                deadline = time.monotonic() + TEARDOWN_TIMEOUT_S
+                while True:
+                    live = dbx.request("GET", f"/api/2.2/jobs/runs/get?run_id={run_id}")
+                    if live.get("state", {}).get("life_cycle_state") in TERMINAL_STATES:
+                        break
+                    if time.monotonic() >= deadline:
+                        raise dbx.DatabricksError(
+                            f"run {run_id} did not reach a terminal state before teardown timeout"
+                        )
+                    time.sleep(TEARDOWN_POLL_S)
+            dbx.request("POST", "/api/2.2/jobs/delete", {"job_id": current})
+            result["job"] = True
+    except Exception as exc:
+        errors["job"] = str(exc)
+
     notebook_path = f"{dbx.PIPELINE_ROOT}/{NOTEBOOK_NAME}"
     try:
         dbx.request("POST", "/api/2.0/workspace/delete", {"path": notebook_path, "recursive": False})
-        notebook_torn_down = True
+        result["notebook"] = True
     except dbx.DatabricksError as exc:
         if exc.status != 404 and exc.error_code != "RESOURCE_DOES_NOT_EXIST":
-            raise
-    return {"job": job_torn_down, "notebook": notebook_torn_down}
+            errors["notebook"] = str(exc)
+    except Exception as exc:
+        errors["notebook"] = str(exc)
+    return result
 
 
 def rollup_rows(ns: str, run_date: str) -> list[dict]:
@@ -254,14 +263,15 @@ def main(argv: list[str]) -> int:
             "read_at": datetime.now(timezone.utc).isoformat(),
         }
     finally:
-        torn_down = {"job": False, "notebook": False}
+        torn_down = {"job": False, "notebook": False, "errors": {}}
         teardown_error = None
         if not keep:
-            try:
-                torn_down = teardown()
-            except Exception as exc:
-                teardown_error = exc
-                print(f"warning: failed to tear down {JOB_NAME}: {exc}", file=sys.stderr)
+            torn_down = teardown()
+            errors = torn_down["errors"]
+            assert isinstance(errors, dict)
+            if errors:
+                teardown_error = "; ".join(f"{resource}: {message}" for resource, message in errors.items())
+                print(f"warning: failed to tear down {JOB_NAME}: {teardown_error}", file=sys.stderr)
         if summary is not None:
             summary["job_torn_down"] = torn_down["job"]
             summary["notebook_torn_down"] = torn_down["notebook"]
