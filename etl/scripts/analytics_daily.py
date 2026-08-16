@@ -305,7 +305,7 @@ def main():
 
     # Write summary
     summary_key = "%s/summary.json.gz" % partition_key
-    summary_bytes = gzip.compress(json.dumps(summary, indent=2).encode("utf-8"))
+    summary_bytes = gzip.compress(json.dumps(summary, indent=2).encode("utf-8"), mtime=0)
     s3_client.put_object(
         Bucket=data_lake_bucket,
         Key=summary_key,
@@ -315,7 +315,7 @@ def main():
 
     # Write hourly breakdown
     hourly_key = "%s/hourly_breakdown.json.gz" % partition_key
-    hourly_bytes = gzip.compress(json.dumps(hourly_breakdown, indent=2).encode("utf-8"))
+    hourly_bytes = gzip.compress(json.dumps(hourly_breakdown, indent=2).encode("utf-8"), mtime=0)
     s3_client.put_object(
         Bucket=data_lake_bucket,
         Key=hourly_key,
@@ -325,7 +325,7 @@ def main():
     # Write top users as JSONL
     users_key = "%s/top_users.jsonl.gz" % partition_key
     buf = io.BytesIO()
-    with gzip.GzipFile(fileobj=buf, mode="wb") as gz:
+    with gzip.GzipFile(fileobj=buf, mode="wb", mtime=0) as gz:
         for user in user_summaries:
             gz.write(json.dumps(user).encode("utf-8"))
             gz.write(b"\n")

@@ -96,7 +96,7 @@ def main():
     archive_key = "%s/year=%s/week=%s/audit_events.jsonl.gz" % (s3_prefix, ds[:4], ds)
 
     buf = io.BytesIO()
-    with gzip.GzipFile(fileobj=buf, mode="wb") as gz:
+    with gzip.GzipFile(fileobj=buf, mode="wb", mtime=0) as gz:
         for event in events_to_archive:
             line = json.dumps(event, cls=DecimalEncoder)
             gz.write(line.encode("utf-8"))
