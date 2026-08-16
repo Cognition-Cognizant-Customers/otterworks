@@ -16,10 +16,17 @@ The five checks are the numbered acceptance checks of
   5. object scope: only the two contracted tables are written, every identifier the
      statement set touches is `ow_tp`-prefixed, and no stray job is left behind
 
+Plus one behavioural check beyond the contract's five, covering the gate the size-settle
+heuristic replaced:
+
+  6. a drop holding one complete and one half-written file ingests exactly the complete
+     one, records nothing for the other, leaves it in landing, and still fails the run
+
 Usage:
     python3 recon_sftp_ingest.py --ns demo                      # full run
     python3 recon_sftp_ingest.py --ns demo --no-rerun           # skip check 4
     python3 recon_sftp_ingest.py --ns demo --report out.md      # + markdown report
+    python3 recon_sftp_ingest.py --ns demo --no-gate-probe      # skip check 6
 """
 
 from __future__ import annotations
@@ -436,6 +443,109 @@ def check5_scope(ns: str, landing_root: str) -> Check:
     return check
 
 
+GATE_NS = "gateprobe"
+
+
+def _gate_cleanup(ns: str) -> None:
+    """Remove the probe namespace's rows again: they are evidence, not estate."""
+    for table in ("custbill_lines", "custbill_files"):
+        dbx.sql(f"DELETE FROM {CATALOG}.bronze.{table} WHERE ns = '{ns}'")
+
+
+def check6_gate(gate_ns: str, landing_root: str, attempt: bool) -> Check:
+    """One complete + one half-written file: the complete one lands, the run still fails.
+
+    The behaviour under test is the one the size-settle heuristic got wrong, and it has
+    two halves that can each fail alone: a partial delivery must not be ingested, and it
+    must not stop the deliveries that did arrive whole from landing — landing is the
+    archive, so an abandoned partial sits in the drop path forever and a fail-first gate
+    would freeze the namespace. Run in its own namespace so nothing here touches the rows
+    the other checks reconcile, and the rows are deleted again afterwards.
+
+    The fixtures cannot be staged from here: `dbx.upload` is refused by this token (no
+    `files` scope, see the upload probe), so their absence is reported as BLOCKED with
+    the command that stages them rather than being quietly passed over.
+    """
+    check = Check(6, "a half-written file neither lands nor blocks the complete files")
+    if not attempt:
+        check.detail.append("skipped (--no-gate-probe / --no-rerun)")
+        return check
+
+    drop = sftp_ingest_sql.drop_path(gate_ns, landing_root)
+    landed = sorted(_landed_files(gate_ns, landing_root))
+    incomplete_rows = dbx.sql(sftp_ingest_sql.incomplete_files_query(gate_ns, CATALOG, landing_root))
+    incomplete = sorted(row[0] for row in incomplete_rows)
+    complete = [name for name in landed if name not in set(incomplete)]
+    check.detail.append(f"fixtures under {drop}: {landed or 'NONE'}")
+    check.detail.append(f"the gate calls incomplete: {incomplete or 'none'}; complete: {complete or 'none'}")
+    if not incomplete or not complete:
+        check.detail.append(
+            f"fixtures for the mixed case are not staged under {drop} — this needs one complete "
+            "and one truncated CUSTBILL drop, and the recon cannot put them there itself "
+            "(dbx.upload is refused: no `files` scope)"
+        )
+        return check
+    for row in incomplete_rows:
+        check.detail.append(f"observed vs declared: {sftp_ingest_sql.describe_incomplete(row)}")
+
+    _gate_cleanup(gate_ns)
+    raised: Exception | None = None
+    try:
+        sftp_ingest_sql.run(ns=gate_ns, catalog=CATALOG, landing_root=landing_root, create_tables=False)
+    except sftp_ingest_sql.IncompleteDropError as exc:
+        raised = exc
+    failed_loudly = raised is not None
+    check.detail.append(
+        f"run over the mixed drop: {'failed, as required: ' + str(raised) if failed_loudly else 'SUCCEEDED — the half-written file was passed over silently'}"
+    )
+    named = failed_loudly and all(name in str(raised) for name in incomplete)
+    check.detail.append(f"error names every refused file {incomplete}: {'ok' if named else 'MISMATCH'}")
+
+    manifest = sorted(_manifest_rows(gate_ns))
+    lines = _ingested_lines(gate_ns)
+    manifest_ok = manifest == sorted(complete)
+    lines_ok = sorted(lines) == sorted(complete)
+    check.detail.append(f"manifest rows after the run: {manifest} expected={sorted(complete)} [{'ok' if manifest_ok else 'MISMATCH'}]")
+    check.detail.append(
+        f"files with raw lines after the run: {sorted(lines)} expected={sorted(complete)} "
+        f"[{'ok' if lines_ok else 'MISMATCH'}]"
+    )
+    for name in incomplete:
+        check.detail.append(f"{name}: manifest rows=0 lines=0 [{'ok' if name not in manifest and name not in lines else 'MISMATCH'}]")
+
+    # The complete file is judged on its own content, not on the gate's verdict about it:
+    # exactly one HDR, one TRL, and a TRL-declared count equal to the detail lines that
+    # landed. Otherwise this check would only be asserting that the gate agrees with itself.
+    structural_ok = True
+    for name in complete:
+        got = lines.get(name, [])
+        headers = [line for line in got if line.startswith("HDR")]
+        trailers = [line for line in got if line.startswith("TRL")]
+        details = [line for line in got if not line.startswith(("HDR", "TRL"))]
+        declared = int(trailers[0][3:13]) if len(trailers) == 1 else None
+        this_ok = len(headers) == 1 and len(trailers) == 1 and declared == len(details)
+        structural_ok = structural_ok and this_ok
+        check.detail.append(
+            f"{name}: ingested whole — hdr={len(headers)} trl={len(trailers)} detail={len(details)} "
+            f"TRL declares={declared} [{'ok' if this_ok else 'MISMATCH'}]"
+        )
+
+    # Left unconsumed, per the retention decision: the drop path still holds both files,
+    # so a re-delivery of the complete file replaces it and the partial one is still there
+    # to be re-checked once the sender finishes it.
+    still_there = sorted(_landed_files(gate_ns, landing_root))
+    retained_ok = still_there == landed
+    check.detail.append(f"drop path after the run: {still_there} expected={landed} [{'ok' if retained_ok else 'MISMATCH'}]")
+
+    _gate_cleanup(gate_ns)
+    left = sorted(_manifest_rows(gate_ns)) + sorted(_ingested_lines(gate_ns))
+    check.detail.append(f"probe rows removed again: {'ok' if not left else 'STILL PRESENT: ' + str(left)}")
+    check.passed = (
+        failed_loudly and named and manifest_ok and lines_ok and structural_ok and retained_ok and not left
+    )
+    return check
+
+
 def _contained(number: int, name: str, check_fn, *args) -> Check:
     """Run one check, turning a crash into a BLOCKED result instead of a traceback.
 
@@ -602,6 +712,13 @@ def render_report(
         "  therefore stays the replay source, and a trimmed file re-ingests on a later run; that is",
         "  intended, not a leak. Re-ingest cannot duplicate, because the manifest is keyed on",
         "  `(ns, file_name)` and carries the whole-file `sha256` (see check 4).",
+        "* **A half-written drop fails the run, after the complete files have landed.** Check 6 above",
+        "  exercises that on a real mixed drop: the complete file lands in both tables, the truncated one",
+        "  contributes no row and stays in the drop path unconsumed, and the run still exits non-zero naming",
+        "  it with the bytes observed against the count its trailer declares. The gate is content-based, with",
+        "  no grace window and no timeout \u2014 that heuristic is what this conversion replaces. Check 6's",
+        "  fixtures live in their own namespace and its rows are deleted again, so the reconciled namespace",
+        "  above is untouched by it.",
         *_upload_caveat(ns, upload),
         "Reproduce with:",
         "",
@@ -624,6 +741,12 @@ def _main(argv: list[str]) -> int:
     parser.add_argument("--golden-root", default=str(GOLDEN_ROOT))
     parser.add_argument("--landing-root", default=LANDING_ROOT)
     parser.add_argument("--no-rerun", action="store_true", help="skip check 4 (the idempotency re-run)")
+    parser.add_argument("--gate-ns", default=GATE_NS, help="namespace holding check 6's mixed-drop fixtures")
+    parser.add_argument(
+        "--no-gate-probe",
+        action="store_true",
+        help="skip check 6 (the mixed complete/half-written drop)",
+    )
     parser.add_argument(
         "--no-upload-probe",
         action="store_true",
@@ -641,6 +764,12 @@ def _main(argv: list[str]) -> int:
     args.ns, _catalog, args.landing_root = sftp_ingest_sql.validated(
         args.ns, CATALOG, args.landing_root
     )
+
+    # Check 6 writes (and then deletes) rows of its own, so its namespace goes through the
+    # same gate, and must not be the namespace under reconciliation.
+    gate_ns, _catalog, _root = sftp_ingest_sql.validated(args.gate_ns, CATALOG, args.landing_root)
+    if gate_ns == args.ns:
+        parser.error(f"--gate-ns {gate_ns!r} must differ from --ns: check 6 deletes its own namespace's rows")
 
     golden = load_golden(Path(args.golden_root))
     # `--no-rerun` is the read-only pass, so it writes nothing at all, probe included.
@@ -667,6 +796,14 @@ def _main(argv: list[str]) -> int:
             golden,
         ),
         _contained(5, "no ow_tp object outside the contract, no unprefixed object", check5_scope, args.ns, args.landing_root),
+        _contained(
+            6,
+            "a half-written file neither lands nor blocks the complete files",
+            check6_gate,
+            gate_ns,
+            args.landing_root,
+            not args.no_gate_probe and not args.no_rerun,
+        ),
     ]
 
     for check in checks:

@@ -1,6 +1,6 @@
 # Recon: `sftp_ingest_poll.ksh` → `ow_tp_sftp_ingest`
 
-- Generated: 2026-08-16T00:02:40+00:00
+- Generated: 2026-08-16T00:25:35+00:00
 - Namespace: `demo`  |  catalog: `ow_tp`  |  landing: `/Volumes/ow_tp/bronze/landing`
 - Golden baseline provenance: artifacts of a real `sftp_ingest_poll.ksh` run (`make legacy-etl-gen-data NS=demo` + `make legacy-etl-run JOB=sftp_ingest_poll`), read byte-for-byte from `/home/ubuntu/tp-golden/custbill/incoming/*.dat.done`
 - Result: **green**
@@ -12,6 +12,7 @@
 | 3 | TRL-declared count equals detail lines ingested | **PASS** |
 | 4 | re-running the ingest leaves both tables byte-identical | **PASS** |
 | 5 | no ow_tp object outside the contract, no unprefixed object | **PASS** |
+| 6 | a half-written file neither lands nor blocks the complete files | **PASS** |
 
 ## 1. bronze.custbill_files matches the golden artifacts — PASS
 
@@ -66,11 +67,27 @@ write targets outside the contract: none
 retention SQL targets: ['ow_tp.bronze.custbill_files', 'ow_tp.bronze.custbill_lines'] outside=none
 contracted tables present: ['ow_tp.bronze.custbill_files', 'ow_tp.bronze.custbill_lines'] missing=none
 other ow_tp tables in the catalog (other units', not written by this unit per (a)): ['ow_tp.bronze.analytics_daily_stage', 'ow_tp.bronze.analytics_events_raw', 'ow_tp.bronze.audit_events_raw', 'ow_tp.bronze.custbill_raw_lines_bootstrap', 'ow_tp.bronze.file_metadata_raw', 'ow_tp.bronze.search_documents_raw', 'ow_tp.bronze.storage_extract_manifest', 'ow_tp.bronze.storage_objects_raw', 'ow_tp.bronze.user_activity_events_landed', 'ow_tp.bronze.user_activity_raw', 'ow_tp.bronze.user_activity_upstream_fixture', 'ow_tp.gold.analytics_daily_summary', 'ow_tp.gold.audit_archive_manifest', 'ow_tp.gold.finance_billing_summary', 'ow_tp.gold.finance_report_delivery', 'ow_tp.gold.search_reindex_summary', 'ow_tp.gold.storage_cleanup_savings', 'ow_tp.gold.user_activity_report', 'ow_tp.gold.user_activity_run_log', 'ow_tp.silver.analytics_events', 'ow_tp.silver.analytics_events_rejects', 'ow_tp.silver.audit_events_archived', 'ow_tp.silver.custbill_file_recon', 'ow_tp.silver.custbill_file_recon_staging', 'ow_tp.silver.custbill_records', 'ow_tp.silver.custbill_records_staging', 'ow_tp.silver.custbill_rejects', 'ow_tp.silver.custbill_rejects_staging', 'ow_tp.silver.search_index_documents', 'ow_tp.silver.search_index_documents_staging', 'ow_tp.silver.storage_orphans', 'ow_tp.silver.user_activity_daily']
-namespaces present in bronze.custbill_lines: ['demo', 'trlneg2'] (this unit only ever writes ns='demo'; other namespaces are other runs')
+namespaces present in bronze.custbill_lines: ['demo', 'gateprobe', 'trlneg2'] (this unit only ever writes ns='demo'; other namespaces are other runs')
 ow_tp jobs in the workspace: none (1/3 not applied yet)
 this unit's throwaway ow_tp_dev_sftp_ingest left behind: none
 other units' ow_tp_dev_* jobs (not this unit's, not judged): none
 catalogs=['ow_tp'] secret_scopes=['ow_tp'] dirs=['/Shared/ow_tp']
+```
+
+## 6. a half-written file neither lands nor blocks the complete files — PASS
+
+```
+fixtures under /Volumes/ow_tp/bronze/landing/gateprobe/custbill/: ['CUSTBILL_GATE_GOOD.dat', 'CUSTBILL_GATE_PARTIAL.dat']
+the gate calls incomplete: ['CUSTBILL_GATE_PARTIAL.dat']; complete: ['CUSTBILL_GATE_GOOD.dat']
+observed vs declared: CUSTBILL_GATE_PARTIAL.dat (observed 1450 bytes, hdr=1, trl=1, detail=20; TRL declares 50)
+run over the mixed drop: failed, as required: completeness handshake failed; these files were NOT ingested and remain in the drop path: CUSTBILL_GATE_PARTIAL.dat (observed 1450 bytes, hdr=1, trl=1, detail=20; TRL declares 50). Ingested this run: ['CUSTBILL_GATE_GOOD.dat']
+error names every refused file ['CUSTBILL_GATE_PARTIAL.dat']: ok
+manifest rows after the run: ['CUSTBILL_GATE_GOOD.dat'] expected=['CUSTBILL_GATE_GOOD.dat'] [ok]
+files with raw lines after the run: ['CUSTBILL_GATE_GOOD.dat'] expected=['CUSTBILL_GATE_GOOD.dat'] [ok]
+CUSTBILL_GATE_PARTIAL.dat: manifest rows=0 lines=0 [ok]
+CUSTBILL_GATE_GOOD.dat: ingested whole — hdr=1 trl=1 detail=50 TRL declares=50 [ok]
+drop path after the run: ['CUSTBILL_GATE_GOOD.dat', 'CUSTBILL_GATE_PARTIAL.dat'] expected=['CUSTBILL_GATE_GOOD.dat', 'CUSTBILL_GATE_PARTIAL.dat'] [ok]
+probe rows removed again: ok
 ```
 
 ## Scope and caveats
@@ -82,13 +99,20 @@ catalogs=['ow_tp'] secret_scopes=['ow_tp'] dirs=['/Shared/ow_tp']
   therefore stays the replay source, and a trimmed file re-ingests on a later run; that is
   intended, not a leak. Re-ingest cannot duplicate, because the manifest is keyed on
   `(ns, file_name)` and carries the whole-file `sha256` (see check 4).
+* **A half-written drop fails the run, after the complete files have landed.** Check 6 above
+  exercises that on a real mixed drop: the complete file lands in both tables, the truncated one
+  contributes no row and stays in the drop path unconsumed, and the run still exits non-zero naming
+  it with the bytes observed against the count its trailer declares. The gate is content-based, with
+  no grace window and no timeout — that heuristic is what this conversion replaces. Check 6's
+  fixtures live in their own namespace and its rows are deleted again, so the reconciled namespace
+  above is untouched by it.
 * **`make dbx-upload` is UNVERIFIED.** The documented upload transport was attempted on this run
   and refused:
 
   ```
   $ make dbx-upload NS=demo
   PUT /api/2.0/fs/files/Volumes/ow_tp/bronze/landing/demo/_upload_probe/upload_probe.txt
-  -> DatabricksError: PUT /api/2.0/fs/files/Volumes/ow_tp/bronze/landing/demo/_upload_probe/upload_probe.txt?overwrite=true -> 403: {"error_code":403,"message":"Provided access token does not have required scopes: files [ReqId: 363a5c74-1a63-4c55-858b-ad7b716dc503]"}
+  -> DatabricksError: PUT /api/2.0/fs/files/Volumes/ow_tp/bronze/landing/demo/_upload_probe/upload_probe.txt?overwrite=true -> 403: {"error_code":403,"message":"Provided access token does not have required scopes: files [ReqId: c9774e8b-252d-4ed9-b1cf-09f2db449aa5]"}
   ```
 
   The inputs the checks above read were landed inside Databricks instead (serverless task writing
