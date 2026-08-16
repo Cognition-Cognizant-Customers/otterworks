@@ -13,7 +13,13 @@ from requests.auth import HTTPDigestAuth
 from common import Manifest, exception_detail, require_env
 
 require_env("MONGODB_ATLAS_PUBLIC_KEY", "MONGODB_ATLAS_PRIVATE_KEY", "MONGODB_ATLAS_PROJECT_ID")
-base = os.environ.get("TP_ATLAS_API_BASE", "https://cloud.mongodb.com/api/atlas/v2").rstrip("/")
+raw_base = os.environ.get("TP_ATLAS_API_BASE", "https://cloud.mongodb.com/api/atlas/v2")
+parsed_base = urllib.parse.urlparse(raw_base)
+if parsed_base.scheme != "https" or not parsed_base.hostname or parsed_base.username or parsed_base.password:
+    raise SystemExit("TP_ATLAS_API_BASE must be an HTTPS URL with a valid host")
+if parsed_base.hostname != "cloud.mongodb.com" and os.environ.get("TP_ATLAS_ALLOW_CUSTOM_API_BASE") != "1":
+    raise SystemExit("TP_ATLAS_API_BASE must use cloud.mongodb.com unless TP_ATLAS_ALLOW_CUSTOM_API_BASE=1")
+base = raw_base.rstrip("/")
 project = os.environ["MONGODB_ATLAS_PROJECT_ID"]
 auth = HTTPDigestAuth(os.environ["MONGODB_ATLAS_PUBLIC_KEY"], os.environ["MONGODB_ATLAS_PRIVATE_KEY"])
 headers = {"Accept": "application/vnd.atlas.2024-08-05+json", "Content-Type": "application/json"}

@@ -179,7 +179,7 @@ else:
 suffix = f"__tp_preflight_{uuid.uuid4().hex}"
 file_path = f"{landing}/{suffix}"
 payload = b"otterworks tp preflight\n"
-put_succeeded = False
+file_put_attempted = False
 landing_api = "/api/2.0/fs/directories" + urllib.parse.quote(landing, safe="/")
 file_api = "/api/2.0/fs/files" + urllib.parse.quote(file_path, safe="/")
 req = urllib.request.Request(HOST + landing_api, headers={"Authorization": f"Bearer {TOKEN}"})
@@ -188,11 +188,32 @@ try:
         manifest.add("files-get-directory", "List the landing volume directory", "Files API GET", "verified", f"HTTP {r.status}")
 except Exception as exc:
     manifest.add("files-get-directory", "List the landing volume directory", "Files API GET", "denied", exception_detail(exc))
+def reconcile_file():
+    if not file_put_attempted:
+        return
+    req = urllib.request.Request(HOST + file_api, headers={"Authorization": f"Bearer {TOKEN}"}, method="DELETE")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            manifest.add("files-delete", "Delete the temporary landing file", "Files API DELETE",
+                         "verified", f"HTTP {r.status}")
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            manifest.add("files-delete", "Delete the temporary landing file", "Files API DELETE",
+                         "verified", "file was absent")
+        else:
+            manifest.add("files-delete", "Delete the temporary landing file", "Files API DELETE",
+                         "denied", exception_detail(exc))
+    except Exception as exc:
+        manifest.add("files-delete", "Delete the temporary landing file", "Files API DELETE",
+                     "denied", exception_detail(exc))
+
+
+register_cleanup("landing-file", reconcile_file)
 try:
     req = urllib.request.Request(HOST + file_api, data=payload, headers={"Authorization": f"Bearer {TOKEN}"}, method="PUT")
+    file_put_attempted = True
     with urllib.request.urlopen(req, timeout=30) as r:
         manifest.add("files-put", "Write a temporary landing file", "Files API PUT", "verified", f"HTTP {r.status}")
-        put_succeeded = True
     req = urllib.request.Request(HOST + file_api, headers={"Authorization": f"Bearer {TOKEN}"})
     with urllib.request.urlopen(req, timeout=30) as r:
         got = r.read()
@@ -201,15 +222,9 @@ try:
 except Exception as exc:
     manifest.add("files-put-get", "Write and read a temporary landing file", "Files API PUT/GET", "denied", exception_detail(exc))
 finally:
-    if put_succeeded:
-        req = urllib.request.Request(HOST + file_api, headers={"Authorization": f"Bearer {TOKEN}"}, method="DELETE")
-        try:
-            with urllib.request.urlopen(req, timeout=30) as r:
-                manifest.add("files-delete", "Delete the temporary landing file", "Files API DELETE", "verified", f"HTTP {r.status}")
-        except Exception as exc:
-            manifest.add("files-delete", "Delete the temporary landing file", "Files API DELETE", "denied", exception_detail(exc))
-    else:
+    if not file_put_attempted:
         manifest.add("files-delete", "Delete the temporary landing file", "Files API DELETE", "skipped", "PUT did not create a file")
+    cleanup_all()
 
 warehouse_probe = call("GET", "/api/2.0/sql/warehouses")
 warehouse_id = os.environ.get("DATABRICKS_SQL_WAREHOUSE_ID", "")
@@ -223,6 +238,10 @@ schema_result = None
 
 
 def reconcile_schema():
+    if schema_result is not None and schema_result.state == "FAILED":
+        manifest.add("uc-schema-delete", "Reconcile the temporary Unity Catalog schema",
+                     "SQL Statement", "verified", f"{schema} was never created")
+        return
     if schema_result is not None and schema_result.accepted and schema_result.status != 0:
         dropped = sql_call(f"DROP SCHEMA IF EXISTS {catalog}.{schema} CASCADE", warehouse_id)
         manifest.add("uc-schema-delete", "Delete the temporary Unity Catalog schema",

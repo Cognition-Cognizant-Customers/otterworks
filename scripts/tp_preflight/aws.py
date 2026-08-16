@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import uuid
@@ -10,6 +11,7 @@ import uuid
 from common import Manifest, exception_detail
 
 m = Manifest("aws")
+cleanup_registry = {}
 
 
 def handle_uncaught(exc_type, exc, traceback):
@@ -22,6 +24,26 @@ def handle_uncaught(exc_type, exc, traceback):
 
 
 sys.excepthook = handle_uncaught
+
+
+def cleanup_all():
+    for name, callback in list(cleanup_registry.items()):
+        try:
+            callback()
+        except Exception as exc:
+            m.add(f"{name}-cleanup", f"Cleanup temporary {name}", "AWS cleanup",
+                  "denied", exception_detail(exc))
+        cleanup_registry.pop(name, None)
+
+
+def handle_signal(signum, _frame):
+    cleanup_all()
+    m.write("aws")
+    raise SystemExit(128 + signum)
+
+
+signal.signal(signal.SIGINT, handle_signal)
+signal.signal(signal.SIGTERM, handle_signal)
 region = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
 name_prefix = os.environ.get("TP_AWS_NAME_PREFIX", "ow-tp-")
 tag_key = os.environ.get("TP_AWS_PROJECT_TAG_KEY", "Project")
@@ -123,30 +145,33 @@ for service, args, desc in [
 
 role = f"{name_prefix}preflight-{uuid.uuid4().hex[:12]}"
 trust = json.dumps({"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}, "Action": "sts:AssumeRole"}]})
-created, detail = aws("iam-role-create", "Create a temporary IAM role to prove role creation permission", ["iam", "create-role", "--role-name", role, "--assume-role-policy-document", trust])
-if created:
-    aws("iam-role-delete", "Delete the temporary IAM role", ["iam", "delete-role", "--role-name", role])
-elif "TimeoutExpired" in detail:
+def reconcile_role():
     found, lookup_detail = aws(
         "iam-role-reconcile",
-        "Reconcile an ambiguous temporary IAM role create",
+        "Reconcile the temporary IAM role",
         ["iam", "get-role", "--role-name", role],
         required=False,
         record=False,
     )
     if found:
-        m.add("iam-role-reconcile", "Reconcile an ambiguous temporary IAM role create",
-              "iam:GetRole", "verified", f"role {role} exists after ambiguous create")
+        m.add("iam-role-reconcile", "Reconcile the temporary IAM role",
+              "iam:GetRole", "verified", f"role {role} exists; deleting it")
         aws("iam-role-delete", "Delete the temporary IAM role", ["iam", "delete-role", "--role-name", role])
     elif "NoSuchEntity" in lookup_detail or "not found" in lookup_detail.lower():
-        m.add("iam-role-reconcile", "Reconcile an ambiguous temporary IAM role create",
-              "iam:GetRole", "verified", f"role {role} was not found after ambiguous create")
+        m.add("iam-role-reconcile", "Reconcile the temporary IAM role",
+              "iam:GetRole", "verified", f"role {role} was absent")
     else:
-        m.add("iam-role-reconcile", "Reconcile an ambiguous temporary IAM role create",
+        m.add("iam-role-reconcile", "Reconcile the temporary IAM role",
               "iam:GetRole", "denied",
               f"role {role} may exist; manual IAM cleanup may be required")
-else:
-    m.add("iam-role-delete", "Delete the temporary IAM role", "iam:DeleteRole", "skipped", "role was not created")
+
+
+cleanup_registry["iam-role"] = reconcile_role
+try:
+    aws("iam-role-create", "Create a temporary IAM role to prove role creation permission",
+        ["iam", "create-role", "--role-name", role, "--assume-role-policy-document", trust])
+finally:
+    cleanup_all()
 
 leftover_scan(
     "leftover-tag-scan",
