@@ -302,6 +302,23 @@ published-silver, and staging tables were returned to zero rows. The attempted
 mutation could not reach the parse task; therefore no claim is made that the
 live constrained table produced a full end-to-end NULL-count run.
 
+## L. A blank line in the legacy baseline is reported without key desynchronisation
+
+A copy of `CUSTBILL_DEMO_001.psv` was created with one blank line inserted at
+PSV line 11. The recon run used that scratch directory and wrote its report to
+`/tmp/l-blank-report.md`. It reported the corrupt baseline line with both line
+number systems, exited nonzero, and did not produce a traceback:
+
+```text
+CUSTBILL_DEMO_001.psv line 11 (source line 12): malformed legacy line: blank line
+report written to /tmp/l-blank-report.md
+recon_exit=1
+report_written=yes
+```
+
+The row-parity check otherwise reported `all 100 rows match on all 6 fields`;
+the blank line did not cascade into false mismatches for following rows.
+
 ## Note on the shared workspace
 
 During the session an extra bronze line (`line_no = 999`, `raw_line` `STALE TAIL RECORD`)

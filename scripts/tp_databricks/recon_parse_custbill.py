@@ -126,8 +126,15 @@ def read_golden(
     errors: list[str] = []
     for psv in sorted(golden_dir.glob(f"CUSTBILL_{ns.upper()}_*.psv")):
         stem = psv.stem
-        data_lines = [line for line in psv.read_text().splitlines() if line.strip()]
-        for index, line in enumerate(data_lines, start=1):
+        data_index = 0
+        for index, line in enumerate(psv.read_text().splitlines(), start=1):
+            if not line.strip():
+                errors.append(
+                    f"{psv.name} line {index} (source line {index + HDR_LINES}): "
+                    "malformed legacy line: blank line"
+                )
+                continue
+            data_index += 1
             parts = line.split("|")
             if len(parts) != 6:
                 errors.append(
@@ -144,7 +151,7 @@ def read_golden(
                 typed_amount: object = Decimal(amount)
             except ArithmeticError:
                 typed_amount = amount
-            rows[(stem, index + HDR_LINES)] = {
+            rows[(stem, data_index + HDR_LINES)] = {
                 "account_id": account_id,
                 "customer_name": customer_name,
                 "bill_date": typed_bill_date,
