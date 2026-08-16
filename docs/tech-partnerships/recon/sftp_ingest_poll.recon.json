@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "sftp_ingest_poll",
   "namespace": "demo",
-  "generated_at": "2026-08-16T18:15:29.109680+00:00",
+  "generated_at": "2026-08-16T18:22:14.908835+00:00",
   "run_mode": "fixture",
   "checks": [
     {
@@ -108,7 +108,7 @@
   "idempotency_rerun": {
     "performed": true,
     "result": "pass",
-    "evidence": "byte-identical re-land of both golden files followed by a rerun: 0 inserts, 2 attributed duplicate-redrop skips, row count unchanged"
+    "evidence": "byte-identical re-land of both golden files followed by a rerun: 0 inserts, 2 attributed duplicate-redrop skips, rows now 2 (expected 2)"
   },
   "planted_anomaly_detections": {
     "expected_set": [

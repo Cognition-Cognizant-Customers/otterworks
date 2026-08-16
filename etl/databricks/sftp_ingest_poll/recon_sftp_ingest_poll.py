@@ -187,7 +187,11 @@ def main() -> int:
         "idempotency_rerun": {
             "performed": True,
             "result": "pass" if dup_detected else "fail",
-            "evidence": "byte-identical re-land of both golden files followed by a rerun: 0 inserts, 2 attributed duplicate-redrop skips, row count unchanged",
+            "evidence": (
+                "byte-identical re-land of both golden files followed by a rerun: "
+                f"{inserted2} inserts, {skipped2} attributed duplicate-redrop skips, "
+                f"rows now {len(registry.rows)} (expected {len(landed)})"
+            ),
         },
         "planted_anomaly_detections": {
             "expected_set": ["duplicate-redrop"],

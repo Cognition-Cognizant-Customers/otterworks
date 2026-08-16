@@ -26,6 +26,7 @@ from dataclasses import dataclass
 FILE_PATTERNS = ("CUSTBILL*.dat", "CUSTBILL*.dat.done")
 NS_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 IDENT_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
+VOLUME_ROOT_PATTERN = re.compile(r"^/Volumes/[A-Za-z0-9_]+/[A-Za-z0-9_]+/[A-Za-z0-9_]+$")
 
 
 @dataclass(frozen=True)
@@ -117,12 +118,14 @@ def _main_databricks() -> None:
     dbutils.widgets.text("table", "custbill_raw_files")  # type: ignore[name-defined]
 
     ns = _require(NS_PATTERN, dbutils.widgets.get("ns"), "ns")  # type: ignore[name-defined]
-    volume_root = dbutils.widgets.get("volume_root").rstrip("/")  # type: ignore[name-defined]
+    volume_root = _require(
+        VOLUME_ROOT_PATTERN,
+        dbutils.widgets.get("volume_root").rstrip("/"),  # type: ignore[name-defined]
+        "volume_root",
+    )
     catalog = _require(IDENT_PATTERN, dbutils.widgets.get("catalog"), "catalog")  # type: ignore[name-defined]
     schema = _require(IDENT_PATTERN, dbutils.widgets.get("schema"), "schema")  # type: ignore[name-defined]
     table = _require(IDENT_PATTERN, dbutils.widgets.get("table"), "table")  # type: ignore[name-defined]
-    if not volume_root.startswith("/Volumes/"):
-        raise ValueError(f"volume_root must be a /Volumes/ path: {volume_root!r}")
 
     fqtn = f"{catalog}.{schema}.{table}"
     drop_dir = f"{volume_root}/{ns}/sftp_ingest_poll"
