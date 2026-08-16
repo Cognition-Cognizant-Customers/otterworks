@@ -130,6 +130,7 @@ def run(catalog: str, ns: str, run_date: str, job_run_id: str, apply_ddl_first: 
 
 
 def show(catalog: str, ns: str, run_date: str) -> None:
+    pipeline.validate_identifier(catalog, "catalog")
     pipeline.validate_ns(ns)
     pipeline.validate_run_date(run_date)
     rows = dbx.sql(
@@ -159,6 +160,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--job-run-id", default="", help="Databricks run id when invoked for a job run; empty locally")
     parser.add_argument("--no-ddl", action="store_true", help="skip the DDL apply before the loads")
     args = parser.parse_args(argv)
+    args.ns = pipeline.validate_ns(args.ns)
+    args.catalog = pipeline.validate_identifier(args.catalog, "catalog")
 
     if args.command == "ddl":
         apply_ddl(args.catalog)
