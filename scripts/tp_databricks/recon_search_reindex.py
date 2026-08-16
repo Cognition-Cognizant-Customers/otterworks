@@ -342,7 +342,8 @@ def check_rerun(golden_dir: Path, ns: str, legacy: dict[str, int]) -> dict:
     live = serving_counts(ns)
     duplicates = duplicate_entity_ids(ns)
     return {
-        "passed": rerun.get("result_state") == "SUCCESS"
+        "passed": first.get("result_state") == "SUCCESS"
+        and rerun.get("result_state") == "SUCCESS"
         and after_first == after_rerun == live == legacy
         and duplicates == 0,
         "first_run_result_state": first.get("result_state"),
