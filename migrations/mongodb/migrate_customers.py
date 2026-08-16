@@ -114,6 +114,7 @@ def build_doc(ns: str, columns, row, attributes, quarantine_out) -> dict:
     raw = dict(zip(columns, row))
     cust_id = ensure_utf8(raw["cust_id"])
     doc = {"_id": mongo_common.det_id(ns, "customer", cust_id)}
+    field_quarantine: list = []
     for field, value in raw.items():
         if value is None:
             continue  # NULL/missing source values are omitted, never defaulted
@@ -121,7 +122,7 @@ def build_doc(ns: str, columns, row, attributes, quarantine_out) -> dict:
         if field in DATE_FIELDS:
             parsed = parse_legacy_date(value)
             if parsed is None:
-                quarantine_out.append(quarantine_doc(
+                field_quarantine.append(quarantine_doc(
                     ns, cust_id, field, QUARANTINE_KINDS[field],
                     f"unparseable DD-MON-YY date in {field.upper()}", value))
                 continue
@@ -129,7 +130,7 @@ def build_doc(ns: str, columns, row, attributes, quarantine_out) -> dict:
         elif field in CSV_FIELDS:
             parsed = parse_csv_list(value, CSV_FIELDS[field])
             if parsed is None:
-                quarantine_out.append(quarantine_doc(
+                field_quarantine.append(quarantine_doc(
                     ns, cust_id, field, QUARANTINE_KINDS[field],
                     f"malformed CSV list in {field.upper()}", value))
                 continue
@@ -139,6 +140,9 @@ def build_doc(ns: str, columns, row, attributes, quarantine_out) -> dict:
     folded = attributes.get(cust_id)
     if folded:
         doc["attributes"] = folded
+    # Only attribute field-level quarantine entries once the record itself is
+    # accepted; a record rejected wholesale must not also be filed per-field.
+    quarantine_out.extend(field_quarantine)
     return doc
 
 

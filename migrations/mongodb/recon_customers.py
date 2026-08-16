@@ -23,12 +23,18 @@ ANOMALY_TARGETS = {
     "dirty_dates": "oracle.OW_BILLING.CUSTOMER_MASTER.SIGNUP_DT",
     "malformed_csv_lists": "oracle.OW_BILLING.CUSTOMER_MASTER.RELATED_ACCT_IDS",
 }
-UNVERIFIED_PATHS = [
-    "invalid_utf8 quarantine path: the seeded fixture plants no non-UTF-8 "
-    "bytes, so this path is implemented but not exercised by fixture data",
-    "live Atlas transport: this report is run_mode=fixture; the parent "
-    "session runs the live window",
-]
+
+
+def unverified_paths(run_mode: str) -> list:
+    paths = [
+        "invalid_utf8 quarantine path: the seeded fixture plants no non-UTF-8 "
+        "bytes, so this path is implemented but not exercised by fixture data",
+    ]
+    if run_mode == "fixture":
+        paths.append(
+            "live Atlas transport: this report is run_mode=fixture; the "
+            "parent session runs the live window")
+    return paths
 
 
 def compute(ns: str) -> dict:
@@ -42,6 +48,7 @@ def compute(ns: str) -> dict:
     missing_checksum_inputs = 0
     attr_entries = 0
     array_typed_related = array_typed_promo = 0
+    string_typed_csv_fields = 0
     bson_date_signup = 0
     for doc in customers.find(
             {}, {"cust_id": 1, "cur_bal_amt": 1, "attributes": 1,
@@ -57,6 +64,9 @@ def compute(ns: str) -> dict:
             array_typed_related += 1
         if isinstance(doc.get("promo_codes_csv"), list):
             array_typed_promo += 1
+        for csv_field in ("related_acct_ids", "promo_codes_csv"):
+            if csv_field in doc and not isinstance(doc[csv_field], list):
+                string_typed_csv_fields += 1
         if isinstance(doc.get("signup_dt"), datetime):
             bson_date_signup += 1
     checksum = mongo_common.ordered_pk_checksum(pairs)
@@ -73,6 +83,7 @@ def compute(ns: str) -> dict:
         "attr_entries": attr_entries,
         "array_typed_related": array_typed_related,
         "array_typed_promo": array_typed_promo,
+        "string_typed_csv_fields": string_typed_csv_fields,
         "bson_date_signup": bson_date_signup,
         "quarantine_by_kind_field": {
             f"{k}:{f}": n for (k, f), n in sorted(q_by_kind_field.items())
@@ -83,6 +94,11 @@ def compute(ns: str) -> dict:
 def build_report(ns: str, run_mode: str, actual: dict,
                  idempotency: dict) -> dict:
     manifest = mongo_common.load_manifest(ns)
+    if not manifest or CM_TARGET not in manifest.get("targets", {}):
+        raise SystemExit(
+            f"[{UNIT}] golden baseline manifest testdata/legacy/manifests/"
+            f"{ns}.json is missing or lacks {CM_TARGET}; seed the fixture "
+            "first (make oracle-billing-seed NS=" + ns + ")")
     targets = manifest.get("targets", {})
     cm_rows = targets.get(CM_TARGET, {}).get("rows")
     cm_checksum = targets.get(CM_TARGET, {}).get("checksum")
@@ -114,7 +130,7 @@ def build_report(ns: str, run_mode: str, actual: dict,
                "valid_lists_are_arrays": True},
               {"quarantined_malformed_csv": badcsv,
                "valid_lists_are_arrays":
-                   actual["array_typed_related"] + badcsv <= cm_rows
+                   actual["string_typed_csv_fields"] == 0
                    and actual["array_typed_related"] > 0
                    and actual["array_typed_promo"] > 0},
               manifest_src + " + target collection type scan"),
@@ -143,7 +159,7 @@ def build_report(ns: str, run_mode: str, actual: dict,
             "missing": sorted(set(expected_set) - set(actual_set)),
             "unexpected": sorted(set(actual_set) - set(expected_set)),
         },
-        "unverified_paths": UNVERIFIED_PATHS,
+        "unverified_paths": unverified_paths(run_mode),
     }
 
 
