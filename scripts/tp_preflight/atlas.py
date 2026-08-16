@@ -96,17 +96,83 @@ def db_user_write():
     except Exception as exc:
         m.add("db-user-write", "Insert and delete a temporary document with the DB user", "MongoDB wire protocol", "denied", str(exc))
 
+
+def access_list_snapshot():
+    entries = []
+    page = 1
+    total = None
+    items_per_page = 100
+    while True:
+        url = f"{base}/groups/{project}/accessList?pageNum={page}&itemsPerPage={items_per_page}"
+        try:
+            response = get(url, auth=auth, headers=headers, timeout=30)
+            if not response.ok:
+                m.add("access-list-read", "Read the Atlas API access list", url, "denied", f"HTTP {response.status_code}")
+                return None
+            body = response.json()
+            page_entries = body.get("results")
+            if not isinstance(page_entries, list):
+                m.add("access-list-read", "Read the Atlas API access list", url, "denied", "response missing results list")
+                return None
+            entries.extend(page_entries)
+            total = body.get("totalCount")
+            if (total is not None and len(entries) >= total) or len(page_entries) < items_per_page:
+                break
+            page += 1
+        except Exception as exc:
+            m.add("access-list-read", "Read the Atlas API access list", url, "denied", str(exc))
+            return None
+    m.add("access-list-read", "Read the Atlas API access list",
+          f"{base}/groups/{project}/accessList", "verified",
+          f"{len(entries)} entr{'y' if len(entries) == 1 else 'ies'} across {page} page(s)")
+    return entries
+
+
+def validate_probe_ip(value):
+    try:
+        if "/" in value:
+            interface = ipaddress.ip_interface(value)
+            if interface.version != 4 or interface.network.prefixlen != 32:
+                raise ValueError
+            address = interface.ip
+        else:
+            address = ipaddress.ip_address(value)
+            if address.version != 4:
+                raise ValueError
+    except ValueError:
+        raise SystemExit(
+            "TP_ATLAS_TEST_IP must be an IPv4 host (optionally /32) in "
+            "192.0.2.0/24, 198.51.100.0/24, or 203.0.113.0/24"
+        )
+    allowed = (
+        ipaddress.ip_network("192.0.2.0/24"),
+        ipaddress.ip_network("198.51.100.0/24"),
+        ipaddress.ip_network("203.0.113.0/24"),
+    )
+    if not any(address in network for network in allowed):
+        raise SystemExit(
+            "TP_ATLAS_TEST_IP must be in 192.0.2.0/24, 198.51.100.0/24, "
+            "or 203.0.113.0/24"
+        )
+    return str(address)
+
+
 ip = None
 try:
     ip = get("https://api.ipify.org", timeout=10).text.strip()
 except Exception:
     ip = socket.gethostbyname(socket.gethostname())
-entries = check("access-list-read", "Read the Atlas API access list", get, f"{base}/groups/{project}/accessList")
-listed = []
-if entries is not None and entries.ok:
-    listed = [api_entry_ip(entry) for entry in entries.json().get("results", []) if api_entry_ip(entry)]
-
-probe_ip = os.environ.get("TP_ATLAS_TEST_IP", "203.0.113.254")
+entry_records = access_list_snapshot()
+probe_ip = validate_probe_ip(os.environ.get("TP_ATLAS_TEST_IP", "203.0.113.254"))
+if entry_records is None:
+    m.add("access-list-post", "Create a temporary API access-list entry",
+          "Atlas accessList POST", "skipped", "access-list snapshot failed; no mutation attempted")
+    m.add("vm-ip-listed", "The VM public IP is present or can be self-healed in the Atlas access list",
+          "Atlas accessList GET", "skipped", "access-list snapshot failed; no mutation attempted")
+    m.add("db-user-write", "Insert and delete a temporary document with the DB user",
+          "MongoDB wire protocol", "skipped", "access-list snapshot failed; no mutation attempted")
+    raise SystemExit(m.write("atlas"))
+listed = [api_entry_ip(entry) for entry in entry_records if api_entry_ip(entry)]
 created_entry = None
 own_entry = None
 
@@ -136,7 +202,7 @@ try:
         created = check("access-list-post", "Create a temporary API access-list entry", post,
                         f"{base}/groups/{project}/accessList",
                         json=[{"ipAddress": probe_ip, "comment": "otterworks preflight"}])
-        if created is not None and created.ok:
+        if created is not None and created.status_code == 201:
             created_entry = {"ipAddress": probe_ip}
     if covers(ip, listed):
         m.add("vm-ip-listed", "The VM public IP is present in the Atlas access list",
@@ -151,7 +217,7 @@ try:
                     post, f"{base}/groups/{project}/accessList",
                     json=[{"ipAddress": ip, "comment": "otterworks preflight temporary access"}])
         try:
-            if own is not None and own.ok:
+            if own is not None and own.status_code == 201:
                 own_entry = {"ipAddress": ip}
                 m.add("vm-ip-listed", "The VM public IP can be self-healed for the DB write path",
                       "Atlas accessList POST/DELETE", "verified", f"VM IP {ip} was absent and temporary add succeeded")

@@ -166,12 +166,14 @@ if not warehouse_id and 200 <= warehouse_probe[0] < 300:
             break
 schema = f"ow_tp_preflight_{uuid.uuid4().hex[:12]}"
 created_schema = sql_call(f"CREATE SCHEMA {catalog}.{schema}", warehouse_id)
-if created_schema[0] >= 200 and created_schema[0] < 300 and created_schema[1].get("status", {}).get("state") == "SUCCEEDED":
+create_accepted = 200 <= created_schema[0] < 300
+create_succeeded = create_accepted and isinstance(created_schema[1], dict) and created_schema[1].get("status", {}).get("state") == "SUCCEEDED"
+if create_succeeded:
     listed_schema = call("GET", f"/api/2.1/unity-catalog/schemas?catalog_name={urllib.parse.quote(catalog)}")
     manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema", "SQL Statement + Unity Catalog APIs", "verified" if 200 <= listed_schema[0] < 300 else "denied", f"{sql_detail(created_schema)}; list HTTP {listed_schema[0]}")
 else:
     manifest.add("uc-create-list", "Create and list a temporary Unity Catalog schema", "SQL Statement + Unity Catalog APIs", "denied", sql_detail(created_schema))
-if created_schema[0] >= 200 and created_schema[0] < 300 and created_schema[1].get("status", {}).get("state") == "SUCCEEDED":
+if create_accepted:
     dropped_schema = sql_call(f"DROP SCHEMA IF EXISTS {catalog}.{schema} CASCADE", warehouse_id)
     manifest.add("uc-schema-delete", "Delete the temporary Unity Catalog schema", "SQL Statement", "verified" if dropped_schema[0] >= 200 and dropped_schema[0] < 300 and dropped_schema[1].get("status", {}).get("state") == "SUCCEEDED" else "denied", sql_detail(dropped_schema))
 else:
