@@ -53,8 +53,11 @@ if not re.fullmatch(r"[A-Za-z0-9_-]+", region):
     raise SystemExit("AWS region must contain only letters, digits, '-' or '_'")
 if not re.fullmatch(r"[A-Za-z0-9_-]+", name_prefix):
     raise SystemExit("TP_AWS_NAME_PREFIX must contain only letters, digits, '-' or '_'")
-if not tag_key or any(ord(char) < 32 or ord(char) == 127 for char in tag_key + tag_value):
-    raise SystemExit("AWS tag key/value must not contain control characters")
+tag_filter_pattern = r"[A-Za-z0-9 +\-._:/@]+"
+if not re.fullmatch(tag_filter_pattern, tag_key) or not re.fullmatch(tag_filter_pattern, tag_value):
+    raise SystemExit(
+        "AWS tag key/value may contain only letters, digits, spaces, '+', '-', '.', '_', ':', '/', and '@'"
+    )
 env = {**os.environ, "AWS_DEFAULT_REGION": region, "AWS_REGION": region}
 
 
