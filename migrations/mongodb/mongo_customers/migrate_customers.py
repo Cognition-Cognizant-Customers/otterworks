@@ -87,7 +87,7 @@ def ensure_utf8(value, field: str):
 
 def parse_legacy_date(value: str):
     """Strict DD-MON-YY parser; returns a BSON-compatible datetime or None."""
-    m = DATE_RE.match(value)
+    m = DATE_RE.fullmatch(value)
     if not m:
         return None
     dd, mon, yy = int(m.group(1)), m.group(2), int(m.group(3))
@@ -103,7 +103,7 @@ def parse_legacy_date(value: str):
 def parse_csv_list(value: str, token_re):
     """Strict CSV list parser; returns a list of tokens or None if malformed."""
     tokens = value.split(",")
-    if all(token_re.match(t) for t in tokens):
+    if all(token_re.fullmatch(t) for t in tokens):
         return tokens
     return None
 
