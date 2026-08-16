@@ -205,7 +205,7 @@ def land(ns: str, catalog: str) -> dict:
                 f"landed inventory objects={landed}, bytes={landed_bytes}; "
                 f"discovered objects={len(keys)}, bytes={source_bytes} for ns={ns}"
             )
-    except Exception:
+    except BaseException:
         try:
             _clear_landing_events(events_path)
         except Exception:
@@ -265,7 +265,7 @@ def stage(ns: str, catalog: str) -> dict:
         in_table = int(dbx.sql_scalar(f"SELECT count(*) FROM {table} WHERE ns = '{ns}'"))
         if in_table != expected:
             raise RuntimeError(f"staged {expected} lines but {table} holds {in_table} for ns={ns}")
-    except Exception:
+    except BaseException:
         try:
             dbx.sql(f"DELETE FROM {table} WHERE ns = '{ns}'")
         except Exception:
