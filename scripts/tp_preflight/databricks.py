@@ -82,15 +82,19 @@ def call(method: str, path: str, body=None):
     try:
         with urllib.request.urlopen(req, timeout=30) as response:
             raw = response.read()
-            return response.status, json.loads(raw) if raw else {}
+            if not raw:
+                return response.status, {}
+            parsed = json.loads(raw)
+            return response.status, parsed if isinstance(parsed, dict) else {"_raw_error": str(parsed)[:300]}
     except urllib.error.HTTPError as exc:
         raw = exc.read().decode(errors="replace")
         try:
-            return exc.code, json.loads(raw)
+            parsed = json.loads(raw)
+            return exc.code, parsed if isinstance(parsed, dict) else {"_raw_error": str(parsed)[:300]}
         except json.JSONDecodeError:
-            return exc.code, raw[:300]
+            return exc.code, {"_raw_error": raw[:300]}
     except Exception as exc:
-        return 0, exception_detail(exc)
+        return 0, {"_raw_error": exception_detail(exc)}
 
 
 def sql_call(statement: str, warehouse_id: str):
@@ -105,7 +109,7 @@ def sql_call(statement: str, warehouse_id: str):
         },
     )
     accepted = 200 <= initial_status < 300
-    body = body if isinstance(body, dict) else {}
+    body = body if isinstance(body, dict) else {"_raw_error": str(body)[:300]}
     status = initial_status
     state = body.get("status", {}).get("state") if isinstance(body.get("status"), dict) else "unknown"
     if accepted:
@@ -115,7 +119,7 @@ def sql_call(statement: str, warehouse_id: str):
                 break
             time.sleep(1)
             status, polled_body = call("GET", f"/api/2.0/sql/statements/{statement_id}")
-            body = polled_body if isinstance(polled_body, dict) else {}
+            body = polled_body if isinstance(polled_body, dict) else {"_raw_error": str(polled_body)[:300]}
             state = body.get("status", {}).get("state") if isinstance(body.get("status"), dict) else "unknown"
     return SqlResult(status, body, accepted, state)
 
@@ -126,11 +130,13 @@ def sql_detail(result):
     state = statement_status.get("state", "unknown")
     error = statement_status.get("error", {})
     message = error.get("message") if isinstance(error, dict) else error
-    return f"HTTP {status}, state={state}" + (f", error={message}" if message else "")
+    raw_error = body.get("_raw_error")
+    return f"HTTP {status}, state={state}" + (f", error={message or raw_error}" if message or raw_error else "")
 
 
 def response_detail(status, body):
     if isinstance(body, dict):
+        raw_error = body.get("_raw_error")
         message = (
             body.get("error_code")
             or body.get("errorCode")
@@ -138,7 +144,7 @@ def response_detail(status, body):
             or body.get("detail")
             or body.get("error")
         )
-        return f"HTTP {status}" + (f": {message}" if message else "")
+        return f"HTTP {status}" + (f": {message or raw_error}" if message or raw_error else "")
     return f"HTTP {status}"
 
 

@@ -99,9 +99,18 @@ def leftover_scan(pid, description, args, extractor):
     return not matches
 
 
+def policy_source_arn(caller_arn):
+    match = re.fullmatch(r"arn:aws:sts::(\d+):assumed-role/(.+)/[^/]+", caller_arn)
+    if not match:
+        return caller_arn
+    account, role = match.groups()
+    return f"arn:aws:iam::{account}:role/{role}"
+
+
 def simulate_permission(pid, description, caller_arn, action):
+    source_arn = policy_source_arn(caller_arn)
     args = [
-        "iam", "simulate-principal-policy", "--policy-source-arn", caller_arn,
+        "iam", "simulate-principal-policy", "--policy-source-arn", source_arn,
         "--action-names", action,
     ]
     try:
@@ -115,8 +124,12 @@ def simulate_permission(pid, description, caller_arn, action):
             except json.JSONDecodeError:
                 pass
         result = "verified" if decision == "allowed" else "denied"
+        stderr = (p.stderr or "").strip()
+        detail = f"decision={decision or 'unavailable'}"
+        if p.returncode != 0 and stderr:
+            detail += f", error={stderr.splitlines()[0][:300]}"
         m.add(pid, description, "aws iam simulate-principal-policy --action-names " + action, result,
-              f"decision={decision or 'unavailable'}")
+              detail)
         return result == "verified"
     except Exception as exc:
         m.add(pid, description, "aws " + " ".join(args), "denied", exception_detail(exc))
