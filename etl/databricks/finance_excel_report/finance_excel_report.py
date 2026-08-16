@@ -124,6 +124,8 @@ def run_pipeline(spark, dbutils) -> None:
         raise ValueError(f"invalid ns parameter: {ns!r}")
     now = datetime.now(timezone.utc)
     stamp = dbutils.widgets.get("report_date") or now.strftime("%Y%m%d")
+    if not re.fullmatch(r"[0-9]{8}", stamp):
+        raise ValueError(f"invalid report_date parameter: {stamp!r}")
 
     gold_table = f"{CATALOG}.gold.finance_billing_summary"
     records_table = f"{CATALOG}.silver.custbill_records"
@@ -166,21 +168,29 @@ def run_pipeline(spark, dbutils) -> None:
     ]
     summary = aggregate(silver_rows)
 
-    # Reconciliation: gold record counts plus rescue attribution must account
-    # for every silver row (rescue rows are excluded from totals by
-    # construction — this job never reads the quarantine into an aggregate).
+    # Reconciliation: gold record counts must account for every silver row,
+    # measured against an independent COUNT(*) on the table (not the
+    # collected list the aggregate was built from). Rescue rows are excluded
+    # from totals by construction — this job never reads the quarantine into
+    # an aggregate — and their attribution is recorded alongside.
+    silver_count = spark.sql(
+        f"SELECT COUNT(*) AS c FROM {records_table} WHERE ns = :ns",
+        args={"ns": ns},
+    ).collect()[0].c
     rescue_count = spark.sql(
         f"SELECT COUNT(*) AS c FROM {rescue_table} WHERE ns = :ns",
         args={"ns": ns},
     ).collect()[0].c
     aggregated = sum(r.record_count for r in summary)
-    if aggregated != len(silver_rows):
+    if aggregated != silver_count:
         raise ValueError(
-            f"reconciliation failure: aggregated {aggregated} != {len(silver_rows)} silver rows"
+            f"reconciliation failure: aggregated {aggregated} != "
+            f"{silver_count} silver rows for ns={ns}"
         )
     print(
-        f"reconciliation ns={ns}: {len(silver_rows)} silver record(s) aggregated, "
-        f"{rescue_count} rescue row(s) quarantined and excluded from totals"
+        f"reconciliation ns={ns}: {aggregated} silver record(s) aggregated "
+        f"(table count {silver_count}), {rescue_count} rescue row(s) "
+        f"quarantined and excluded from totals"
     )
 
     # Idempotent per-run-key write: delete any rows from a previous run of

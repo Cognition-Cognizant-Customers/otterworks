@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "finance_excel_report",
   "namespace": "demo",
-  "generated_at": "2026-08-16T19:03:02.894220+00:00",
+  "generated_at": "2026-08-16T19:07:00.992148+00:00",
   "run_mode": "fixture",
   "checks": [
     {
