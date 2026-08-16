@@ -401,8 +401,16 @@ def check5_scope(ns: str, landing_root: str) -> Check:
     ok = ok and bool(written) and not written_unowned
     check.detail.append(f"write targets in the statement set: {sorted(written) or '[]'}")
     check.detail.append(f"write targets outside the contract: {sorted(written_unowned) or 'none'}")
-    # retention SQL addresses its tables through IDENTIFIER(:catalog || ...), so match those
-    retention_tables = {f"{CATALOG}{frag}" for frag in re.findall(r":catalog \|\| '(\.[a-z_.]+)'", retention_sql)}
+    # The retention SQL goes through the same two scanners as the statement set above,
+    # after binding `:catalog` the way the SQL task does. Matching only the
+    # `IDENTIFIER(:catalog || '...')` spelling would let a literal `ow_tp.bronze.other`
+    # or a two-part `bronze.other` target be added to that file without the audit ever
+    # seeing it, while the two existing targets kept `bool(...)` true and the check green.
+    retention_bound = retention_sql.replace(":catalog || '.", f"'{CATALOG}.")
+    retention_tables = {
+        *_QUALIFIED_NAME.findall(retention_bound),
+        *_write_targets(retention_bound),
+    }
     retention_unowned = retention_tables - OWNED_TABLES
     ok = ok and not retention_unowned and bool(retention_tables)
     check.detail.append(f"retention SQL targets: {sorted(retention_tables)} outside={sorted(retention_unowned) or 'none'}")
