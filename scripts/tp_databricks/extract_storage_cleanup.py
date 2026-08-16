@@ -61,6 +61,10 @@ def _validate_inputs(ns: str, scenario: str) -> None:
     nb._checked("scenario", scenario)
 
 
+def _validate_input_dir(input_dir: str) -> None:
+    nb._checked("input_dir", input_dir)
+
+
 def _client(service: str):
     return boto3.client(
         service,
@@ -279,6 +283,7 @@ def main(argv: list[str]) -> int:
     )
     args = parser.parse_args(argv)
     _validate_inputs(args.ns, args.scenario)
+    _validate_input_dir(args.input_dir)
 
     # List first, then scan metadata: an object is visible to the join if its
     # metadata row lands before the second observation, avoiding a read-order
