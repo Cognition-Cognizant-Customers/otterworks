@@ -279,8 +279,11 @@ def main() -> int:
     for statement in ddl_statements():
         dbx.sql(statement)
 
+    landed_names: set[str] | None = None
     if not args.skip_landing:
-        for name, count in _land_drops(ns, args.source_dir):
+        landed = _land_drops(ns, args.source_dir)
+        landed_names = {name for name, _ in landed}
+        for name, count in landed:
             print(f"landed {name}: {count} lines")
 
     for statement in parse_statements(ns):
@@ -295,6 +298,16 @@ def main() -> int:
     )
     for row in recon:
         print("recon: " + "\t".join(map(str, row)))
+    if landed_names is not None:
+        recon_names = {row[0] for row in recon}
+        missing = sorted(landed_names - recon_names)
+        if missing:
+            print(
+                "trailer reconciliation missing landed files: "
+                + ", ".join(missing),
+                file=sys.stderr,
+            )
+            return 1
     bad = [r for r in recon if str(r[4]).lower() != "true"]
     if bad or not recon:
         print("trailer reconciliation failed; silver is not trustworthy", file=sys.stderr)
