@@ -104,8 +104,10 @@ multi-task job that mirrors the shipped DAG (`ow_tp_dev_estate_orchestrator`), p
   from the drill artifact, so the query cannot be pointed at a namespace the drill never wrote to
   and pass by finding nothing there), asked of the live table by the recon script after the fact:
   **none** — no green row, no row at all
-- `job_torn_down: true`; the temporary job and its notebook copy are gone, and nothing under `etl/`
-  was modified to stage the failure
+- `job_torn_down: true`; the temporary job is gone, and nothing under `etl/` was modified to stage
+  the failure. The throwaway notebook copy the drill deployed to `/Shared/ow_tp` was left behind
+  by that run and has since been deleted by hand; `run_estate_dev.py` now deletes it as part of
+  teardown and reports whether it did.
 
 The legacy comparison is the point: `run_all.sh` with the same broken input printed nothing and
 exited 0.
