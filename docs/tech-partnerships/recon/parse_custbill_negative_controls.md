@@ -175,12 +175,24 @@ still validated the two rows it found but skipped the baseline row-count
 comparison):
 
 ```text
-| 1. Row-level parity: every field of every row, keyed on (file, line_no) | **BLOCKED** |
-| 2. Per-file subtotals per record type and currency, exact to the cent | **BLOCKED** |
-| 3. Trailer reconciliation: declared_trailer_count = parsed + rejected, recon_ok | **BLOCKED** |
-| 4. Quarantine justified: nothing the legacy output contains is rejected | **BLOCKED** |
-Blocked: `golden output` -> no rows loaded from /tmp/empty-golden using CUSTBILL_DEMO_[0-9][0-9][0-9].psv
+BLOCKED  1. Row-level parity: every field of every row, keyed on (file, line_no)
+BLOCKED  2. Per-file subtotals per record type and currency, exact to the cent
+BLOCKED  3. Trailer reconciliation: declared_trailer_count = parsed + rejected, recon_ok
+BLOCKED  4. Quarantine justified: nothing the legacy output contains is rejected
+report written to /tmp/h-recapture-report.md
+recon_exit=1
 ```
+
+The baseline check also reported:
+
+```text
+CUSTBILL_DEMO_001.psv: missing from /tmp/h-empty
+CUSTBILL_DEMO_002.psv: missing from /tmp/h-empty
+```
+
+The blocking reason names the directory and exact namespace glob:
+`golden output` -> no rows loaded from `/tmp/h-empty` using
+`CUSTBILL_DEMO_[0-9][0-9][0-9].psv`.
 
 The report result was `red` because the baseline check could not find its two
 contract files; the empty baseline is not an evaluable success.
@@ -336,6 +348,55 @@ planted_golden_exists True
 
 The planted files were scratch-only and were not loaded or included in the
 demo namespace. The scratch directories were removed after the control.
+
+## N. Mixed normal and detail-free delivery reconciles every file
+
+The throwaway namespace `ns=nemptymix` contained one normal 50-detail file and
+one HDR+TRL-only file. Its matching golden directory contained the normal
+50-row `.psv` and a zero-byte `.psv` for the detail-free file. The row-level
+check matched all rows from the normal file, while check 3 validated a
+reconciliation row for both delivered files:
+
+```text
+PASS  1. Row-level parity: every field of every row, keyed on (file, line_no)
+      golden rows: 50; converted rows: 50
+      all 50 rows match on all 6 fields
+PASS  3. Trailer reconciliation: declared_trailer_count = parsed + rejected, recon_ok
+      CUSTBILL_NEMPTYMIX_001.dat: declared 50 = parsed 50 + rejected 0, recon_ok=true
+      CUSTBILL_NEMPTYMIX_003.dat: declared 0 = parsed 0 + rejected 0, recon_ok=true
+report written to /tmp/n-mixed-report.md
+recon_exit=1
+```
+
+The overall exit was nonzero because this throwaway namespace is not the
+`demo` contract namespace, so check 0 is blocked and check 2 does not evaluate
+the demo-only subtotal constants. The delivery-specific row and trailer
+checks passed.
+
+## O. All-empty delivery compares as a real zero-row result
+
+The throwaway namespace `ns=nemptyall` contained two HDR+TRL-only files, with
+two matching zero-byte `.psv` files. Checks 1, 2, 3, and 4 all passed:
+
+```text
+PASS  1. Row-level parity: every field of every row, keyed on (file, line_no)
+      golden rows: 0; converted rows: 0
+      all 0 rows match on all 6 fields
+PASS  2. Per-file subtotals per record type and currency, exact to the cent
+      golden rows: 0; converted rows: 0
+      all 0 rows match; no subtotal groups to compare
+PASS  3. Trailer reconciliation: declared_trailer_count = parsed + rejected, recon_ok
+      CUSTBILL_NEMPTYALL_001.dat: declared 0 = parsed 0 + rejected 0, recon_ok=true
+      CUSTBILL_NEMPTYALL_002.dat: declared 0 = parsed 0 + rejected 0, recon_ok=true
+PASS  4. Quarantine justified: nothing the legacy output contains is rejected
+      quarantined rows for ns=nemptyall: 0
+report written to /tmp/o-empty-report.md
+recon_exit=1
+```
+
+The overall exit was nonzero only because the non-demo namespace cannot satisfy
+the demo-only baseline contract; the empty delivery itself was evaluated as
+0-vs-0 rather than blocked.
 
 ## Note on the shared workspace
 
