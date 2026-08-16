@@ -44,7 +44,8 @@ def leftover_scan(pid, description, args, extractor):
         m.add(pid, description, "aws " + " ".join(args), "denied", "scan command failed")
         return False
     try:
-        matches = extractor(json.loads(raw))
+        body = {} if not raw.strip() else json.loads(raw)
+        matches = extractor(body)
     except (json.JSONDecodeError, TypeError, AttributeError, KeyError) as exc:
         detail = f"unable to parse leftover scan output: {exc}; output={(raw or '<empty>')[:300]}"
         m.add(pid, description, "aws " + " ".join(args), "denied", detail)
@@ -127,7 +128,11 @@ def list_output(body):
 
 
 def field_list(body, field):
-    if not isinstance(body, dict) or not isinstance(body.get(field), list):
+    if not isinstance(body, dict):
+        raise TypeError(f"expected JSON object with list field {field}")
+    if field not in body:
+        return []
+    if not isinstance(body[field], list):
         raise TypeError(f"expected JSON object with list field {field}")
     return body[field]
 
