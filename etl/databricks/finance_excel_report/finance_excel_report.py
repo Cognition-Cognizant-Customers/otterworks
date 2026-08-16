@@ -143,29 +143,27 @@ def run_pipeline(spark, dbutils) -> None:
         )"""
     )
 
-    # Malformed-record policy: NULL attribution in silver fails the run with
-    # attribution before anything is aggregated or written.
-    breaches = spark.sql(
-        f"""SELECT file_name, line_number FROM {records_table}
-            WHERE ns = :ns
-              AND (currency IS NULL OR record_type IS NULL OR amount IS NULL)
+    fetched = spark.sql(
+        f"""SELECT file_name, line_number, currency, record_type, amount
+            FROM {records_table} WHERE ns = :ns
             ORDER BY file_name, line_number""",
         args={"ns": ns},
     ).collect()
-    if breaches:
-        attribution = [f"{b.file_name}:{b.line_number}" for b in breaches]
+    silver_rows = [(r.currency, r.record_type, r.amount) for r in fetched]
+
+    # Malformed-record policy: NULL attribution in silver fails the run with
+    # attribution before anything is aggregated or written.
+    breach_indices = find_attribution_breaches(silver_rows)
+    if breach_indices:
+        attribution = [
+            f"{fetched[i - 1].file_name}:{fetched[i - 1].line_number}"
+            for i in breach_indices
+        ]
         raise ValueError(
-            f"upstream contract breach: {len(breaches)} silver row(s) with NULL "
-            f"currency/record_type/amount for ns={ns}: {attribution}"
+            f"upstream contract breach: {len(breach_indices)} silver row(s) with "
+            f"NULL currency/record_type/amount for ns={ns}: {attribution}"
         )
 
-    silver_rows = [
-        (r.currency, r.record_type, r.amount)
-        for r in spark.sql(
-            f"SELECT currency, record_type, amount FROM {records_table} WHERE ns = :ns",
-            args={"ns": ns},
-        ).collect()
-    ]
     summary = aggregate(silver_rows)
 
     # Reconciliation: gold record counts must account for every silver row,
