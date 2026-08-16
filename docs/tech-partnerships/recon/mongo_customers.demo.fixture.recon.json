@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_customers",
   "namespace": "demo",
-  "generated_at": "2026-08-16T18:19:04Z",
+  "generated_at": "2026-08-16T18:27:17Z",
   "run_mode": "fixture",
   "checks": [
     {
@@ -24,6 +24,13 @@
       "expected": 8333,
       "actual": 8333,
       "source_of_truth": "testdata/legacy/manifests/demo.json",
+      "result": "pass"
+    },
+    {
+      "id": "checksum-inputs-present",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "target collection scan (documents lacking cust_id/cur_bal_amt)",
       "result": "pass"
     },
     {

@@ -25,6 +25,7 @@ import re
 import sys
 from datetime import datetime, timezone
 
+import oracledb
 from pymongo import ReplaceOne
 
 import mongo_common
@@ -50,6 +51,25 @@ QUARANTINE_KINDS = {
     "related_acct_ids": "malformed_csv_lists",
     "promo_codes_csv": "malformed_csv_lists",
 }
+
+
+def surrogate_passthrough_handler(cursor, metadata):
+    """Fetch VARCHAR2/CHAR with surrogateescape so invalid UTF-8 bytes survive
+    the driver decode and can be detected per record instead of crashing the
+    fetch."""
+    if metadata.type_code in (oracledb.DB_TYPE_VARCHAR, oracledb.DB_TYPE_CHAR,
+                              oracledb.DB_TYPE_LONG):
+        return cursor.var(metadata.type_code, metadata.internal_size,
+                          arraysize=cursor.arraysize,
+                          encoding_errors="surrogateescape")
+
+
+def ensure_utf8(value):
+    """Raise UnicodeEncodeError if the value carries surrogate-escaped bytes
+    (i.e. the source bytes were not valid UTF-8)."""
+    if isinstance(value, str):
+        value.encode("utf-8")
+    return value
 
 
 def parse_legacy_date(value: str):
@@ -92,11 +112,12 @@ def quarantine_doc(ns: str, cust_id: str, field: str, kind: str, reason: str,
 
 def build_doc(ns: str, columns, row, attributes, quarantine_out) -> dict:
     raw = dict(zip(columns, row))
-    cust_id = raw["cust_id"]
+    cust_id = ensure_utf8(raw["cust_id"])
     doc = {"_id": mongo_common.det_id(ns, "customer", cust_id)}
     for field, value in raw.items():
         if value is None:
             continue  # NULL/missing source values are omitted, never defaulted
+        ensure_utf8(value)
         if field in DATE_FIELDS:
             parsed = parse_legacy_date(value)
             if parsed is None:
@@ -153,6 +174,8 @@ def migrate(ns: str) -> int:
     total = cur.fetchone()[0]
     if total == 0:
         # Empty/absent source namespace: write nothing, leave prior output.
+        cur.close()
+        conn.close()
         print(f"[{UNIT}] ns={ns}: source namespace is empty; no-op")
         return 0
 
@@ -161,13 +184,15 @@ def migrate(ns: str) -> int:
     customers = client[mongo_common.target_db_name(ns)]["customers"]
     quarantine = client[mongo_common.quarantine_db_name(ns)]["customers_quarantine"]
 
-    cur.execute("SELECT * FROM customer_master WHERE conversion_batch_no = :1 "
-                "ORDER BY cust_id", [batch_no])
-    columns = [d[0].lower() for d in cur.description]
+    data_cur = conn.cursor()
+    data_cur.outputtypehandler = surrogate_passthrough_handler
+    data_cur.execute("SELECT * FROM customer_master WHERE conversion_batch_no = :1 "
+                     "ORDER BY cust_id", [batch_no])
+    columns = [d[0].lower() for d in data_cur.description]
     migrated = quarantined_records = 0
     quarantine_ops_total = 0
     while True:
-        rows = cur.fetchmany(BATCH_SIZE)
+        rows = data_cur.fetchmany(BATCH_SIZE)
         if not rows:
             break
         doc_ops, q_docs = [], []
@@ -176,9 +201,10 @@ def migrate(ns: str) -> int:
                 doc = build_doc(ns, columns, row, attributes, q_docs)
             except (UnicodeDecodeError, UnicodeError) as exc:
                 # Invalid bytes never fail open into a valid-looking document.
-                cust_id = row[columns.index("cust_id")]
+                raw_pk = row[columns.index("cust_id")]
+                safe_pk = str(raw_pk).encode("utf-8", "backslashreplace").decode()
                 q_docs.append(quarantine_doc(
-                    ns, str(cust_id), "*", "invalid_utf8",
+                    ns, safe_pk, "*", "invalid_utf8",
                     f"record does not decode as UTF-8: {exc}", None))
                 quarantined_records += 1
                 continue
@@ -191,6 +217,7 @@ def migrate(ns: str) -> int:
                 [ReplaceOne({"_id": d["_id"]}, d, upsert=True) for d in q_docs],
                 ordered=False)
             quarantine_ops_total += len(q_docs)
+    data_cur.close()
     cur.close()
     conn.close()
     client.close()

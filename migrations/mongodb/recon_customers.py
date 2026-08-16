@@ -39,13 +39,19 @@ def compute(ns: str) -> dict:
 
     count = customers.count_documents({})
     pairs = []
+    missing_checksum_inputs = 0
     attr_entries = 0
     array_typed_related = array_typed_promo = 0
     bson_date_signup = 0
     for doc in customers.find(
             {}, {"cust_id": 1, "cur_bal_amt": 1, "attributes": 1,
                  "related_acct_ids": 1, "promo_codes_csv": 1, "signup_dt": 1}):
-        pairs.append((doc["cust_id"], f"{doc['cur_bal_amt']:.2f}"))
+        if "cust_id" in doc and "cur_bal_amt" in doc:
+            pairs.append((doc["cust_id"], f"{doc['cur_bal_amt']:.2f}"))
+        else:
+            # NULL source values are omitted fields; never fabricate a 0.00
+            # balance into the checksum — count and surface instead.
+            missing_checksum_inputs += 1
         attr_entries += len(doc.get("attributes", []))
         if isinstance(doc.get("related_acct_ids"), list):
             array_typed_related += 1
@@ -63,6 +69,7 @@ def compute(ns: str) -> dict:
     return {
         "count": count,
         "checksum": checksum,
+        "missing_checksum_inputs": missing_checksum_inputs,
         "attr_entries": attr_entries,
         "array_typed_related": array_typed_related,
         "array_typed_promo": array_typed_promo,
@@ -100,6 +107,8 @@ def build_report(ns: str, run_mode: str, actual: dict,
         check("customers-checksum", cm_checksum, actual["checksum"],
               manifest_src),
         check("eav-folded", eav_rows, actual["attr_entries"], manifest_src),
+        check("checksum-inputs-present", 0, actual["missing_checksum_inputs"],
+              "target collection scan (documents lacking cust_id/cur_bal_amt)"),
         check("csv-to-arrays",
               {"quarantined_malformed_csv": anomalies.get("malformed_csv_lists"),
                "valid_lists_are_arrays": True},
