@@ -73,7 +73,7 @@ def aggregate(psv_bodies: list[bytes]) -> bytes:
 def handler(event, context):
     ns = event.get("ns") or os.environ["NS"]
     report_date = event["report_date"]
-    if not re.fullmatch(r"\d{8}", report_date):
+    if not re.fullmatch(r"[0-9]{8}", report_date):
         raise ValueError(f"report_date must be YYYYMMDD, got {report_date!r}")
     bucket = os.environ.get("PIPELINE_BUCKET") or (
         f"ow-tp-{ns}-pipeline-{os.environ['ACCOUNT_ID']}"

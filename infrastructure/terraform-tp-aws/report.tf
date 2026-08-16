@@ -172,6 +172,7 @@ data "aws_iam_policy_document" "chain_permissions" {
     effect = "Allow"
     actions = [
       "logs:CreateLogDelivery",
+      "logs:CreateLogStream",
       "logs:GetLogDelivery",
       "logs:UpdateLogDelivery",
       "logs:DeleteLogDelivery",
