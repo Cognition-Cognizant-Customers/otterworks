@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_customers",
   "namespace": "demo",
-  "generated_at": "2026-08-16T20:12:45Z",
+  "generated_at": "2026-08-16T20:21:20Z",
   "run_mode": "fixture",
   "checks": [
     {

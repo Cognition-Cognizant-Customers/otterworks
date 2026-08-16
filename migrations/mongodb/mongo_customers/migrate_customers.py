@@ -152,12 +152,34 @@ def build_doc(ns: str, columns, row, attributes, quarantine_out) -> dict:
             doc[field] = parsed
         else:
             doc[field] = value
-    folded = attributes.get(cust_id)
-    if folded:
-        for entry in folded:
+    # Attribute-level decode failures quarantine only the offending EAV
+    # entry (attributed by eav_id/attr_name); the customer document and its
+    # remaining attributes are still written. Whole-record rejection is
+    # reserved for invalid bytes in CUSTOMER_MASTER columns.
+    kept = []
+    for entry in attributes.get(cust_id, []):
+        try:
             for v in entry.values():
                 ensure_utf8(v, "attributes")
-        doc["attributes"] = folded
+        except InvalidUtf8 as exc:
+            safe_name = str(entry.get("name", "")).encode(
+                "utf-8", "backslashreplace").decode()
+            safe_value = str(exc.value).encode(
+                "utf-8", "backslashreplace").decode()
+            q = quarantine_doc(
+                ns, cust_id, "attributes", "invalid_utf8",
+                f"EAV entry eav_id={entry['eav_id']} attr_name={safe_name} "
+                "does not decode as UTF-8", safe_value)
+            q["_id"] = mongo_common.det_id(
+                ns, "quarantine", cust_id, "invalid_utf8", "attributes",
+                str(entry["eav_id"]))
+            q["eav_id"] = entry["eav_id"]
+            q["attr_name"] = safe_name
+            field_quarantine.append(q)
+            continue
+        kept.append(entry)
+    if kept:
+        doc["attributes"] = kept
     # Only attribute field-level quarantine entries once the record itself is
     # accepted; a record rejected wholesale must not also be filed per-field.
     quarantine_out.extend(field_quarantine)
