@@ -23,7 +23,18 @@ Positions are 1-based, matching both the copybook and the legacy `cut -c` calls.
 
 from __future__ import annotations
 
-CATALOG = "ow_tp"
+import os
+import re
+
+
+def validate_catalog(value: str) -> str:
+    """Validate the Unity Catalog identifier before interpolating table names."""
+    if re.fullmatch(r"ow_tp[a-z0-9_]*", value) is None:
+        raise ValueError(f"invalid catalog {value!r}: expected ^ow_tp[a-z0-9_]*$")
+    return value
+
+
+CATALOG = validate_catalog(os.environ.get("OW_TP_CATALOG", "ow_tp"))
 
 RECORD_LENGTH = 65
 VALID_RECORD_TYPES = ("01", "02")
@@ -33,13 +44,16 @@ VALID_RECORD_TYPES = ("01", "02")
 SILVER_RECORDS = f"{CATALOG}.silver.custbill_records"
 SILVER_REJECTS = f"{CATALOG}.silver.custbill_rejects"
 SILVER_FILE_RECON = f"{CATALOG}.silver.custbill_file_recon"
+STAGING_RECORDS = f"{CATALOG}.silver.custbill_records_staging"
+STAGING_REJECTS = f"{CATALOG}.silver.custbill_rejects_staging"
+STAGING_FILE_RECON = f"{CATALOG}.silver.custbill_file_recon_staging"
 
 BRONZE_FILES = f"{CATALOG}.bronze.custbill_files"
 BRONZE_LINES = f"{CATALOG}.bronze.custbill_lines"
 
 
 def silver_ddl() -> list[str]:
-    """Idempotent DDL for the three silver tables this unit owns.
+    """Idempotent DDL for the published and staging silver tables this unit owns.
 
     Typed columns replace the legacy string surgery: the implied decimal becomes
     a real DECIMAL(18,2) and the YYYYMMDD field a real DATE, so a record that
@@ -54,12 +68,12 @@ def silver_ddl() -> list[str]:
           line_no INT COMMENT '1-based line number in the source file (HDR is line 1).',
           record_type STRING COMMENT '01 = invoice, 02 = credit (copybook REC-TYPE).',
           account_id STRING COMMENT 'Copybook CUST-ID, trailing blanks trimmed.',
-          customer_name STRING COMMENT 'Copybook CUST-NAME, trailing blanks trimmed.',
           invoice_id STRING COMMENT 'Reserved: copybook CBCUST01 carries no invoice number, so this is always NULL for this feed.',
           currency STRING COMMENT 'ISO currency code (copybook CURRENCY).',
           amount DECIMAL(18,2) COMMENT 'Copybook BILL-AMT with the implied decimal applied numerically (units/100), not by string insertion.',
           bill_date DATE COMMENT 'Copybook BILL-DATE parsed as a real date; invalid dates are rejected, never reformatted through.',
-          parsed_at TIMESTAMP COMMENT 'When this run wrote the row.'
+          parsed_at TIMESTAMP COMMENT 'When this run wrote the row.',
+          customer_name STRING COMMENT 'Copybook CUST-NAME, trailing blanks trimmed.'
         )
         USING DELTA
         COMMENT 'Typed CUSTBILL detail records, replacing the legacy pipe-delimited .psv produced by three passes of cut/sed/awk.'
@@ -88,6 +102,48 @@ def silver_ddl() -> list[str]:
         )
         USING DELTA
         COMMENT 'Trailer-count reconciliation per file. The legacy job logged the trailer count next to the parsed count and moved on (ETL-0187, requested 2011, never implemented); here a mismatch fails the run.'
+        """,
+        f"""
+        CREATE TABLE IF NOT EXISTS {STAGING_RECORDS} (
+          ns STRING,
+          file_name STRING,
+          line_no INT,
+          record_type STRING,
+          account_id STRING,
+          invoice_id STRING,
+          currency STRING,
+          amount DECIMAL(18,2),
+          bill_date DATE,
+          parsed_at TIMESTAMP,
+          customer_name STRING
+        )
+        USING DELTA
+        COMMENT 'Namespace-scoped staging for typed CUSTBILL records; published only after trailer reconciliation passes.'
+        """,
+        f"""
+        CREATE TABLE IF NOT EXISTS {STAGING_REJECTS} (
+          ns STRING,
+          file_name STRING,
+          line_no INT,
+          raw_line STRING,
+          reject_reason STRING,
+          rejected_at TIMESTAMP
+        )
+        USING DELTA
+        COMMENT 'Namespace-scoped staging for CUSTBILL quarantine rows.'
+        """,
+        f"""
+        CREATE TABLE IF NOT EXISTS {STAGING_FILE_RECON} (
+          ns STRING,
+          file_name STRING,
+          declared_trailer_count BIGINT,
+          parsed_count BIGINT,
+          rejected_count BIGINT,
+          recon_ok BOOLEAN,
+          reconciled_at TIMESTAMP
+        )
+        USING DELTA
+        COMMENT 'Namespace-scoped staging for CUSTBILL trailer reconciliation rows.'
         """,
     ]
 
