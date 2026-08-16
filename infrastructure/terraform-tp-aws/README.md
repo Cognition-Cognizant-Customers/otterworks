@@ -1,71 +1,54 @@
-# terraform-tp-aws — serverless "after" state for the AWS partner demo
+# terraform-tp-aws — AWS serverless CUSTBILL pipeline (tech-partnerships)
 
-Self-contained Terraform stack (separate **local** state, nothing shared with
-`infrastructure/terraform/`) that replaces the legacy CUSTBILL pet-box chain
-(`etl/legacy-extra/`) with an event-driven serverless pipeline:
+Self-contained Terraform stack that replaces the legacy pet-box CUSTBILL batch chain
+(`etl/legacy-extra/`) with an event-driven serverless pipeline. Separate from
+`infrastructure/terraform` (different state, no shared resources), and safe to
+`terraform destroy` at any time.
 
 ```
-s3://ow-tp-ingest-<acct>/landing/<ns>/CUSTBILL_*.dat
-  -> EventBridge rule (Object Created, prefix landing/)
-    -> SQS ow-tp-ingest-queue (DLQ: ow-tp-ingest-dlq, maxReceive 3)
-      -> Lambda ow-tp-trigger
-        -> Step Functions ow-tp-custbill-pipeline
-             ParseCustbill  (ow-tp-parse):  fixed-width -> parsed/<ns>/*.psv + DynamoDB ow-tp-billing-records
-             FinanceReport  (ow-tp-report): reports/<ns>/finance_billing_<YYYYMMDD>.csv (+ .xls copy)
+s3://ow-tp-ingest-<account>/landing/<ns>/CUSTBILL_*.dat
+  -> EventBridge "Object Created"        (rule ow-tp-landing-object-created)
+    -> SQS ow-tp-ingest-queue (+ -dlq)
+      -> Lambda ow-tp-trigger            replaces etl/legacy-extra/jobs/sftp_ingest_poll.ksh
+        -> Step Functions ow-tp-custbill-pipeline   replaces run_all.sh sleep-sequencing
+             Parse  : Lambda ow-tp-parse  replaces jobs/parse_custbill_fixedwidth.sh
+                      -> parsed/<ns>/<file>.psv + DynamoDB ow-tp-billing-records
+             Report : Lambda ow-tp-report replaces jobs/finance_excel_report.pl
+                      -> reports/<ns>/finance_billing_<stamp>.csv (+ .xls copy)
 ```
 
-Lambda source: `services/serverless-ingest/` (semantically equivalent to
-`parse_custbill_fixedwidth.sh` + `finance_excel_report.pl`, parameterized by
-namespace for multi-tenant fan-out).
+## Layout
 
-Cost discipline: Lambda, Step Functions, EventBridge, SQS, DynamoDB
-**on-demand**, S3 only — nothing with an hourly cost. Every resource is tagged
-`Project=otterworks-tp` and named `ow-tp-*`.
+| File | Owner | Contents |
+|---|---|---|
+| `main.tf`, `iam.tf`, `variables.tf`, `outputs.tf`, `versions.tf` | shared skeleton | S3 bucket, EventBridge rule, SQS + DLQ, DynamoDB, Lambda packaging, naming/ARN locals, assume-role documents |
+| `component-ingest.tf` | ingest component | `ow-tp-trigger` Lambda + SQS event-source mapping |
+| `component-parse.tf` | parse component | `ow-tp-parse` Lambda + its IAM policy |
+| `component-report.tf` | report/orchestration component | `ow-tp-report` Lambda + `ow-tp-custbill-pipeline` state machine |
 
-## Apply
+Components never reference each other's Terraform resources — they use the
+deterministic names/ARNs in `local.lambda_names`, `local.lambda_arns` and
+`local.state_machine_arn` so each component can be developed and merged on its own.
+Per-component contracts: `docs/tech-partnerships/contracts/aws-serverless-*.md`.
+
+## Usage
 
 ```bash
-cd infrastructure/terraform-tp-aws
-terraform init
-terraform apply -auto-approve      # ~2 minutes
+# the stack's region comes from var.aws_region (default us-east-1); set it with
+# TF_VAR_aws_region, not AWS_DEFAULT_REGION — the helper scripts read the
+# deployed region back out of the stack outputs.
+export TF_VAR_aws_region=us-east-1
+make aws-tp-apply                 # terraform init + apply
+make legacy-etl-gen-data NS=demo  # deterministic CUSTBILL input
+make aws-tp-run NS=demo           # upload the sample files to landing/<ns>/
+make aws-tp-verify NS=demo        # recon vs. the legacy golden outputs
+make aws-tp-destroy               # destroy + tag scan proving nothing is left
 ```
 
-Credentials: standard AWS env vars (`AWS_ACCESS_KEY_ID` /
-`AWS_SECRET_ACCESS_KEY`, region `us-east-1` by default).
+## Cost discipline
 
-## Verify (recon vs. the legacy chain)
-
-From the repo root:
-
-```bash
-make aws-tp-verify NS=dev
-```
-
-Seeds deterministic sample input (`etl/legacy-extra/tools/gen_sample_data.pl`),
-runs the legacy chain locally, uploads the same files to `landing/<ns>/`, waits
-for the pipeline, and diffs the serverless outputs (parsed `.psv` files and the
-finance report) against the legacy outputs byte-for-byte. Writes a recon report
-and exits non-zero on any mismatch.
-
-## Destroy
-
-```bash
-terraform destroy -auto-approve
-```
-
-Removes everything, including the bucket contents (`force_destroy = true`) and
-the CloudWatch log groups. Confirm no leftovers:
-
-```bash
-aws resourcegroupstaggingapi get-resources \
-  --tag-filters Key=Project,Values=otterworks-tp \
-  --query 'ResourceTagMappingList[].ResourceARN'
-```
-
-The tagging API is eventually consistent: a just-deleted Lambda event-source
-mapping can linger in its listing for a while. If an ARN shows up, confirm the
-resource is actually gone (e.g. `aws lambda get-event-source-mapping --uuid
-<uuid>` returns `ResourceNotFoundException`).
-
-State is local (`terraform.tfstate`, gitignored). The stack is kept destroyed
-between demos and re-applied at demo time.
+Serverless / on-demand only: S3, Lambda, SQS, EventBridge, Step Functions (Standard),
+DynamoDB `PAY_PER_REQUEST`, CloudWatch log groups with 7-day retention. No EC2, NAT
+gateways, RDS, or load balancers — nothing with an hourly charge. Every resource is
+named `ow-tp-*` and tagged `Project=otterworks-tp` (provider `default_tags`), so
+`make aws-tp-destroy` can prove teardown with a tag scan.

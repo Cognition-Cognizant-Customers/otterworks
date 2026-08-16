@@ -1,31 +1,53 @@
-# Demo-grade Atlas configuration for the MongoDB modernization track.
-# Everything Atlas-side is Terraform-managed so teardown is one command
-# (see README.md — the shared M0 cluster needs `terraform state rm` first).
+locals {
+  database_name  = "ow_tp_${var.ns}"
+  username       = "ow_tp_${var.ns}_migrator"
+  access_comment = "ow-tp-mongo-${var.ns}"
+}
 
-# IP access list — demo-grade open entry so Devin VMs / demo laptops
-# (no stable egress IPs) can reach the cluster.
-resource "mongodbatlas_project_ip_access_list" "demo_open" {
+# The demo uses an existing shared M0 cluster. Atlas rejects updates to M0/M2/M5
+# tenant clusters, and replacing this cluster would change its SRV hostname.
+# For the full-scale path, manage_cluster=true creates a dedicated cluster whose
+# tier is controlled by cluster_tier.
+data "mongodbatlas_advanced_cluster" "existing" {
+  count      = var.manage_cluster ? 0 : 1
   project_id = var.project_id
-  cidr_block = var.access_cidr
-  comment    = "terraform-managed demo access (otterworks tech-partnerships)"
+  name       = var.cluster_name
 }
 
-# Dedicated database user for the migration demo, scoped to readWriteAnyDatabase
-# so it can create/drop the per-namespace ow_tp_<ns> databases.
-resource "random_password" "demo_user" {
-  length  = 24
-  special = false
+resource "mongodbatlas_advanced_cluster" "managed" {
+  count                  = var.manage_cluster ? 1 : 0
+  project_id             = var.project_id
+  name                   = var.cluster_name
+  cluster_type           = "REPLICASET"
+  mongo_db_major_version = "8.0"
+
+  replication_specs {
+    zone_name = "Zone 1"
+
+    region_configs {
+      electable_specs {
+        instance_size = var.cluster_tier
+        node_count    = contains(["M0", "M2", "M5"], var.cluster_tier) ? null : 3
+      }
+
+      provider_name         = contains(["M0", "M2", "M5"], var.cluster_tier) ? "TENANT" : "AWS"
+      backing_provider_name = contains(["M0", "M2", "M5"], var.cluster_tier) ? "AWS" : null
+      region_name           = var.region
+      priority              = 7
+    }
+  }
 }
 
-resource "mongodbatlas_database_user" "demo_migrator" {
+resource "mongodbatlas_database_user" "migrator" {
   project_id         = var.project_id
-  username           = var.demo_db_username
-  password           = random_password.demo_user.result
+  username           = local.username
+  password           = var.db_password
   auth_database_name = "admin"
+  depends_on         = [mongodbatlas_advanced_cluster.managed]
 
   roles {
-    role_name     = "readWriteAnyDatabase"
-    database_name = "admin"
+    role_name     = "readWrite"
+    database_name = local.database_name
   }
 
   scopes {
@@ -34,37 +56,8 @@ resource "mongodbatlas_database_user" "demo_migrator" {
   }
 }
 
-# The shared M0 cluster. IMPORTED into state (see README.md) — Atlas allows a
-# single M0 per project, so this resource must never be created fresh here.
-locals {
-  # M0/M2/M5 shared tiers run on the TENANT provider backed by AWS;
-  # anything larger is a dedicated AWS cluster and needs electable nodes.
-  shared_tier = contains(["M0", "M2", "M5"], var.cluster_instance_size)
-}
-
-resource "mongodbatlas_advanced_cluster" "demo" {
-  project_id             = var.project_id
-  name                   = var.cluster_name
-  cluster_type           = "REPLICASET"
-  mongo_db_major_version = var.mongodb_major_version
-
-  replication_specs {
-    zone_name = "Zone 1" # matches the imported cluster so the plan is a no-op
-    region_configs {
-      electable_specs {
-        instance_size = var.cluster_instance_size
-        node_count    = local.shared_tier ? null : 3
-      }
-      provider_name         = local.shared_tier ? "TENANT" : "AWS"
-      backing_provider_name = local.shared_tier ? "AWS" : null
-      region_name           = var.cluster_region
-      priority              = 7
-    }
-  }
-
-  lifecycle {
-    # Belt-and-braces: the shared cluster must never be destroyed by this
-    # stack. Remove it from state (terraform state rm) before any destroy.
-    prevent_destroy = true
-  }
+resource "mongodbatlas_project_ip_access_list" "migration_vm" {
+  project_id = var.project_id
+  cidr_block = var.access_cidr
+  comment    = local.access_comment
 }

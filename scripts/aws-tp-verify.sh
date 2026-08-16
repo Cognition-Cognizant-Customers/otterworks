@@ -1,174 +1,222 @@
 #!/usr/bin/env bash
-#############################################################
-# aws-tp-verify.sh — recon the serverless CUSTBILL pipeline
-# against the legacy chain (etl/legacy-extra/).
 #
-# Usage: scripts/aws-tp-verify.sh <NS>   (or: make aws-tp-verify NS=<ns>)
+# Recon the serverless CUSTBILL pipeline against the legacy chain.
 #
-# 1. Seeds deterministic sample input (gen_sample_data.pl).
-# 2. Runs the legacy chain locally (ingest -> parse -> report).
-# 3. Uploads the same .dat files to the ow-tp landing bucket.
-# 4. Waits for the event-driven pipeline, then diffs parsed .psv
-#    files + the finance report byte-for-byte and reconciles the
-#    DynamoDB record count. Writes a recon report; exits non-zero
-#    on any mismatch.
+# Baselines are DERIVED, never hard-coded: the legacy outputs under
+# $OTTERWORKS_LEGACY_ROOT (produced by `make legacy-etl-run NS=<ns>`) are the
+# source of truth. Every parsed .psv and the finance report CSV must be
+# byte-identical, the DynamoDB row count must match the legacy record count, the
+# DLQ must be empty, and no Step Functions execution may have failed.
 #
-# Requires: the terraform-tp-aws stack applied, aws cli creds,
-# perl; ksh optional (falls back to a plain copy for ingest).
-#############################################################
-# The setup steps (1-3) fail fast via `die`; `set -e` is not used globally
-# because the wait/compare sections must keep going to emit full diagnostics
-set -uo pipefail
+# Usage: scripts/aws-tp-verify.sh [NS] [--wait <seconds>]
+set -euo pipefail
 
-die() { echo "ERROR: $*" >&2; exit 1; }
-
-NS="${1:-${NS:-}}"
-if [ -z "$NS" ] || ! echo "$NS" | grep -qE '^[A-Za-z0-9]+$'; then
-    echo "usage: $0 <NS>   (alphanumeric namespace)" >&2
-    exit 1
-fi
-NS_LOWER=$(echo "$NS" | tr '[:upper:]' '[:lower:]')
-
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TF_DIR="$REPO_ROOT/infrastructure/terraform-tp-aws"
-LEGACY="$REPO_ROOT/etl/legacy-extra"
-
-# Talk to the region the stack was actually applied in (provider region wins
-# over env vars, so the operator's AWS_REGION may not match the stack)
-STACK_REGION=$(terraform -chdir="$TF_DIR" output -raw aws_region 2>/dev/null)
-export AWS_DEFAULT_REGION="${STACK_REGION:-us-east-1}"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+STACK_DIR="$REPO_ROOT/infrastructure/terraform-tp-aws"
+LEGACY_ROOT="${OTTERWORKS_LEGACY_ROOT:-/tmp/otterworks-legacy}"
+export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-east-1}}"
 export AWS_REGION="$AWS_DEFAULT_REGION"
-
-# Stamp the local legacy report with the same timezone the report Lambda
-# uses, so the filenames (finance_billing_<YYYYMMDD>.csv) match exactly
-REPORT_TZ=$(terraform -chdir="$TF_DIR" output -raw report_tz 2>/dev/null)
-export TZ="${REPORT_TZ:-UTC}"
-
-BUCKET=$(terraform -chdir="$TF_DIR" output -raw ingest_bucket 2>/dev/null)
-TABLE=$(terraform -chdir="$TF_DIR" output -raw billing_table 2>/dev/null)
-if [ -z "${BUCKET:-}" ] || [ -z "${TABLE:-}" ]; then
-    echo "ERROR: terraform outputs unavailable — apply infrastructure/terraform-tp-aws first" >&2
-    exit 1
+# The stack's provider region wins over the ambient one, so the deployed region
+# is authoritative for every CLI call below.
+if deployed_region="$(terraform -chdir="$STACK_DIR" output -raw aws_region 2>/dev/null)" && [ -n "$deployed_region" ]; then
+  # AWS_REGION outranks AWS_DEFAULT_REGION in the CLI, so both must be pinned
+  export AWS_DEFAULT_REGION="$deployed_region"
+  export AWS_REGION="$deployed_region"
 fi
 
-ROOT="/tmp/ow-tp-recon-$NS_LOWER"
-rm -rf "$ROOT"
-export OTTERWORKS_LEGACY_ROOT="$ROOT"
-STASH="$ROOT/stash"
-mkdir -p "$STASH"
-REPORT_FILE="$ROOT/recon_report_$NS_LOWER.txt"
+NS="${NS:-demo}"
+WAIT=0
+SINCE=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+  --wait)
+    WAIT="$2"
+    shift 2
+    ;;
+  --wait=*)
+    WAIT="${1#*=}"
+    shift
+    ;;
+  --since)
+    SINCE="$2"
+    shift 2
+    ;;
+  --since=*)
+    SINCE="${1#*=}"
+    shift
+    ;;
+  *)
+    NS="$1"
+    shift
+    ;;
+  esac
+done
+NS_UPPER="$(printf '%s' "$NS" | tr '[:lower:]' '[:upper:]')"
 
-echo "== 1. Generating deterministic sample input (NS=$NS) =="
-perl "$LEGACY/tools/gen_sample_data.pl" "$NS" || die "sample data generation failed"
-cp "$ROOT/sftp-drop/upload/"CUSTBILL*.dat "$STASH/" || die "no CUSTBILL files generated"
-NFILES=$(ls "$STASH" | wc -l | tr -d ' ')
-NRECORDS=$(cat "$STASH"/*.dat | grep -cv '^HDR\|^TRL')
+tf() { terraform -chdir="$STACK_DIR" output -raw "$1"; }
+BUCKET="$(tf ingest_bucket)"
+TABLE="$(tf billing_table)"
+DLQ_URL="$(tf ingest_dlq_url)"
+SM_ARN="$(tf state_machine_arn)"
 
-echo "== 2. Running the legacy chain locally =="
-if command -v ksh >/dev/null 2>&1; then
-    "$LEGACY/jobs/sftp_ingest_poll.ksh" >/dev/null || die "legacy ingest failed"
-else
-    mkdir -p "$ROOT/incoming"
-    cp "$STASH"/*.dat "$ROOT/incoming/" || die "legacy ingest copy failed"
+# --- legacy baseline (derived) ---
+shopt -s nullglob
+legacy_psv=("$LEGACY_ROOT"/parsed/CUSTBILL_"${NS_UPPER}"_*.psv)
+legacy_csv=("$LEGACY_ROOT"/reports/finance_billing_*.csv)
+if [ ${#legacy_psv[@]} -eq 0 ] || [ ${#legacy_csv[@]} -eq 0 ]; then
+  echo "no legacy baseline under $LEGACY_ROOT — run: make legacy-etl-gen-data NS=$NS && make legacy-etl-run NS=$NS" >&2
+  exit 2
 fi
-"$LEGACY/jobs/parse_custbill_fixedwidth.sh" >/dev/null || die "legacy parse failed"
-perl "$LEGACY/jobs/finance_excel_report.pl" >/dev/null || die "legacy report failed"
-LEGACY_REPORT=$(ls "$ROOT/reports/"finance_billing_*.csv | head -1)
-[ -n "$LEGACY_REPORT" ] || die "legacy report not produced"
-
-echo "== 3. Clearing remote namespace + uploading to s3://$BUCKET/landing/$NS_LOWER/ =="
-# A GREEN verdict must come from fresh pipeline output, never leftovers of a
-# previous run, so clearing failures are fatal and emptiness is re-checked
-for p in landing parsed reports archive; do
-    aws s3 rm --recursive "s3://$BUCKET/$p/$NS_LOWER/" --quiet \
-        || die "failed to clear s3://$BUCKET/$p/$NS_LOWER/"
-    [ -z "$(aws s3 ls "s3://$BUCKET/$p/$NS_LOWER/" 2>/dev/null)" ] \
-        || die "stale objects remain under s3://$BUCKET/$p/$NS_LOWER/"
+# The legacy Perl job aggregates EVERY CUSTBILL*.psv in $LEGACY_ROOT/parsed
+# regardless of namespace, while the serverless report only aggregates
+# parsed/<ns>/. Comparing the two is only meaningful when the legacy parsed dir
+# holds this namespace alone — refuse rather than emit a bogus mismatch.
+foreign=()
+for f in "$LEGACY_ROOT"/parsed/CUSTBILL_*.psv; do
+  case "$(basename "$f")" in
+  CUSTBILL_"${NS_UPPER}"_*) ;;
+  *) foreign+=("$(basename "$f")") ;;
+  esac
 done
-# Also clear stale DynamoDB rows from earlier runs of this namespace
-# (the CLI follows LastEvaluatedKey automatically, so Items spans all pages)
-STALE_RECS=$(aws dynamodb query --table-name "$TABLE" \
-    --key-condition-expression "#ns = :ns AND begins_with(rec, :pfx)" \
-    --expression-attribute-names '{"#ns":"ns"}' \
-    --expression-attribute-values "{\":ns\":{\"S\":\"$NS_LOWER\"},\":pfx\":{\"S\":\"CUSTBILL\"}}" \
-    --projection-expression rec --query 'Items[].rec.S' --output text) \
-    || die "failed to query stale DynamoDB rows"
-while read -r rec; do
-    aws dynamodb delete-item --table-name "$TABLE" \
-        --key "{\"ns\":{\"S\":\"$NS_LOWER\"},\"rec\":{\"S\":\"$rec\"}}" \
-        || die "failed to delete stale row $rec"
-done < <(echo "$STALE_RECS" | tr '\t' '\n' | grep -v '^None$' | grep . || true)
-for f in "$STASH"/*.dat; do
-    aws s3 cp "$f" "s3://$BUCKET/landing/$NS_LOWER/$(basename "$f")" --quiet || die "upload failed: $f"
+if [ ${#foreign[@]} -gt 0 ]; then
+  echo "refusing to compare: $LEGACY_ROOT/parsed also holds other namespaces' files (${foreign[*]})." >&2
+  echo "the legacy finance report is not namespace-scoped, so its baseline would mix namespaces." >&2
+  echo "clear it and re-run the legacy chain for NS=$NS only: rm -rf $LEGACY_ROOT && make legacy-etl-gen-data NS=$NS && make legacy-etl-run NS=$NS" >&2
+  exit 2
+fi
+
+# newest report wins (the legacy job stamps by date)
+legacy_report="$(ls -t "${legacy_csv[@]}" | head -1)"
+legacy_records=0
+for f in "${legacy_psv[@]}"; do
+  legacy_records=$((legacy_records + $(wc -l <"$f")))
 done
 
-echo "== 4. Waiting for the serverless pipeline =="
-DEADLINE=$(( $(date +%s) + 300 ))
+echo "namespace       : $NS"
+echo "bucket          : $BUCKET"
+echo "legacy baseline : ${#legacy_psv[@]} parsed file(s), $legacy_records record(s), $(basename "$legacy_report")"
+echo
+
+# --- wait for the event-driven chain to catch up ---
+s3_parsed() { aws s3api list-objects-v2 --bucket "$BUCKET" --prefix "parsed/$NS/" --query 'Contents[].Key' --output text 2>/dev/null || true; }
+# .csv only — the .xls sibling is a byte-identical copy and must not be picked as
+# the report under test
+s3_report() { aws s3api list-objects-v2 --bucket "$BUCKET" --prefix "reports/$NS/finance_billing_" --query 'sort_by(Contents[?ends_with(Key,`.csv`)],&LastModified)[-1].Key' --output text 2>/dev/null || true; }
+
+deadline=$((SECONDS + WAIT))
 while :; do
-    NPARSED=$(aws s3 ls "s3://$BUCKET/parsed/$NS_LOWER/" 2>/dev/null | grep -c '\.psv$' || true)
-    NREPORT=$(aws s3 ls "s3://$BUCKET/reports/$NS_LOWER/" 2>/dev/null | grep -c '\.csv$' || true)
-    [ "$NPARSED" -ge "$NFILES" ] && [ "$NREPORT" -ge 1 ] && break
-    if [ "$(date +%s)" -gt "$DEADLINE" ]; then
-        echo "ERROR: pipeline timed out (parsed=$NPARSED/$NFILES report=$NREPORT)" >&2
-        exit 1
-    fi
-    sleep 5
+  parsed_keys="$(s3_parsed)"
+  report_key="$(s3_report)"
+  parsed_n=0
+  [ -n "$parsed_keys" ] && [ "$parsed_keys" != "None" ] && parsed_n=$(wc -w <<<"$parsed_keys")
+  if [ "$parsed_n" -ge "${#legacy_psv[@]}" ] && [ -n "$report_key" ] && [ "$report_key" != "None" ]; then
+    break
+  fi
+  if [ "$SECONDS" -ge "$deadline" ]; then
+    echo "pipeline output incomplete after ${WAIT}s: parsed=$parsed_n/${#legacy_psv[@]} report=${report_key:-none}" >&2
+    break
+  fi
+  sleep 5
 done
 
-compare() {
-    PASS=true
-    CLOUD="$ROOT/cloud"
-    rm -rf "$CLOUD" && mkdir -p "$CLOUD/parsed" "$CLOUD/reports"
-    aws s3 cp --recursive "s3://$BUCKET/parsed/$NS_LOWER/" "$CLOUD/parsed/" --quiet
-    aws s3 cp --recursive "s3://$BUCKET/reports/$NS_LOWER/" "$CLOUD/reports/" --quiet
-
-    {
-        echo "recon report — NS=$NS  $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-        echo "bucket=$BUCKET table=$TABLE files=$NFILES records=$NRECORDS"
-        echo
-        for f in "$ROOT/parsed/"CUSTBILL*.psv; do
-            b=$(basename "$f")
-            if diff -q "$f" "$CLOUD/parsed/$b" >/dev/null 2>&1; then
-                echo "PASS  parsed/$b byte-identical"
-            else
-                echo "FAIL  parsed/$b differs"
-                PASS=false
-            fi
-        done
-        # Same filename required (both sides stamp with $TZ), not just same bytes
-        CLOUD_REPORT="$CLOUD/reports/$(basename "$LEGACY_REPORT")"
-        if [ -f "$CLOUD_REPORT" ] && diff -q "$LEGACY_REPORT" "$CLOUD_REPORT" >/dev/null 2>&1; then
-            echo "PASS  finance report byte-identical ($(basename "$LEGACY_REPORT"))"
-        else
-            echo "FAIL  finance report differs or missing ($(basename "$LEGACY_REPORT"))"
-            PASS=false
-        fi
-        # length(Items) instead of --select COUNT: the CLI merges Items across
-        # LastEvaluatedKey pages, while Count reflects only a single page
-        DDB_COUNT=$(aws dynamodb query --table-name "$TABLE" \
-            --key-condition-expression "#ns = :ns AND begins_with(rec, :pfx)" \
-            --expression-attribute-names '{"#ns":"ns"}' \
-            --expression-attribute-values "{\":ns\":{\"S\":\"$NS_LOWER\"},\":pfx\":{\"S\":\"CUSTBILL\"}}" \
-            --projection-expression rec --query 'length(Items)' --output text 2>/dev/null)
-        if [ "$DDB_COUNT" = "$NRECORDS" ]; then
-            echo "PASS  DynamoDB record count matches ($DDB_COUNT)"
-        else
-            echo "FAIL  DynamoDB record count $DDB_COUNT != $NRECORDS"
-            PASS=false
-        fi
-    } > "$REPORT_FILE"
-    cat "$REPORT_FILE"
-    $PASS
+# --- compare bytes ---
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+fails=0
+printf '%-42s %-8s %s\n' FILE RESULT DETAIL
+check() { # name expected_sha actual_sha
+  if [ "$2" = "$3" ]; then
+    printf '%-42s %-8s %s\n' "$1" PASS "sha256 ${2:0:12}…"
+  else
+    printf '%-42s %-8s %s\n' "$1" FAIL "expected ${2:0:12}… got ${3:0:12}…"
+    fails=$((fails + 1))
+  fi
 }
 
-echo "== 5. Reconciling outputs =="
-# the last report regeneration can lag the last parse; retry the diff briefly
-for attempt in 1 2 3 4 5 6; do
-    if compare; then
-        echo "aws-tp-verify: GREEN (report: $REPORT_FILE)"
-        exit 0
-    fi
-    [ "$attempt" -lt 6 ] && echo "-- mismatch, retrying in 10s (attempt $attempt/6)" && sleep 10
+for f in "${legacy_psv[@]}"; do
+  base="$(basename "$f")"
+  if aws s3 cp "s3://$BUCKET/parsed/$NS/$base" "$work/$base" --only-show-errors 2>/dev/null; then
+    check "parsed/$NS/$base" "$(sha256sum <"$f" | cut -d' ' -f1)" "$(sha256sum <"$work/$base" | cut -d' ' -f1)"
+  else
+    printf '%-42s %-8s %s\n' "parsed/$NS/$base" FAIL "missing in s3"
+    fails=$((fails + 1))
+  fi
 done
-echo "aws-tp-verify: FAILED (report: $REPORT_FILE)" >&2
-exit 1
+
+report_key="$(s3_report)"
+if [ -n "$report_key" ] && [ "$report_key" != "None" ]; then
+  aws s3 cp "s3://$BUCKET/$report_key" "$work/report.csv" --only-show-errors
+  check "$report_key" "$(sha256sum <"$legacy_report" | cut -d' ' -f1)" "$(sha256sum <"$work/report.csv" | cut -d' ' -f1)"
+else
+  printf '%-42s %-8s %s\n' "reports/$NS/finance_billing_*.csv" FAIL "no report written"
+  fails=$((fails + 1))
+fi
+
+# --- DynamoDB row count ---
+ddb_count="$(aws dynamodb query --table-name "$TABLE" \
+  --key-condition-expression 'ns = :ns' \
+  --expression-attribute-values "{\":ns\":{\"S\":\"$NS\"}}" \
+  --select COUNT --query Count --output text)"
+if [ "$ddb_count" = "$legacy_records" ]; then
+  printf '%-42s %-8s %s\n' "dynamodb $TABLE (ns=$NS)" PASS "$ddb_count items"
+else
+  printf '%-42s %-8s %s\n' "dynamodb $TABLE (ns=$NS)" FAIL "$ddb_count items, legacy has $legacy_records"
+  fails=$((fails + 1))
+fi
+
+# --- DLQ must be empty ---
+dlq="$(aws sqs get-queue-attributes --queue-url "$DLQ_URL" \
+  --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible \
+  --query 'Attributes.[ApproximateNumberOfMessages,ApproximateNumberOfMessagesNotVisible]' --output text)"
+dlq_total=$(awk '{print $1+$2}' <<<"$dlq")
+if [ "$dlq_total" -eq 0 ]; then
+  printf '%-42s %-8s %s\n' "dlq" PASS "empty"
+else
+  printf '%-42s %-8s %s\n' "dlq" FAIL "$dlq_total message(s) — see ow-tp-ingest-dlq"
+  fails=$((fails + 1))
+fi
+
+# --- no failed executions for THIS run ---
+# list-executions returns the full 90-day history across namespaces, so an old
+# failure (e.g. the deliberate malformed-file beat) must not redden every later
+# run: scope to this namespace's executions started at/after the cutoff.
+if [ -n "$SINCE" ]; then
+  cutoff="$(date -d "$SINCE" +%s)"
+else
+  # oldest landing object for the namespace = when this run's feed arrived
+  oldest="$(aws s3api list-objects-v2 --bucket "$BUCKET" --prefix "landing/$NS/" \
+    --query 'sort_by(Contents,&LastModified)[0].LastModified' --output text 2>/dev/null || true)"
+  if [ -n "$oldest" ] && [ "$oldest" != "None" ]; then
+    cutoff="$(date -d "$oldest" +%s)"
+  else
+    cutoff=0
+  fi
+fi
+
+bad=""
+for status in FAILED TIMED_OUT ABORTED; do
+  # a query that could not run must never read as "none failed"
+  if rows="$(aws stepfunctions list-executions --state-machine-arn "$SM_ARN" --status-filter "$status" \
+    --query "executions[?starts_with(name,'$NS-')].[name,startDate]" --output text 2>&1)"; then
+    while read -r name started; do
+      [ -z "$name" ] && continue
+      [ "$(date -d "$started" +%s 2>/dev/null || echo 0)" -ge "$cutoff" ] && bad="$bad $status:$name"
+    done <<<"$rows"
+  else
+    bad="$bad $status:QUERY-FAILED($rows)"
+  fi
+done
+if [ -z "$bad" ]; then
+  printf '%-42s %-8s %s\n' "step functions executions" PASS "none failed"
+else
+  printf '%-42s %-8s %s\n' "step functions executions" FAIL "$bad"
+  fails=$((fails + 1))
+fi
+
+echo
+if [ "$fails" -eq 0 ]; then
+  echo "VERIFY PASS: serverless pipeline output is byte-identical to the legacy chain for NS=$NS"
+else
+  echo "VERIFY FAIL: $fails check(s) failed for NS=$NS" >&2
+  exit 1
+fi

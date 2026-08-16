@@ -1,14 +1,23 @@
 # ------------------------------------------------------------------------------
-# OtterWorks Tech-Partnerships — AWS serverless "after" state
+# OtterWorks Tech-Partnerships — AWS serverless CUSTBILL pipeline (shared skeleton)
 #
 # Replaces the legacy pet-box CUSTBILL chain (etl/legacy-extra/: SFTP poll ->
-# fixed-width parse -> finance report on cron) with an event-driven pipeline:
+# fixed-width parse -> finance report, sequenced by sleeps) with an event-driven
+# pipeline:
 #
-#   S3 landing/<ns>/CUSTBILL_*.dat
-#     -> EventBridge (S3 Object Created)
-#       -> SQS (with DLQ)
-#         -> Lambda trigger
-#           -> Step Functions: Parse (S3 .psv + DynamoDB) -> FinanceReport (S3 CSV)
+#   s3://<bucket>/landing/<ns>/CUSTBILL_*.dat
+#     -> EventBridge (S3 "Object Created")
+#       -> SQS (+ DLQ)
+#         -> trigger Lambda            (component: ingest)
+#           -> Step Functions          (component: report/orchestration)
+#                Parse   -> parsed/<ns>/*.psv + DynamoDB   (component: parse)
+#                Report  -> reports/<ns>/finance_billing_<stamp>.csv|.xls
+#
+# This file owns only the SHARED substrate (bucket, event bus wiring, queue,
+# table, packaging, naming). Each pipeline component lives in its own
+# component-*.tf file and is referenced by deterministic name, so components can
+# be developed and merged independently — see
+# docs/tech-partnerships/contracts/aws-serverless-*.md.
 #
 # Everything is serverless/on-demand (no hourly-cost resources) and fully
 # removed by `terraform destroy`.
@@ -19,9 +28,35 @@ data "aws_caller_identity" "current" {}
 locals {
   account_id = data.aws_caller_identity.current.account_id
   bucket     = "${var.name_prefix}-ingest-${local.account_id}"
+
+  # Deterministic cross-component references. Components must NOT reference each
+  # other's Terraform resources directly (they land in separate PRs); they use
+  # these constructed names/ARNs instead.
+  state_machine_name = "${var.name_prefix}-custbill-pipeline"
+  state_machine_arn  = "arn:aws:states:${var.aws_region}:${local.account_id}:stateMachine:${var.name_prefix}-custbill-pipeline"
+
+  lambda_names = {
+    trigger = "${var.name_prefix}-trigger"
+    parse   = "${var.name_prefix}-parse"
+    report  = "${var.name_prefix}-report"
+  }
+
+  lambda_arns = {
+    for k, name in local.lambda_names :
+    k => "arn:aws:lambda:${var.aws_region}:${local.account_id}:function:${name}"
+  }
+
+  # Environment every handler gets; keeps the S3/DynamoDB/state-machine contract
+  # in one place.
+  lambda_env = {
+    BUCKET            = aws_s3_bucket.ingest.bucket
+    TABLE_NAME        = aws_dynamodb_table.billing.name
+    STATE_MACHINE_ARN = local.state_machine_arn
+    TZ                = var.report_tz
+  }
 }
 
-# --- S3 landing/parsed/reports bucket ---
+# --- S3: landing/, parsed/, reports/ prefixes in one bucket ---
 
 resource "aws_s3_bucket" "ingest" {
   bucket        = local.bucket
@@ -125,7 +160,8 @@ resource "aws_sqs_queue_policy" "ingest" {
         Action    = "sqs:SendMessage"
         Resource  = aws_sqs_queue.ingest.arn
         Condition = {
-          ArnEquals = { "aws:SourceArn" = aws_cloudwatch_event_rule.landing.arn }
+          ArnEquals    = { "aws:SourceArn" = aws_cloudwatch_event_rule.landing.arn }
+          StringEquals = { "aws:SourceAccount" = local.account_id }
         }
       }
     ]
@@ -153,114 +189,11 @@ resource "aws_cloudwatch_event_target" "landing_to_sqs" {
   arn  = aws_sqs_queue.ingest.arn
 }
 
-# --- Lambda packaging (shared zip, three handlers) ---
+# --- Shared Lambda packaging: one zip, one handler module per component ---
 
 data "archive_file" "lambda" {
   type        = "zip"
   source_dir  = "${path.module}/../../services/serverless-ingest/src"
   output_path = "${path.module}/.build/serverless-ingest.zip"
   excludes    = ["__pycache__"]
-}
-
-locals {
-  lambdas = {
-    trigger = "handler_trigger.handler"
-    parse   = "handler_parse.handler"
-    report  = "handler_report.handler"
-  }
-}
-
-resource "aws_cloudwatch_log_group" "lambda" {
-  for_each          = local.lambdas
-  name              = "/aws/lambda/${var.name_prefix}-${each.key}"
-  retention_in_days = var.log_retention_days
-}
-
-resource "aws_lambda_function" "fn" {
-  for_each = local.lambdas
-
-  function_name    = "${var.name_prefix}-${each.key}"
-  role             = aws_iam_role.lambda[each.key].arn
-  handler          = each.value
-  runtime          = "python3.12"
-  timeout          = 120
-  memory_size      = 256
-  filename         = data.archive_file.lambda.output_path
-  source_code_hash = data.archive_file.lambda.output_base64sha256
-
-  environment {
-    variables = {
-      TABLE_NAME        = aws_dynamodb_table.billing.name
-      BUCKET            = aws_s3_bucket.ingest.bucket
-      STATE_MACHINE_ARN = "arn:aws:states:${var.aws_region}:${local.account_id}:stateMachine:${var.name_prefix}-custbill-pipeline"
-      TZ                = var.report_tz
-    }
-  }
-
-  depends_on = [aws_cloudwatch_log_group.lambda]
-}
-
-resource "aws_lambda_event_source_mapping" "sqs_to_trigger" {
-  event_source_arn = aws_sqs_queue.ingest.arn
-  function_name    = aws_lambda_function.fn["trigger"].arn
-  batch_size       = 10
-
-  # Partial-batch responses: only messages the handler reports as failed
-  # are retried / DLQ'd
-  function_response_types = ["ReportBatchItemFailures"]
-
-  # AWS validates the role's SQS permissions at CreateEventSourceMapping time
-  depends_on = [aws_iam_role_policy.trigger]
-}
-
-# --- Step Functions: Parse -> FinanceReport ---
-
-resource "aws_cloudwatch_log_group" "sfn" {
-  name              = "/aws/states/${var.name_prefix}-custbill-pipeline"
-  retention_in_days = var.log_retention_days
-}
-
-resource "aws_sfn_state_machine" "pipeline" {
-  name     = "${var.name_prefix}-custbill-pipeline"
-  role_arn = aws_iam_role.sfn.arn
-
-  # Step Functions validates the role's log-delivery permissions at create time
-  depends_on = [aws_iam_role_policy.sfn]
-
-  definition = jsonencode({
-    Comment = "CUSTBILL serverless pipeline: parse fixed-width extract, then regenerate the finance report"
-    StartAt = "ParseCustbill"
-    States = {
-      ParseCustbill = {
-        Type       = "Task"
-        Resource   = aws_lambda_function.fn["parse"].arn
-        ResultPath = "$.parse"
-        Retry = [{
-          ErrorEquals     = ["States.TaskFailed"]
-          IntervalSeconds = 2
-          MaxAttempts     = 2
-          BackoffRate     = 2
-        }]
-        Next = "FinanceReport"
-      }
-      FinanceReport = {
-        Type       = "Task"
-        Resource   = aws_lambda_function.fn["report"].arn
-        ResultPath = "$.report"
-        Retry = [{
-          ErrorEquals     = ["States.TaskFailed"]
-          IntervalSeconds = 2
-          MaxAttempts     = 2
-          BackoffRate     = 2
-        }]
-        End = true
-      }
-    }
-  })
-
-  logging_configuration {
-    log_destination        = "${aws_cloudwatch_log_group.sfn.arn}:*"
-    include_execution_data = true
-    level                  = "ERROR"
-  }
 }

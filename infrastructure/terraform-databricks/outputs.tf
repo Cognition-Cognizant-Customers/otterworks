@@ -1,24 +1,29 @@
 output "catalog" {
-  value = var.catalog_name
+  description = "Catalog holding the lakehouse layers."
+  value       = var.catalog_name
+}
+
+output "schemas" {
+  description = "Fully qualified bronze/silver/gold schema names."
+  value       = { for k, s in databricks_schema.layer : k => "${var.catalog_name}.${s.name}" }
 }
 
 output "landing_volume" {
-  value = "/Volumes/${var.catalog_name}/${databricks_schema.bronze.name}/${databricks_volume.landing.name}"
+  description = "Volume path the local drivers upload legacy inputs to."
+  value       = "/Volumes/${var.catalog_name}/${databricks_schema.layer["bronze"].name}/${databricks_volume.landing.name}"
 }
 
 output "warehouse_id" {
-  description = "Existing serverless SQL warehouse reused for queries (not managed by this stack)."
-  value       = data.databricks_sql_warehouse.existing.id
-}
-
-output "custbill_job_id" {
-  value = databricks_job.custbill_lakehouse.id
-}
-
-output "python_etl_wave_job_id" {
-  value = databricks_job.python_etl_wave.id
+  description = "Existing serverless SQL warehouse the jobs and recon queries run on."
+  value       = data.databricks_sql_warehouse.serverless.id
 }
 
 output "secret_scope" {
-  value = databricks_secret_scope.demo.name
+  description = "Secret scope replacing the legacy hardcoded credentials."
+  value       = databricks_secret_scope.estate.name
+}
+
+output "pipeline_root" {
+  description = "Workspace directory holding the converted pipeline notebooks."
+  value       = databricks_directory.pipelines.path
 }

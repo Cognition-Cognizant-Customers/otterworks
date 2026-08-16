@@ -1,59 +1,35 @@
-# Terraform — MongoDB Atlas (tech-partnerships demo)
+# OtterWorks MongoDB Atlas stack
 
-Self-contained stack managing the Atlas-side configuration for the MongoDB
-modernization demo (`docs/tech-partnerships/runbook-mongodb.md`):
+This parent-owned stack creates the per-run Atlas database user and IP access
+entry used by the MongoDB migration demo.
 
-- the project IP access list entry (`0.0.0.0/0`, demo-grade — Devin VMs and
-  demo laptops have no stable egress IPs),
-- a dedicated database user (`otterworks-demo-migrator`, generated password),
-- the shared `otterworks-demo` M0 cluster — **imported, never created** (Atlas
-  allows one M0 per project).
+The demo path leaves the existing `otterworks-demo` M0 cluster untouched and
+reads it through a data source. Set `manage_cluster=true` for a full-scale run
+that needs Terraform to create a dedicated cluster.
 
-State is local and gitignored (repo-wide `*.tfstate` / `.terraform/` rules).
-
-## Prerequisites
-
-Environment variables (org secrets — never committed):
+Credentials are supplied through environment variables:
 
 ```bash
-export MONGODB_ATLAS_PUBLIC_KEY=...    # programmatic API key
+export MONGODB_ATLAS_PUBLIC_KEY=...
 export MONGODB_ATLAS_PRIVATE_KEY=...
+export MONGODB_ATLAS_PROJECT_ID=...
 export TF_VAR_project_id="$MONGODB_ATLAS_PROJECT_ID"
+export TF_VAR_access_cidr="$(curl -fsS https://api.ipify.org)/32"
+export TF_VAR_db_password='use-a-secret-manager-or-shell-environment'
 ```
 
-## Apply
+Do not put credentials in Terraform files, tfvars files, or committed state.
+Local state and tfvars files are ignored by this directory.
+
+For the demo cluster:
 
 ```bash
-cd infrastructure/terraform-atlas
 terraform init
-
-# One-time: adopt the existing shared M0 cluster instead of creating one
-terraform import mongodbatlas_advanced_cluster.demo "${TF_VAR_project_id}-otterworks-demo"
-
-terraform apply
+terraform apply \
+  -var='manage_cluster=false' \
+  -var='cluster_tier=M0'
 ```
 
-The apply creates the access-list entry and the demo user, and reconciles the
-imported cluster (tier is `var.cluster_instance_size`, default `M0`).
-
-Read the generated demo-user password (for `mongodb+srv://` URIs):
-
-```bash
-terraform output -raw demo_db_password
-```
-
-## Destroy (teardown)
-
-The `otterworks-demo` M0 cluster is **shared** across demos. A plain
-`terraform destroy` would delete it (it is blocked by `prevent_destroy`, which
-fails the destroy). Remove the cluster from state first, then destroy the
-rest (access-list entry + demo user):
-
-```bash
-terraform state rm mongodbatlas_advanced_cluster.demo
-terraform destroy
-```
-
-This removes the Terraform-managed access entry and the demo database user
-while leaving the shared cluster untouched. Re-adopt the cluster later with
-the `terraform import` command above.
+The cluster is intentionally not managed in this mode because Atlas refuses
+updates to M0/M2/M5 tenant clusters, and replacing the existing M0 would
+change the SRV hostname stored by the migration track.

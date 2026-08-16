@@ -1,79 +1,51 @@
-# terraform-databricks — OtterWorks lakehouse demo estate
+# Databricks lakehouse estate (tech-partnerships migration target)
 
-Self-contained Terraform stack for the tech-partnerships Databricks track.
-It stands up the entire "after" state of the legacy-ETL migration —
-Unity Catalog `ow_tp` catalog with `bronze`/`silver`/`gold` schemas, a managed
-landing volume, the `ow_tp` secret scope, and two serverless Workflows jobs
-(`ow_tp_custbill_lakehouse`, `ow_tp_python_etl_wave`) — and tears it all down
-with one command.
+Terraform stack for the target state of the legacy batch estate: the Unity
+Catalog layers the converted ETL jobs land in, the landing volume that replaces
+the SFTP drop directory, the secret scope that replaces the credentials
+hardcoded in `etl/config.ini` and `etl/legacy-extra/jobs/*`, and one job
+definition per converted legacy script (`jobs_<unit>.tf`, added by each
+conversion work unit).
 
-Guardrails for the shared demo workspace:
+## Shared-workspace rules
 
-- **Everything is `ow_tp`-prefixed.** The stack never reads or writes any
-  object without that prefix.
-- **No compute is created.** Jobs run on serverless jobs compute; queries reuse
-  the existing serverless SQL warehouse (`warehouse_name` variable, discovered
-  via a data source). Cost is per-run only — idle cost is zero.
-- **State is local and gitignored.** This is a disposable demo estate; do not
-  add a remote backend.
+The demo workspace is shared with other demos, so:
 
-Two workspace quirks the stack works around:
+- every object this stack creates carries the `ow_tp` prefix — catalog `ow_tp`,
+  jobs `ow_tp_*`, secret scope `ow_tp`, workspace directory `/Shared/ow_tp`.
+  The prefix is validated in `variables.tf` and in `catalog.sh`;
+- nothing unprefixed is read-write; the only pre-existing object referenced is
+  the serverless SQL warehouse, by name, as a data source;
+- **no compute is created.** Jobs run on serverless job compute, SQL and recon
+  queries on the existing warehouse. Nothing here has an hourly floor.
 
-- **Default Storage workspace:** the catalogs API refuses to create catalogs
-  (`Metastore storage root URL does not exist`), so the `ow_tp` catalog is
-  managed by a `terraform_data` resource that runs `CREATE CATALOG` /
-  `DROP CATALOG ... CASCADE` through the SQL Statement Execution API on the
-  reused warehouse. Everything else uses native provider resources. Changing
-  `catalog_name` replaces this resource (drop old catalog, create new); the
-  cascade also drops the provider-managed schemas/volume, so run `terraform
-  apply` a second time after a rename to recreate them.
-- **PAT without the `files` scope:** the demo token cannot use the Files API,
-  so `make databricks-recon` stages inputs via the workspace import API under
-  `/Shared/ow_tp/landing/`, and the ingest notebooks copy them into the
-  `landing` UC volume. The staging directory lives inside the Terraform-managed
-  `/Shared/ow_tp` directory (`delete_recursive = true`), so destroy removes it.
-
-## Apply
+## Usage
 
 ```bash
-export DATABRICKS_HOST="$DATABRICKS_DEMO_HOST"     # never hardcode
-export DATABRICKS_TOKEN="$DATABRICKS_DEMO_TOKEN"
-
-cd infrastructure/terraform-databricks
-terraform init
-terraform apply
+export DATABRICKS_HOST="$DATABRICKS_DEMO_HOST" DATABRICKS_TOKEN="$DATABRICKS_DEMO_TOKEN"
+make dbx-init
+make dbx-apply                    # catalog + bronze/silver/gold + volume + scope + jobs
+make dbx-inventory                # what the demo owns right now
+make dbx-destroy                  # full teardown
+make dbx-verify-teardown          # exits non-zero if anything ow_tp survived
 ```
 
-Apply takes under a minute. Outputs include the landing volume path, the
-reused warehouse id, and both job ids (consumed by `make databricks-recon`).
+Demo state is per run and per namespace (`NS=<ns>`): the landing volume is laid
+out `<ns>/custbill/...` and jobs take an `ns` parameter, so repeated rehearsals
+and parallel namespaces never collide. Branches hold code only.
 
-## Destroy
+## Catalog creation
 
-```bash
-cd infrastructure/terraform-databricks
-terraform destroy
-```
+`databricks_catalog` cannot create a catalog in this workspace: Default Storage
+is enabled and the Unity Catalog REST API demands an explicit managed location,
+while `CREATE CATALOG` over the SQL Statement Execution API works. The catalog
+is therefore a `terraform_data` resource driving `catalog.sh`, whose destroy
+provisioner runs `DROP CATALOG ... CASCADE` — that also removes tables created
+by pipeline runs outside Terraform's view, which is what makes teardown
+verifiable.
 
-Destroy drops the catalog with `CASCADE` (removing all tables/volumes created
-by pipeline runs), deletes both jobs, the secret scope, and the whole
-`/Shared/ow_tp` workspace directory including staged recon inputs. Verify
-cleanliness with:
+## Secrets
 
-```bash
-databricks catalogs list | grep ow_tp   # or SHOW CATALOGS LIKE 'ow_tp*'
-databricks jobs list | grep ow_tp
-databricks secrets list-scopes | grep ow_tp
-```
-
-All three should return nothing after destroy.
-
-## What maps to what
-
-| Legacy | Terraform-managed replacement |
-|---|---|
-| cron + `run_all.sh` + `sleep 60` | `ow_tp_custbill_lakehouse` job (dependency-ordered tasks) |
-| `sftp_ingest_poll.ksh` settle hack | `landing` UC volume (atomic PUT) + bronze ingest task |
-| `parse_custbill_fixedwidth.sh` | silver parse task (validation + quarantine + trailer audit) |
-| `finance_excel_report.pl` | gold finance task |
-| 5 Python cron scripts (`etl/scripts/`) | `ow_tp_python_etl_wave` job, one task per script |
-| hardcoded creds (`etl/config.ini`, plaintext `mvsprod`) | `ow_tp` secret scope |
+`var.secrets` populates the `ow_tp` scope and defaults to placeholders. Real
+values are passed as `TF_VAR_secrets='{...}'` at apply time and never
+committed; converted jobs read them through `dbutils.secrets`, never inline.

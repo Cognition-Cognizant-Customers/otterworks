@@ -1,0 +1,352 @@
+#!/usr/bin/env python3
+"""Extract stage for ow_tp_storage_cleanup: the two sides of the orphan join.
+
+The legacy cron interleaved extract, comparison and a destructive quarantine in
+one `main()`: it listed S3, scanned DynamoDB item by item, and deleted whatever
+it could not find a metadata row for -- in the same pass, with no record of what
+it read. Here extraction is a separate, re-runnable stage that lands two flat
+extracts plus a manifest in the landing volume, and the manifest carries the one
+fact the legacy script never recorded: **whether the metadata side was read
+completely**. Everything downstream keys its safety decision off that.
+
+    extract_storage_cleanup.py --ns demo
+    extract_storage_cleanup.py --ns demo --metadata-limit 4000 \
+        --input-dir storage_cleanup_partial   # simulated incomplete read
+
+`--metadata-limit` truncates the metadata read deliberately (the transient
+DynamoDB failure the legacy script could not distinguish from "these files are
+orphans") and marks the manifest `metadata_read_complete=false`.
+
+Local AWS is LocalStack (AWS_ENDPOINT_URL); the Databricks side is reached with
+the shared driver, which reads DATABRICKS_HOST/TOKEN from the environment. No
+credential is inlined here -- that is one of the deficiencies being retired.
+"""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import json
+import os
+import re
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+import boto3
+from botocore.exceptions import ClientError
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import dbx  # noqa: E402  (sibling module, same driver the recon uses)
+
+ENDPOINT = os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4566")
+REGION = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+DYNAMO_TABLE = "otterworks-file-metadata"
+FILE_STORAGE_BUCKET = "otterworks-file-storage"
+LEGACY_PREFIX = "files/"  # the un-namespaced prefix the legacy script hardcodes
+FIXTURE_MANIFEST_PREFIX = "fixture-manifests/"
+OUT_ROOT = Path(os.environ.get("TP_EXTRACT_ROOT", "/tmp/ow_tp_extracts"))
+_BUCKET = re.compile(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
+NOTEBOOK = Path(__file__).resolve().parents[2] / "databricks" / "notebooks" / "storage_cleanup_daily.py"
+
+
+def _load_notebook():
+    spec = importlib.util.spec_from_file_location("ow_tp_storage_cleanup", NOTEBOOK)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+nb = _load_notebook()
+
+
+def _client(service: str):
+    return boto3.client(
+        service,
+        endpoint_url=ENDPOINT,
+        region_name=REGION,
+        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "test"),
+        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "test"),
+    )
+
+
+def legacy_attributed_keys(bucket: str, ns: str) -> set[str]:
+    """Read fixture-only positive attribution for planted legacy-prefix keys."""
+    try:
+        body = _client("s3").get_object(
+            Bucket=bucket, Key=f"{FIXTURE_MANIFEST_PREFIX}{ns}.json"
+        )["Body"].read()
+        manifest = json.loads(body)
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") not in {"NoSuchKey", "404"}:
+            raise
+        return set()
+    return set(manifest.get("legacy_attributed_keys", []))
+
+
+def list_objects(bucket: str, ns: str) -> list[dict]:
+    """Inventory under this namespace and the shared legacy prefix.
+
+    Two prefixes, no more: `<ns>/` (namespaced keys, the tenancy boundary in the
+    shared bucket) and the un-namespaced `files/` the legacy script hardcodes.
+    The latter is deliberately wider than the namespace: legacy-prefix objects
+    without positive attribution are visible but never quarantinable.
+
+    Keys under the legacy prefix predate namespacing, so nothing in the key
+    attributes them to a tenant. Fixture-only positive attribution is recorded
+    out of band; filtering keys claimed by another namespace happens after the
+    metadata scan.
+    """
+    s3 = _client("s3")
+    attributed = legacy_attributed_keys(bucket, ns)
+    by_key: dict[str, dict] = {}
+    for prefix in (f"{ns}/", LEGACY_PREFIX):
+        for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                by_key[obj["Key"]] = {
+                    "bucket": bucket,
+                    "key": obj["Key"],
+                    "size_bytes": obj["Size"],
+                    "last_modified": obj["LastModified"].astimezone(timezone.utc).isoformat(),
+                    "legacy_attributed": obj["Key"] in attributed,
+                }
+    return [by_key[key] for key in sorted(by_key)]
+
+
+def filter_claimed_elsewhere(objects: list[dict], claimed_elsewhere: set) -> list[dict]:
+    """Drop only legacy-prefix objects claimed by another namespace."""
+    return [
+        obj
+        for obj in objects
+        if not (obj["key"].startswith(LEGACY_PREFIX) and obj["key"] in claimed_elsewhere)
+    ]
+
+
+def scan_metadata(ns: str, limit: int | None = None) -> tuple[list[dict], bool, set]:
+    """Metadata items for the namespace, and whether the read completed.
+
+    Returns `(items, complete, claimed_elsewhere)`. `complete` is False when the
+    scan was cut short -- the distinction the legacy script structurally could
+    not make. `claimed_elsewhere` holds the storage keys another namespace's
+    metadata references, which `filter_claimed_elsewhere` uses to keep another
+    tenant's files out of this run's inventory.
+    """
+    dynamodb = _client("dynamodb")
+    items: list[dict] = []
+    claimed_elsewhere: set = set()
+    truncated = False
+    kwargs: dict = {
+        "TableName": DYNAMO_TABLE,
+        "ProjectionExpression": "id, s3_key, size_bytes, created_at, #n",
+        "ExpressionAttributeNames": {"#n": "ns"},
+    }
+    while True:
+        page = dynamodb.scan(**kwargs)
+        for raw in page.get("Items", []):
+            if raw.get("ns", {}).get("S") != ns:
+                claimed_elsewhere.add(raw["s3_key"]["S"])
+                continue
+            if limit is not None and len(items) >= limit:
+                truncated = True
+                continue
+            key = raw["s3_key"]["S"]
+            items.append(
+                {
+                    "file_id": raw["id"]["S"],
+                    "storage_key": key,
+                    "owner_id": key.split("/")[2] if len(key.split("/")) > 2 else "",
+                    "size_bytes": int(raw["size_bytes"]["N"]),
+                    "created_at": raw["created_at"]["S"],
+                }
+            )
+        if "LastEvaluatedKey" not in page:
+            items.sort(key=lambda i: i["file_id"])
+            return items, not truncated, claimed_elsewhere
+        kwargs["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+
+
+def write_jsonl(path: Path, rows: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, sort_keys=True) + "\n")
+
+
+def _ts(value: str) -> str:
+    """Normalise an ISO instant to a UTC literal Spark casts unambiguously."""
+    text = value.replace("Z", "+00:00")
+    return datetime.fromisoformat(text).astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _insert_json_rows(
+    table: str,
+    columns: str,
+    schema: str,
+    projection: str,
+    rows: list[dict],
+    batch: int = 400,
+) -> None:
+    for start in range(0, len(rows), batch):
+        payload = json.dumps(rows[start : start + batch], separators=(",", ":"))
+        dbx.sql(
+            f"""
+            INSERT INTO {table} ({columns})
+            SELECT {projection}
+            FROM (SELECT explode(from_json(:payload, '{schema}')) AS r)
+            """,
+            parameters=[{"name": "payload", "value": payload, "type": "STRING"}],
+        )
+
+
+def load_bronze(ns: str, scenario: str, objects: list[dict], metadata: list[dict], manifest: dict) -> None:
+    """Land both extracts in bronze through the serverless SQL warehouse.
+
+    Bronze is loaded with the same statements the job task would run, keyed by
+    `ns`: each slice is deleted before it is rewritten, so a re-run replaces its
+    own rows instead of doubling the object count (and with it the orphan set).
+
+    Why INSERT rather than the landing volume: the demo PAT is not granted the
+    Files API (`files`) scope, so `dbx.upload` -- and therefore COPY INTO from
+    /Volumes/<catalog>/bronze/landing -- returns 403 in this workspace. The SQL path
+    needs no extra scope and lands identical rows.
+    """
+    nb.ensure_legacy_attributed(dbx.sql, dbx.CATALOG)
+    for table in ("bronze.storage_objects_raw", "bronze.file_metadata_raw", "bronze.storage_extract_manifest"):
+        dbx.sql(
+            f"DELETE FROM {dbx.CATALOG}.{table} WHERE ns = :ns",
+            parameters=[{"name": "ns", "value": ns, "type": "STRING"}],
+        )
+
+    listed_at = _ts(manifest["extracted_at"])
+    _insert_json_rows(
+        f"{dbx.CATALOG}.bronze.storage_objects_raw",
+        "ns, bucket, key, size_bytes, legacy_attributed, last_modified, listed_at",
+        "array<struct<ns:string,bucket:string,key:string,size_bytes:bigint,legacy_attributed:boolean,last_modified:string,listed_at:string>>",
+        "r.ns, r.bucket, r.key, r.size_bytes, r.legacy_attributed, "
+        "CAST(r.last_modified AS TIMESTAMP), CAST(r.listed_at AS TIMESTAMP)",
+        [
+            {
+                "ns": ns,
+                "bucket": o["bucket"],
+                "key": o["key"],
+                "size_bytes": o["size_bytes"],
+                "legacy_attributed": o["legacy_attributed"],
+                "last_modified": _ts(o["last_modified"]),
+                "listed_at": listed_at,
+            }
+            for o in objects
+        ],
+    )
+    _insert_json_rows(
+        f"{dbx.CATALOG}.bronze.file_metadata_raw",
+        "ns, file_id, storage_key, owner_id, size_bytes, created_at",
+        "array<struct<ns:string,file_id:string,storage_key:string,owner_id:string,size_bytes:bigint,created_at:string>>",
+        "r.ns, r.file_id, r.storage_key, r.owner_id, r.size_bytes, "
+        "CAST(r.created_at AS TIMESTAMP)",
+        [
+            {
+                "ns": ns,
+                "file_id": m["file_id"],
+                "storage_key": m["storage_key"],
+                "owner_id": m["owner_id"],
+                "size_bytes": m["size_bytes"],
+                "created_at": _ts(m["created_at"]),
+            }
+            for m in metadata
+        ],
+    )
+    _insert_json_rows(
+        f"{dbx.CATALOG}.bronze.storage_extract_manifest",
+        "ns, scenario, source_bucket, source_table, objects_expected, objects_bytes, "
+        "metadata_expected, metadata_read_complete, extracted_at, loaded_at",
+        "array<struct<ns:string,scenario:string,source_bucket:string,source_table:string,objects_expected:bigint,objects_bytes:bigint,metadata_expected:bigint,metadata_read_complete:boolean,extracted_at:string>>",
+        "r.ns, r.scenario, r.source_bucket, r.source_table, r.objects_expected, "
+        "r.objects_bytes, r.metadata_expected, r.metadata_read_complete, "
+        "CAST(r.extracted_at AS TIMESTAMP), current_timestamp()",
+        [
+            {
+                "ns": ns,
+                "scenario": scenario,
+                "source_bucket": manifest["source_bucket"],
+                "source_table": manifest["source_table"],
+                "objects_expected": manifest["objects_expected"],
+                "objects_bytes": manifest["objects_bytes"],
+                "metadata_expected": manifest["metadata_expected"],
+                "metadata_read_complete": manifest["metadata_read_complete"],
+                "extracted_at": listed_at,
+            }
+        ],
+    )
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--ns", default=os.environ.get("NS", "demo"))
+    parser.add_argument("--bucket", default=FILE_STORAGE_BUCKET)
+    parser.add_argument(
+        "--input-dir",
+        default="storage_cleanup",
+        help="directory under <ns>/ in the landing volume to write the extract to",
+    )
+    parser.add_argument(
+        "--metadata-limit",
+        type=int,
+        default=None,
+        help="stop the metadata scan after N items and mark the read incomplete",
+    )
+    parser.add_argument(
+        "--scenario",
+        default="nominal",
+        help="label recorded with the extract: nominal | metadata_read_incomplete",
+    )
+    parser.add_argument(
+        "--load",
+        action="store_true",
+        help=f"also load the extract into {dbx.CATALOG} bronze via the serverless SQL warehouse",
+    )
+    args = parser.parse_args(argv)
+    try:
+        args.ns = nb._checked("ns", args.ns)
+        args.scenario = nb._checked("scenario", args.scenario)
+        args.bucket = nb._checked("bucket", args.bucket, _BUCKET)
+        args.input_dir = nb._checked("input_dir", args.input_dir)
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    # List first, then scan metadata: an object is visible to the join if its
+    # metadata row lands before the second observation, avoiding a read-order
+    # false orphan.
+    objects = list_objects(args.bucket, args.ns)
+    metadata, complete, claimed_elsewhere = scan_metadata(args.ns, args.metadata_limit)
+    objects = filter_claimed_elsewhere(objects, claimed_elsewhere)
+
+    out_dir = OUT_ROOT / args.ns / args.input_dir
+    write_jsonl(out_dir / "objects.jsonl", objects)
+    write_jsonl(out_dir / "metadata.jsonl", metadata)
+
+    manifest = {
+        "ns": args.ns,
+        "unit": "storage_cleanup_daily",
+        "extracted_at": datetime.now(tz=timezone.utc).isoformat(),
+        "source_bucket": args.bucket,
+        "source_table": DYNAMO_TABLE,
+        "objects_expected": len(objects),
+        "objects_bytes": sum(o["size_bytes"] for o in objects),
+        # The guard's inputs: how many metadata rows this extract claims to
+        # carry, and whether the scan that produced them ran to completion.
+        "metadata_expected": len(metadata),
+        "metadata_read_complete": complete,
+    }
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True) + "\n")
+
+    manifest["scenario"] = args.scenario
+    if args.load:
+        load_bronze(args.ns, args.scenario, objects, metadata, manifest)
+        manifest["loaded"] = f"{dbx.CATALOG}.bronze"
+
+    print(json.dumps(manifest, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

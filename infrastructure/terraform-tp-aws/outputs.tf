@@ -4,7 +4,7 @@ output "aws_region" {
 }
 
 output "report_tz" {
-  description = "Timezone the report Lambda stamps filenames with"
+  description = "Timezone the report Lambda stamps report filenames with"
   value       = var.report_tz
 }
 
@@ -18,15 +18,22 @@ output "billing_table" {
   value       = aws_dynamodb_table.billing.name
 }
 
-output "state_machine_arn" {
-  description = "Step Functions CUSTBILL pipeline"
-  value       = aws_sfn_state_machine.pipeline.arn
-}
-
 output "ingest_queue_url" {
-  value = aws_sqs_queue.ingest.url
+  description = "SQS queue EventBridge delivers landing-object events to"
+  value       = aws_sqs_queue.ingest.url
 }
 
 output "ingest_dlq_url" {
-  value = aws_sqs_queue.ingest_dlq.url
+  description = "Dead-letter queue for events the trigger Lambda could not process"
+  value       = aws_sqs_queue.ingest_dlq.url
+}
+
+output "state_machine_arn" {
+  description = "Step Functions CUSTBILL pipeline (created by the orchestration component)"
+  value       = local.state_machine_arn
+}
+
+output "lambda_names" {
+  description = "Deterministic Lambda names per component"
+  value       = local.lambda_names
 }

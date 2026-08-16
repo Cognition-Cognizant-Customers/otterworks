@@ -1,18 +1,28 @@
-output "cluster_name" {
-  value = mongodbatlas_advanced_cluster.demo.name
+locals {
+  active_cluster = var.manage_cluster ? mongodbatlas_advanced_cluster.managed[0] : data.mongodbatlas_advanced_cluster.existing[0]
 }
 
-output "cluster_srv_address" {
-  description = "mongodb+srv connection seed for the cluster (no credentials)."
-  value       = mongodbatlas_advanced_cluster.demo.connection_strings[0].standard_srv
+output "srv_connection_string" {
+  description = "Atlas SRV connection string without credentials."
+  value       = local.active_cluster.connection_strings[0].standard_srv
 }
 
-output "demo_db_username" {
-  value = mongodbatlas_database_user.demo_migrator.username
+output "database_name" {
+  description = "Per-run migration database name."
+  value       = local.database_name
 }
 
-output "demo_db_password" {
-  description = "Generated password for the demo user. Read with: terraform output -raw demo_db_password"
-  value       = random_password.demo_user.result
-  sensitive   = true
+output "migration_username" {
+  description = "Per-run migration database username."
+  value       = mongodbatlas_database_user.migrator.username
+}
+
+output "child_env" {
+  description = "Connection summary for child migration sessions."
+  value = {
+    MONGODB_ATLAS_URI      = "${local.active_cluster.connection_strings[0].standard_srv}/${local.database_name}"
+    MONGODB_ATLAS_SRV_HOST = local.active_cluster.connection_strings[0].standard_srv
+    MONGODB_DATABASE       = local.database_name
+    MONGODB_USERNAME       = mongodbatlas_database_user.migrator.username
+  }
 }
