@@ -1,6 +1,6 @@
 # Recon: `sftp_ingest_poll.ksh` → `ow_tp_sftp_ingest`
 
-- Generated: 2026-08-16T00:50:05+00:00
+- Generated: 2026-08-16T00:54:59+00:00
 - Namespace: `demo`  |  catalog: `ow_tp`  |  landing: `/Volumes/ow_tp/bronze/landing`
 - Golden baseline provenance: artifacts of a real `sftp_ingest_poll.ksh` run (`make legacy-etl-gen-data NS=demo` + `make legacy-etl-run JOB=sftp_ingest_poll`), read byte-for-byte from `/home/ubuntu/tp-golden/custbill/incoming/*.dat.done`
 - Result: **green**
@@ -112,7 +112,7 @@ probe rows removed again: ok
   ```
   $ make dbx-upload NS=demo
   PUT /api/2.0/fs/files/Volumes/ow_tp/bronze/landing/demo/_upload_probe/upload_probe.txt
-  -> DatabricksError: PUT /api/2.0/fs/files/Volumes/ow_tp/bronze/landing/demo/_upload_probe/upload_probe.txt?overwrite=true -> 403: {"error_code":403,"message":"Provided access token does not have required scopes: files [ReqId: a51f42b1-f880-465d-b277-e4b1ce9da044]"}
+  -> DatabricksError: PUT /api/2.0/fs/files/Volumes/ow_tp/bronze/landing/demo/_upload_probe/upload_probe.txt?overwrite=true -> 403: {"error_code":403,"message":"Provided access token does not have required scopes: files [ReqId: 7fb5fb00-cc38-4e24-8b20-f1108ef8a29d]"}
   ```
 
   The inputs the checks above read were landed inside Databricks instead (serverless task writing
