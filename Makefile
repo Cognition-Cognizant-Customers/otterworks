@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean tp-mongo-migrate-invoices tp-mongo-recon-invoices tp-mongo-verify-invoices
 
 SHELL := /bin/bash
 
@@ -39,6 +39,20 @@ tp-fixture-verify: ## Verify local fixture bytes and checksums (NS=<ns>)
 
 tp-fixture-clean: ## Remove local Databricks transport fixture (NS=<ns>)
 	python3 scripts/tp_databricks/local_fixture.py clean --ns $${NS:-fixture}
+
+TP_MONGO_UV = uv run --with oracledb==2.5.1 --with pymongo==4.15.5
+
+tp-mongo-migrate-invoices: ## Migrate Oracle invoices to MongoDB (NS=<ns>; MONGODB_ATLAS_URI/MONGODB_URI)
+	$(call validate_ns)
+	$(TP_MONGO_UV) migrations/mongodb/migrate_invoices.py --ns $(NS) --port $(ORACLE_BILLING_DB_PORT)
+
+tp-mongo-recon-invoices: ## Recompute mongo_invoices recon from the target MongoDB (NS=<ns>)
+	$(call validate_ns)
+	$(TP_MONGO_UV) migrations/mongodb/recon_invoices.py --ns $(NS)
+
+tp-mongo-verify-invoices: ## Fixture verification incl. idempotency rerun proof (NS=<ns>)
+	$(call validate_ns)
+	NS=$(NS) migrations/mongodb/verify_invoices.sh --port $(ORACLE_BILLING_DB_PORT)
 
 PROCS_COMPOSE = docker compose -f docker-compose.procs.yml -p otterworks-procs-$(NS)
 PROCS_UV = uv run --with psycopg[binary]==3.2.9 --with pyyaml==6.0.2

@@ -1,0 +1,72 @@
+{
+  "kind": "recon-report",
+  "unit": "mongo_invoices",
+  "namespace": "demo",
+  "generated_at": "2026-08-16T18:23:02Z",
+  "run_mode": "fixture",
+  "checks": [
+    {
+      "id": "invoices-count",
+      "expected": 18750,
+      "actual": 18750,
+      "source_of_truth": "manifest testdata/legacy/manifests/demo.json (INVOICE_HEADER.rows) vs recomputed from target MongoDB collections",
+      "result": "pass"
+    },
+    {
+      "id": "lines-embedded",
+      "expected": 149963,
+      "actual": 149963,
+      "source_of_truth": "manifest testdata/legacy/manifests/demo.json (INVOICE_LINE.rows minus quarantined orphans) vs recomputed from target MongoDB collections",
+      "result": "pass"
+    },
+    {
+      "id": "lines-checksum",
+      "expected": {
+        "checksum": "88a66751f0b08b476b492105a2efc537",
+        "rows": 150000
+      },
+      "actual": {
+        "checksum": "88a66751f0b08b476b492105a2efc537",
+        "rows": 150000,
+        "duplicate_line_ids": 0
+      },
+      "source_of_truth": "manifest testdata/legacy/manifests/demo.json (INVOICE_LINE.checksum over embedded lines plus quarantined orphans) vs recomputed from target MongoDB collections",
+      "result": "pass"
+    },
+    {
+      "id": "orphans-quarantined",
+      "expected": 37,
+      "actual": {
+        "orphaned_line": 37,
+        "quarantined_by_reason": {
+          "orphaned_line": 37
+        },
+        "orphaned_line_ids_md5": "53d9562b0327c3abbe767bed019dede1"
+      },
+      "source_of_truth": "manifest testdata/legacy/manifests/demo.json (planted orphaned_rows count) vs recomputed from target MongoDB collections (quarantine collection, attributed and enumerated)",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "migration rerun for ns=demo: state fingerprint de4e33100d4ad71146d855941eda4f79 (run 1) vs de4e33100d4ad71146d855941eda4f79 (run 2), identical counts/checksums/quarantine sets recomputed from the target"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      "orphaned_rows:37"
+    ],
+    "actual_set": [
+      "orphaned_rows:37"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "live Atlas run (this report is run_mode=fixture; the parent owns the live window)",
+    "invalid_utf8 quarantine path (no non-UTF-8 rows exist in the seeded fixture)",
+    "null_amount quarantine path (no NULL amounts exist in the seeded fixture)",
+    "empty-input no-op verified only against an unseeded namespace, not a truncated one"
+  ]
+}
