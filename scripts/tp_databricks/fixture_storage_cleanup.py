@@ -75,7 +75,8 @@ def scan_metadata(ns: str) -> list[dict]:
     items: list[dict] = []
     kwargs: dict = {
         "TableName": DYNAMO_TABLE,
-        "ProjectionExpression": "id, s3_key, size_bytes, created_at, ns",
+        "ProjectionExpression": "id, s3_key, size_bytes, created_at, #n",
+        "ExpressionAttributeNames": {"#n": "ns"},
     }
     while True:
         page = dynamodb.scan(**kwargs)

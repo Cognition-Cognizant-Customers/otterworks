@@ -107,7 +107,8 @@ def scan_metadata(ns: str, limit: int | None = None) -> tuple[list[dict], bool, 
     truncated = False
     kwargs: dict = {
         "TableName": DYNAMO_TABLE,
-        "ProjectionExpression": "id, s3_key, size_bytes, created_at, ns",
+        "ProjectionExpression": "id, s3_key, size_bytes, created_at, #n",
+        "ExpressionAttributeNames": {"#n": "ns"},
     }
     while True:
         page = dynamodb.scan(**kwargs)
@@ -128,8 +129,6 @@ def scan_metadata(ns: str, limit: int | None = None) -> tuple[list[dict], bool, 
                     "created_at": raw["created_at"]["S"],
                 }
             )
-            if limit is not None and len(items) >= limit:
-                truncated = True
         if "LastEvaluatedKey" not in page:
             items.sort(key=lambda i: i["file_id"])
             return items, not truncated, claimed_elsewhere
