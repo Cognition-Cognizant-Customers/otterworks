@@ -80,7 +80,7 @@ def parse_legacy_date(value: str):
     dd, mon, yy = int(m.group(1)), m.group(2), int(m.group(3))
     if mon not in MONS:
         return None
-    year = 2000 + yy if yy <= 68 else 1900 + yy
+    year = 2000 + yy if yy <= 49 else 1900 + yy  # Oracle RR semantics
     try:
         return datetime(year, MONS[mon], dd, tzinfo=timezone.utc)
     except ValueError:

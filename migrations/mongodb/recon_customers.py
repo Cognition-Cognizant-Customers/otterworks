@@ -142,7 +142,13 @@ def build_report(ns: str, run_mode: str, actual: dict,
               manifest_src + " + target collection type scan"),
     ]
     expected_set = sorted(f"{k}:{v}" for k, v in anomalies.items())
-    actual_set = sorted([f"dirty_dates:{dirty}", f"malformed_csv_lists:{badcsv}"])
+    # Aggregate everything actually quarantined, per kind across all fields,
+    # so anomaly categories beyond the planted ones surface as "unexpected".
+    actual_by_kind: dict = {}
+    for kind_field, n in q.items():
+        kind = kind_field.rsplit(":", 1)[0]
+        actual_by_kind[kind] = actual_by_kind.get(kind, 0) + n
+    actual_set = sorted(f"{k}:{v}" for k, v in actual_by_kind.items())
     return {
         "kind": "recon-report",
         "unit": UNIT,
