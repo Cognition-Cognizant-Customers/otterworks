@@ -58,8 +58,8 @@
     {
       "id": "errors-surfaced",
       "expected": "failures raise; no swallowed errors, no lock files; undeliverable events drain to the rule DLQ",
-      "actual": "missing object, malformed event, wrong-prefix key and nested key all raise (tests); EventBridge target carries retry_policy(3) + dead_letter_config on the shared events DLQ with rule-scoped queue policy",
-      "source_of_truth": "test_errors_surface_* + ingest.tf aws_cloudwatch_event_target; live DLQ drain is parent-only",
+      "actual": "missing object, malformed event, wrong-prefix key and nested key all raise (tests); EventBridge target carries retry_policy(3) + dead_letter_config for delivery failures, and aws_lambda_function_event_invoke_config routes handler failures (async invoke, 2 retries) to the shared events DLQ via on_failure",
+      "source_of_truth": "test_errors_surface_* + ingest.tf aws_cloudwatch_event_target + aws_lambda_function_event_invoke_config; live DLQ drain is parent-only",
       "result": "pass"
     }
   ],
@@ -79,7 +79,7 @@
     "real EventBridge S3 'Object Created' envelope delivery to the Lambda (fixture events are hand-built to the documented shape)",
     "aws_lambda_permission SourceArn/SourceAccount resolution against the live rule",
     "live IAM policy evaluation of the least-privilege role (prefix-scoped S3 actions, trust condition)",
-    "DLQ drain path: EventBridge retry exhaustion delivering the event to ow-tp-<ns>-events-dlq under the rule-scoped queue policy",
+    "DLQ drain paths: EventBridge delivery-failure dead-lettering and Lambda async on_failure destination both delivering to ow-tp-<ns>-events-dlq",
     "CloudWatch log group wiring via logging_config on a live invoke",
     "terraform plan/apply of ingest.tf against the shared stack (parent-owned)"
   ]

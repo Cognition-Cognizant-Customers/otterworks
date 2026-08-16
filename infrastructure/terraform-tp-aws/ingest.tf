@@ -82,6 +82,15 @@ data "aws_iam_policy_document" "ingest" {
     resources = [aws_dynamodb_table.batch_state.arn]
   }
 
+  # Handler failures are delivered to the shared events DLQ via the async
+  # invoke on_failure destination below; Lambda sends with the function role.
+  statement {
+    sid       = "FailureDestination"
+    effect    = "Allow"
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.events_dlq.arn]
+  }
+
   # Logs, scoped to this function's log group.
   statement {
     sid       = "Logs"
@@ -127,6 +136,20 @@ resource "aws_lambda_function" "ingest" {
   }
 
   depends_on = [aws_iam_role_policy.ingest]
+}
+
+# EventBridge invokes Lambda targets asynchronously, so the rule's DLQ only
+# covers delivery failures. Handler errors are retried by Lambda's async
+# machinery and then surfaced to the shared events DLQ via on_failure.
+resource "aws_lambda_function_event_invoke_config" "ingest" {
+  function_name          = aws_lambda_function.ingest.function_name
+  maximum_retry_attempts = 2
+
+  destination_config {
+    on_failure {
+      destination = aws_sqs_queue.events_dlq.arn
+    }
+  }
 }
 
 # --- EventBridge target: landing/ Object Created -> ingest Lambda -----------
