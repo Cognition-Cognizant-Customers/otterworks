@@ -237,10 +237,12 @@ def main() -> int:
             "version_gap_documents": actual["version_gap_documents"],
             "orphaned_snapshot_ids": actual["orphaned_snapshot_ids"],
         },
-        "unverified_paths": [
+        "unverified_paths": ([
             "live Atlas run (this report is run_mode=fixture; the parent owns the live window)",
+        ] if args.run_mode == "fixture" else []) + [
             "invalid-byte quarantine path (not expected from Postgres UTF-8; exercised only by unit policy, no such rows exist in the seeded estate)",
-        ] if args.run_mode == "fixture" else [],
+            "full-scale memory behavior (validated only at M0/demo scale)",
+        ],
         "recomputed_values": actual,
     }
 
