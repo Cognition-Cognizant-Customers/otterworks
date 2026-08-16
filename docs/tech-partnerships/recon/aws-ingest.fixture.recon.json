@@ -1,0 +1,86 @@
+{
+  "kind": "recon-report",
+  "unit": "aws-ingest",
+  "namespace": "demo",
+  "generated_at": "2026-08-16T18:35:00Z",
+  "run_mode": "fixture",
+  "checks": [
+    {
+      "id": "byte-transparent-copy",
+      "expected": {
+        "CUSTBILL_DEMO_001.dat": "f304679dff6190de3206ccc15466428c",
+        "CUSTBILL_DEMO_002.dat": "5153ba871c74d8d2d518021f63b36d07",
+        "CUSTBILL_DEMO_ANOM.dat": "11eb3d1a3cf99ad46d66d3c65c0add01"
+      },
+      "actual": {
+        "CUSTBILL_DEMO_001.dat": "f304679dff6190de3206ccc15466428c",
+        "CUSTBILL_DEMO_002.dat": "5153ba871c74d8d2d518021f63b36d07",
+        "CUSTBILL_DEMO_ANOM.dat": "11eb3d1a3cf99ad46d66d3c65c0add01"
+      },
+      "source_of_truth": "md5 of incoming/<basename> recomputed from the moto-emulated S3 target after handler runs on regenerated golden inputs (services/serverless-ingest/ingest/tests/test_handler.py::test_golden_inputs_stage_bit_for_bit); byte 0xA3 survival asserted in test_byte_transparent_copy_including_non_utf8",
+      "result": "pass"
+    },
+    {
+      "id": "archive-copy",
+      "expected": "archive/<basename> exists with identical md5, no wall-clock suffix in the key",
+      "actual": "archive/CUSTBILL_DEMO_00{1,2}.dat and archive/CUSTBILL_DEMO_ANOM.dat match golden md5s; only key under archive/ is archive/<basename>",
+      "source_of_truth": "tests test_golden_inputs_stage_bit_for_bit + test_archive_copy_deterministic_key (moto S3 listing)",
+      "result": "pass"
+    },
+    {
+      "id": "landing-deleted",
+      "expected": "landing/ empty after successful staging",
+      "actual": "landing/ prefix empty after handler completes",
+      "source_of_truth": "test_landing_deleted_after_staging (moto S3 listing)",
+      "result": "pass"
+    },
+    {
+      "id": "name-validation",
+      "expected": "non-CUSTBILL*.dat key moved to quarantine/, ledger row status=quarantined, nothing in incoming/",
+      "actual": "quarantine/notes.txt staged byte-identically, landing/ and incoming/ empty, exactly one ledger item with status=quarantined",
+      "source_of_truth": "test_name_validation_quarantines_and_records (moto S3 + DynamoDB scan)",
+      "result": "pass"
+    },
+    {
+      "id": "idempotent-redelivery",
+      "expected": "second delivery of the same event yields identical incoming/ and archive/ state, one ledger row, no failure",
+      "actual": "redelivery after completion is a no-op (redelivery=true) whether or not the event carries an etag; mid-flight redelivery reconverges; single ledger row per (basename, etag); detection uses the DynamoDB ledger, not S3 404-vs-403 semantics",
+      "source_of_truth": "test_idempotent_redelivery + test_idempotent_redelivery_without_etag — actual reruns of the handler on the same event, post-completion (with and without etag) and mid-flight",
+      "result": "pass"
+    },
+    {
+      "id": "least-privilege",
+      "expected": "role ow-tp-<ns>-ingest-role: GetObject+DeleteObject on landing/*, PutObject on incoming/*, archive/*, quarantine/* only, no bucket-wide write, trust conditioned on aws:SourceAccount",
+      "actual": "data.aws_iam_policy_document.ingest grants exactly those prefix-scoped S3 actions (no s3:ListBucket anywhere) plus GetItem/PutItem/Query on the batch-state table, sqs:SendMessage on the events DLQ for the on_failure destination, and log-group-scoped logs; trust policy carries StringEquals aws:SourceAccount; terraform validate green",
+      "source_of_truth": "infrastructure/terraform-tp-aws/ingest.tf (static Terraform review + terraform validate); live IAM evaluation is parent-only",
+      "result": "pass"
+    },
+    {
+      "id": "errors-surfaced",
+      "expected": "failures raise; no swallowed errors, no lock files; undeliverable events drain to the rule DLQ",
+      "actual": "missing object, malformed event, wrong-prefix key and nested key all raise (tests); EventBridge target carries retry_policy(3) + dead_letter_config for delivery failures, and aws_lambda_function_event_invoke_config routes handler failures (async invoke, 2 retries) to the shared events DLQ via on_failure",
+      "source_of_truth": "test_errors_surface_* + ingest.tf aws_cloudwatch_event_target + aws_lambda_function_event_invoke_config; live DLQ drain is parent-only",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "test_idempotent_redelivery reruns the handler on the same event twice (post-completion no-op) and again after re-landing the object mid-flight; destination bytes and ledger cardinality unchanged"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [],
+    "actual_set": [],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "real EventBridge S3 'Object Created' envelope delivery to the Lambda (fixture events are hand-built to the documented shape)",
+    "aws_lambda_permission SourceArn/SourceAccount resolution against the live rule",
+    "live IAM policy evaluation of the least-privilege role (prefix-scoped S3 actions, trust condition)",
+    "DLQ drain paths: EventBridge delivery-failure dead-lettering and Lambda async on_failure destination both delivering to ow-tp-<ns>-events-dlq",
+    "CloudWatch log group wiring via logging_config on a live invoke",
+    "terraform plan/apply of ingest.tf against the shared stack (parent-owned)"
+  ]
+}
