@@ -147,7 +147,7 @@ def load_baseline(directory: Path) -> dict:
     }
 
 
-def converted_facts(ns: str, catalog: str) -> dict:
+def converted_facts(ns: str, catalog: str, sample_users: set[str] | None = None) -> dict:
     counts = {key: int(dbx.sql_scalar(query)) for key, query in pipeline.count_queries(catalog, ns).items()}
     by_type = {
         row[0]: int(row[1])
@@ -163,11 +163,15 @@ def converted_facts(ns: str, catalog: str) -> dict:
             f"FROM {catalog}.gold.analytics_daily_summary WHERE ns = '{ns}' GROUP BY 1, 2"
         )
     }
+    user_filter = ""
+    if sample_users:
+        quoted_users = ", ".join("'" + user.replace("'", "''") + "'" for user in sorted(sample_users))
+        user_filter = f" AND user_id IN ({quoted_users})"
     user_by_type = {
         (row[0], row[1]): int(row[2])
         for row in dbx.sql(
             f"SELECT user_id, event_type, count(*) FROM {catalog}.silver.analytics_events "
-            f"WHERE ns = '{ns}' GROUP BY user_id, event_type"
+            f"WHERE ns = '{ns}'{user_filter} GROUP BY user_id, event_type"
         )
     }
     shape = dbx.sql(
@@ -241,7 +245,7 @@ def check_2(baseline: dict, converted: dict) -> Check:
     )
     check.note("contract dimensions unavailable in legacy artifacts: summary_date, document_id, file_id")
     user_comparable = check.record(
-        "(user_id, event_type) totals — legacy top-100 sample",
+        "(user_id, event_type) totals — both sides restricted to legacy top-100 sample",
         baseline["user_actions"],
         converted["user_by_type"],
     )
@@ -325,9 +329,20 @@ def check_3(ns: str, catalog: str, baseline: dict, source_table: str | None) -> 
     except pipeline.ZeroEventExtract as exc:
         check.note(f"unreachable source: raised ZeroEventExtract instead of the source error: {exc}")
         outcomes.append(False)
-    except Exception as exc:  # noqa: BLE001 - any source failure must surface, not be swallowed
-        check.note(f"unreachable source: run failed as required ({type(exc).__name__}: {str(exc)[:200]})")
-        outcomes.append(True)
+    except Exception as exc:  # noqa: BLE001 - classify infrastructure failures as blocked
+        message = str(exc)
+        if (
+            exc.__class__.__name__ == "DatabricksError"
+            and ("TABLE_OR_VIEW_NOT_FOUND" in message or missing_table in message)
+        ):
+            check.note(f"unreachable source: run failed as required ({type(exc).__name__}: {message[:200]})")
+            outcomes.append(True)
+        else:
+            check.block(
+                f"runner.run(ns={probe_ns!r}, catalog={catalog!r}, source_table={missing_table!r})",
+                f"{type(exc).__name__}: {message}",
+            )
+            return check
 
     # (b) reachable but empty source: no zero-event "success". In volume mode, first create
     # and remove a sentinel so the probe directory exists without any source files.
@@ -473,7 +488,7 @@ def main(argv: list[str] | None = None) -> int:
     converted: dict = {"counts": {}}
     try:
         baseline = load_baseline(args.baseline_dir)
-        converted = converted_facts(args.ns, args.catalog)
+        converted = converted_facts(args.ns, args.catalog, set(baseline["users"]))
     except Exception as exc:  # noqa: BLE001 - reported as BLOCKED, never as a pass
         collection_error = f"{type(exc).__name__}: {exc}"
 
