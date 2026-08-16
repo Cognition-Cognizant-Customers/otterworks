@@ -21,9 +21,9 @@ locals {
   )
 }
 
-# The DDL is catalog-relative, so the SQL task's catalog parameter keeps the
-# warehouse context aligned with the catalog used by the notebook and avoids
-# the hardcoded-catalog precondition needed by older unit DDL files.
+# The DDL is catalog-relative and is read by the notebook at run time. Keeping
+# the reviewed file in the workspace lets the notebook substitute the catalog
+# selected for this run instead of relying on a warehouse session default.
 resource "databricks_workspace_file" "estate_rollup_tables" {
   source = "${path.module}/../../databricks/sql/estate_rollup_tables.sql"
   path   = "${databricks_directory.pipelines.path}/sql/estate_rollup_tables.sql"
@@ -85,35 +85,13 @@ resource "databricks_job" "estate_rollup" {
     default = "{{job.run_id}}"
   }
 
-  task {
-    task_key                  = "ddl"
-    max_retries               = 2
-    min_retry_interval_millis = 60000
-    retry_on_timeout          = false
-
-    sql_task {
-      warehouse_id = data.databricks_sql_warehouse.serverless.id
-
-      file {
-        path   = databricks_workspace_file.estate_rollup_tables.path
-        source = "WORKSPACE"
-      }
-
-      # The provider exposes SQL-task execution context through its parameters
-      # map; pass the catalog explicitly so the catalog-relative DDL runs in the
-      # same catalog as the rollup notebook.
-      parameters = {
-        catalog = var.catalog_name
-      }
-    }
+  parameter {
+    name    = "ddl_path"
+    default = "/Workspace${databricks_workspace_file.estate_rollup_tables.path}"
   }
 
   task {
     task_key = "estate_rollup"
-
-    depends_on {
-      task_key = "ddl"
-    }
 
     notebook_task {
       notebook_path = databricks_notebook.estate_rollup[0].path
@@ -124,11 +102,13 @@ resource "databricks_job" "estate_rollup" {
         catalog    = "{{job.parameters.catalog}}"
         run_date   = "{{job.parameters.run_date}}"
         job_run_id = "{{job.parameters.job_run_id}}"
+        ddl_path   = "{{job.parameters.ddl_path}}"
       }
     }
 
-    # The notebook raises after recording non-green units; bounded retries are
-    # safe because its INSERT ... REPLACE WHERE write is idempotent.
+    # The notebook applies the idempotent DDL, records the estate evidence, and
+    # raises on a non-green unit; bounded retries are safe for its replacement
+    # writes and retire the legacy silent-failure behavior.
     max_retries               = 2
     min_retry_interval_millis = 60000
     retry_on_timeout          = true

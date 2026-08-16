@@ -1,17 +1,17 @@
 -- Unity Catalog tables for the estate wave (`etl/legacy-extra/run_all.sh` +
 -- `etl/legacy-extra/crontab` -> `ow_tp_estate_orchestrator` / `ow_tp_estate_rollup`).
 --
--- Idempotent: every statement is CREATE ... IF NOT EXISTS, so the job's `ddl` task can
--- apply it on every run and a re-run is a no-op. Table names are catalog-relative
--- (schema.table) so the file follows whichever catalog the caller sets -- the SQL task's
--- catalog, `USE CATALOG`, or the SQL API's catalog field -- and never hardcodes one
--- catalog while the job writes to another.
+-- Idempotent: every statement is CREATE ... IF NOT EXISTS, so the notebook can apply it on
+-- every run and a re-run is a no-op. `${catalog}` is substituted by whoever applies it (the
+-- notebook task from its `catalog` parameter, the local runner from the driver's catalog),
+-- the convention databricks/ddl/analytics_daily.sql established, so one reviewed statement
+-- text serves both and no catalog is hardcoded here.
 --
 -- Both gold tables are per-namespace demo state: `ns` is the isolation boundary, and each
 -- load replaces exactly the slice it recomputes (`INSERT ... REPLACE WHERE`), never
 -- appending a second copy of a re-run.
 
-CREATE TABLE IF NOT EXISTS gold.estate_daily_rollup (
+CREATE TABLE IF NOT EXISTS ${catalog}.gold.estate_daily_rollup (
   ns               STRING    COMMENT 'demo namespace the rolled-up slice belongs to',
   run_date         DATE      COMMENT 'orchestrator run date this rollup describes; one slice per (ns, run_date)',
   unit             STRING    COMMENT 'converted unit: sftp_ingest | parse_custbill | finance_report | analytics_daily | audit_archive | search_reindex | storage_cleanup | user_activity',
@@ -31,7 +31,7 @@ COMMENT 'One row per (ns, run_date, unit): whether a night''s batch actually rec
 
 ;
 
-CREATE TABLE IF NOT EXISTS gold.estate_anomalies (
+CREATE TABLE IF NOT EXISTS ${catalog}.gold.estate_anomalies (
   ns          STRING    COMMENT 'demo namespace the anomaly was found in',
   unit        STRING    COMMENT 'converted unit whose tables surface the anomaly, or seed_manifest when no converted unit ingests the affected source',
   anomaly_type STRING   COMMENT 'seed-manifest anomaly kind: orphaned_metadata | missing_hours | version_gaps | orphaned_snapshots',
@@ -44,7 +44,7 @@ COMMENT 'Data defects planted by the seed generator and surfaced from the conver
 
 ;
 
-CREATE TABLE IF NOT EXISTS bronze.seed_anomaly_manifest (
+CREATE TABLE IF NOT EXISTS ${catalog}.bronze.seed_anomaly_manifest (
   ns                    STRING    COMMENT 'namespace the manifest was generated for',
   kind                  STRING    COMMENT 'planted anomaly kind, verbatim from the manifest',
   target                STRING    COMMENT 'seeded store the anomalies were planted in, verbatim from the manifest',
