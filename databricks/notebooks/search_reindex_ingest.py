@@ -11,6 +11,8 @@
 # MAGIC
 # MAGIC The landed row counts are validated against the extract manifest: a truncated extract
 # MAGIC fails the run instead of being published as a smaller index.
+# MAGIC
+# MAGIC %run /Shared/ow_tp/landing_prefix
 
 # COMMAND ----------
 
@@ -30,18 +32,13 @@ dbutils.widgets.text("simulate_source_failure", "false")
 
 ns = dbutils.widgets.get("ns").strip()
 catalog = dbutils.widgets.get("catalog").strip()
-landing_prefix = dbutils.widgets.get("landing_prefix").strip().strip("/")
 simulate_source_failure = dbutils.widgets.get("simulate_source_failure").strip().lower() == "true"
 
 if not re.fullmatch(r"[a-z0-9_]+", ns):
     raise ValueError(f"ns must match [a-z0-9_]+, got {ns!r}")
 if not re.fullmatch(r"ow_tp[a-z0-9_]*", catalog):
     raise ValueError(f"catalog must match ow_tp[a-z0-9_]*, got {catalog!r}")
-if not re.fullmatch(r"[a-z0-9_-]+(/[a-z0-9_-]+)*", landing_prefix):
-    raise ValueError(
-        "landing_prefix must match [a-z0-9_-]+(/[a-z0-9_-]+)*, "
-        f"got {landing_prefix!r}"
-    )
+landing_prefix = normalize_landing_prefix(dbutils.widgets.get("landing_prefix"))
 
 BRONZE_TABLE = f"{catalog}.bronze.search_documents_raw"
 LANDING_ROOT = f"/Volumes/{catalog}/bronze/landing"
