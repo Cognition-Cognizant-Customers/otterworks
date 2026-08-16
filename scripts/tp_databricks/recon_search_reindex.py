@@ -287,7 +287,7 @@ def load_run(golden_dir: Path, name: str) -> dict:
 def run_snapshot(run: dict, name: str) -> dict[str, int]:
     """Counts recorded by the dev runner when that run finished, not a report-time read."""
     snapshot = run.get("serving_counts_at_run_end")
-    if not snapshot:
+    if snapshot is None:
         raise Blocked(
             f"{name} carries no serving_counts_at_run_end snapshot; "
             "re-run it with the current run_search_reindex_dev.py so the count is captured "
@@ -466,17 +466,24 @@ def main(argv: list[str] | None = None) -> int:
     golden_dir = Path(args.golden_dir)
     baseline = "blocked"
     provenance: dict = {}
-    baseline_established = False
     setup_succeeded = False
 
     try:
         baseline, provenance = baseline_line(golden_dir)
-        baseline_established = True
-        legacy = legacy_counts()
-        converted = serving_counts(args.ns)
-        setup_succeeded = True
     except Blocked as exc:
         results = blocked_results(str(exc))
+    else:
+        try:
+            legacy = legacy_counts()
+            converted = serving_counts(args.ns)
+            setup_succeeded = True
+        except Blocked as exc:
+            results = blocked_results(str(exc))
+            results["check 5 — baseline provenance"] = {
+                "passed": True,
+                "baseline": baseline,
+                **provenance,
+            }
 
     def run_check(name: str, fn):
         try:
