@@ -202,7 +202,7 @@ try:
         created = check("access-list-post", "Create a temporary API access-list entry", post,
                         f"{base}/groups/{project}/accessList",
                         json=[{"ipAddress": probe_ip, "comment": "otterworks preflight"}])
-        if created is not None and created.status_code == 201:
+        if created is not None and created.ok:
             created_entry = {"ipAddress": probe_ip}
     if covers(ip, listed):
         m.add("vm-ip-listed", "The VM public IP is present in the Atlas access list",
@@ -217,7 +217,7 @@ try:
                     post, f"{base}/groups/{project}/accessList",
                     json=[{"ipAddress": ip, "comment": "otterworks preflight temporary access"}])
         try:
-            if own is not None and own.status_code == 201:
+            if own is not None and own.ok:
                 own_entry = {"ipAddress": ip}
                 m.add("vm-ip-listed", "The VM public IP can be self-healed for the DB write path",
                       "Atlas accessList POST/DELETE", "verified", f"VM IP {ip} was absent and temporary add succeeded")
