@@ -42,6 +42,18 @@ from types import ModuleType
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NOTEBOOK = REPO_ROOT / "databricks" / "notebooks" / "analytics_daily.py"
 DDL_FILE = REPO_ROOT / "databricks" / "ddl" / "analytics_daily.sql"
+
+
+def _dbx_retryable(exc: Exception) -> bool:
+    """Retry terminal SQL failures or rejected submissions, never ambiguous polling errors."""
+    message = str(exc)
+    if message.startswith("statement failed ("):
+        return True
+    return (
+        exc.__class__.__name__ == "DatabricksError"
+        and message.startswith("POST ")
+        and 400 <= int(getattr(exc, "status", 0) or 0) < 500
+    )
 STAGE_DDL_FILE = REPO_ROOT / "databricks" / "ddl" / "analytics_daily_stage.sql"
 DATA_LAKE_BUCKET = "otterworks-data-lake"
 STAGE_TABLE_SUFFIX = "bronze.analytics_daily_stage"
@@ -272,6 +284,7 @@ def run(ns: str, catalog: str, source_kind: str, apply_ddl: bool = True, source_
         source_kind=source_kind,
         source_table=source_table,
         apply_ddl=apply_ddl,
+        is_retryable=_dbx_retryable,
     )
 
 
