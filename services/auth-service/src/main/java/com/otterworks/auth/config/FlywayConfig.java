@@ -8,8 +8,8 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Repairs the schema history before migrating so that the V1 checksum change that removed the
  * committed admin password digest does not block startup on databases that already applied V1.
- * Disable with {@code auth.flyway.repair-before-migrate=false} to restore Flyway's default
- * checksum validation once every database has been migrated.
+ * Disable with {@code auth.flyway.repair-before-migrate=false} to restore Flyway's default checksum
+ * validation once every database has been migrated.
  */
 @Configuration
 public class FlywayConfig {
