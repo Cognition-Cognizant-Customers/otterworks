@@ -19,17 +19,15 @@ class AuditLog < ApplicationRecord
   scope :recent, -> { order(created_at: :desc) }
   scope :since, ->(time) { where('created_at >= ?', time) }
 
-  def self.record!(action:, resource_type:, resource_id: nil, actor_id: nil, actor_email: nil,
-                   changes_made: {}, ip_address: nil, user_agent: nil)
+  RECORDABLE_DETAILS = %i[resource_id actor_id actor_email changes_made ip_address user_agent].freeze
+
+  def self.record!(action:, resource_type:, **details)
+    unknown = details.keys - RECORDABLE_DETAILS
+    raise ArgumentError, "unknown keyword#{'s' if unknown.many?}: #{unknown.join(', ')}" if unknown.any?
+
     create!(
-      action: action,
-      resource_type: resource_type,
-      resource_id: resource_id,
-      actor_id: actor_id,
-      actor_email: actor_email,
-      changes_made: changes_made,
-      ip_address: ip_address,
-      user_agent: user_agent
+      details.reverse_merge(changes_made: {})
+             .merge(action: action, resource_type: resource_type)
     )
   end
 end
