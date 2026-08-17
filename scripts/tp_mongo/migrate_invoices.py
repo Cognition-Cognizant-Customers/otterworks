@@ -232,10 +232,14 @@ def invoice_document(
     quality: list[str] = []
     if not lines:
         quality.append("no_source_lines")
-    if invoice_date_bad:
-        quality.append("unparseable_invoice_dt")
-    if due_date_bad:
-        quality.append("unparseable_due_dt")
+    if invoice_date_bad is not False:
+        quality.append(
+            "unparseable_invoice_dt" if invoice_date_bad else "null_invoice_dt"
+        )
+    if due_date_bad is not False:
+        quality.append("unparseable_due_dt" if due_date_bad else "null_due_dt")
+    if header.get("duplicate_invoice_no"):
+        quality.append("duplicate_invoice_no")
     if not matches:
         quality.append("legacy_total_mismatch")
     return {
@@ -274,6 +278,7 @@ def fetch_headers(connection: Any, batch_no: int) -> dict[str, dict[str, Any]]:
         batch_no=batch_no,
     )
     headers: dict[str, dict[str, Any]] = {}
+    invoice_no_counts: dict[str, int] = {}
     for row in cursor:
         values = dict(zip(
             (
@@ -325,7 +330,15 @@ def fetch_headers(connection: Any, batch_no: int) -> dict[str, dict[str, Any]]:
                 f"in batch {batch_no}"
             ) from exc
         headers[header["invoice_id"]] = header
+        invoice_no = header["invoice_no"]
+        if invoice_no is not None:
+            invoice_no_counts[invoice_no] = invoice_no_counts.get(invoice_no, 0) + 1
     cursor.close()
+    for header in headers.values():
+        invoice_no = header["invoice_no"]
+        header["duplicate_invoice_no"] = (
+            invoice_no is not None and invoice_no_counts[invoice_no] > 1
+        )
     return headers
 
 

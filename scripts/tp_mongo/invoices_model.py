@@ -226,10 +226,12 @@ def decimal_text(value: Any) -> str:
     return format(value.quantize(MONEY_QUANTUM), "f")
 
 
-def parse_legacy_date(raw_value: Any) -> tuple[datetime | None, str | None, bool]:
+def parse_legacy_date(
+    raw_value: Any,
+) -> tuple[datetime | None, str | None, bool | None]:
     raw = decode_text(raw_value)
     if raw is None:
-        return None, None, True
+        return None, None, None
     try:
         day_text, month_text, year_text = raw.split("-")
         if len(day_text) != 2 or len(month_text) != 3 or len(year_text) != 2:
@@ -454,7 +456,10 @@ def ensure_collections(database: Any) -> None:
                 validationAction="error",
             )
     database["invoices"].create_index([("ns", 1), ("cust_id", 1)])
-    database["invoices"].create_index(
-        [("ns", 1), ("invoice_no", 1)], unique=True
-    )
+    invoice_no_key = [("ns", 1), ("invoice_no", 1)]
+    invoices = database["invoices"]
+    for index in invoices.list_indexes():
+        if list(index["key"].items()) == invoice_no_key and index.get("unique", False):
+            invoices.drop_index(index["name"])
+    invoices.create_index(invoice_no_key)
     database["invoices_quarantine"].create_index([("ns", 1), ("anomaly_id", 1)])

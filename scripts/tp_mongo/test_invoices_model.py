@@ -71,6 +71,10 @@ def test_legacy_date_retains_raw_value_when_unparseable():
     assert parsed == _dt.datetime(2024, 1, 5, tzinfo=_dt.timezone.utc)
     assert raw == "05-JAN-24"
     assert invalid is False
+    parsed, raw, invalid = parse_legacy_date(None)
+    assert parsed is None
+    assert raw is None
+    assert invalid is None
 
 
 def test_money_rejects_float_and_produces_decimal128():
@@ -204,3 +208,45 @@ def test_invoice_total_is_exact_line_sum_and_flags_legacy_mismatch():
     assert document["lines"][0]["line_id"] == "101"
     assert document["due_dt"] is None
     assert document["due_dt_raw"] == "31-FEB-24"
+
+
+def test_null_invoice_dates_are_attributed():
+    document = invoice_document(
+        {
+            "invoice_id": "1",
+            "invoice_no": "INV-1",
+            "cust_id": "CUST-1",
+            "tenant_id": "demo",
+            "status_cd": 1,
+            "invoice_dt": None,
+            "due_dt": None,
+            "total_amt": decimal.Decimal(0),
+        },
+        [],
+        "demo",
+        85559852,
+    )
+    assert document["invoice_dt"] is None
+    assert document["due_dt"] is None
+    assert "null_invoice_dt" in document["data_quality"]
+    assert "null_due_dt" in document["data_quality"]
+
+
+def test_duplicate_invoice_no_is_attributed():
+    document = invoice_document(
+        {
+            "invoice_id": "1",
+            "invoice_no": "INV-1",
+            "cust_id": "CUST-1",
+            "tenant_id": "demo",
+            "status_cd": 1,
+            "invoice_dt": "05-JAN-24",
+            "due_dt": "06-JAN-24",
+            "total_amt": decimal.Decimal(0),
+            "duplicate_invoice_no": True,
+        },
+        [],
+        "demo",
+        85559852,
+    )
+    assert "duplicate_invoice_no" in document["data_quality"]
