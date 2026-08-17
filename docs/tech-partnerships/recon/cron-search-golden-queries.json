@@ -1,0 +1,541 @@
+{
+  "kind": "golden-query-set",
+  "unit": "cron-search",
+  "namespace": "demo",
+  "source_of_truth": "Legacy MeiliSearch indexes captured in testdata/legacy/golden/cronbox/demo/search_reindex_weekly/manifest.json",
+  "comparison": "document-id sets only; result ordering and relevance scores are engine-specific and out of scope (see cron-search.json coverage gaps)",
+  "queries": [
+    {
+      "id": "DOC-UNICODE-TITLE",
+      "collection": "documents",
+      "intent": "A multi-byte title term must remain matchable after migration.",
+      "meilisearch_query": {
+        "q": "Δocument"
+      },
+      "atlas_pipeline": [
+        {
+          "$search": {
+            "index": "default",
+            "text": {
+              "query": "Δocument",
+              "path": [
+                "title",
+                "content",
+                "tags"
+              ]
+            }
+          }
+        },
+        {
+          "$project": {
+            "_id": 0,
+            "id": 1
+          }
+        }
+      ],
+      "expected_count": 1,
+      "expected_ids": [
+        "doc-004"
+      ]
+    },
+    {
+      "id": "DOC-TERM-ALL",
+      "collection": "documents",
+      "intent": "A term present in every document body proves full-corpus coverage of the searchable content field.",
+      "meilisearch_query": {
+        "q": "Content"
+      },
+      "atlas_pipeline": [
+        {
+          "$search": {
+            "index": "default",
+            "text": {
+              "query": "Content",
+              "path": [
+                "title",
+                "content",
+                "tags"
+              ]
+            }
+          }
+        },
+        {
+          "$project": {
+            "_id": 0,
+            "id": 1
+          }
+        }
+      ],
+      "expected_count": 125,
+      "expected_ids": [
+        "doc-000",
+        "doc-001",
+        "doc-002",
+        "doc-003",
+        "doc-004",
+        "doc-005",
+        "doc-006",
+        "doc-007",
+        "doc-008",
+        "doc-009",
+        "doc-010",
+        "doc-011",
+        "doc-012",
+        "doc-013",
+        "doc-014",
+        "doc-015",
+        "doc-016",
+        "doc-017",
+        "doc-018",
+        "doc-019",
+        "doc-020",
+        "doc-021",
+        "doc-022",
+        "doc-023",
+        "doc-024",
+        "doc-025",
+        "doc-026",
+        "doc-027",
+        "doc-028",
+        "doc-029",
+        "doc-030",
+        "doc-031",
+        "doc-032",
+        "doc-033",
+        "doc-034",
+        "doc-035",
+        "doc-036",
+        "doc-037",
+        "doc-038",
+        "doc-039",
+        "doc-040",
+        "doc-041",
+        "doc-042",
+        "doc-043",
+        "doc-044",
+        "doc-045",
+        "doc-046",
+        "doc-047",
+        "doc-048",
+        "doc-049",
+        "doc-050",
+        "doc-051",
+        "doc-052",
+        "doc-053",
+        "doc-054",
+        "doc-055",
+        "doc-056",
+        "doc-057",
+        "doc-058",
+        "doc-059",
+        "doc-060",
+        "doc-061",
+        "doc-062",
+        "doc-063",
+        "doc-064",
+        "doc-065",
+        "doc-066",
+        "doc-067",
+        "doc-068",
+        "doc-069",
+        "doc-070",
+        "doc-071",
+        "doc-072",
+        "doc-073",
+        "doc-074",
+        "doc-075",
+        "doc-076",
+        "doc-077",
+        "doc-078",
+        "doc-079",
+        "doc-080",
+        "doc-081",
+        "doc-082",
+        "doc-083",
+        "doc-084",
+        "doc-085",
+        "doc-086",
+        "doc-087",
+        "doc-088",
+        "doc-089",
+        "doc-090",
+        "doc-091",
+        "doc-092",
+        "doc-093",
+        "doc-094",
+        "doc-095",
+        "doc-096",
+        "doc-097",
+        "doc-098",
+        "doc-099",
+        "doc-100",
+        "doc-101",
+        "doc-102",
+        "doc-103",
+        "doc-104",
+        "doc-105",
+        "doc-106",
+        "doc-107",
+        "doc-108",
+        "doc-109",
+        "doc-110",
+        "doc-111",
+        "doc-112",
+        "doc-113",
+        "doc-114",
+        "doc-115",
+        "doc-116",
+        "doc-117",
+        "doc-118",
+        "doc-119",
+        "doc-120",
+        "doc-121",
+        "doc-122",
+        "doc-123",
+        "doc-124"
+      ]
+    },
+    {
+      "id": "DOC-FILTER-OWNER",
+      "collection": "documents",
+      "intent": "Owner filtering must be exact-match on a keyword field, not analyzed text.",
+      "meilisearch_query": {
+        "q": "",
+        "filter": "owner_id = \"user-003\""
+      },
+      "atlas_pipeline": [
+        {
+          "$search": {
+            "index": "default",
+            "compound": {
+              "filter": [
+                {
+                  "equals": {
+                    "path": "owner_id",
+                    "value": "user-003"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "$project": {
+            "_id": 0,
+            "id": 1
+          }
+        }
+      ],
+      "expected_count": 11,
+      "expected_ids": [
+        "doc-003",
+        "doc-015",
+        "doc-027",
+        "doc-039",
+        "doc-051",
+        "doc-063",
+        "doc-075",
+        "doc-087",
+        "doc-099",
+        "doc-111",
+        "doc-123"
+      ]
+    },
+    {
+      "id": "DOC-FILTER-TAG",
+      "collection": "documents",
+      "intent": "Tag filtering must match a single element of the tag array.",
+      "meilisearch_query": {
+        "q": "",
+        "filter": "tags = \"tag-2\""
+      },
+      "atlas_pipeline": [
+        {
+          "$search": {
+            "index": "default",
+            "compound": {
+              "filter": [
+                {
+                  "equals": {
+                    "path": "tags",
+                    "value": "tag-2"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "$project": {
+            "_id": 0,
+            "id": 1
+          }
+        }
+      ],
+      "expected_count": 25,
+      "expected_ids": [
+        "doc-002",
+        "doc-007",
+        "doc-012",
+        "doc-017",
+        "doc-022",
+        "doc-027",
+        "doc-032",
+        "doc-037",
+        "doc-042",
+        "doc-047",
+        "doc-052",
+        "doc-057",
+        "doc-062",
+        "doc-067",
+        "doc-072",
+        "doc-077",
+        "doc-082",
+        "doc-087",
+        "doc-092",
+        "doc-097",
+        "doc-102",
+        "doc-107",
+        "doc-112",
+        "doc-117",
+        "doc-122"
+      ]
+    },
+    {
+      "id": "FILE-UNICODE-NAME",
+      "collection": "files",
+      "intent": "A multi-byte file name term must remain matchable after migration.",
+      "meilisearch_query": {
+        "q": "Fichier"
+      },
+      "atlas_pipeline": [
+        {
+          "$search": {
+            "index": "default",
+            "text": {
+              "query": "Fichier",
+              "path": [
+                "name",
+                "tags",
+                "mime_type"
+              ]
+            }
+          }
+        },
+        {
+          "$project": {
+            "_id": 0,
+            "id": 1
+          }
+        }
+      ],
+      "expected_count": 1,
+      "expected_ids": [
+        "file-007"
+      ]
+    },
+    {
+      "id": "FILE-FILTER-MIME",
+      "collection": "files",
+      "intent": "MIME-type filtering must be exact-match and must not tokenize on the slash.",
+      "meilisearch_query": {
+        "q": "",
+        "filter": "mime_type = \"application/pdf\""
+      },
+      "atlas_pipeline": [
+        {
+          "$search": {
+            "index": "default",
+            "compound": {
+              "filter": [
+                {
+                  "equals": {
+                    "path": "mime_type",
+                    "value": "application/pdf"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "$project": {
+            "_id": 0,
+            "id": 1
+          }
+        }
+      ],
+      "expected_count": 18,
+      "expected_ids": [
+        "file-001",
+        "file-005",
+        "file-009",
+        "file-013",
+        "file-017",
+        "file-021",
+        "file-025",
+        "file-029",
+        "file-033",
+        "file-037",
+        "file-041",
+        "file-045",
+        "file-049",
+        "file-053",
+        "file-057",
+        "file-061",
+        "file-065",
+        "file-069"
+      ]
+    },
+    {
+      "id": "FILE-FILTER-FOLDER",
+      "collection": "files",
+      "intent": "Folder scoping must be exact-match on a keyword field.",
+      "meilisearch_query": {
+        "q": "",
+        "filter": "folder_id = \"folder-2\""
+      },
+      "atlas_pipeline": [
+        {
+          "$search": {
+            "index": "default",
+            "compound": {
+              "filter": [
+                {
+                  "equals": {
+                    "path": "folder_id",
+                    "value": "folder-2"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "$project": {
+            "_id": 0,
+            "id": 1
+          }
+        }
+      ],
+      "expected_count": 24,
+      "expected_ids": [
+        "file-001",
+        "file-004",
+        "file-007",
+        "file-010",
+        "file-013",
+        "file-016",
+        "file-019",
+        "file-022",
+        "file-025",
+        "file-028",
+        "file-031",
+        "file-034",
+        "file-037",
+        "file-040",
+        "file-043",
+        "file-046",
+        "file-049",
+        "file-052",
+        "file-055",
+        "file-058",
+        "file-061",
+        "file-064",
+        "file-067",
+        "file-070"
+      ]
+    },
+    {
+      "id": "FILE-FILTER-OWNER",
+      "collection": "files",
+      "intent": "Owner filtering on the file corpus, cross-checking tenant-style scoping.",
+      "meilisearch_query": {
+        "q": "",
+        "filter": "owner_id = \"user-005\""
+      },
+      "atlas_pipeline": [
+        {
+          "$search": {
+            "index": "default",
+            "compound": {
+              "filter": [
+                {
+                  "equals": {
+                    "path": "owner_id",
+                    "value": "user-005"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "$project": {
+            "_id": 0,
+            "id": 1
+          }
+        }
+      ],
+      "expected_count": 6,
+      "expected_ids": [
+        "file-005",
+        "file-017",
+        "file-029",
+        "file-041",
+        "file-053",
+        "file-065"
+      ]
+    },
+    {
+      "id": "FILE-FILTER-TAG",
+      "collection": "files",
+      "intent": "Tag filtering on the file corpus must match one element of the tag array.",
+      "meilisearch_query": {
+        "q": "",
+        "filter": "tags = \"tag-0\""
+      },
+      "atlas_pipeline": [
+        {
+          "$search": {
+            "index": "default",
+            "compound": {
+              "filter": [
+                {
+                  "equals": {
+                    "path": "tags",
+                    "value": "tag-0"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "$project": {
+            "_id": 0,
+            "id": 1
+          }
+        }
+      ],
+      "expected_count": 15,
+      "expected_ids": [
+        "file-000",
+        "file-005",
+        "file-010",
+        "file-015",
+        "file-020",
+        "file-025",
+        "file-030",
+        "file-035",
+        "file-040",
+        "file-045",
+        "file-050",
+        "file-055",
+        "file-060",
+        "file-065",
+        "file-070"
+      ]
+    }
+  ]
+}
