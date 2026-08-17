@@ -356,7 +356,7 @@ def process_version(
 
     try:
         created_at = utc_datetime(row[6])
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         return (
             str(row[1]),
             None,
@@ -450,7 +450,7 @@ def process_document(
     try:
         created_at = utc_datetime(row[10])
         updated_at = utc_datetime(row[11])
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         return (
             None,
             quarantine_record(
@@ -546,6 +546,7 @@ def migrate(ns: str) -> dict[str, int]:
         ensure_target(db)
 
         source_document_ids: set[str] = set()
+        quarantined_document_ids: set[str] = set()
         document_collection = db[DOCUMENTS]
         quarantine_collection = db[QUARANTINE]
 
@@ -598,6 +599,8 @@ def migrate(ns: str) -> dict[str, int]:
                     gaps_detected += int(has_gap)
                 elif quarantine is not None:
                     document_quarantine.append(quarantine)
+                    if document_id != "<null>":
+                        quarantined_document_ids.add(document_id)
 
             replace_batch(document_collection, document_records)
             replace_batch(
@@ -666,7 +669,7 @@ def migrate(ns: str) -> dict[str, int]:
 
             try:
                 created_at = utc_datetime(snapshot_row[5])
-            except ValueError as exc:
+            except (TypeError, ValueError) as exc:
                 snapshot_quarantine.append(
                     quarantine_record(
                         ns,
@@ -680,6 +683,18 @@ def migrate(ns: str) -> dict[str, int]:
                 continue
 
             document_id = str(snapshot_row[1])
+            if document_id in quarantined_document_ids:
+                snapshot_quarantine.append(
+                    quarantine_record(
+                        ns,
+                        "document_snapshots",
+                        source_id,
+                        "parent_quarantined",
+                        f"parent document {document_id} was quarantined and not written to documents",
+                        raw,
+                    )
+                )
+                continue
             snapshot = {
                 "_id": source_id_text(source_id),
                 "ns": ns,

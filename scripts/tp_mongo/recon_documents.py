@@ -59,8 +59,64 @@ UNVERIFIED_LIVE = [
 #   document_snapshots: <snapshot id>|<document id>
 
 
+def epoch_ms(value: datetime) -> int:
+    """Instant as milliseconds since the epoch — the BSON date resolution."""
+    return int(value.astimezone(timezone.utc).timestamp() * 1000)
+
+
+def text(value) -> str:
+    return "" if value is None else str(value)
+
+
+# Field-level parity line formats. The manifest checksums cover only a few
+# columns, so these fold every migrated field (including both timestamps, as
+# UTC milliseconds) into a checksum computed independently on each side.
+#   documents:          <id>|<title>|<content>|<content_type>|<owner_id>|<folder_id>|
+#                       <is_deleted>|<is_template>|<word_count>|<declared_version>|
+#                       <created_at ms>|<updated_at ms>
+#   document_versions:  <id>|<document_id>|<version_number>|<title>|<content>|
+#                       <created_by>|<created_at ms>
+#   document_snapshots: <id>|<document_id>|<state_b64>|<label>|<created_by>|<created_at ms>
+
+
+def document_parity_line(
+    doc_id, title, content, content_type, owner_id, folder_id,
+    is_deleted, is_template, word_count, declared_version, created_at, updated_at,
+) -> str:
+    return "|".join(
+        [
+            text(doc_id), text(title), text(content), text(content_type),
+            text(owner_id), text(folder_id), str(int(bool(is_deleted))),
+            str(int(bool(is_template))), str(int(word_count)), str(int(declared_version)),
+            str(epoch_ms(created_at)), str(epoch_ms(updated_at)),
+        ]
+    )
+
+
+def version_parity_line(
+    version_id, doc_id, version_number, title, content, created_by, created_at
+) -> str:
+    return "|".join(
+        [
+            text(version_id), text(doc_id), str(int(version_number)), text(title),
+            text(content), text(created_by), str(epoch_ms(created_at)),
+        ]
+    )
+
+
+def snapshot_parity_line(
+    snapshot_id, doc_id, state_b64, label, created_by, created_at
+) -> str:
+    return "|".join(
+        [
+            text(snapshot_id), text(doc_id), text(state_b64), text(label),
+            text(created_by), str(epoch_ms(created_at)),
+        ]
+    )
+
+
 def source_expectations(ns: str) -> dict:
-    """Anomaly sets re-derived from the legacy Postgres estate (source of truth)."""
+    """Anomaly sets and field-level parity checksums re-derived from Postgres."""
     schema = source_schema(ns)
     conn = pg_connect(ns)
     try:
@@ -89,9 +145,61 @@ def source_expectations(ns: str) -> dict:
                 """
             )
             orphans = [row[0] for row in cur.fetchall()]
+
+        lc = legacy_common()
+        doc_ck, ver_ck, snap_ck = lc.Checksum(), lc.Checksum(), lc.Checksum()
+        sub_ms = 0
+
+        def fold(sql: str, line, cursor_name: str) -> None:
+            nonlocal sub_ms
+            cursor = conn.cursor(name=cursor_name)
+            cursor.itersize = 500
+            cursor.execute(sql)
+            for row in cursor:
+                for value in row:
+                    if isinstance(value, datetime) and value.microsecond % 1000:
+                        sub_ms += 1
+                line(row)
+            cursor.close()
+
+        fold(
+            f"""
+            SELECT id::text, title, content, content_type, owner_id::text,
+                   folder_id::text, is_deleted, is_template, word_count, version,
+                   created_at, updated_at
+              FROM {schema}.documents
+            """,
+            lambda row: doc_ck.add(document_parity_line(*row)),
+            "ow_tp_recon_src_documents",
+        )
+        fold(
+            f"""
+            SELECT id::text, document_id::text, version_number, title, content,
+                   created_by::text, created_at
+              FROM {schema}.document_versions
+            """,
+            lambda row: ver_ck.add(version_parity_line(*row)),
+            "ow_tp_recon_src_versions",
+        )
+        fold(
+            f"""
+            SELECT id::text, document_id::text, state_b64, label, created_by::text,
+                   created_at
+              FROM {schema}.document_snapshots
+            """,
+            lambda row: snap_ck.add(snapshot_parity_line(*row)),
+            "ow_tp_recon_src_snapshots",
+        )
     finally:
         conn.close()
-    return {"version_gaps": gaps, "orphaned_snapshots": orphans}
+    return {
+        "version_gaps": gaps,
+        "orphaned_snapshots": orphans,
+        "documents_parity": doc_ck.hexdigest(),
+        "versions_parity": ver_ck.hexdigest(),
+        "snapshots_parity": snap_ck.hexdigest(),
+        "sub_millisecond_timestamps": sub_ms,
+    }
 
 
 def missing_versions(declared: int, present: list[int]) -> list[int]:
@@ -116,6 +224,7 @@ def target_facts(ns: str) -> dict:
     try:
         db = client[target_db_name(ns)]
         doc_ck, ver_ck, snap_ck = lc.Checksum(), lc.Checksum(), lc.Checksum()
+        doc_parity, ver_parity, snap_parity = lc.Checksum(), lc.Checksum(), lc.Checksum()
         documents = 0
         embedded_versions = 0
         gaps: dict[str, list[int]] = {}
@@ -123,16 +232,24 @@ def target_facts(ns: str) -> dict:
         over_bound = 0
         doc_ids: set[str] = set()
 
-        for doc in db[DOCUMENTS].find(
-            {},
-            projection={
-                "declared_version": 1,
-                "word_count": 1,
-                "versions.version_number": 1,
-                "snapshots": 1,
-            },
-        ):
+        for doc in db[DOCUMENTS].find({}):
             documents += 1
+            doc_parity.add(
+                document_parity_line(
+                    doc["_id"], doc["title"], doc["content"], doc["content_type"],
+                    doc["owner_id"], doc.get("folder_id"), doc["is_deleted"],
+                    doc["is_template"], doc["word_count"], doc["declared_version"],
+                    doc["created_at"], doc["updated_at"],
+                )
+            )
+            for version in doc.get("versions", []):
+                ver_parity.add(
+                    version_parity_line(
+                        version["_id"], doc["_id"], version["version_number"],
+                        version["title"], version["content"], version["created_by"],
+                        version["created_at"],
+                    )
+                )
             doc_ids.add(doc["_id"])
             doc_ck.add(f"{doc['_id']}|{doc['declared_version']}|{doc['word_count']}")
             numbers = [v["version_number"] for v in doc.get("versions", [])]
@@ -150,9 +267,15 @@ def target_facts(ns: str) -> dict:
         snapshots = 0
         orphans: list[str] = []
         attached_to_missing_parent: list[str] = []
-        for snap in db[SNAPSHOTS].find({}, projection={"document_id": 1, "parent_missing": 1}):
+        for snap in db[SNAPSHOTS].find({}):
             snapshots += 1
             snap_ck.add(f"{snap['_id']}|{snap['document_id']}")
+            snap_parity.add(
+                snapshot_parity_line(
+                    snap["_id"], snap["document_id"], snap["state_b64"],
+                    snap.get("label"), snap["created_by"], snap["created_at"],
+                )
+            )
             if snap.get("parent_missing"):
                 orphans.append(snap["_id"])
             elif snap["document_id"] not in doc_ids:
@@ -173,6 +296,9 @@ def target_facts(ns: str) -> dict:
             "snapshots_with_unresolvable_parent_not_flagged": sorted(attached_to_missing_parent),
             "documents_with_embedded_snapshots": embedded_snapshot_fields,
             "documents_over_version_bound": over_bound,
+            "documents_parity": doc_parity.hexdigest(),
+            "versions_parity": ver_parity.hexdigest(),
+            "snapshots_parity": snap_parity.hexdigest(),
             "validators": validator_probe,
         }
     finally:
@@ -222,6 +348,9 @@ def fingerprint(facts: dict) -> dict:
         "snapshots_checksum": facts["snapshots_checksum"],
         "version_gaps": {k: v for k, v in sorted(facts["version_gaps"].items())},
         "orphaned_snapshots": facts["orphaned_snapshots"],
+        "documents_parity": facts["documents_parity"],
+        "versions_parity": facts["versions_parity"],
+        "snapshots_parity": facts["snapshots_parity"],
     }
 
 
@@ -271,6 +400,14 @@ def build_checks(ns: str, mf: dict, expected: dict, facts: dict) -> list[dict]:
               f"{manifest_src} vs {target_src}"),
         check("documents.snapshots_not_embedded", 0, facts["documents_with_embedded_snapshots"],
               target_src),
+        check("documents.field_parity",
+              {"documents": expected["documents_parity"], "versions": expected["versions_parity"],
+               "snapshots": expected["snapshots_parity"]},
+              {"documents": facts["documents_parity"], "versions": facts["versions_parity"],
+               "snapshots": facts["snapshots_parity"]},
+              f"{pg_src} vs {target_src} (every migrated field incl. UTC timestamps)"),
+        check("documents.timestamps_representable_in_bson", 0,
+              expected["sub_millisecond_timestamps"], pg_src),
         check("documents.version_gaps_reported", expected_gap_keys, actual_gap_keys,
               f"{pg_src} vs {target_src}"),
         check("documents.version_gaps_count",
