@@ -26,6 +26,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+type ConnectionStatus = "connected" | "disconnected" | "connecting";
+
 interface CollaborativeEditorProps {
   documentId: string;
   initialContent?: string;
@@ -53,7 +55,7 @@ export function CollaborativeEditor({ documentId, initialContent, onUpdate }: Co
   const { user } = useAuthStore();
   const [ydoc] = useState(() => new Y.Doc());
   const [provider, setProvider] = useState<WebsocketProvider | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<"connected" | "disconnected" | "connecting">("connecting");
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting");
   const [isSynced, setIsSynced] = useState(false);
   const [hasLocalChanges, setHasLocalChanges] = useState(false);
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -68,7 +70,7 @@ export function CollaborativeEditor({ documentId, initialContent, onUpdate }: Co
     );
 
     wsProvider.on("status", (event: { status: string }) => {
-      setConnectionStatus(event.status as "connected" | "disconnected" | "connecting");
+      setConnectionStatus(event.status as ConnectionStatus);
     });
 
     wsProvider.on("sync", (synced: boolean) => {
@@ -259,7 +261,7 @@ function SaveStatusIndicator({
   isSynced,
   hasLocalChanges,
 }: {
-  connectionStatus: "connected" | "disconnected" | "connecting";
+  connectionStatus: ConnectionStatus;
   isSynced: boolean;
   hasLocalChanges: boolean;
 }) {
