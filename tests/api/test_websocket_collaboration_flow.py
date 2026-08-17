@@ -1,11 +1,16 @@
 import os
 import time
+import uuid
 
 import pytest
 import socketio
 
 
 pytestmark = [pytest.mark.api_flow, pytest.mark.websocket]
+
+
+def _invalid_token() -> str:
+    return os.getenv("OTTERWORKS_INVALID_WS_TOKEN", f"invalid-{uuid.uuid4().hex}")
 
 
 def _collab_url(base_url: str) -> str:
@@ -21,7 +26,7 @@ def test_socketio_rejects_missing_or_invalid_token(base_url):
     with pytest.raises(socketio.exceptions.ConnectionError):
         invalid.connect(
             _collab_url(base_url),
-            auth={"token": "not-a-valid-token"},
+            auth={"token": _invalid_token()},
             transports=["websocket"],
         )
 
