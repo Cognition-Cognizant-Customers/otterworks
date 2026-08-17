@@ -25,6 +25,11 @@ import io.micrometer.prometheus.PrometheusMeterRegistry
 import kotlinx.serialization.Serializable
 import org.koin.ktor.ext.inject
 
+private const val USER_ID_HEADER = "X-User-ID"
+private const val USER_ID_REQUIRED_MESSAGE = "user_id is required (via X-User-ID header or query parameter)"
+private const val NOTIFICATION_ID_REQUIRED_MESSAGE = "Notification ID is required"
+private const val NOTIFICATION_NOT_FOUND_MESSAGE = "Notification not found"
+
 @Serializable
 data class HealthResponse(val status: String, val service: String)
 
@@ -52,9 +57,9 @@ fun Application.configureRouting(prometheusRegistry: PrometheusMeterRegistry) {
 
         route("/api/v1/notifications") {
             get {
-                val userId = call.request.headers["X-User-ID"] ?: call.request.queryParameters["user_id"]
+                val userId = call.request.headers[USER_ID_HEADER] ?: call.request.queryParameters["user_id"]
                 if (userId.isNullOrBlank()) {
-                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("user_id is required (via X-User-ID header or query parameter)"))
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(USER_ID_REQUIRED_MESSAGE))
                     return@get
                 }
 
@@ -75,9 +80,9 @@ fun Application.configureRouting(prometheusRegistry: PrometheusMeterRegistry) {
             }
 
             get("/unread-count") {
-                val userId = call.request.headers["X-User-ID"] ?: call.request.queryParameters["user_id"]
+                val userId = call.request.headers[USER_ID_HEADER] ?: call.request.queryParameters["user_id"]
                 if (userId.isNullOrBlank()) {
-                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("user_id is required (via X-User-ID header or query parameter)"))
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(USER_ID_REQUIRED_MESSAGE))
                     return@get
                 }
 
@@ -88,35 +93,35 @@ fun Application.configureRouting(prometheusRegistry: PrometheusMeterRegistry) {
             get("/{id}") {
                 val id = call.parameters["id"] ?: return@get call.respond(
                     HttpStatusCode.BadRequest,
-                    ErrorResponse("Notification ID is required"),
+                    ErrorResponse(NOTIFICATION_ID_REQUIRED_MESSAGE),
                 )
 
                 val notification = notificationService.getNotificationById(id)
                 if (notification != null) {
                     call.respond(notification)
                 } else {
-                    call.respond(HttpStatusCode.NotFound, ErrorResponse("Notification not found"))
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse(NOTIFICATION_NOT_FOUND_MESSAGE))
                 }
             }
 
             put("/{id}/read") {
                 val id = call.parameters["id"] ?: return@put call.respond(
                     HttpStatusCode.BadRequest,
-                    ErrorResponse("Notification ID is required"),
+                    ErrorResponse(NOTIFICATION_ID_REQUIRED_MESSAGE),
                 )
 
                 val success = notificationService.markAsRead(id)
                 if (success) {
                     call.respond(HttpStatusCode.NoContent)
                 } else {
-                    call.respond(HttpStatusCode.NotFound, ErrorResponse("Notification not found"))
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse(NOTIFICATION_NOT_FOUND_MESSAGE))
                 }
             }
 
             put("/read-all") {
-                val userId = call.request.headers["X-User-ID"] ?: call.request.queryParameters["user_id"]
+                val userId = call.request.headers[USER_ID_HEADER] ?: call.request.queryParameters["user_id"]
                 if (userId.isNullOrBlank()) {
-                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("user_id is required (via X-User-ID header or query parameter)"))
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(USER_ID_REQUIRED_MESSAGE))
                     return@put
                 }
 
@@ -127,23 +132,23 @@ fun Application.configureRouting(prometheusRegistry: PrometheusMeterRegistry) {
             delete("/{id}") {
                 val id = call.parameters["id"] ?: return@delete call.respond(
                     HttpStatusCode.BadRequest,
-                    ErrorResponse("Notification ID is required"),
+                    ErrorResponse(NOTIFICATION_ID_REQUIRED_MESSAGE),
                 )
 
                 val success = notificationService.deleteNotification(id)
                 if (success) {
                     call.respond(HttpStatusCode.NoContent)
                 } else {
-                    call.respond(HttpStatusCode.NotFound, ErrorResponse("Notification not found"))
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse(NOTIFICATION_NOT_FOUND_MESSAGE))
                 }
             }
         }
 
         route("/api/v1/preferences") {
             get {
-                val userId = call.request.headers["X-User-ID"] ?: call.request.queryParameters["user_id"]
+                val userId = call.request.headers[USER_ID_HEADER] ?: call.request.queryParameters["user_id"]
                 if (userId.isNullOrBlank()) {
-                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("user_id is required (via X-User-ID header or query parameter)"))
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(USER_ID_REQUIRED_MESSAGE))
                     return@get
                 }
 
