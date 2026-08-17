@@ -17,6 +17,7 @@ from app.domain import (
     InvoiceLine,
     InvoiceRow,
     PlanRow,
+    Rating,
     RatingPeriod,
     RatingResult,
     SubscriptionRow,
@@ -443,14 +444,14 @@ class MongoInvoicingRepository:
         tenant_id: UUID,
         period_start: date,
         period_end: date,
-        rating_repository,
-        rating,
+        rating_repository: MongoRatingRepository,
+        rating: Rating,
     ) -> InvoiceRow:
         period_id, invoice_id = invoice_ids(tenant_id, period_start)
         session = self.database.client.start_session()
         try:
             with session, session.start_transaction():
-                period_id, result = finalize_result(rating, tenant_id, period_start, period_end)
+                _, result = finalize_result(rating, tenant_id, period_start, period_end)
                 rating_repository.upsert_rating(
                     period_id,
                     tenant_id,
