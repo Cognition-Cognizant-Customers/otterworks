@@ -1,0 +1,33 @@
+{
+  "unit": "mongo_files",
+  "source_artifact_path": "testdata/legacy/seed.py dynamodb target (otterworks-file-metadata, ns=demo)",
+  "target_objects": ["ow_tp_demo.files", "ow_tp_demo.files_quarantine"],
+  "golden_baseline_location": "testdata/legacy/manifests/demo.json (targets.dynamodb.file-metadata)",
+  "acceptance_checks": [
+    {"id": "files.count", "description": "ow_tp_demo.files holds exactly 10000 documents for ns=demo, recomputed from Atlas"},
+    {"id": "files.checksum", "description": "Order-independent md5 over the migrated file-metadata line format equals manifest checksum db614663b2c6d41141cae82261b416d5"},
+    {"id": "files.tenant_field", "description": "The DynamoDB ns attribute is carried onto every document as the tenant field; no document is written without it"},
+    {"id": "files.attribute_types_preserved", "description": "DynamoDB numeric attributes become BSON numbers and byte/binary attributes become BSON binary; nothing is stringified"},
+    {"id": "files.orphans_reported", "description": "The 40 items whose s3_key has no backing object are reported by item key and are migrated with an explicit orphan marker rather than dropped"},
+    {"id": "files.idempotent", "description": "A second migration run leaves counts, checksums and the reported orphan set byte-identical"}
+  ],
+  "planted_anomalies": [
+    {"id": "orphaned_metadata", "description": "40 file-metadata items point at an s3_key with no backing object; they must be detected and marked, never silently dropped or repaired", "status": "must-detect"},
+    {"id": "missing_hours", "description": "1 missing hourly S3 event partition under data-lake/events/demo/", "status": "coverage_gap", "reason": "The S3 event lake is the Databricks track's source; no MongoDB unit ingests hourly event objects, so this anomaly is out of scope for the Atlas migration and is not reported by any Mongo recon."}
+  ],
+  "encoding_policy": {
+    "input_encoding": "UTF-8 as returned by the DynamoDB API through boto3",
+    "byte_transparency": "Attribute values are carried through unchanged; binary attributes are stored as BSON binary with their original bytes",
+    "invalid_bytes": "An attribute that cannot be decoded is quarantined with the raw bytes hex-encoded; it is never replaced by a lossy substitute character"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "fail",
+    "details": "Unexpected extra attributes are tolerated and carried through under an explicit extras subdocument, attributed in the recon report. An item missing its partition key, ns, or s3_key fails into quarantine; a missing value may never fail open into an empty string."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "A scan that returns zero items leaves prior Atlas output untouched and exits non-zero; an empty scan at demo scale is a source-connectivity failure."
+  },
+  "trigger_granularity": "per-batch"
+}
