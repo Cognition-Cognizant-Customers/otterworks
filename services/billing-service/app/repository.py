@@ -326,6 +326,9 @@ class MongoInvoicingRepository:
         return value.to_decimal() if isinstance(value, Decimal128) else value
 
     def ensure_schema(self) -> None:
+        key = (self.database.client, self.database.name)
+        if key in _INVOICING_INDEXED_DATABASES:
+            return
         validators = self._validators()
         for name in self.collections:
             if name not in self.database.list_collection_names():
@@ -343,14 +346,12 @@ class MongoInvoicingRepository:
                     validationLevel="strict",
                     validationAction="error",
                 )
-        key = (self.database.client, self.database.name)
-        if key not in _INVOICING_INDEXED_DATABASES:
-            self.database.billing_invoices.create_index([("tenant_id", 1)])
-            self.database.billing_invoices.create_index([("period_id", 1)])
-            self.database.billing_credit_notes.create_index(
-                [("tenant_id", 1), ("issued_on", 1), ("_id", 1)]
-            )
-            _INVOICING_INDEXED_DATABASES.add(key)
+        self.database.billing_invoices.create_index([("tenant_id", 1)])
+        self.database.billing_invoices.create_index([("period_id", 1)])
+        self.database.billing_credit_notes.create_index(
+            [("tenant_id", 1), ("issued_on", 1), ("_id", 1)]
+        )
+        _INVOICING_INDEXED_DATABASES.add(key)
 
     def reset(self) -> None:
         for name in self.collections:
@@ -450,6 +451,7 @@ class MongoInvoicingRepository:
         rating: Rating,
     ) -> InvoiceRow:
         period_id, invoice_id = invoice_ids(tenant_id, period_start)
+        self.ensure_schema()
         session = self.database.client.start_session()
         try:
             with session, session.start_transaction():

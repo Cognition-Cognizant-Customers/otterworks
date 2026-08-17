@@ -94,7 +94,7 @@ services:
         - CMD-SHELL
         - >-
           mongosh --quiet --eval
-          "try { rs.status().ok } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'billing-service-mongo:27017'}]}).ok }"
+          "try { if (rs.status().myState !== 1) { throw new Error('replica set is not PRIMARY') } } catch (e) { try { rs.initiate({_id:'rs0',members:[{_id:0,host:'billing-service-mongo:27017'}]}) } catch (_) {} quit(1) }"
       interval: 3s
       timeout: 10s
       retries: 30

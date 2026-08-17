@@ -185,6 +185,10 @@ def test_reissuance_preserves_first_issued_at() -> None:
         def upsert_rating(self, *_args, **_kwargs):
             return None
 
+    class Repository(MongoInvoicingRepository):
+        def ensure_schema(self):
+            return None
+
     subscription = SubscriptionRow(
         UUID("20000000-0000-0000-0000-000000000006"),
         TENANT,
@@ -196,7 +200,7 @@ def test_reissuance_preserves_first_issued_at() -> None:
     )
     rating = Rating(201, 100, 0, 101, 0, 101, Decimal("5.56"), subscription)
     database = Database()
-    repository = MongoInvoicingRepository(database)
+    repository = Repository(database)
     first = repository.issue(PLAN, False, TENANT, START, END, RatingRepository(), rating)
     second = repository.issue(
         PLAN,
