@@ -5,8 +5,8 @@ The definitions themselves live as code under
 infrastructure/atlas/cronbox/search-indexes/ and replace the legacy
 MeiliSearch settings patch. This module loads them, describes the intended
 operations for a child-safe dry run, applies them idempotently (parent only),
-and reads the deployed definitions back from the Atlas Admin API so recon never
-trusts local state.
+and reads the deployed definitions back through the PyMongo data plane so recon
+never trusts local state.
 """
 
 from __future__ import annotations
@@ -14,20 +14,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
-import urllib.parse
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFINITIONS_DIR = REPO_ROOT / "infrastructure" / "atlas" / "cronbox" / "search-indexes"
-API_BASE = "https://cloud.mongodb.com/api/atlas/v2"
-API_VERSION = "application/vnd.atlas.2024-05-30+json"
-PROJECT_ENV = "MONGODB_ATLAS_PROJECT_ID"
-PUBLIC_KEY_ENV = "MONGODB_ATLAS_PUBLIC_KEY"
-PRIVATE_KEY_ENV = "MONGODB_ATLAS_PRIVATE_KEY"
-CLUSTER_ENV = "MONGODB_ATLAS_CLUSTER_NAME"
+URI_ENV = "MONGODB_ATLAS_URI"
 
 # MeiliSearch attribute role -> Atlas Search index types that satisfy it.
 # "searchable" needs an analyzed string; MeiliSearch filter/sort equality is
@@ -112,118 +105,107 @@ def intended_operations(definitions: Sequence[dict[str, Any]]) -> Iterator[str]:
         )
 
 
-def _auth() -> Any:
-    from requests.auth import HTTPDigestAuth
+def _client(uri: str | None = None) -> Any:
+    from pymongo import MongoClient
 
-    missing = [
-        name
-        for name in (PUBLIC_KEY_ENV, PRIVATE_KEY_ENV, PROJECT_ENV)
-        if not os.environ.get(name)
-    ]
-    if missing:
-        raise SystemExit(
-            f"missing required environment variable(s): {', '.join(missing)}"
+    uri = uri or os.environ.get(URI_ENV)
+    if not uri:
+        raise SystemExit(f"{URI_ENV} is required for Atlas index management")
+    return MongoClient(uri, serverSelectionTimeoutMS=20_000)
+
+
+def _read_back_collection(
+    client: Any, database: str, collection: str
+) -> list[dict[str, Any]]:
+    """Read Atlas Search definitions and build status from the PyMongo data plane."""
+    result = []
+    for item in client[database][collection].list_search_indexes():
+        definition = item.get("latestDefinition") or item.get("definition") or {}
+        result.append(
+            {
+                "database": database,
+                "collectionName": collection,
+                "name": item.get("name"),
+                "indexID": item.get("indexID"),
+                "status": item.get("status"),
+                "queryable": item.get("queryable"),
+                "definition": definition,
+            }
         )
-    return HTTPDigestAuth(os.environ[PUBLIC_KEY_ENV], os.environ[PRIVATE_KEY_ENV])
-
-
-def _project() -> str:
-    project = os.environ[PROJECT_ENV]
-    if not re.fullmatch(r"[A-Za-z0-9_-]+", project):
-        raise SystemExit(f"{PROJECT_ENV} must contain only letters, digits, '_' or '-'")
-    return project
-
-
-def _headers() -> dict[str, str]:
-    return {"Accept": API_VERSION, "Content-Type": "application/json"}
-
-
-def cluster_name(auth: Any = None) -> str:
-    """The configured cluster, or the project's single cluster when unambiguous."""
-    import requests
-
-    configured = os.environ.get(CLUSTER_ENV)
-    if configured:
-        return configured
-    response = requests.get(
-        f"{API_BASE}/groups/{_project()}/clusters",
-        auth=auth or _auth(),
-        headers=_headers(),
-        timeout=30,
-    )
-    response.raise_for_status()
-    names = [item["name"] for item in response.json().get("results", [])]
-    if len(names) != 1:
-        raise SystemExit(
-            f"set {CLUSTER_ENV}: the project has {len(names)} clusters, so the target is ambiguous"
-        )
-    return names[0]
+    return result
 
 
 def read_back(
-    database: str, collection: str, auth: Any = None, cluster: str | None = None
+    database: str, collection: str, uri: str | None = None
 ) -> list[dict[str, Any]]:
-    """Read deployed search index definitions from the Atlas Admin API."""
-    import requests
-
-    auth = auth or _auth()
-    cluster = cluster or cluster_name(auth)
-    url = (
-        f"{API_BASE}/groups/{_project()}/clusters/{urllib.parse.quote(cluster, safe='')}"
-        f"/search/indexes/{urllib.parse.quote(database, safe='')}"
-        f"/{urllib.parse.quote(collection, safe='')}"
-    )
-    response = requests.get(url, auth=auth, headers=_headers(), timeout=30)
-    response.raise_for_status()
-    body = response.json()
-    return body if isinstance(body, list) else body.get("results", [])
+    """Read deployed search index definitions through PyMongo."""
+    client = _client(uri)
+    try:
+        return _read_back_collection(client, database, collection)
+    finally:
+        client.close()
 
 
 def apply_definitions(definitions: Sequence[dict[str, Any]]) -> list[str]:
     """Create or update each index in place; never deletes an index (parent only)."""
-    import requests
+    from pymongo.operations import SearchIndexModel
 
-    auth = _auth()
-    cluster = cluster_name(auth)
-    project = _project()
-    base = f"{API_BASE}/groups/{project}/clusters/{urllib.parse.quote(cluster, safe='')}/search/indexes"
+    client = _client()
     outcomes = []
-    for definition in definitions:
-        existing = {
-            item.get("name"): item
-            for item in read_back(
-                definition["database"],
-                definition["collectionName"],
-                auth=auth,
-                cluster=cluster,
+    try:
+        for definition in definitions:
+            collection = client[definition["database"]][definition["collectionName"]]
+            existing = {
+                item.get("name"): item for item in collection.list_search_indexes()
+            }
+            name = definition["name"]
+            if name not in existing:
+                collection.create_search_index(
+                    SearchIndexModel(
+                        definition=definition["definition"],
+                        name=name,
+                        type=definition.get("type", "search"),
+                    )
+                )
+                action = "created"
+            else:
+                collection.update_search_index(name, definition["definition"])
+                action = "updated"
+            outcomes.append(
+                f"{action} {name} on "
+                f"{definition['database']}.{definition['collectionName']}"
             )
-        }
-        current = existing.get(definition["name"])
-        if current is None:
-            response = requests.post(
-                base, auth=auth, headers=_headers(), json=definition, timeout=60
+
+        for definition in definitions:
+            deployed = _read_back_collection(
+                client, definition["database"], definition["collectionName"]
             )
-            action = "created"
-        else:
-            response = requests.patch(
-                f"{base}/{urllib.parse.quote(str(current['indexID']), safe='')}",
-                auth=auth,
-                headers=_headers(),
-                json={
-                    "database": definition["database"],
-                    "collectionName": definition["collectionName"],
-                    "name": definition["name"],
-                    "type": definition.get("type", "search"),
-                    "definition": definition["definition"],
-                },
-                timeout=60,
+            current = next(
+                (item for item in deployed if item["name"] == definition["name"]),
+                None,
             )
-            action = "updated"
-        response.raise_for_status()
-        outcomes.append(
-            f"{action} {definition['name']} on "
-            f"{definition['database']}.{definition['collectionName']}"
-        )
+            if current is None:
+                raise RuntimeError(
+                    f"search index {definition['name']} on "
+                    f"{definition['database']}.{definition['collectionName']} "
+                    "was not returned by list_search_indexes"
+                )
+            problems = role_violations(current)
+            if problems:
+                raise RuntimeError(
+                    f"role verification failed for {definition['name']}: "
+                    + "; ".join(problems)
+                )
+            status = current.get("status") or "unknown"
+            queryable = current.get("queryable")
+            outcomes.append(
+                f"verified {definition['name']} on "
+                f"{definition['database']}.{definition['collectionName']} "
+                f"preserves every MeiliSearch attribute role "
+                f"(status={status}, queryable={queryable})"
+            )
+    finally:
+        client.close()
     return outcomes
 
 
@@ -243,7 +225,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     mode.add_argument(
         "--read-back",
         action="store_true",
-        help="print the deployed definitions as reported by the Atlas Admin API",
+        help="print the deployed definitions and build status from PyMongo",
     )
     args = parser.parse_args(argv)
 
