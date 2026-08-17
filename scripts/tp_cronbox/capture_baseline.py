@@ -21,6 +21,37 @@ from common import (
 )
 
 MAX_ARTIFACT_BYTES = 5 * 1024 * 1024
+VOLATILE_JSON_FIELDS = {
+    "otterworks-data-lake/reports/analytics/daily/2026-01-15/report.json": (
+        "generated_at",
+    ),
+    "otterworks-data-lake/reports/storage-cleanup/2026-01-15/report.json": (
+        "generated_at",
+    ),
+    "otterworks-audit-archive/reports/compliance/audit-archive/2026-01-15/report.json": (
+        "generated_at",
+    ),
+    "otterworks-data-lake/reports/user-activity/2026-01-15/activity_report.json": (
+        "generated_at",
+    ),
+    "otterworks-data-lake/reports/user-activity/latest/activity_report.json": (
+        "generated_at",
+    ),
+}
+
+
+def canonical_json(value, fields):
+    canonical = dict(value)
+    observed = {}
+    for field in fields:
+        if field in canonical:
+            observed[field] = canonical.pop(field)
+    return (
+        json.dumps(
+            canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8"),
+        observed,
+    )
 
 
 def main():
@@ -38,6 +69,7 @@ def main():
         "job": args.job,
         "s3": {},
         "sha256": {},
+        "volatile_fields": {},
         "dynamodb": {},
         "postgres": {},
         "meilisearch": {},
@@ -56,9 +88,14 @@ def main():
                 s3.restore_object(Bucket=bucket, Key=key, RestoreRequest={"Days": 1})
                 body = s3.get_object(Bucket=bucket, Key=key)["Body"].read()
             digest_body = gzip.decompress(body) if key.endswith(".gz") else body
-            manifest["sha256"][f"{bucket}/{key}"] = hashlib.sha256(
-                digest_body
-            ).hexdigest()
+            artifact_name = f"{bucket}/{key}"
+            if key.endswith(".json") and artifact_name in VOLATILE_JSON_FIELDS:
+                value = json.loads(body)
+                digest_body, observed = canonical_json(
+                    value, VOLATILE_JSON_FIELDS[artifact_name]
+                )
+                manifest["volatile_fields"][artifact_name] = observed
+            manifest["sha256"][artifact_name] = hashlib.sha256(digest_body).hexdigest()
             if len(body) > MAX_ARTIFACT_BYTES:
                 raise RuntimeError(
                     f"refusing to write oversized artifact {bucket}/{key}: {len(body)} bytes"

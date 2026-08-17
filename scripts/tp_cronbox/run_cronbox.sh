@@ -51,4 +51,3 @@ case "$JOB" in
   *) echo "unknown job: $JOB" >&2; exit 2 ;;
 esac
 "$ROOT/scripts/tp-run-deterministic.sh" "$STATE/venv/bin/python" "$ROOT/etl/scripts/$SCRIPT" > "$STATE/logs/${JOB%.py}.log" 2>&1
-"$STATE/venv/bin/python" "$ROOT/scripts/tp_cronbox/normalize_reports.py"

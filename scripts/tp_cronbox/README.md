@@ -44,7 +44,33 @@ runner. Frozen libfaketime makes the legacy polling sleep fail with
 `EINVAL`; this changes timing only, not emitted values, and leaves legacy
 sources untouched. Captured Postgres aggregate values intentionally exclude
 `updated_at`, because the immutable SQL writes database `NOW()` and that value
-is wall-clock-dependent. The runner also canonicalizes report-only
-`generated_at` fields to the fixture anchor after each immutable job, so every
-captured object is byte-stable without changing the legacy source or any
-business value.
+is wall-clock-dependent. Capture preserves every legacy artifact byte exactly.
+For the report JSON objects listed below, capture records the observed
+`generated_at` value as non-comparable metadata and computes the comparison
+checksum after removing only that field. The raw artifact remains available
+under the capture's `artifacts/` directory.
+
+The explicit volatile JSON field list is:
+
+- `otterworks-data-lake/reports/analytics/daily/2026-01-15/report.json`:
+  `generated_at`
+- `otterworks-data-lake/reports/storage-cleanup/2026-01-15/report.json`:
+  `generated_at`
+- `otterworks-audit-archive/reports/compliance/audit-archive/2026-01-15/report.json`:
+  `generated_at`
+- `otterworks-data-lake/reports/user-activity/2026-01-15/activity_report.json`:
+  `generated_at`
+- `otterworks-data-lake/reports/user-activity/latest/activity_report.json`:
+  `generated_at`
+
+This list was derived by comparing raw artifacts from fresh runs. PostgreSQL
+`updated_at` remains excluded from captured aggregate values because the
+immutable SQL writes database `NOW()` and that value is wall-clock-dependent.
+The deterministic wrapper does hard-fail when libfaketime is unavailable, and
+the clock's whole-second value is frozen at the anchor. In this environment,
+however, libfaketime's `@` mode still leaked live fractional seconds through
+Python's `datetime.now()`: repeated probes produced values such as
+`2026-01-15T00:00:00.007142+00:00` and
+`2026-01-15T00:00:00.007156+00:00`. Supplying
+`TP_FAKETIME='2026-01-15 00:00:00.000000'` did not remove the leak, so the
+comparison-time volatile-field treatment is intentional.
