@@ -1,0 +1,64 @@
+{
+  "database": "ow_tp_demo",
+  "collectionName": "files",
+  "name": "default",
+  "type": "search",
+  "definition": {
+    "analyzer": "lucene.standard",
+    "searchAnalyzer": "lucene.standard",
+    "mappings": {
+      "dynamic": false,
+      "fields": {
+        "id": {
+          "type": "token",
+          "normalizer": "none"
+        },
+        "name": {
+          "type": "string",
+          "analyzer": "lucene.standard"
+        },
+        "tags": [
+          {
+            "type": "string",
+            "analyzer": "lucene.standard"
+          },
+          {
+            "type": "token",
+            "normalizer": "none"
+          }
+        ],
+        "mime_type": [
+          {
+            "type": "string",
+            "analyzer": "lucene.standard"
+          },
+          {
+            "type": "token",
+            "normalizer": "none"
+          }
+        ],
+        "type": {
+          "type": "token",
+          "normalizer": "none"
+        },
+        "owner_id": {
+          "type": "token",
+          "normalizer": "none"
+        },
+        "folder_id": {
+          "type": "token",
+          "normalizer": "none"
+        },
+        "size": {
+          "type": "number"
+        },
+        "created_at": {
+          "type": "date"
+        },
+        "updated_at": {
+          "type": "date"
+        }
+      }
+    }
+  }
+}
