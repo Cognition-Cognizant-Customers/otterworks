@@ -463,7 +463,11 @@ def wait_for_ttl_probe(
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             return {
-                "result": "skipped",
+                "result": (
+                    "fail"
+                    if absent_ids == expected_ids and archived_ids != expected_ids
+                    else "skipped"
+                ),
                 "archived_objects": sorted(archived_ids),
                 "absent_from_table": sorted(absent_ids),
             }
@@ -729,15 +733,16 @@ def run(args) -> dict:
                             "s3:ListObjectsV2 after DynamoDB TTL deletion plus "
                             "dynamodb:Scan absence of the items"
                         ),
-                        "result": "skipped",
+                        "result": ttl_probe_result["result"],
                     }
                 )
-                unverified.append(
-                    "The bounded live TTL-removal probe reached its 10-minute deadline "
-                    "before both probe objects appeared in S3 after DynamoDB TTL "
-                    "deletion; the existing 48-hour TTL latency coverage-gap note "
-                    "remains in force."
-                )
+                if ttl_probe_result["result"] == "skipped":
+                    unverified.append(
+                        "The bounded live TTL-removal probe reached its 10-minute "
+                        "deadline before both probe objects appeared in S3 after "
+                        "DynamoDB TTL deletion; the existing 48-hour TTL latency "
+                        "coverage-gap note remains in force."
+                    )
     final_objects = target.archive_objects()
 
     new_keys = sorted(set(objects) - pre_existing_objects)
