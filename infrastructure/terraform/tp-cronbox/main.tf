@@ -13,15 +13,18 @@ locals {
 }
 
 resource "aws_s3_bucket" "file_storage" {
-  bucket = "${local.name_prefix}file-storage"
+  bucket        = "${local.name_prefix}file-storage"
+  force_destroy = true
 }
 
 resource "aws_s3_bucket" "file_quarantine" {
-  bucket = "${local.name_prefix}file-quarantine"
+  bucket        = "${local.name_prefix}file-quarantine"
+  force_destroy = true
 }
 
 resource "aws_s3_bucket" "audit_archive" {
-  bucket = "${local.name_prefix}audit-archive"
+  bucket        = "${local.name_prefix}audit-archive"
+  force_destroy = true
 }
 
 resource "aws_dynamodb_table" "audit_events" {

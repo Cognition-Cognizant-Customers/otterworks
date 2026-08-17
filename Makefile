@@ -37,8 +37,7 @@ tp-skeleton-validate: ## Validate the Databricks, AWS Terraform, and Atlas skele
 	$(MAKE) tp-atlas-skeleton-validate
 
 tp-databricks-skeleton-validate: ## Validate the Cron Box Databricks bundle without deploying
-	@command -v databricks >/dev/null 2>&1 || { echo "databricks CLI is required"; exit 127; }
-	@cd infrastructure/databricks/cronbox && databricks bundle validate
+	@cd infrastructure/databricks/cronbox && DATABRICKS_HOST=$${DATABRICKS_DEMO_HOST:-$${DATABRICKS_HOST:-}} DATABRICKS_TOKEN=$${DATABRICKS_DEMO_TOKEN:-$${DATABRICKS_TOKEN:-}} mise exec -- databricks bundle validate
 
 tp-terraform-skeleton-validate: ## Validate the Cron Box AWS Terraform root without applying
 	@cd infrastructure/terraform/tp-cronbox && terraform init -backend=false
@@ -50,13 +49,13 @@ tp-atlas-skeleton-validate: ## Validate the Cron Box Atlas namespace bootstrap w
 	python3 scripts/tp_atlas/cronbox_namespace.py --dry-run
 
 tp-databricks-apply: ## Parent-owned Databricks bundle deployment (DO NOT RUN from child sessions)
-	@cd infrastructure/databricks/cronbox && databricks bundle deploy
+	@cd infrastructure/databricks/cronbox && DATABRICKS_HOST=$${DATABRICKS_DEMO_HOST:-$${DATABRICKS_HOST:-}} DATABRICKS_TOKEN=$${DATABRICKS_DEMO_TOKEN:-$${DATABRICKS_TOKEN:-}} mise exec -- databricks bundle deploy
 
 tp-terraform-apply: ## Parent-owned AWS Terraform apply (DO NOT RUN from child sessions)
 	@cd infrastructure/terraform/tp-cronbox && terraform apply
 
 tp-atlas-apply: ## Parent-owned Atlas namespace write (DO NOT RUN from child sessions)
-	python3 scripts/tp_atlas/cronbox_namespace.py --apply
+	uv run --no-project --with pymongo==4.10.1 python3 scripts/tp_atlas/cronbox_namespace.py --apply
 
 tp-fixture-land: ## Land source artifacts in the local Databricks transport fixture (NS=<ns>)
 	python3 scripts/tp_databricks/local_fixture.py land --ns $${NS:-fixture} --source $${FIXTURE_SOURCE:-etl/legacy-extra}

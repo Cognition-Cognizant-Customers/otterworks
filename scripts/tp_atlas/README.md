@@ -14,7 +14,11 @@ python3 scripts/tp_atlas/cronbox_namespace.py --dry-run
 The parent owns the write:
 
 ```sh
-MONGODB_ATLAS_URI=... python3 scripts/tp_atlas/cronbox_namespace.py --apply
+MONGODB_ATLAS_URI=... uv run --no-project --with pymongo==4.10.1 \
+  python3 scripts/tp_atlas/cronbox_namespace.py --apply
 ```
+
+The pinned `pymongo` dependency is installed by `uv` for the apply command;
+the dry-run path does not import it.
 
 The URI is read from the environment and never printed.
