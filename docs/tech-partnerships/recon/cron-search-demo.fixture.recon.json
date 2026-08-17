@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "cron-search",
   "namespace": "demo",
-  "generated_at": "2026-08-17T06:08:02Z",
+  "generated_at": "2026-08-17T06:09:12Z",
   "run_mode": "fixture",
   "checks": [
     {
@@ -178,7 +178,11 @@
           "FILE-UNICODE-NAME"
         ],
         "id_sets_match": true,
-        "stored_values_contain_non_ascii": true
+        "stored_values": {
+          "required_query_characters_present": true,
+          "committed_literals_match_when_available": true,
+          "missing_expectation_is_failure": true
+        }
       },
       "actual": {
         "evaluated_query_ids": [

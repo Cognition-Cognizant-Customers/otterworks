@@ -174,7 +174,11 @@ def _multibyte_check(
         "expected": {
             "query_ids": list(MULTIBYTE_QUERY_IDS),
             "id_sets_match": True,
-            "stored_values_contain_non_ascii": True,
+            "stored_values": {
+                "required_query_characters_present": True,
+                "committed_literals_match_when_available": True,
+                "missing_expectation_is_failure": True,
+            },
         },
         "actual": {
             "evaluated_query_ids": sorted(evaluated_query_ids),
