@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_documents",
   "namespace": "demo",
-  "generated_at": "2026-08-17T05:42:15Z",
+  "generated_at": "2026-08-17T05:56:10Z",
   "run_mode": "fixture",
   "target": {
     "database": "ow_tp_demo",
@@ -121,6 +121,13 @@
       "result": "pass"
     },
     {
+      "id": "documents.version_sequence_over_bound_quarantined",
+      "expected": [],
+      "actual": [],
+      "source_of_truth": "postgres otterworks_demo (legacy source estate) expected quarantine vs mongodb ow_tp_demo (recomputed after write)",
+      "result": "pass"
+    },
+    {
       "id": "documents.version_sequence_annotations",
       "expected": [],
       "actual": [],
@@ -224,9 +231,9 @@
     },
     {
       "id": "documents.idempotent",
-      "expected": "pass",
+      "expected": "rerun requested",
       "actual": "pass",
-      "source_of_truth": "mongodb ow_tp_demo re-read before and after a real migration re-run",
+      "source_of_truth": "migration rerun is opt-in; pass --rerun-migration to compare mongodb ow_tp_demo before and after a write",
       "result": "pass"
     }
   ],
@@ -277,7 +284,7 @@
     "Atlas alert configuration: the parent's capability preflight reports alert-webhook-config DENIED (HTTP 401 USER_UNAUTHORIZED); nothing in this unit depends on it and it was not exercised.",
     "Atlas access-list and credential handling: this unit never touched the Atlas project access list or Atlas credentials."
   ],
-  "recompute_command": "MONGO_URI='<target uri>' MONGO_DB='<target db>' make tp-mongo-documents-recon NS=demo RUN_MODE=live",
+  "recompute_command": "MONGO_URI='<target uri>' MONGO_DB='<target db>' make tp-mongo-documents-recon NS=demo RUN_MODE=live # read-only; add --rerun-migration to the recon script to repeat the migration write",
   "idempotency_rerun": {
     "performed": true,
     "result": "pass",

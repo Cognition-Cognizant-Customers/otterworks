@@ -43,6 +43,10 @@ default:
 ```bash
 export MONGO_URI="${MONGO_URI:-mongodb://localhost:27017}"
 make tp-mongo-fixture-up
+# Fixture recon reruns the migration for an actual idempotency proof:
+make tp-mongo-documents-recon NS=demo
+# Live recon is read-only by default; add --rerun-migration to the recon script
+# only when intentionally repeating the migration write.
 # stop the shared fixture when the demo is complete:
 # make tp-mongo-fixture-down
 ```

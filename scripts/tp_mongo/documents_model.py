@@ -11,6 +11,17 @@ from typing import Any
 
 VERSION_ARRAY_BOUND = 50
 
+
+class VersionSequenceOverBound(ValueError):
+    def __init__(self, declared: int, missing_count: int) -> None:
+        self.declared = declared
+        self.missing_count = missing_count
+        super().__init__(
+            f"declared version {declared} implies {missing_count} missing versions "
+            f"which exceeds bound {VERSION_ARRAY_BOUND}"
+        )
+
+
 DOCUMENT_COLUMNS = (
     "id",
     "title",
@@ -245,6 +256,11 @@ VALIDATORS = {
 def missing_versions_for(declared: int, present: list[int]) -> list[int]:
     present_set = set(present)
     upper = max([declared] + present) if present else declared
+    missing_count = upper - sum(
+        1 for number in present_set if 1 <= number <= upper
+    )
+    if missing_count > VERSION_ARRAY_BOUND:
+        raise VersionSequenceOverBound(declared, missing_count)
     return [number for number in range(1, upper + 1) if number not in present_set]
 
 
@@ -452,7 +468,21 @@ def process_document(
 
     valid_versions.sort(key=lambda version: version["version_number"])
     present = [version["version_number"] for version in valid_versions]
-    missing_versions = missing_versions_for(int(row[9]), present)
+    try:
+        missing_versions = missing_versions_for(int(row[9]), present)
+    except VersionSequenceOverBound as exc:
+        return (
+            None,
+            quarantine_record(
+                ns,
+                "documents",
+                source_id,
+                "version_sequence_over_bound",
+                str(exc),
+                raw,
+            ),
+            False,
+        )
     document = {
         "_id": source_id_text(source_id),
         "ns": ns,

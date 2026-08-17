@@ -75,6 +75,19 @@ def test_version_bound_exceeded_quarantines_without_truncated_document():
     assert str(VERSION_ARRAY_BOUND + 1) in quarantine["detail"]
 
 
+def test_version_sequence_bound_quarantines_without_building_missing_array():
+    document, quarantine, _ = process_document(
+        "demo",
+        document_row(version=VERSION_ARRAY_BOUND + 2),
+        [],
+    )
+
+    assert document is None
+    assert quarantine["reason"] == "version_sequence_over_bound"
+    assert f"declared version {VERSION_ARRAY_BOUND + 2}" in quarantine["detail"]
+    assert "missing versions" in quarantine["detail"]
+
+
 def test_version_bound_counts_only_embedded_versions():
     versions = [
         {

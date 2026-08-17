@@ -40,7 +40,7 @@ from common import (
     target_db_name,
     validate_namespace,
 )
-from documents_model import missing_versions_for
+from documents_model import VersionSequenceOverBound, missing_versions_for
 
 UNIT = "mongo_documents"
 
@@ -48,7 +48,8 @@ UNIT = "mongo_documents"
 # number in it against whatever deployment MONGO_URI points at.
 RECOMPUTE_COMMAND = (
     "MONGO_URI='<target uri>' MONGO_DB='<target db>' "
-    "make tp-mongo-documents-recon NS={ns} RUN_MODE=live"
+    "make tp-mongo-documents-recon NS={ns} RUN_MODE=live "
+    "# read-only; add --rerun-migration to the recon script to repeat the migration write"
 )
 
 UNVERIFIED_FIXTURE = [
@@ -125,6 +126,19 @@ def snapshot_parity_line(
     )
 
 
+def classify_version_sequence(
+    declared: int,
+    present: list[int],
+) -> tuple[list[int] | None, dict[str, int] | None]:
+    try:
+        return missing_versions_for(declared, present), None
+    except VersionSequenceOverBound as exc:
+        return None, {
+            "declared": exc.declared,
+            "missing_count": exc.missing_count,
+        }
+
+
 def source_expectations(ns: str) -> dict:
     """Anomaly sets and field-level parity checksums re-derived from Postgres."""
     schema = source_schema(ns)
@@ -142,8 +156,14 @@ def source_expectations(ns: str) -> dict:
                 """
             )
             gaps = {}
+            version_sequence_over_bound = {}
             for doc_id, declared, present in cur.fetchall():
-                missing = missing_versions_for(declared, list(present))
+                missing, over_bound = classify_version_sequence(
+                    declared, list(present)
+                )
+                if over_bound is not None:
+                    version_sequence_over_bound[doc_id] = over_bound
+                    continue
                 if missing:
                     gaps[doc_id] = missing
             cur.execute(
@@ -204,6 +224,7 @@ def source_expectations(ns: str) -> dict:
         conn.close()
     return {
         "version_gaps": gaps,
+        "version_sequence_over_bound": version_sequence_over_bound,
         "orphaned_snapshots": orphans,
         "documents_parity": doc_ck.hexdigest(),
         "versions_parity": ver_ck.hexdigest(),
@@ -231,6 +252,7 @@ def target_facts(ns: str) -> dict:
         over_bound = 0
         doc_ids: set[str] = set()
         version_sequence_mismatches: list[dict] = []
+        target_version_sequence_over_bound: dict[str, dict] = {}
 
         for doc in db[DOCUMENTS].find({"ns": ns}):
             documents += 1
@@ -258,7 +280,12 @@ def target_facts(ns: str) -> dict:
                 over_bound += 1
             for number in numbers:
                 ver_ck.add(f"{doc['_id']}|{number}")
-            missing = missing_versions_for(doc["declared_version"], numbers)
+            missing, sequence_over_bound = classify_version_sequence(
+                doc["declared_version"], numbers
+            )
+            if sequence_over_bound is not None:
+                target_version_sequence_over_bound[doc["_id"]] = sequence_over_bound
+                missing = []
             if missing:
                 gaps[doc["_id"]] = missing
             sequence = doc.get("version_sequence", {})
@@ -298,6 +325,17 @@ def target_facts(ns: str) -> dict:
                 attached_to_missing_parent.append(snap["_id"])
 
         quarantined = db[QUARANTINE].count_documents({"ns": ns})
+        version_sequence_over_bound_quarantine = sorted(
+            record["source_id"]
+            for record in db[QUARANTINE].find(
+                {
+                    "ns": ns,
+                    "source_table": "documents",
+                    "reason": "version_sequence_over_bound",
+                },
+                {"source_id": 1},
+            )
+        )
         validator_probe = probe_validator(db, ns)
         return {
             "documents": documents,
@@ -308,6 +346,8 @@ def target_facts(ns: str) -> dict:
             "versions_checksum": ver_ck.hexdigest(),
             "snapshots_checksum": snap_ck.hexdigest(),
             "version_gaps": gaps,
+            "version_sequence_over_bound": target_version_sequence_over_bound,
+            "version_sequence_over_bound_quarantine": version_sequence_over_bound_quarantine,
             "version_sequence_mismatches": sorted(
                 version_sequence_mismatches, key=lambda mismatch: mismatch["_id"]
             ),
@@ -375,6 +415,10 @@ def fingerprint(facts: dict) -> dict:
         "versions_checksum": facts["versions_checksum"],
         "snapshots_checksum": facts["snapshots_checksum"],
         "version_gaps": {k: v for k, v in sorted(facts["version_gaps"].items())},
+        "version_sequence_over_bound": facts["version_sequence_over_bound"],
+        "version_sequence_over_bound_quarantine": facts[
+            "version_sequence_over_bound_quarantine"
+        ],
         "version_sequence_mismatches": facts["version_sequence_mismatches"],
         "orphaned_snapshots": facts["orphaned_snapshots"],
         "documents_parity": facts["documents_parity"],
@@ -414,6 +458,8 @@ def build_checks(ns: str, mf: dict, expected: dict, facts: dict) -> list[dict]:
 
     expected_gap_keys = sorted(anomaly_key(d, m) for d, m in expected["version_gaps"].items())
     actual_gap_keys = sorted(anomaly_key(d, m) for d, m in facts["version_gaps"].items())
+    expected_sequence_over_bound = sorted(expected["version_sequence_over_bound"])
+    actual_sequence_over_bound = facts["version_sequence_over_bound_quarantine"]
 
     contract_path = ROOT / f"docs/tech-partnerships/contracts/{UNIT}.json"
     contract = json.loads(contract_path.read_text())
@@ -481,6 +527,12 @@ def build_checks(ns: str, mf: dict, expected: dict, facts: dict) -> list[dict]:
         check("documents.version_gaps_count",
               anomaly_count(mf, "version_gaps", f"postgres.{schema}.document_versions"),
               len(facts["version_gaps"]), f"{manifest_src} vs {target_src}"),
+        check(
+            "documents.version_sequence_over_bound_quarantined",
+            expected_sequence_over_bound,
+            actual_sequence_over_bound,
+            f"{pg_src} expected quarantine vs {target_src}",
+        ),
         check("documents.version_sequence_annotations", [], facts["version_sequence_mismatches"],
               f"{target_src} persisted version_sequence vs recomputed embedded versions"),
         check("documents.orphaned_snapshots_reported", expected["orphaned_snapshots"],
@@ -490,7 +542,26 @@ def build_checks(ns: str, mf: dict, expected: dict, facts: dict) -> list[dict]:
               len(facts["orphaned_snapshots"]), f"{manifest_src} vs {target_src}"),
         check("documents.unflagged_missing_parents", [],
               facts["snapshots_with_unresolvable_parent_not_flagged"], target_src),
-        check("documents.quarantine_empty", 0, facts["quarantined"], target_src),
+        {
+            "id": "documents.quarantine_empty",
+            "expected": 0 if not expected_sequence_over_bound else "expected source quarantines",
+            "actual": facts["quarantined"]
+            if not expected_sequence_over_bound
+            else {
+                "count": facts["quarantined"],
+                "version_sequence_over_bound": actual_sequence_over_bound,
+            },
+            "source_of_truth": target_src,
+            "result": (
+                "pass"
+                if (
+                    facts["quarantined"] == 0
+                    if not expected_sequence_over_bound
+                    else actual_sequence_over_bound == expected_sequence_over_bound
+                )
+                else "fail"
+            ),
+        },
         check("documents.no_truncated_version_arrays", 0, facts["documents_over_version_bound"],
               target_src),
         check("documents.validators_reject_invalid",
@@ -513,36 +584,49 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--ns", default="demo")
     parser.add_argument("--run-mode", choices=["fixture", "live"], default="fixture")
+    parser.add_argument(
+        "--rerun-migration",
+        action="store_true",
+        help="run the migration again and compare target state",
+    )
     parser.add_argument("--out", help="write the recon report to this path")
     args = parser.parse_args()
     validate_namespace(args.ns)
 
     mf = manifest(args.ns)
     expected = source_expectations(args.ns)
-    facts = fingerprint_before = target_facts(args.ns)
-
-    before = fingerprint(fingerprint_before)
-    proc = rerun_migration(args.ns)
-    if proc.returncode != 0:
-        idempotency = {
-            "performed": True,
-            "result": "fail",
-            "evidence": f"rerun exited {proc.returncode}: {proc.stderr.strip()[-500:]}",
-        }
-        facts = target_facts(args.ns)
+    facts = target_facts(args.ns)
+    before = fingerprint(facts)
+    if args.rerun_migration:
+        proc = rerun_migration(args.ns)
+        if proc.returncode != 0:
+            idempotency = {
+                "performed": True,
+                "result": "fail",
+                "evidence": f"rerun exited {proc.returncode}: {proc.stderr.strip()[-500:]}",
+            }
+        else:
+            facts = target_facts(args.ns)
+            after = fingerprint(facts)
+            idempotency = {
+                "performed": True,
+                "result": "pass" if after == before else "fail",
+                "evidence": (
+                    "migration re-run end to end; target re-read before and after: "
+                    f"documents={after['documents']} embedded_versions={after['embedded_versions']} "
+                    f"snapshots={after['snapshots']} documents_checksum={after['documents_checksum']} "
+                    f"versions_checksum={after['versions_checksum']} "
+                    f"snapshots_checksum={after['snapshots_checksum']} "
+                    f"anomaly sets unchanged={before['version_gaps'] == after['version_gaps'] and before['orphaned_snapshots'] == after['orphaned_snapshots']}"
+                ),
+            }
     else:
-        facts = target_facts(args.ns)
-        after = fingerprint(facts)
         idempotency = {
-            "performed": True,
-            "result": "pass" if before == after else "fail",
+            "performed": False,
+            "result": "skipped",
             "evidence": (
-                "migration re-run end to end; target re-read before and after: "
-                f"documents={after['documents']} embedded_versions={after['embedded_versions']} "
-                f"snapshots={after['snapshots']} documents_checksum={after['documents_checksum']} "
-                f"versions_checksum={after['versions_checksum']} "
-                f"snapshots_checksum={after['snapshots_checksum']} "
-                f"anomaly sets unchanged={before['version_gaps'] == after['version_gaps'] and before['orphaned_snapshots'] == after['orphaned_snapshots']}"
+                "migration rerun not performed; pass --rerun-migration to repeat "
+                "the migration write"
             ),
         }
 
@@ -550,12 +634,19 @@ def main() -> int:
     checks.append(
         {
             "id": "documents.idempotent",
-            "expected": "pass",
+            "expected": "rerun requested",
             "actual": idempotency["result"],
             "source_of_truth": (
-                f"mongodb {target_db_name(args.ns)} re-read before and after a real migration re-run"
+                "migration rerun is opt-in; pass --rerun-migration to compare "
+                f"mongodb {target_db_name(args.ns)} before and after a write"
             ),
-            "result": "pass" if idempotency["result"] == "pass" else "fail",
+            "result": (
+                "pass"
+                if idempotency["result"] == "pass"
+                else "skipped"
+                if idempotency["result"] == "skipped"
+                else "fail"
+            ),
         }
     )
     expected_set = sorted(
@@ -591,7 +682,13 @@ def main() -> int:
     report["idempotency_rerun"] = idempotency
 
     failures = [c["id"] for c in checks if c["result"] == "fail"]
-    report["recon_result"] = "pass" if not failures and not report["planted_anomaly_detections"]["missing"] and not report["planted_anomaly_detections"]["unexpected"] and (idempotency or {}).get("result") == "pass" else "fail"
+    report["recon_result"] = (
+        "pass"
+        if not failures
+        and not report["planted_anomaly_detections"]["missing"]
+        and not report["planted_anomaly_detections"]["unexpected"]
+        else "fail"
+    )
 
     text = json.dumps(report, indent=2, sort_keys=False) + "\n"
     if args.out:
