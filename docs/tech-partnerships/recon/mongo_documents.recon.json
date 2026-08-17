@@ -2,11 +2,11 @@
   "kind": "recon-report",
   "unit": "mongo_documents",
   "namespace": "demo",
-  "generated_at": "2026-08-17T04:55:12Z",
+  "generated_at": "2026-08-17T05:06:51Z",
   "run_mode": "fixture",
   "target": {
     "database": "ow_tp_demo",
-    "uri": "mongodb://localhost:27019/?directConnection=true",
+    "uri": "mongodb://localhost:27017",
     "collections": [
       "documents",
       "document_snapshots",
@@ -208,7 +208,7 @@
         "documents": "e70001cf6110014dab6e1d80adb40285",
         "versions": "13bc033b2780a0569d7f2217e85d7303"
       },
-      "source_of_truth": "docs/tech-partnerships/contracts/mongo_documents.json vs testdata/legacy/manifests/demo.json",
+      "source_of_truth": "docs/tech-partnerships/contracts/mongo_documents.json acceptance_checks.documents.checksums vs testdata/legacy/manifests/demo.json documents+versions checksums",
       "result": "pass"
     },
     {
@@ -261,12 +261,12 @@
     "unexpected": []
   },
   "unverified_paths": [
-    "Writes against the shared MongoDB Atlas cluster: this run targeted the local mongo:7 fixture only (make tp-mongo-up), so Atlas wire-protocol writes, Atlas-side $jsonSchema validator DDL and Atlas index builds are unverified here. The parent session's single uncontended run against Atlas is the only live proof.",
+    "Writes against the shared MongoDB Atlas cluster: this run targeted the local mongo:7 fixture only (make tp-mongo-fixture-up), so Atlas wire-protocol writes, Atlas-side $jsonSchema validator DDL and Atlas index builds are unverified here. The parent session's single uncontended run against Atlas is the only live proof.",
     "Atlas-specific operational behaviour: M0 free-tier storage headroom for this collection set, Atlas index build time, and read/write performance under Atlas latency.",
     "Atlas alert configuration: the parent's capability preflight reports alert-webhook-config DENIED (HTTP 401 USER_UNAUTHORIZED); nothing in this unit depends on it and it was not exercised.",
     "Atlas access-list and credential handling: this unit never touched the Atlas project access list or Atlas credentials."
   ],
-  "recompute_command": "MONGO_URI='<target uri>' uv run --no-project --with pymongo==4.10.1 --with psycopg2-binary==2.9.10 python3 scripts/tp_mongo/recon_documents.py --ns demo --run-mode live --out docs/tech-partnerships/recon/mongo_documents.live.recon.json",
+  "recompute_command": "MONGO_URI='<target uri>' MONGO_DB='<target db>' make tp-mongo-documents-recon NS=demo RUN_MODE=live",
   "idempotency_rerun": {
     "performed": true,
     "result": "pass",

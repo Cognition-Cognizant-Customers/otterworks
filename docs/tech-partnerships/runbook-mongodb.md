@@ -41,8 +41,10 @@ to MongoDB Atlas. Set `MONGO_URI` for migration commands, or use the local
 default:
 
 ```bash
-export MONGO_URI="${MONGO_URI:-mongodb://localhost:27019/?directConnection=true}"
-make tp-mongo-up
+export MONGO_URI="${MONGO_URI:-mongodb://localhost:27017}"
+make tp-mongo-fixture-up
+# stop the shared fixture when the demo is complete:
+# make tp-mongo-fixture-down
 ```
 
 ## Beat 1 — Before-state tour (0:00–0:10)

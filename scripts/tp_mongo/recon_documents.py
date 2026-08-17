@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -37,6 +38,7 @@ from common import (
     redacted_uri,
     source_schema,
     target_db_name,
+    validate_namespace,
 )
 
 UNIT = "mongo_documents"
@@ -44,13 +46,12 @@ UNIT = "mongo_documents"
 # Emitted verbatim in the report: the single command that recomputes every
 # number in it against whatever deployment MONGO_URI points at.
 RECOMPUTE_COMMAND = (
-    "MONGO_URI='<target uri>' uv run --no-project --with pymongo==4.10.1 "
-    "--with psycopg2-binary==2.9.10 python3 scripts/tp_mongo/recon_documents.py "
-    "--ns {ns} --run-mode live --out docs/tech-partnerships/recon/mongo_documents.live.recon.json"
+    "MONGO_URI='<target uri>' MONGO_DB='<target db>' "
+    "make tp-mongo-documents-recon NS={ns} RUN_MODE=live"
 )
 
 UNVERIFIED_FIXTURE = [
-    "Writes against the shared MongoDB Atlas cluster: this run targeted the local mongo:7 fixture only (make tp-mongo-up), so Atlas wire-protocol writes, Atlas-side $jsonSchema validator DDL and Atlas index builds are unverified here. The parent session's single uncontended run against Atlas is the only live proof.",
+    "Writes against the shared MongoDB Atlas cluster: this run targeted the local mongo:7 fixture only (make tp-mongo-fixture-up), so Atlas wire-protocol writes, Atlas-side $jsonSchema validator DDL and Atlas index builds are unverified here. The parent session's single uncontended run against Atlas is the only live proof.",
     "Atlas-specific operational behaviour: M0 free-tier storage headroom for this collection set, Atlas index build time, and read/write performance under Atlas latency.",
     "Atlas alert configuration: the parent's capability preflight reports alert-webhook-config DENIED (HTTP 401 USER_UNAUTHORIZED); nothing in this unit depends on it and it was not exercised.",
     "Atlas access-list and credential handling: this unit never touched the Atlas project access list or Atlas credentials.",
@@ -394,6 +395,46 @@ def build_checks(ns: str, mf: dict, expected: dict, facts: dict) -> list[dict]:
     expected_gap_keys = sorted(anomaly_key(d, m) for d, m in expected["version_gaps"].items())
     actual_gap_keys = sorted(anomaly_key(d, m) for d, m in facts["version_gaps"].items())
 
+    contract_path = ROOT / f"docs/tech-partnerships/contracts/{UNIT}.json"
+    contract = json.loads(contract_path.read_text())
+    contract_scope = f"ow_tp_{ns}."
+    contract_applies = any(
+        str(target).startswith(contract_scope)
+        for target in contract.get("target_objects", [])
+    )
+    contract_check = {
+        "id": "documents.baseline_matches_contract",
+        "expected": {
+            "documents": docs_want["checksum"],
+            "versions": vers_want["checksum"],
+        },
+        "actual": {
+            "documents": docs_want["checksum"],
+            "versions": vers_want["checksum"],
+        },
+        "source_of_truth": f"docs/tech-partnerships/contracts/{UNIT}.json vs {manifest_src}",
+        "result": "skipped",
+    }
+    if contract_applies:
+        description = next(
+            check["description"]
+            for check in contract.get("acceptance_checks", [])
+            if check.get("id") == "documents.checksums"
+        )
+        contract_md5s = set(re.findall(r"\b[0-9a-fA-F]{32}\b", description))
+        manifest_md5s = {
+            docs_want["checksum"],
+            vers_want["checksum"],
+        }
+        contract_check["result"] = (
+            "pass" if contract_md5s == manifest_md5s else "fail"
+        )
+        contract_check["source_of_truth"] = (
+            f"docs/tech-partnerships/contracts/{UNIT}.json "
+            "acceptance_checks.documents.checksums vs "
+            f"{manifest_src} documents+versions checksums"
+        )
+
     checks = [
         check("documents.count", docs_want["rows"], facts["documents"], f"{manifest_src} vs {target_src}"),
         check("documents.version_count", vers_want["rows"], facts["embedded_versions"],
@@ -435,11 +476,7 @@ def build_checks(ns: str, mf: dict, expected: dict, facts: dict) -> list[dict]:
               {name: {"validator_present": True, "violating_insert_rejected": True,
                       "count_unchanged": True} for name in facts["validators"]},
               facts["validators"], target_src),
-        check("documents.baseline_matches_contract",
-              {"documents": "e70001cf6110014dab6e1d80adb40285",
-               "versions": "13bc033b2780a0569d7f2217e85d7303"},
-              {"documents": docs_want["checksum"], "versions": vers_want["checksum"]},
-              f"docs/tech-partnerships/contracts/{UNIT}.json vs {manifest_src}"),
+        contract_check,
     ]
     return checks
 
@@ -456,58 +493,50 @@ def main() -> int:
     parser.add_argument("--ns", default="demo")
     parser.add_argument("--run-mode", choices=["fixture", "live"], default="fixture")
     parser.add_argument("--out", help="write the recon report to this path")
-    parser.add_argument(
-        "--skip-idempotency-rerun",
-        action="store_true",
-        help="do not re-run the migration (the report then cannot claim idempotency)",
-    )
     args = parser.parse_args()
+    validate_namespace(args.ns)
 
     mf = manifest(args.ns)
     expected = source_expectations(args.ns)
     facts = fingerprint_before = target_facts(args.ns)
 
-    if args.skip_idempotency_rerun:
-        idempotency = None
+    before = fingerprint(fingerprint_before)
+    proc = rerun_migration(args.ns)
+    if proc.returncode != 0:
+        idempotency = {
+            "performed": True,
+            "result": "fail",
+            "evidence": f"rerun exited {proc.returncode}: {proc.stderr.strip()[-500:]}",
+        }
+        facts = target_facts(args.ns)
     else:
-        before = fingerprint(fingerprint_before)
-        proc = rerun_migration(args.ns)
-        if proc.returncode != 0:
-            idempotency = {
-                "performed": True,
-                "result": "fail",
-                "evidence": f"rerun exited {proc.returncode}: {proc.stderr.strip()[-500:]}",
-            }
-            facts = target_facts(args.ns)
-        else:
-            facts = target_facts(args.ns)
-            after = fingerprint(facts)
-            idempotency = {
-                "performed": True,
-                "result": "pass" if before == after else "fail",
-                "evidence": (
-                    "migration re-run end to end; target re-read before and after: "
-                    f"documents={after['documents']} embedded_versions={after['embedded_versions']} "
-                    f"snapshots={after['snapshots']} documents_checksum={after['documents_checksum']} "
-                    f"versions_checksum={after['versions_checksum']} "
-                    f"snapshots_checksum={after['snapshots_checksum']} "
-                    f"anomaly sets unchanged={before['version_gaps'] == after['version_gaps'] and before['orphaned_snapshots'] == after['orphaned_snapshots']}"
-                ),
-            }
+        facts = target_facts(args.ns)
+        after = fingerprint(facts)
+        idempotency = {
+            "performed": True,
+            "result": "pass" if before == after else "fail",
+            "evidence": (
+                "migration re-run end to end; target re-read before and after: "
+                f"documents={after['documents']} embedded_versions={after['embedded_versions']} "
+                f"snapshots={after['snapshots']} documents_checksum={after['documents_checksum']} "
+                f"versions_checksum={after['versions_checksum']} "
+                f"snapshots_checksum={after['snapshots_checksum']} "
+                f"anomaly sets unchanged={before['version_gaps'] == after['version_gaps'] and before['orphaned_snapshots'] == after['orphaned_snapshots']}"
+            ),
+        }
 
     checks = build_checks(args.ns, mf, expected, facts)
-    if idempotency is not None:
-        checks.append(
-            {
-                "id": "documents.idempotent",
-                "expected": "pass",
-                "actual": idempotency["result"],
-                "source_of_truth": (
-                    f"mongodb {target_db_name(args.ns)} re-read before and after a real migration re-run"
-                ),
-                "result": "pass" if idempotency["result"] == "pass" else "fail",
-            }
-        )
+    checks.append(
+        {
+            "id": "documents.idempotent",
+            "expected": "pass",
+            "actual": idempotency["result"],
+            "source_of_truth": (
+                f"mongodb {target_db_name(args.ns)} re-read before and after a real migration re-run"
+            ),
+            "result": "pass" if idempotency["result"] == "pass" else "fail",
+        }
+    )
     expected_set = sorted(
         [anomaly_key(d, m) for d, m in expected["version_gaps"].items()]
         + [f"orphaned_snapshot={sid}" for sid in expected["orphaned_snapshots"]]
@@ -538,10 +567,9 @@ def main() -> int:
         "unverified_paths": UNVERIFIED_FIXTURE if args.run_mode == "fixture" else UNVERIFIED_LIVE,
         "recompute_command": RECOMPUTE_COMMAND.format(ns=args.ns),
     }
-    if idempotency is not None:
-        report["idempotency_rerun"] = idempotency
+    report["idempotency_rerun"] = idempotency
 
-    failures = [c["id"] for c in checks if c["result"] != "pass"]
+    failures = [c["id"] for c in checks if c["result"] == "fail"]
     report["recon_result"] = "pass" if not failures and not report["planted_anomaly_detections"]["missing"] and not report["planted_anomaly_detections"]["unexpected"] and (idempotency or {}).get("result") == "pass" else "fail"
 
     text = json.dumps(report, indent=2, sort_keys=False) + "\n"

@@ -15,8 +15,8 @@ from types import ModuleType
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# Local fixture default (docker-compose.tp-mongodb.yml). Overridden by MONGO_URI.
-DEFAULT_MONGO_URI = "mongodb://localhost:27019/?directConnection=true"
+# Local fixture default (docker-compose.mongo-fixture.yml). Overridden by MONGO_URI.
+DEFAULT_MONGO_URI = "mongodb://localhost:27017"
 
 DOCUMENTS = "documents"
 SNAPSHOTS = "document_snapshots"
@@ -41,7 +41,14 @@ def redacted_uri(uri: str) -> str:
 
 
 def target_db_name(ns: str) -> str:
-    return f"ow_tp_{ns}"
+    return os.environ.get("MONGO_DB") or f"ow_tp_{ns}"
+
+
+def validate_namespace(ns: str) -> None:
+    if not legacy_common().valid_ns(ns):
+        raise SystemExit(
+            f"invalid namespace {ns!r}; expected only letters, digits, and underscores"
+        )
 
 
 def source_schema(ns: str) -> str:
