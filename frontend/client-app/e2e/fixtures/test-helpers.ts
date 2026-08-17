@@ -5,6 +5,15 @@ export function uniqueEmail(): string {
   return `test-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@otterworks.test`;
 }
 
+/**
+ * Generate a throwaway credential that satisfies the registration form's
+ * complexity rules. Used when no explicit value is supplied so that no
+ * credential value is committed to the repository.
+ */
+export function uniqueSecret(): string {
+  return `Aa1!${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+}
+
 /** Fill and submit the registration form */
 export async function registerUser(
   page: Page,
@@ -12,7 +21,8 @@ export async function registerUser(
 ) {
   const name = opts.name ?? "Test User";
   const email = opts.email ?? uniqueEmail();
-  const password = opts.password ?? "Passw0rd!23";
+  const password =
+    opts.password ?? process.env.E2E_TEST_PASSWORD ?? uniqueSecret();
 
   await page.goto("/register");
   await page.getByLabel("Full name").fill(name);
