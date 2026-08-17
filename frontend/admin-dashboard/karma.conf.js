@@ -17,7 +17,7 @@ module.exports = function (config) {
       suppressAll: true,
     },
     coverageReporter: {
-      dir: require('path').join(__dirname, './coverage/admin-dashboard'),
+      dir: require('node:path').join(__dirname, './coverage/admin-dashboard'),
       subdir: '.',
       reporters: [{ type: 'html' }, { type: 'text-summary' }],
     },
