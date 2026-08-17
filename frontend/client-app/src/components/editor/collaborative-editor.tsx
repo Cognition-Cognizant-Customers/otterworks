@@ -67,8 +67,8 @@ export function CollaborativeEditor({ documentId, initialContent, onUpdate }: Co
       { params: { token: token || "" } }
     );
 
-    wsProvider.on("status", (event: { status: string }) => {
-      setConnectionStatus(event.status as "connected" | "disconnected" | "connecting");
+    wsProvider.on("status", (event: { status: "connected" | "disconnected" | "connecting" }) => {
+      setConnectionStatus(event.status);
     });
 
     wsProvider.on("sync", (synced: boolean) => {

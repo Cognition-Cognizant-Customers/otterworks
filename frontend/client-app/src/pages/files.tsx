@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, skipToken } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { useDropzone } from "react-dropzone";
 import {
@@ -81,8 +81,7 @@ function FileBrowserContent() {
 
   const { data: currentFolder } = useQuery({
     queryKey: ["folders", "detail", folderId],
-    queryFn: () => filesApi.getFolder(folderId!),
-    enabled: !!folderId,
+    queryFn: folderId ? () => filesApi.getFolder(folderId) : skipToken,
   });
 
   const isLoading = filesLoading || foldersLoading;

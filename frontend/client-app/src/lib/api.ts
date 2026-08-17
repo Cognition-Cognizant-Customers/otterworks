@@ -189,7 +189,7 @@ export const filesApi = {
     const ownerId = getOwnerIdFromJwt();
     if (ownerId) formData.append("owner_id", ownerId);
 
-    const { data } = await apiClient.post<{ file: RawFileItem }>("/files/upload", formData, {
+    const { data } = await apiClient.post<{ file?: RawFileItem } & RawFileItem>("/files/upload", formData, {
       headers: { "Content-Type": "multipart/form-data" },
       signal: options?.signal,
       onUploadProgress: options?.onUploadProgress
@@ -201,7 +201,7 @@ export const filesApi = {
         : undefined,
     });
     // Backend wraps response in { file: {...} }
-    const raw = data.file ?? (data as unknown as RawFileItem);
+    const raw = data.file ?? data;
     return mapRawFile(raw);
   },
   listFolders: async (parentId?: string | null): Promise<FileItem[]> => {
@@ -322,7 +322,7 @@ export const filesApi = {
   getRecent: async (limit = 10): Promise<FileItem[]> => {
     const params: Record<string, string | number> = { page: 1, page_size: limit };
     const { data } = await apiClient.get<RawFileListResponse>("/files", { params });
-    return (data.files ?? []).map((f) => normalizeFileItem(f as unknown as Record<string, unknown>));
+    return (data.files ?? []).map((f) => normalizeFileItem({ ...f }));
   },
 };
 
