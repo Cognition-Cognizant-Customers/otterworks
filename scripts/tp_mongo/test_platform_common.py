@@ -42,6 +42,15 @@ def test_redacted_uri_fails_closed_for_unescaped_password_delimiters() -> None:
             assert "localhost:27017" not in rendered
 
 
+def test_redacted_uri_with_later_at_is_fully_withheld() -> None:
+    uri = "mongodb://alice:pa@ss/word@host:27017/db"
+    expected = "mongodb://<unparseable-uri-withheld>"
+    for rendered in (redacted_uri(uri), redacted_uri_for_report(uri)):
+        assert rendered == expected
+        assert "ss/word" not in rendered
+        assert "ss" not in rendered
+
+
 def test_redacted_uri_for_report_removes_userinfo() -> None:
     uri = "mongodb+srv://alice:pa%40ss%2Fword@cluster.example/ow_tp_redact"
     rendered = redacted_uri_for_report(uri)

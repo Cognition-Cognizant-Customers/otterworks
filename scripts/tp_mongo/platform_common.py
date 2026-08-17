@@ -55,6 +55,12 @@ def _uri_parts(uri: str) -> _UriParts | None:
         position = remainder.find(delimiter)
         if position != -1:
             authority_end = min(authority_end, position)
+    if any(
+        position > authority_end
+        for position, character in enumerate(remainder)
+        if character == "@"
+    ):
+        return _UriParts(scheme, "", "", "", opaque=True)
     authority = remainder[:authority_end]
     if "@" in authority:
         at = authority.rfind("@")
@@ -62,12 +68,7 @@ def _uri_parts(uri: str) -> _UriParts | None:
         host = authority[at + 1:]
         suffix = remainder[authority_end:]
         return _UriParts(scheme, userinfo, host, suffix)
-    if "@" not in remainder:
-        return None
-
-    # An @ beyond the authority boundary is ambiguous: it may be an
-    # unescaped delimiter in userinfo or a credential-free path/query value.
-    return _UriParts(scheme, "", "", "", opaque=True)
+    return None
 
 
 def _opaque_uri(scheme: str) -> str:
