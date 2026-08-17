@@ -21,7 +21,7 @@ val awsSdkVersion = "1.0.70"
 val coroutinesVersion = "1.8.0"
 val koinVersion = "3.5.3"
 val micrometerVersion = "1.12.4"
-val commonsTextVersion = "1.9"
+val commonsTextVersion = "1.10.0"
 
 dependencies {
     // Ktor Server

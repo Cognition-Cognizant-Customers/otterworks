@@ -82,6 +82,20 @@
         </dependency>
     </dependencies>
 
+    <dependencyManagement>
+        <dependencies>
+            <!-- Explicit pin over the commons-text pulled transitively by
+                 commons-configuration2 2.8.0 (which resolves 1.9, vulnerable to
+                 CVE-2022-42889). Remove once commons-configuration2 is upgraded
+                 to a release that depends on commons-text >= 1.10.0. -->
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-text</artifactId>
+                <version>1.10.0</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <build>
         <finalName>legacy-portal</finalName>
         <plugins>
