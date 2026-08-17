@@ -1,5 +1,5 @@
 import { Server as SocketIOServer } from 'socket.io';
-import { createServer } from 'http';
+import { createServer } from 'node:http';
 import { io as clientIO, Socket as ClientSocket } from 'socket.io-client';
 import jwt from 'jsonwebtoken';
 import * as Y from 'yjs';
