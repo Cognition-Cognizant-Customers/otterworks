@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.models.search_result import (
     AnalyticsData,
     SearchHit,
@@ -96,6 +98,6 @@ class TestAnalyticsData:
         )
         d = data.to_dict()
         assert d["total_searches"] == 100
-        assert d["avg_results_per_query"] == 3.5
+        assert d["avg_results_per_query"] == pytest.approx(3.5)
         assert len(d["popular_queries"]) == 1
         assert len(d["zero_result_queries"]) == 1
