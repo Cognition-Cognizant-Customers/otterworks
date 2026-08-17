@@ -12,6 +12,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.json.Json
 import mu.KotlinLogging
 import redis.clients.jedis.JedisPool
@@ -122,7 +123,7 @@ class SqsConsumer(
             try {
                 // Try unwrapping SNS envelope
                 val snsWrapper = parser.decodeFromString<SnsEnvelope>(body)
-                parser.decodeFromString<SqsNotificationMessage>(snsWrapper.Message)
+                parser.decodeFromString<SqsNotificationMessage>(snsWrapper.message)
             } catch (e: Exception) {
                 logger.error(e) { "Failed to parse message body" }
                 null
@@ -133,8 +134,8 @@ class SqsConsumer(
 
 @kotlinx.serialization.Serializable
 internal data class SnsEnvelope(
-    val Message: String,
-    val MessageId: String = "",
-    val TopicArn: String = "",
-    val Type: String = "",
+    @SerialName("Message") val message: String,
+    @SerialName("MessageId") val messageId: String = "",
+    @SerialName("TopicArn") val topicArn: String = "",
+    @SerialName("Type") val type: String = "",
 )
