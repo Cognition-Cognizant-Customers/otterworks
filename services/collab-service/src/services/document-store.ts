@@ -94,7 +94,7 @@ export class DocumentStore {
       createdAt: data.createdAt,
       lastModifiedAt: data.lastModifiedAt,
       lastModifiedBy: data.lastModifiedBy,
-      version: parseInt(data.version, 10),
+      version: Number.parseInt(data.version, 10),
     };
   }
 
