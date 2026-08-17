@@ -29,6 +29,16 @@ interface UploadingFile {
 
 let fileIdCounter = 0;
 
+const patchEntry =
+  (id: string, patch: Partial<UploadingFile>) =>
+  (prev: UploadingFile[]): UploadingFile[] =>
+    prev.map((f) => (f.id === id ? { ...f, ...patch } : f));
+
+const removeEntry =
+  (id: string) =>
+  (prev: UploadingFile[]): UploadingFile[] =>
+    prev.filter((f) => f.id !== id);
+
 export const FileUploadDropzone = forwardRef(function FileUploadDropzone(
   { uploadFile, onUploadComplete, onDismiss, className }: FileUploadDropzoneProps,
   ref: Ref<FileUploadDropzoneHandle>,
@@ -76,42 +86,35 @@ export const FileUploadDropzone = forwardRef(function FileUploadDropzone(
     (entry: UploadingFile) => {
       const abortController = new AbortController();
 
-      setUploadingFiles((prev) =>
-        prev.map((f) =>
-          f.id === entry.id
-            ? { ...f, status: "uploading" as const, progress: 0, error: undefined, abortController }
-            : f,
-        ),
+      setUploadingFiles(
+        patchEntry(entry.id, {
+          status: "uploading",
+          progress: 0,
+          error: undefined,
+          abortController,
+        }),
       );
 
       uploadFile(entry.file, {
-        onProgress: (percent) => {
-          setUploadingFiles((prev) =>
-            prev.map((f) => (f.id === entry.id ? { ...f, progress: percent } : f)),
-          );
-        },
+        onProgress: (percent) => setUploadingFiles(patchEntry(entry.id, { progress: percent })),
         signal: abortController.signal,
       })
         .then(() => {
-          setUploadingFiles((prev) =>
-            prev.map((f) =>
-              f.id === entry.id
-                ? { ...f, status: "done" as const, progress: 100, abortController: undefined }
-                : f,
-            ),
+          setUploadingFiles(
+            patchEntry(entry.id, { status: "done", progress: 100, abortController: undefined }),
           );
           onUploadComplete?.();
         })
         .catch(() => {
           if (abortController.signal.aborted) {
-            setUploadingFiles((prev) => prev.filter((f) => f.id !== entry.id));
+            setUploadingFiles(removeEntry(entry.id));
           } else {
-            setUploadingFiles((prev) =>
-              prev.map((f) =>
-                f.id === entry.id
-                  ? { ...f, status: "error" as const, error: "Upload failed", abortController: undefined }
-                  : f,
-              ),
+            setUploadingFiles(
+              patchEntry(entry.id, {
+                status: "error",
+                error: "Upload failed",
+                abortController: undefined,
+              }),
             );
           }
         });
