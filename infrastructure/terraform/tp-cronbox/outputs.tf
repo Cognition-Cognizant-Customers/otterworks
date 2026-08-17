@@ -21,3 +21,15 @@ output "file_metadata_table" {
 output "orphan_audit_table" {
   value = aws_dynamodb_table.orphan_audit.name
 }
+
+output "audit_archive_function" {
+  value = aws_lambda_function.audit_archive.function_name
+}
+
+output "audit_archive_prefix" {
+  value = var.audit_archive_prefix
+}
+
+output "audit_archive_dlq_url" {
+  value = aws_sqs_queue.audit_archive_dlq.url
+}
