@@ -77,25 +77,47 @@ function NotificationsContent() {
       </div>
 
       {/* Notifications */}
-      {isLoading ? (
-        <PageLoader />
-      ) : notifications.length === 0 ? (
-        <EmptyState
-          icon={Bell}
-          title="No notifications"
-          description="You&apos;re all caught up! New notifications will appear here."
+      <NotificationListing
+        isLoading={isLoading}
+        notifications={notifications}
+        onMarkRead={(id) => markReadMutation.mutate(id)}
+      />
+    </div>
+  );
+}
+
+function NotificationListing({
+  isLoading,
+  notifications,
+  onMarkRead,
+}: Readonly<{
+  isLoading: boolean;
+  notifications: Notification[];
+  onMarkRead: (id: string) => void;
+}>) {
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
+  if (notifications.length === 0) {
+    return (
+      <EmptyState
+        icon={Bell}
+        title="No notifications"
+        description="You&apos;re all caught up! New notifications will appear here."
+      />
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
+      {notifications.map((notification) => (
+        <NotificationRow
+          key={notification.id}
+          notification={notification}
+          onMarkRead={() => onMarkRead(notification.id)}
         />
-      ) : (
-        <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
-          {notifications.map((notification) => (
-            <NotificationRow
-              key={notification.id}
-              notification={notification}
-              onMarkRead={() => markReadMutation.mutate(notification.id)}
-            />
-          ))}
-        </div>
-      )}
+      ))}
     </div>
   );
 }
@@ -116,6 +138,13 @@ const notificationColors: Record<string, string> = {
   system: "text-gray-600 bg-gray-100",
 };
 
+function notificationHref(notification: Notification): string | undefined {
+  if (!notification.resourceId) return undefined;
+  if (notification.resourceType === "document") return `/documents/${notification.resourceId}`;
+  if (notification.resourceType === "file") return `/files/${notification.resourceId}`;
+  return undefined;
+}
+
 function NotificationRow({
   notification,
   onMarkRead,
@@ -126,12 +155,7 @@ function NotificationRow({
   const Icon = notificationIcons[notification.type] || Bell;
   const color = notificationColors[notification.type] || "text-gray-600 bg-gray-100";
 
-  const href =
-    notification.resourceId && notification.resourceType === "document"
-      ? `/documents/${notification.resourceId}`
-      : notification.resourceId && notification.resourceType === "file"
-      ? `/files/${notification.resourceId}`
-      : undefined;
+  const href = notificationHref(notification);
 
   const handleActivate = () => {
     if (!notification.read) onMarkRead();

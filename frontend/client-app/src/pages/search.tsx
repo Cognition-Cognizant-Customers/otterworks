@@ -147,55 +147,83 @@ function SearchContent() {
       )}
 
       {/* Results */}
-      {submittedQuery && isLoading ? (
-        <PageLoader />
-      ) : submittedQuery && results.length === 0 ? (
-        <EmptyState
-          icon={Search}
-          title="No results found"
-          description={`No results for "${submittedQuery}". Try different keywords.`}
-        />
-      ) : submittedQuery ? (
-        <div className="space-y-1">
-          <p className="text-sm text-gray-500 mb-4">
-            {data?.total || results.length} result{results.length !== 1 ? "s" : ""} for &ldquo;{submittedQuery}&rdquo;
-          </p>
-          {results.map((result) => (
-            <SearchResultRow key={result.id} result={result} />
-          ))}
-        </div>
-      ) : (
-        <EmptyState
-          icon={Search}
-          title="Search OtterWorks"
-          description="Find files, documents, and folders across your workspace"
-        />
-      )}
+      <SearchResults
+        submittedQuery={submittedQuery}
+        isLoading={isLoading}
+        results={results}
+        total={data?.total}
+      />
     </div>
   );
 }
 
+function SearchResults({
+  submittedQuery,
+  isLoading,
+  results,
+  total,
+}: Readonly<{
+  submittedQuery: string;
+  isLoading: boolean;
+  results: SearchResult[];
+  total?: number;
+}>) {
+  if (!submittedQuery) {
+    return (
+      <EmptyState
+        icon={Search}
+        title="Search OtterWorks"
+        description="Find files, documents, and folders across your workspace"
+      />
+    );
+  }
+
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
+  if (results.length === 0) {
+    return (
+      <EmptyState
+        icon={Search}
+        title="No results found"
+        description={`No results for "${submittedQuery}". Try different keywords.`}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <p className="text-sm text-gray-500 mb-4">
+        {total || results.length} result{results.length !== 1 ? "s" : ""} for &ldquo;{submittedQuery}&rdquo;
+      </p>
+      {results.map((result) => (
+        <SearchResultRow key={result.id} result={result} />
+      ))}
+    </div>
+  );
+}
+
+const resultIcons: Record<string, typeof FileText> = {
+  document: FileText,
+  folder: FolderOpen,
+};
+
+const resultIconColors: Record<string, string> = {
+  document: "text-blue-600 bg-blue-50",
+  folder: "text-amber-600 bg-amber-50",
+};
+
+function resultHref(result: SearchResult): string {
+  if (result.type === "document") return `/documents/${result.id}`;
+  if (result.type === "folder") return `/files?folder=${result.id}`;
+  return `/files/${result.id}`;
+}
+
 function SearchResultRow({ result }: Readonly<{ result: SearchResult }>) {
-  const href =
-    result.type === "document"
-      ? `/documents/${result.id}`
-      : result.type === "folder"
-      ? `/files?folder=${result.id}`
-      : `/files/${result.id}`;
-
-  const Icon =
-    result.type === "document"
-      ? FileText
-      : result.type === "folder"
-      ? FolderOpen
-      : File;
-
-  const iconColor =
-    result.type === "document"
-      ? "text-blue-600 bg-blue-50"
-      : result.type === "folder"
-      ? "text-amber-600 bg-amber-50"
-      : "text-otter-600 bg-otter-50";
+  const href = resultHref(result);
+  const Icon = resultIcons[result.type] ?? File;
+  const iconColor = resultIconColors[result.type] ?? "text-otter-600 bg-otter-50";
 
   return (
     <Link

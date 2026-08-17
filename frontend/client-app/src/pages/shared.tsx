@@ -9,7 +9,7 @@ import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { filesApi } from "@/lib/api";
 import { useUIStore } from "@/stores/ui-store";
 import { cn } from "@/lib/utils";
-import type { ViewMode } from "@/types";
+import type { FileItem, ViewMode } from "@/types";
 
 export default function SharedPage() {
   return (
@@ -58,46 +58,64 @@ function SharedContent() {
         </div>
       </div>
 
-      {isLoading ? (
-        <PageLoader />
-      ) : files.length === 0 ? (
-        <EmptyState
-          icon={Share2}
-          title="Nothing shared with you yet"
-          description="Files and documents shared with you will appear here"
-        />
-      ) : (
-        <div
-          className={cn(
-            viewMode === "grid"
-              ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
-              : "space-y-1"
-          )}
-        >
-          {files.map((file) => (
-            <FileCard
-              key={file.id}
-              file={file}
-              view={viewMode}
-              onDownload={async (id, name) => {
-                try {
-                  const downloadUrl = await filesApi.getDownloadUrl(id);
-                  const a = document.createElement("a");
-                  a.href = downloadUrl;
-                  a.download = name;
-                  a.rel = "noopener";
-                  document.body.appendChild(a);
-                  a.click();
-                  a.remove();
-                  toast.success("File downloaded successfully");
-                } catch {
-                  toast.error("Download failed. Please try again.");
-                }
-              }}
-            />
-          ))}
-        </div>
+      <SharedListing isLoading={isLoading} files={files} viewMode={viewMode} />
+    </div>
+  );
+}
+
+function SharedListing({
+  isLoading,
+  files,
+  viewMode,
+}: Readonly<{
+  isLoading: boolean;
+  files: FileItem[];
+  viewMode: ViewMode;
+}>) {
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
+  if (files.length === 0) {
+    return (
+      <EmptyState
+        icon={Share2}
+        title="Nothing shared with you yet"
+        description="Files and documents shared with you will appear here"
+      />
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        viewMode === "grid"
+          ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+          : "space-y-1"
       )}
+    >
+      {files.map((file) => (
+        <FileCard
+          key={file.id}
+          file={file}
+          view={viewMode}
+          onDownload={async (id, name) => {
+            try {
+              const downloadUrl = await filesApi.getDownloadUrl(id);
+              const a = document.createElement("a");
+              a.href = downloadUrl;
+              a.download = name;
+              a.rel = "noopener";
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              toast.success("File downloaded successfully");
+            } catch {
+              toast.error("Download failed. Please try again.");
+            }
+          }}
+        />
+      ))}
     </div>
   );
 }

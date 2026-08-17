@@ -117,27 +117,13 @@ function TrashContent() {
       )}
 
       {/* Trash items */}
-      {isLoading ? (
-        <PageLoader />
-      ) : items.length === 0 ? (
-        <EmptyState
-          icon={Trash2}
-          title="Trash is empty"
-          description="Deleted files and documents will appear here"
-        />
-      ) : (
-        <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
-          {items.map((item) => (
-            <TrashRow
-              key={item.id}
-              item={item}
-              onRestore={() => restoreMutation.mutate(item.id)}
-              onDelete={() => setDeleteTarget(item)}
-              isRestoring={restoreMutation.isPending}
-            />
-          ))}
-        </div>
-      )}
+      <TrashListing
+        isLoading={isLoading}
+        items={items}
+        onRestore={(id) => restoreMutation.mutate(id)}
+        onDelete={setDeleteTarget}
+        isRestoring={restoreMutation.isPending}
+      />
 
       {/* Confirm permanent delete of single item */}
       <ConfirmDialog
@@ -166,6 +152,48 @@ function TrashContent() {
         }}
         onCancel={() => setShowEmptyTrashConfirm(false)}
       />
+    </div>
+  );
+}
+
+function TrashListing({
+  isLoading,
+  items,
+  onRestore,
+  onDelete,
+  isRestoring,
+}: Readonly<{
+  isLoading: boolean;
+  items: FileItem[];
+  onRestore: (id: string) => void;
+  onDelete: (item: FileItem) => void;
+  isRestoring: boolean;
+}>) {
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        icon={Trash2}
+        title="Trash is empty"
+        description="Deleted files and documents will appear here"
+      />
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
+      {items.map((item) => (
+        <TrashRow
+          key={item.id}
+          item={item}
+          onRestore={() => onRestore(item.id)}
+          onDelete={() => onDelete(item)}
+          isRestoring={isRestoring}
+        />
+      ))}
     </div>
   );
 }

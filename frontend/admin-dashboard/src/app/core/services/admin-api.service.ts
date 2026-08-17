@@ -335,12 +335,18 @@ export class AdminApiService {
     };
   }
 
+  private mapHealthStatus(status: string): ServiceHealth['status'] {
+    if (status === 'healthy') return 'healthy';
+    if (status === 'unhealthy') return 'down';
+    return 'degraded';
+  }
+
   private mapHealthServices(res: any): ServiceHealth[] {
     const services: ServiceHealth[] = (res.services || []).map((s: any) => {
       const meta = SERVICE_META[s.name] ?? { version: 'unknown', port: 0, language: 'unknown', details: s.message ?? '' };
       return {
         name: s.name,
-        status: s.status === 'healthy' ? 'healthy' : (s.status === 'unhealthy' ? 'down' : 'degraded'),
+        status: this.mapHealthStatus(s.status),
         uptime: 'N/A',
         responseTime: s.latency_ms ?? 0,
         lastChecked: res.timestamp ?? new Date().toISOString(),
