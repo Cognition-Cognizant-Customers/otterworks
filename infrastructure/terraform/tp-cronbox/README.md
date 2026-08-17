@@ -29,6 +29,13 @@ python3 scripts/tp_aws/audit_archive_recon.py --mode live \
 make tp-validate-recon FILE=docs/tech-partnerships/recon/cron-archive-demo.recon.json
 ```
 
+Live mode shifts only the seeded TTL horizon to a whole-second wall-clock
+reference one hour ahead, keeping the immutable golden identities, payloads,
+and expected sets unchanged. After both sweeps it seeds two uniquely marked
+ASCII/multibyte TTL-removal probes and waits up to ten minutes for each
+removal to be archived in S3 and absent from DynamoDB; a timeout is skipped,
+and `--skip-ttl-probe` records an explicit omission.
+
 The committed `*.fixture.recon.json` is the child's LocalStack run of the same
 script (`--mode fixture`, isolated `-fixture` table/bucket).
 

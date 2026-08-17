@@ -61,3 +61,16 @@ DLQ, provisioned concurrency, resource tags — is reported `skipped` with its
 reason in `unverified_paths`, along with the fact that the values come from the
 fixture rather than the deployed target. It is evidence about the logic; only
 the parent's `--mode live` run satisfies the contract's read-back requirement.
+
+## Cron-archive live validation
+
+The parent-owned archive recon re-anchors only the live TTL horizon to a
+whole-second wall-clock reference one hour in the future; fixture mode keeps the
+frozen-date corpus. The compared identities, payloads, and expected sets remain
+from the immutable golden baseline. After the two reconciliation sweeps, live
+mode seeds two clearly marked TTL-removal probes (ASCII and multibyte payloads)
+and waits up to ten minutes for both DynamoDB TTL removals to appear in S3 and
+disappear from DynamoDB. A timeout is reported as skipped rather than failed;
+`--skip-ttl-probe` records an explicit omission. Unless `--keep` is supplied,
+the run removes its corpus, probes, and archive objects without touching
+pre-existing objects or records.
