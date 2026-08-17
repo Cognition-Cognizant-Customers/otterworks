@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_invoices",
   "namespace": "demo",
-  "generated_at": "2026-08-17T04:52:50.532029Z",
+  "generated_at": "2026-08-17T04:58:06.985206Z",
   "run_mode": "fixture",
   "checks": [
     {
@@ -30,7 +30,7 @@
       "id": "invoices.checksum_non_orphan_lines",
       "expected": "e81010466568b9ac79e5e29f9087d842",
       "actual": "e81010466568b9ac79e5e29f9087d842",
-      "source_of_truth": "target read-back over embedded non-orphan lines only; narrower contract wording",
+      "source_of_truth": "Oracle batch recomputation over header-backed lines; target read-back over embedded non-orphan lines",
       "result": "pass"
     },
     {
@@ -111,7 +111,7 @@
     },
     {
       "id": "invoices.validator_rejects_bad_document",
-      "expected": "rejected",
+      "expected": "rejected_code_121",
       "actual": "rejected_code_121",
       "source_of_truth": "target negative insert probe; MongoDB document validation error code 121 and probe absence",
       "result": "pass"
@@ -121,7 +121,7 @@
   "idempotency_rerun": {
     "performed": true,
     "result": "pass",
-    "evidence": "fingerprint_a={'invoice_doc_count': 18750, 'total_embedded_line_count': 149963, 'all_lines_checksum': '88a66751f0b08b476b492105a2efc537', 'quarantine_count': 37, 'sorted_quarantine_id_hash': '53d9562b0327c3abbe767bed019dede1'}; fingerprint_b={'invoice_doc_count': 18750, 'total_embedded_line_count': 149963, 'all_lines_checksum': '88a66751f0b08b476b492105a2efc537', 'quarantine_count': 37, 'sorted_quarantine_id_hash': '53d9562b0327c3abbe767bed019dede1'}"
+    "evidence": "fingerprint_a={'invoice_doc_count': 18750, 'total_embedded_line_count': 149963, 'all_lines_checksum': '88a66751f0b08b476b492105a2efc537', 'quarantine_count': 37, 'sorted_quarantine_id_hash': '53d9562b0327c3abbe767bed019dede1', 'full_documents_hash': 'bf70452bca9591121e03a8a450f913fe'}; fingerprint_b={'invoice_doc_count': 18750, 'total_embedded_line_count': 149963, 'all_lines_checksum': '88a66751f0b08b476b492105a2efc537', 'quarantine_count': 37, 'sorted_quarantine_id_hash': '53d9562b0327c3abbe767bed019dede1', 'full_documents_hash': 'bf70452bca9591121e03a8a450f913fe'}"
   },
   "planted_anomaly_detections": {
     "expected_set": [
@@ -137,6 +137,7 @@
     "Live-Atlas write path and its validator DDL are unverified; only the parent's uncontended Atlas run proves them.",
     "Date-parse-failure branch is unverified because the demo baseline has zero malformed invoice_dt strings, so unparseable_invoice_dt and unparseable_due_dt never fired.",
     "null_amount, unparseable_amount, and null_invoice_id quarantine branches are unverified because the baseline has zero such rows.",
+    "null_required_field quarantine branch is unverified because the baseline has no NULL or unparseable required non-amount line fields.",
     "invalid_encoding quarantine branch is unverified because the baseline has zero non-decodable values.",
     "Malformed GL_ACCT_CSV tolerate-and-attribute path is unverified because baseline CSVs are all well-formed."
   ]

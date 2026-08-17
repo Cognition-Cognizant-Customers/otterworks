@@ -13,7 +13,10 @@ from common import (
     LINE_COLUMNS,
     SOURCE_ROW_COLUMNS,
     DecodingError,
+    NullRequiredField,
+    UnparseableRequiredField,
     bulk_replace,
+    chunked,
     decimal128,
     decimal128_or_none,
     decimal_value,
@@ -98,7 +101,7 @@ def quarantine_document(
     invoice_id = safe_text(raw["invoice_id"])
     line_id = safe_text(raw["line_id"])
     if line_id is None:
-        line_id = f"0x{repr(raw['line_id']).encode().hex()}"
+        raise SystemExit("cannot quarantine source line with NULL LINE_ID")
     try:
         amount = decimal128_or_none(decimal_value(raw["amount"]))
     except (decimal.InvalidOperation, TypeError, ValueError):
@@ -124,31 +127,50 @@ def quarantine_document(
 
 
 def normalize_line(raw: dict[str, Any]) -> dict[str, Any]:
+    def required_int(value: Any, field: str) -> int:
+        if value is None:
+            raise NullRequiredField(field)
+        try:
+            return int(value)
+        except (TypeError, ValueError) as exc:
+            raise UnparseableRequiredField(field) from exc
+
+    def required_decimal(value: Any, field: str) -> decimal.Decimal:
+        if value is None:
+            raise NullRequiredField(field)
+        try:
+            result = decimal_value(value)
+        except (decimal.InvalidOperation, TypeError, ValueError) as exc:
+            raise UnparseableRequiredField(field) from exc
+        assert result is not None
+        return result
+
+    line_id = decode_text(raw["line_id"])
+    if line_id is None:
+        raise NullRequiredField("LINE_ID")
     line = {
-        "line_id": decode_text(raw["line_id"]),
+        "line_id": line_id,
         "invoice_no": decode_text(raw["invoice_no"]),
         "invoice_id": decode_text(raw["invoice_id"]),
         "cust_id": decode_text(raw["cust_id"]),
         "cust_no": decode_text(raw["cust_no"]),
         "cust_name": decode_text(raw["cust_name"]),
         "tenant_id": decode_text(raw["tenant_id"]),
-        "line_no": int(raw["line_no"]),
-        "line_type_cd": int(raw["line_type_cd"]),
+        "line_no": required_int(raw["line_no"], "LINE_NO"),
+        "line_type_cd": required_int(raw["line_type_cd"], "LINE_TYPE_CD"),
         "item_desc": decode_text(raw["item_desc"]),
-        "qty": decimal_value(raw["qty"]),
-        "unit_price": decimal_value(raw["unit_price"]),
+        "qty": required_decimal(raw["qty"], "QTY"),
+        "unit_price": required_decimal(raw["unit_price"], "UNIT_PRICE"),
         "amount": decimal_value(raw["amount"]),
-        "tax_amt": decimal_value(raw["tax_amt"]),
+        "tax_amt": required_decimal(raw["tax_amt"], "TAX_AMT"),
         "invoice_dt": parse_legacy_date(raw["invoice_dt"]),
         "service_period": decode_text(raw["service_period"]),
         "posted_yn": decode_text(raw["posted_yn"]),
         "gl_acct_csv": decode_text(raw["gl_acct_csv"]),
         "src_system": decode_text(raw["src_system"]),
     }
-    if line["line_id"] is None:
-        raise ValueError("LINE_ID is NULL")
     if line["amount"] is None:
-        raise ValueError("AMOUNT is NULL")
+        raise NullRequiredField("AMOUNT")
     return line
 
 
@@ -273,11 +295,35 @@ def fetch_headers(connection: Any, batch_no: int) -> dict[str, dict[str, Any]]:
             "tenant_id": decode_text(values["tenant_id"]),
             "invoice_dt": values["invoice_dt"],
             "due_dt": values["due_dt"],
-            "status_cd": int(values["status_cd"]),
-            "total_amt": decimal_value(values["total_amt"]),
         }
         if header["invoice_id"] is None:
-            raise ValueError("batch contains a header with NULL INVOICE_ID")
+            raise SystemExit(
+                f"NULL INVOICE_ID in invoice_header batch {batch_no}"
+            )
+        if values["status_cd"] is None:
+            raise SystemExit(
+                f"NULL STATUS_CD for invoice {header['invoice_id']} "
+                f"in batch {batch_no}"
+            )
+        try:
+            header["status_cd"] = int(values["status_cd"])
+        except (TypeError, ValueError) as exc:
+            raise SystemExit(
+                f"unparseable STATUS_CD for invoice {header['invoice_id']} "
+                f"in batch {batch_no}"
+            ) from exc
+        if values["total_amt"] is None:
+            raise SystemExit(
+                f"NULL TOTAL_AMT for invoice {header['invoice_id']} "
+                f"in batch {batch_no}"
+            )
+        try:
+            header["total_amt"] = decimal_value(values["total_amt"])
+        except (decimal.InvalidOperation, TypeError, ValueError) as exc:
+            raise SystemExit(
+                f"unparseable TOTAL_AMT for invoice {header['invoice_id']} "
+                f"in batch {batch_no}"
+            ) from exc
         headers[header["invoice_id"]] = header
     cursor.close()
     return headers
@@ -319,8 +365,7 @@ def write_stale_cleanup(
         value["_id"] for value in invoices.find(invoice_scope, {"_id": 1})
     }
     stale_invoice_ids = existing_invoice_ids - invoice_ids
-    for start in range(0, len(stale_invoice_ids), 1000):
-        values = list(stale_invoice_ids)[start : start + 1000]
+    for values in chunked(stale_invoice_ids, 1000):
         if values:
             invoices.delete_many(
                 {"_id": {"$in": values}, "ns": namespace, "source.batch_no": batch_no}
@@ -330,8 +375,7 @@ def write_stale_cleanup(
         value["_id"] for value in quarantine.find(quarantine_scope, {"_id": 1})
     }
     stale_quarantine_ids = existing_quarantine_ids - quarantine_ids
-    for start in range(0, len(stale_quarantine_ids), 1000):
-        values = list(stale_quarantine_ids)[start : start + 1000]
+    for values in chunked(stale_quarantine_ids, 1000):
         if values:
             quarantine.delete_many(
                 {"_id": {"$in": values}, "ns": namespace, "source.batch_no": batch_no}
@@ -404,7 +448,6 @@ def migrate(args: argparse.Namespace) -> None:
                 try:
                     line = normalize_line(raw)
                 except DecodingError:
-                    flush_invoice() if key != current_invoice_id else None
                     document = quarantine_document(
                         raw,
                         args.ns,
@@ -420,18 +463,27 @@ def migrate(args: argparse.Namespace) -> None:
                         "unparseable_amount",
                         "AMOUNT cannot be parsed as Decimal",
                     )
-                except ValueError as exc:
-                    message = str(exc)
-                    if message == "AMOUNT is NULL":
-                        anomaly = "null_amount"
-                        reason = "AMOUNT is NULL"
-                    elif message == "LINE_ID is NULL":
-                        anomaly = "invalid_encoding"
-                        reason = "LINE_ID is NULL and cannot identify a source row"
-                    else:
-                        raise
+                except NullRequiredField as exc:
+                    if exc.field == "LINE_ID":
+                        raise SystemExit(
+                            f"source line has NULL LINE_ID in batch {batch_no}; "
+                            "LINE_ID is required as the source primary key"
+                        ) from exc
+                    anomaly = "null_amount" if exc.field == "AMOUNT" else "null_required_field"
                     document = quarantine_document(
-                        raw, args.ns, batch_no, anomaly, reason
+                        raw,
+                        args.ns,
+                        batch_no,
+                        anomaly,
+                        f"{exc.field} is NULL",
+                    )
+                except UnparseableRequiredField as exc:
+                    document = quarantine_document(
+                        raw,
+                        args.ns,
+                        batch_no,
+                        "null_required_field",
+                        f"{exc.field} is unparseable",
                     )
                 else:
                     if line["invoice_id"] is None:
@@ -491,8 +543,9 @@ def migrate(args: argparse.Namespace) -> None:
 
 def main() -> int:
     args = parser().parse_args()
+    batch_no = resolve_batch(args.ns, args.batch_no)
     migrate(args)
-    print(f"migrated namespace={args.ns} batch={resolve_batch(args.ns, args.batch_no)}")
+    print(f"migrated namespace={args.ns} batch={batch_no}")
     return 0
 
 

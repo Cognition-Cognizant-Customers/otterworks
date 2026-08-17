@@ -97,6 +97,22 @@ class DecodingError(ValueError):
         super().__init__("source value is not valid UTF-8")
 
 
+class NullRequiredField(ValueError):
+    """A required source field was NULL."""
+
+    def __init__(self, field: str) -> None:
+        self.field = field
+        super().__init__(f"{field} is NULL")
+
+
+class UnparseableRequiredField(ValueError):
+    """A required non-money source field could not be parsed."""
+
+    def __init__(self, field: str) -> None:
+        self.field = field
+        super().__init__(f"{field} is unparseable")
+
+
 def validate_namespace(namespace: str) -> None:
     if not re.fullmatch(r"[A-Za-z0-9_]+", namespace):
         raise SystemExit("--ns must contain only letters, digits, and underscores")
@@ -398,6 +414,7 @@ def quarantine_validator() -> dict[str, Any]:
                         "null_amount",
                         "unparseable_amount",
                         "invalid_encoding",
+                        "null_required_field",
                     ]
                 },
                 "reason": {"bsonType": "string"},

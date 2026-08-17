@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from bson import Decimal128
+from bson.json_util import CANONICAL_JSON_OPTIONS
+from bson.json_util import dumps as bson_dumps
 from common import (
     decimal_text,
     install_decimal_handler,
@@ -27,8 +29,6 @@ from common import (
 from pymongo.errors import OperationFailure, WriteError
 
 RECON_DEFAULT = "docs/tech-partnerships/recon/mongo_invoices.recon.json"
-FULL_CHECKSUM = "88a66751f0b08b476b492105a2efc537"
-NON_ORPHAN_CHECKSUM = "e81010466568b9ac79e5e29f9087d842"
 
 
 def parser() -> argparse.ArgumentParser:
@@ -84,7 +84,15 @@ def run_migration(args: argparse.Namespace) -> None:
 
 def source_facts(
     args: argparse.Namespace, batch_no: int
-) -> tuple[set[str], dict[str, decimal.Decimal], set[str], int, int, int]:
+) -> tuple[
+    set[str],
+    dict[str, decimal.Decimal],
+    set[str],
+    int,
+    int,
+    int,
+    str,
+]:
     connection = oracle_connection(args)
     try:
         cursor = connection.cursor()
@@ -109,18 +117,21 @@ def source_facts(
         install_decimal_handler(cursor)
         cursor.execute(
             """
-            SELECT invoice_id, amount, posted_yn
+            SELECT line_id, invoice_id, amount, posted_yn
               FROM OW_BILLING.invoice_line
              WHERE batch_no = :batch_no
             """,
             batch_no=batch_no,
         )
         line_totals: dict[str, decimal.Decimal] = {}
-        for invoice_id, amount, _posted in cursor:
-            if invoice_id in header_totals:
-                line_totals[invoice_id] = (
-                    line_totals.get(invoice_id, decimal.Decimal(0)) + amount
+        non_orphan_lines: list[tuple[str, decimal.Decimal]] = []
+        for line_id, invoice_id, amount, _posted in cursor:
+            invoice_key = str(invoice_id)
+            if invoice_key in header_totals:
+                line_totals[invoice_key] = (
+                    line_totals.get(invoice_key, decimal.Decimal(0)) + amount
                 )
+                non_orphan_lines.append((str(line_id), amount))
         cursor.close()
 
         cursor = connection.cursor()
@@ -170,6 +181,7 @@ def source_facts(
             null_posted,
             zero_line,
             mismatch,
+            checksum(non_orphan_lines),
         )
     finally:
         connection.close()
@@ -224,12 +236,30 @@ def embedded_line_count(invoices: Any, namespace: str) -> int:
 
 def fingerprint(invoices: Any, quarantine: Any, namespace: str) -> dict[str, Any]:
     embedded, quarantined, _ = target_lines(invoices, quarantine, namespace)
+    content_digest = hashlib.md5()
+    for collection_name, collection in (
+        ("invoices", invoices),
+        ("invoices_quarantine", quarantine),
+    ):
+        for document in collection.find({"ns": namespace}).sort("_id", 1):
+            content_digest.update(collection_name.encode())
+            content_digest.update(b"\0")
+            content_digest.update(
+                bson_dumps(
+                    document,
+                    json_options=CANONICAL_JSON_OPTIONS,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode()
+            )
+            content_digest.update(b"\n")
     return {
         "invoice_doc_count": invoices.count_documents({"ns": namespace}),
         "total_embedded_line_count": embedded_line_count(invoices, namespace),
         "all_lines_checksum": checksum(embedded + quarantined),
         "quarantine_count": quarantine.count_documents({"ns": namespace}),
         "sorted_quarantine_id_hash": quarantine_hash(quarantine, namespace),
+        "full_documents_hash": content_digest.hexdigest(),
     }
 
 
@@ -303,9 +333,15 @@ def report(
     manifest = load_manifest(args.ns)
     line_target = manifest["targets"]["oracle.OW_BILLING.INVOICE_LINE"]
     header_target = manifest["targets"]["oracle.OW_BILLING.INVOICE_HEADER"]
+    line_anomalies = [
+        item
+        for item in manifest["planted_anomalies"]
+        if item.get("target") == "oracle.OW_BILLING.INVOICE_LINE"
+    ]
+    expected_anomaly_set = sorted({item["kind"] for item in line_anomalies})
     orphan_count = next(
         item["count"]
-        for item in manifest["planted_anomalies"]
+        for item in line_anomalies
         if item["kind"] == "orphaned_rows"
     )
     (
@@ -315,6 +351,7 @@ def report(
         source_null_posted,
         source_zero_line,
         source_mismatch,
+        source_non_orphan_checksum,
     ) = source_facts(args, batch_no)
     mongo_client, database = mongo_database(args)
     try:
@@ -503,9 +540,9 @@ def report(
         ),
         make_check(
             "invoices.checksum_non_orphan_lines",
-            NON_ORPHAN_CHECKSUM,
+            source_non_orphan_checksum,
             checksum(embedded),
-            "target read-back over embedded non-orphan lines only; narrower contract wording",
+            "Oracle batch recomputation over header-backed lines; target read-back over embedded non-orphan lines",
         ),
         make_check(
             "invoices.line_totals_preserved",
@@ -571,7 +608,7 @@ def report(
         ),
         make_check(
             "invoices.validator_rejects_bad_document",
-            "rejected",
+            "rejected_code_121",
             probe_actual,
             "target negative insert probe; MongoDB document validation error code 121 and probe absence",
             probe_passed,
@@ -592,15 +629,16 @@ def report(
             "evidence": "fingerprints are replaced by the caller after the second migration run",
         },
         "planted_anomaly_detections": {
-            "expected_set": ["orphaned_rows"],
+            "expected_set": expected_anomaly_set,
             "actual_set": all_anomaly_ids,
-            "missing": sorted({"orphaned_rows"} - set(all_anomaly_ids)),
-            "unexpected": sorted(set(all_anomaly_ids) - {"orphaned_rows"}),
+            "missing": sorted(set(expected_anomaly_set) - set(all_anomaly_ids)),
+            "unexpected": sorted(set(all_anomaly_ids) - set(expected_anomaly_set)),
         },
         "unverified_paths": [
             "Live-Atlas write path and its validator DDL are unverified; only the parent's uncontended Atlas run proves them.",
             "Date-parse-failure branch is unverified because the demo baseline has zero malformed invoice_dt strings, so unparseable_invoice_dt and unparseable_due_dt never fired.",
             "null_amount, unparseable_amount, and null_invoice_id quarantine branches are unverified because the baseline has zero such rows.",
+            "null_required_field quarantine branch is unverified because the baseline has no NULL or unparseable required non-amount line fields.",
             "invalid_encoding quarantine branch is unverified because the baseline has zero non-decodable values.",
             "Malformed GL_ACCT_CSV tolerate-and-attribute path is unverified because baseline CSVs are all well-formed.",
         ],
