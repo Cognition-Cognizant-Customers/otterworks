@@ -10,11 +10,13 @@ export function NotificationBell() {
     refetchInterval: 30000,
   });
 
+  const unreadSuffix = unreadCount > 0 ? ` (${unreadCount} unread)` : "";
+
   return (
     <Link
       to="/notifications"
       className="relative p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition"
-      aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ""}`}
+      aria-label={`Notifications${unreadSuffix}`}
     >
       <Bell size={20} />
       {unreadCount > 0 && (
