@@ -17,12 +17,100 @@ resources:
         quartz_cron_expression: 0 0 2 * * ?
         timezone_id: UTC
         pause_status: PAUSED
+      parameters:
+        - name: ns
+          default: demo
+        - name: ds
+          default: "{{job.trigger.time.iso_date}}"
       tasks:
-        - task_key: analytics_placeholder
+        - task_key: analytics_00_ddl_bronze_raw
           sql_task:
-            file:
-              path: ../src/analytics_placeholder.sql
+            file: {path: ../src/analytics/00_ddl_bronze_raw.sql}
             warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: analytics_01_ddl_bronze_rejected
+          depends_on: [{task_key: analytics_00_ddl_bronze_raw}]
+          sql_task:
+            file: {path: ../src/analytics/01_ddl_bronze_rejected.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: analytics_02_ddl_silver
+          depends_on: [{task_key: analytics_01_ddl_bronze_rejected}]
+          sql_task:
+            file: {path: ../src/analytics/02_ddl_silver.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: analytics_03_ddl_gold_summary
+          depends_on: [{task_key: analytics_02_ddl_silver}]
+          sql_task:
+            file: {path: ../src/analytics/03_ddl_gold_summary.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: analytics_04_ddl_gold_top_users
+          depends_on: [{task_key: analytics_03_ddl_gold_summary}]
+          sql_task:
+            file: {path: ../src/analytics/04_ddl_gold_top_users.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: analytics_05_ddl_gold_hourly
+          depends_on: [{task_key: analytics_04_ddl_gold_top_users}]
+          sql_task:
+            file: {path: ../src/analytics/05_ddl_gold_hourly.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: analytics_06_ddl_gold_report_view
+          depends_on: [{task_key: analytics_05_ddl_gold_hourly}]
+          sql_task:
+            file: {path: ../src/analytics/06_ddl_gold_report_view.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+        - task_key: analytics_10_bronze_ingest
+          depends_on: [{task_key: analytics_06_ddl_gold_report_view}]
+          sql_task:
+            file: {path: ../src/analytics/10_bronze_ingest.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: analytics_20_bronze_reject
+          depends_on: [{task_key: analytics_10_bronze_ingest}]
+          sql_task:
+            file: {path: ../src/analytics/20_bronze_reject.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: analytics_30_silver
+          depends_on: [{task_key: analytics_20_bronze_reject}]
+          sql_task:
+            file: {path: ../src/analytics/30_silver.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: analytics_40_gold_summary
+          depends_on: [{task_key: analytics_30_silver}]
+          sql_task:
+            file: {path: ../src/analytics/40_gold_summary.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: analytics_50_gold_top_users_prune
+          depends_on: [{task_key: analytics_40_gold_summary}]
+          sql_task:
+            file: {path: ../src/analytics/50_gold_top_users_prune.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: analytics_51_gold_top_users_publish
+          depends_on: [{task_key: analytics_50_gold_top_users_prune}]
+          sql_task:
+            file: {path: ../src/analytics/51_gold_top_users_publish.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: analytics_60_gold_hourly_prune
+          depends_on: [{task_key: analytics_51_gold_top_users_publish}]
+          sql_task:
+            file: {path: ../src/analytics/60_gold_hourly_prune.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: analytics_61_gold_hourly_publish
+          depends_on: [{task_key: analytics_60_gold_hourly_prune}]
+          sql_task:
+            file: {path: ../src/analytics/61_gold_hourly_publish.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
 
     ow_tp_cron_user_activity_daily:
       name: ow_tp_cron_user_activity_daily
@@ -31,9 +119,88 @@ resources:
         quartz_cron_expression: 0 0 5 * * ?
         timezone_id: UTC
         pause_status: PAUSED
+      parameters:
+        - name: ns
+          default: demo
+        - name: ds
+          default: "{{job.trigger.time.iso_date}}"
       tasks:
-        - task_key: user_activity_placeholder
+        - task_key: act_00_ddl_gold
           sql_task:
-            file:
-              path: ../src/user_activity_placeholder.sql
+            file: {path: ../src/activity/30_ddl_gold_daily.sql}
             warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: act_01_ddl_gold_user_summaries
+          depends_on: [{task_key: act_00_ddl_gold}]
+          sql_task:
+            file: {path: ../src/activity/31_ddl_gold_user_summaries.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: act_02_ddl_gold_coverage
+          depends_on: [{task_key: act_01_ddl_gold_user_summaries}]
+          sql_task:
+            file: {path: ../src/activity/32_ddl_gold_window_coverage.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: act_03_ddl_latest_view
+          depends_on: [{task_key: act_02_ddl_gold_coverage}]
+          sql_task:
+            file: {path: ../src/activity/33_ddl_gold_latest_view.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+        - task_key: act_10_window_coverage
+          depends_on: [{task_key: act_03_ddl_latest_view}]
+          sql_task:
+            file: {path: ../src/activity/40_window_coverage.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: act_20_user_summaries_prune
+          depends_on: [{task_key: act_10_window_coverage}]
+          sql_task:
+            file: {path: ../src/activity/50_user_summaries_prune.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: act_21_user_summaries_publish
+          depends_on: [{task_key: act_20_user_summaries_prune}]
+          sql_task:
+            file: {path: ../src/activity/51_user_summaries_publish.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: act_30_report
+          depends_on: [{task_key: act_21_user_summaries_publish}]
+          sql_task:
+            file: {path: ../src/activity/60_gold_report.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+
+    ow_tp_cron_activity_history_backfill:
+      name: ow_tp_cron_activity_history_backfill
+      max_concurrent_runs: 1
+      parameters:
+        - name: ns
+          default: demo
+        - name: ds
+          default: "2026-01-15"
+      tasks:
+        - task_key: activity_00_ddl_bronze_history
+          sql_task:
+            file: {path: ../src/activity/00_ddl_bronze_history.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: activity_10_bronze_ingest_history
+          depends_on: [{task_key: activity_00_ddl_bronze_history}]
+          sql_task:
+            file: {path: ../src/activity/10_bronze_ingest_history.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: activity_20_gold_merge_summary_history
+          depends_on: [{task_key: activity_10_bronze_ingest_history}]
+          sql_task:
+            file: {path: ../src/activity/20_gold_merge_summary_history.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: activity_21_gold_merge_top_users_history
+          depends_on: [{task_key: activity_20_gold_merge_summary_history}]
+          sql_task:
+            file: {path: ../src/activity/21_gold_merge_top_users_history.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}

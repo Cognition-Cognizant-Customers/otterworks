@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safely bootstrap the shared Cron Box Atlas database and collections."""
+"""Safely bootstrap the dedicated Cron Box Atlas database and collections."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import os
 from collections.abc import Iterable
 
 URI_ENV = "MONGODB_ATLAS_URI"
-DATABASE = "ow_tp_demo"
+DATABASE = "ow_tp_cronbox_demo"
 COLLECTIONS = ("documents", "files")
 
 

@@ -1,5 +1,5 @@
 {
-  "database": "ow_tp_demo",
+  "database": "ow_tp_cronbox_demo",
   "collectionName": "files",
   "name": "default",
   "type": "search",

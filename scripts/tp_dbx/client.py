@@ -41,6 +41,7 @@ class SqlResult:
     columns: list[str]
     rows: list[list]
     error: str
+    column_types: list[str] | None = None
 
     @property
     def ok(self) -> bool:
@@ -49,8 +50,42 @@ class SqlResult:
     def scalar(self):
         return self.rows[0][0] if self.rows and self.rows[0] else None
 
-    def dicts(self) -> list[dict]:
-        return [dict(zip(self.columns, row)) for row in self.rows]
+    def dicts(self, typed: bool = False) -> list[dict]:
+        if not typed:
+            return [dict(zip(self.columns, row)) for row in self.rows]
+        return [
+            dict(
+                zip(
+                    self.columns,
+                    (
+                        _coerce_sql_value(value, type_name)
+                        for value, type_name in zip(
+                            row, self.column_types or ("",) * len(self.columns)
+                        )
+                    ),
+                )
+            )
+            for row in self.rows
+        ]
+
+
+def _coerce_sql_value(value, type_name: str):
+    if value is None:
+        return None
+    kind = type_name.upper().split("(", 1)[0]
+    if kind in {"BYTE", "SHORT", "INT", "LONG"}:
+        return int(value)
+    if kind in {"FLOAT", "DOUBLE", "DECIMAL"}:
+        return float(value)
+    if kind == "BOOLEAN":
+        if isinstance(value, str):
+            lowered = value.lower()
+            if lowered == "true":
+                return True
+            if lowered == "false":
+                return False
+        return value
+    return value
 
 
 class Databricks:
@@ -152,9 +187,11 @@ class Databricks:
             state = payload.get("status", {}).get("state", "UNKNOWN")
         error = payload.get("status", {}).get("error", {})
         message = error.get("message", "") if isinstance(error, dict) else str(error)
-        columns = [c.get("name", "") for c in payload.get("manifest", {}).get("schema", {}).get("columns", [])]
+        manifest_columns = payload.get("manifest", {}).get("schema", {}).get("columns", [])
+        columns = [c.get("name", "") for c in manifest_columns]
+        column_types = [c.get("type_name", "") for c in manifest_columns]
         rows = payload.get("result", {}).get("data_array") or []
-        return SqlResult(state, columns, rows, message)
+        return SqlResult(state, columns, rows, message, column_types)
 
     def sql_ok(self, statement: str) -> SqlResult:
         result = self.sql(statement)

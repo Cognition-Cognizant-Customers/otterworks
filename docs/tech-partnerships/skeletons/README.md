@@ -6,7 +6,7 @@ These roots contain only scaffolding shared by both units on each platform:
   serverless SQL job shells for cron-analytics and cron-activity.
 - `infrastructure/terraform/tp-cronbox/` — three prefixed S3 buckets and
   three PAY_PER_REQUEST DynamoDB tables, with local Terraform state.
-- `scripts/tp_atlas/cronbox_namespace.py` — idempotent `ow_tp_demo` database
+- `scripts/tp_atlas/cronbox_namespace.py` — idempotent `ow_tp_cronbox_demo` database
   and `documents`/`files` collection bootstrap on the existing M0 cluster.
 
 Unit-owned notebooks, Lambda functions, EventBridge rules, lifecycle rules,

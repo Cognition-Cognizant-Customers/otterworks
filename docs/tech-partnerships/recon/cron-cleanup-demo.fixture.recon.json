@@ -1,0 +1,1154 @@
+{
+  "kind": "recon-report",
+  "unit": "cron-cleanup",
+  "namespace": "demo",
+  "generated_at": "2026-08-17T05:51:34Z",
+  "run_mode": "fixture",
+  "checks": [
+    {
+      "id": "CLN-06/storage_bucket_eventbridge_enabled",
+      "expected": true,
+      "actual": null,
+      "source_of_truth": "deployed-only configuration: the fixture estate has no bucket notification, lifecycle rule, EventBridge rule, Lambda function or SQS queue to read back",
+      "result": "skipped"
+    },
+    {
+      "id": "CLN-06/quarantine_lifecycle_expiry_configured",
+      "expected": true,
+      "actual": null,
+      "source_of_truth": "deployed-only configuration: the fixture estate has no bucket notification, lifecycle rule, EventBridge rule, Lambda function or SQS queue to read back",
+      "result": "skipped"
+    },
+    {
+      "id": "CLN-06/eventbridge_rule_has_no_schedule",
+      "expected": "",
+      "actual": null,
+      "source_of_truth": "deployed-only configuration: the fixture estate has no bucket notification, lifecycle rule, EventBridge rule, Lambda function or SQS queue to read back",
+      "result": "skipped"
+    },
+    {
+      "id": "CLN-06/eventbridge_rule_enabled",
+      "expected": "ENABLED",
+      "actual": null,
+      "source_of_truth": "deployed-only configuration: the fixture estate has no bucket notification, lifecycle rule, EventBridge rule, Lambda function or SQS queue to read back",
+      "result": "skipped"
+    },
+    {
+      "id": "CLN-06/eventbridge_rule_pattern",
+      "expected": [
+        "Object Created",
+        [
+          "aws.s3"
+        ]
+      ],
+      "actual": null,
+      "source_of_truth": "deployed-only configuration: the fixture estate has no bucket notification, lifecycle rule, EventBridge rule, Lambda function or SQS queue to read back",
+      "result": "skipped"
+    },
+    {
+      "id": "CLN-06/eventbridge_target_is_lambda_with_dlq",
+      "expected": [
+        true,
+        true
+      ],
+      "actual": null,
+      "source_of_truth": "deployed-only configuration: the fixture estate has no bucket notification, lifecycle rule, EventBridge rule, Lambda function or SQS queue to read back",
+      "result": "skipped"
+    },
+    {
+      "id": "CLN-08/lambda_dlq_is_unit_queue",
+      "expected": true,
+      "actual": null,
+      "source_of_truth": "deployed-only configuration: the fixture estate has no bucket notification, lifecycle rule, EventBridge rule, Lambda function or SQS queue to read back",
+      "result": "skipped"
+    },
+    {
+      "id": "CLN-08/lambda_no_provisioned_concurrency",
+      "expected": 0,
+      "actual": null,
+      "source_of_truth": "deployed-only configuration: the fixture estate has no bucket notification, lifecycle rule, EventBridge rule, Lambda function or SQS queue to read back",
+      "result": "skipped"
+    },
+    {
+      "id": "CLN-08/lambda_tagged_project",
+      "expected": "otterworks-tp",
+      "actual": null,
+      "source_of_truth": "deployed-only configuration: the fixture estate has no bucket notification, lifecycle rule, EventBridge rule, Lambda function or SQS queue to read back",
+      "result": "skipped"
+    },
+    {
+      "id": "CLN-08/dlq_tagged_project",
+      "expected": "otterworks-tp",
+      "actual": null,
+      "source_of_truth": "deployed-only configuration: the fixture estate has no bucket notification, lifecycle rule, EventBridge rule, Lambda function or SQS queue to read back",
+      "result": "skipped"
+    },
+    {
+      "id": "CLN-08/unit_resource_names_prefixed",
+      "expected": [
+        true,
+        true,
+        true
+      ],
+      "actual": null,
+      "source_of_truth": "deployed-only configuration: the fixture estate has no bucket notification, lifecycle rule, EventBridge rule, Lambda function or SQS queue to read back",
+      "result": "skipped"
+    },
+    {
+      "id": "CLN-05/event_driven_quarantine_without_schedule",
+      "expected": [
+        true,
+        true
+      ],
+      "actual": [
+        true,
+        true
+      ],
+      "source_of_truth": "s3:PutObject probe under files/demo/recon-47fdcd31/ then dynamodb:GetItem ow-tp-orphan-audit-fixture + s3:HeadObject",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-05/audit_records_trigger_source_event",
+      "expected": [
+        "event",
+        "event"
+      ],
+      "actual": [
+        "event",
+        "event"
+      ],
+      "source_of_truth": "dynamodb:GetItem ow-tp-orphan-audit-fixture",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-04/probe_destination_key_not_re_encoded",
+      "expected": [
+        true,
+        true
+      ],
+      "actual": [
+        true,
+        true
+      ],
+      "source_of_truth": "dynamodb:GetItem ow-tp-orphan-audit-fixture quarantine_key vs source key",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-04/probe_body_byte_identical",
+      "expected": "7265636f6e2d70726f62652d627974657300ff",
+      "actual": "7265636f6e2d70726f62652d627974657300ff",
+      "source_of_truth": "s3:GetObject ow-tp-file-quarantine-fixture probe body bytes",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-07/replay_no_function_error",
+      "expected": null,
+      "actual": null,
+      "source_of_truth": "in-process handler.py against http://localhost:4566 replay of the identical event",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-07/replay_reports_already_quarantined",
+      "expected": "already_quarantined",
+      "actual": "already_quarantined",
+      "source_of_truth": "in-process handler.py against http://localhost:4566 response payload",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-07/replay_audit_row_unchanged",
+      "expected": [
+        "2026-08-17T05:51:32Z",
+        "quarantined/2026-08-17/files/demo/recon-47fdcd31/probe.bin"
+      ],
+      "actual": [
+        "2026-08-17T05:51:32Z",
+        "quarantined/2026-08-17/files/demo/recon-47fdcd31/probe.bin"
+      ],
+      "source_of_truth": "dynamodb:GetItem ow-tp-orphan-audit-fixture before/after replay",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-07/replay_no_duplicate_quarantine_object",
+      "expected": [
+        [
+          "quarantined/2026-08-17/files/demo/recon-47fdcd31/probe.bin",
+          19
+        ]
+      ],
+      "actual": [
+        [
+          "quarantined/2026-08-17/files/demo/recon-47fdcd31/probe.bin",
+          19
+        ]
+      ],
+      "source_of_truth": "s3:ListObjectsV2 ow-tp-file-quarantine-fixture before/after replay",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-01/seeded_orphans_settled_before_comparison",
+      "expected": [],
+      "actual": [],
+      "source_of_truth": "polled dynamodb:GetItem ow-tp-orphan-audit-fixture + s3:HeadObject ow-tp-file-storage-fixture for up to 30s",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-01/orphan_key_set_quarantined",
+      "expected": [
+        "files/demo/orphan-000.bin",
+        "files/demo/orphan-001.bin",
+        "files/demo/orphan-002.bin",
+        "files/demo/orphan-003.bin"
+      ],
+      "actual": [
+        "files/demo/orphan-000.bin",
+        "files/demo/orphan-001.bin",
+        "files/demo/orphan-002.bin",
+        "files/demo/orphan-003.bin"
+      ],
+      "source_of_truth": "s3:ListObjectsV2 ow-tp-file-quarantine-fixture/quarantined/ mapped back to source keys",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-03/surviving_key_set",
+      "expected": [
+        "files/demo/file-000.bin",
+        "files/demo/file-001.bin",
+        "files/demo/file-002.bin",
+        "files/demo/file-003.bin",
+        "files/demo/file-004.bin",
+        "files/demo/file-005.bin",
+        "files/demo/file-006.bin",
+        "files/demo/file-007.bin",
+        "files/demo/file-008.bin",
+        "files/demo/file-009.bin",
+        "files/demo/file-010.bin",
+        "files/demo/file-011.bin",
+        "files/demo/file-012.bin",
+        "files/demo/file-013.bin",
+        "files/demo/file-014.bin",
+        "files/demo/file-015.bin",
+        "files/demo/file-016.bin",
+        "files/demo/file-017.bin",
+        "files/demo/file-018.bin",
+        "files/demo/file-019.bin",
+        "files/demo/file-020.bin",
+        "files/demo/file-021.bin",
+        "files/demo/file-022.bin",
+        "files/demo/file-023.bin",
+        "files/demo/file-024.bin",
+        "files/demo/file-025.bin",
+        "files/demo/file-026.bin",
+        "files/demo/file-027.bin",
+        "files/demo/file-028.bin",
+        "files/demo/file-029.bin",
+        "files/demo/file-030.bin",
+        "files/demo/file-031.bin",
+        "files/demo/file-032.bin",
+        "files/demo/file-033.bin",
+        "files/demo/file-034.bin",
+        "files/demo/file-035.bin",
+        "files/demo/file-036.bin",
+        "files/demo/file-037.bin",
+        "files/demo/file-038.bin",
+        "files/demo/file-039.bin",
+        "files/demo/file-040.bin",
+        "files/demo/file-041.bin",
+        "files/demo/file-042.bin",
+        "files/demo/file-043.bin",
+        "files/demo/file-044.bin",
+        "files/demo/file-045.bin",
+        "files/demo/file-046.bin",
+        "files/demo/file-047.bin",
+        "files/demo/file-048.bin",
+        "files/demo/file-049.bin",
+        "files/demo/file-050.bin",
+        "files/demo/file-051.bin",
+        "files/demo/file-052.bin",
+        "files/demo/file-053.bin",
+        "files/demo/file-054.bin",
+        "files/demo/file-055.bin",
+        "files/demo/file-056.bin",
+        "files/demo/file-057.bin",
+        "files/demo/file-058.bin",
+        "files/demo/file-059.bin",
+        "files/demo/file-060.bin",
+        "files/demo/file-061.bin",
+        "files/demo/file-062.bin",
+        "files/demo/file-063.bin",
+        "files/demo/file-064.bin",
+        "files/demo/file-065.bin",
+        "files/demo/file-066.bin",
+        "files/demo/file-067.bin",
+        "files/demo/file-068.bin",
+        "files/demo/file-069.bin",
+        "files/demo/file-070.bin",
+        "files/demo/file-071.bin"
+      ],
+      "actual": [
+        "files/demo/file-000.bin",
+        "files/demo/file-001.bin",
+        "files/demo/file-002.bin",
+        "files/demo/file-003.bin",
+        "files/demo/file-004.bin",
+        "files/demo/file-005.bin",
+        "files/demo/file-006.bin",
+        "files/demo/file-007.bin",
+        "files/demo/file-008.bin",
+        "files/demo/file-009.bin",
+        "files/demo/file-010.bin",
+        "files/demo/file-011.bin",
+        "files/demo/file-012.bin",
+        "files/demo/file-013.bin",
+        "files/demo/file-014.bin",
+        "files/demo/file-015.bin",
+        "files/demo/file-016.bin",
+        "files/demo/file-017.bin",
+        "files/demo/file-018.bin",
+        "files/demo/file-019.bin",
+        "files/demo/file-020.bin",
+        "files/demo/file-021.bin",
+        "files/demo/file-022.bin",
+        "files/demo/file-023.bin",
+        "files/demo/file-024.bin",
+        "files/demo/file-025.bin",
+        "files/demo/file-026.bin",
+        "files/demo/file-027.bin",
+        "files/demo/file-028.bin",
+        "files/demo/file-029.bin",
+        "files/demo/file-030.bin",
+        "files/demo/file-031.bin",
+        "files/demo/file-032.bin",
+        "files/demo/file-033.bin",
+        "files/demo/file-034.bin",
+        "files/demo/file-035.bin",
+        "files/demo/file-036.bin",
+        "files/demo/file-037.bin",
+        "files/demo/file-038.bin",
+        "files/demo/file-039.bin",
+        "files/demo/file-040.bin",
+        "files/demo/file-041.bin",
+        "files/demo/file-042.bin",
+        "files/demo/file-043.bin",
+        "files/demo/file-044.bin",
+        "files/demo/file-045.bin",
+        "files/demo/file-046.bin",
+        "files/demo/file-047.bin",
+        "files/demo/file-048.bin",
+        "files/demo/file-049.bin",
+        "files/demo/file-050.bin",
+        "files/demo/file-051.bin",
+        "files/demo/file-052.bin",
+        "files/demo/file-053.bin",
+        "files/demo/file-054.bin",
+        "files/demo/file-055.bin",
+        "files/demo/file-056.bin",
+        "files/demo/file-057.bin",
+        "files/demo/file-058.bin",
+        "files/demo/file-059.bin",
+        "files/demo/file-060.bin",
+        "files/demo/file-061.bin",
+        "files/demo/file-062.bin",
+        "files/demo/file-063.bin",
+        "files/demo/file-064.bin",
+        "files/demo/file-065.bin",
+        "files/demo/file-066.bin",
+        "files/demo/file-067.bin",
+        "files/demo/file-068.bin",
+        "files/demo/file-069.bin",
+        "files/demo/file-070.bin",
+        "files/demo/file-071.bin"
+      ],
+      "source_of_truth": "s3:ListObjectsV2 ow-tp-file-storage-fixture/files/demo/",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-01/orphans_absent_from_storage",
+      "expected": [],
+      "actual": [],
+      "source_of_truth": "s3:ListObjectsV2 ow-tp-file-storage-fixture",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-01/freed_bytes",
+      "expected": 24,
+      "actual": 24,
+      "source_of_truth": "s3:ListObjectsV2 ow-tp-file-quarantine-fixture object sizes",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-04/quarantine_layout_matches_legacy_semantics",
+      "expected": [
+        4,
+        true
+      ],
+      "actual": [
+        4,
+        true
+      ],
+      "source_of_truth": "s3:ListObjectsV2 ow-tp-file-quarantine-fixture key shape quarantined/<YYYY-MM-DD>/<source key>",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-04/quarantined_bodies_byte_identical",
+      "expected": [
+        "orphan"
+      ],
+      "actual": [
+        "orphan"
+      ],
+      "source_of_truth": "s3:GetObject ow-tp-file-quarantine-fixture object bodies",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-02/reverse_orphan_metadata_retained",
+      "expected": [
+        "reverse-orphan"
+      ],
+      "actual": [
+        "reverse-orphan"
+      ],
+      "source_of_truth": "dynamodb:Scan ow-tp-file-metadata-fixture",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-02/reverse_orphan_object_still_absent",
+      "expected": false,
+      "actual": false,
+      "source_of_truth": "s3:HeadObject ow-tp-file-storage-fixture/files/demo/missing-reverse.bin",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-02/reverse_orphan_not_quarantined",
+      "expected": [],
+      "actual": [],
+      "source_of_truth": "s3:ListObjectsV2 ow-tp-file-quarantine-fixture",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-02/metadata_item_count_unchanged",
+      "expected": 73,
+      "actual": 73,
+      "source_of_truth": "dynamodb:Scan ow-tp-file-metadata-fixture",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-01/audit_quarantined_decision_set",
+      "expected": [
+        "files/demo/orphan-000.bin",
+        "files/demo/orphan-001.bin",
+        "files/demo/orphan-002.bin",
+        "files/demo/orphan-003.bin"
+      ],
+      "actual": [
+        "files/demo/orphan-000.bin",
+        "files/demo/orphan-001.bin",
+        "files/demo/orphan-002.bin",
+        "files/demo/orphan-003.bin"
+      ],
+      "source_of_truth": "dynamodb:Scan ow-tp-orphan-audit-fixture decision=quarantined",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-05/sweep_no_function_error",
+      "expected": null,
+      "actual": null,
+      "source_of_truth": "in-process handler.py against http://localhost:4566 mode=reconcile (on demand, never scheduled)",
+      "result": "pass"
+    },
+    {
+      "id": "empty_input_semantics/sweep_summary_row_written",
+      "expected": true,
+      "actual": true,
+      "source_of_truth": "dynamodb:Scan ow-tp-orphan-audit-fixture __sweep__/ summary items",
+      "result": "pass"
+    },
+    {
+      "id": "empty_input_semantics/zero_orphans_still_recorded",
+      "expected": [
+        "0",
+        "1"
+      ],
+      "actual": [
+        "0",
+        "1"
+      ],
+      "source_of_truth": "dynamodb:GetItem ow-tp-orphan-audit-fixture latest sweep summary",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-07/sweep_rerun_quarantine_set_unchanged",
+      "expected": [
+        "quarantined/2026-08-17/files/demo/orphan-000.bin",
+        "quarantined/2026-08-17/files/demo/orphan-001.bin",
+        "quarantined/2026-08-17/files/demo/orphan-002.bin",
+        "quarantined/2026-08-17/files/demo/orphan-003.bin",
+        "quarantined/2026-08-17/files/demo/recon-47fdcd31/Fichier Δ ☕.bin",
+        "quarantined/2026-08-17/files/demo/recon-47fdcd31/probe.bin"
+      ],
+      "actual": [
+        "quarantined/2026-08-17/files/demo/orphan-000.bin",
+        "quarantined/2026-08-17/files/demo/orphan-001.bin",
+        "quarantined/2026-08-17/files/demo/orphan-002.bin",
+        "quarantined/2026-08-17/files/demo/orphan-003.bin",
+        "quarantined/2026-08-17/files/demo/recon-47fdcd31/Fichier Δ ☕.bin",
+        "quarantined/2026-08-17/files/demo/recon-47fdcd31/probe.bin"
+      ],
+      "source_of_truth": "s3:ListObjectsV2 ow-tp-file-quarantine-fixture before/after the reconciliation sweep",
+      "result": "pass"
+    },
+    {
+      "id": "CLN-02/sweep_leaves_reverse_orphan_alone",
+      "expected": [
+        73
+      ],
+      "actual": [
+        73
+      ],
+      "source_of_truth": "dynamodb:Scan ow-tp-file-metadata-fixture after the sweep",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "identical EventBridge event replayed through in-process handler.py against http://localhost:4566; status=already_quarantined, detected_at unchanged, quarantine object set unchanged; on-demand reconciliation sweep recomputed the orphan set from the deployed stores (0 orphan(s) found, 0 quarantined) and changed nothing"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      [
+        "s3_orphan_objects",
+        "files/demo/orphan-000.bin"
+      ],
+      [
+        "s3_orphan_objects",
+        "files/demo/orphan-001.bin"
+      ],
+      [
+        "s3_orphan_objects",
+        "files/demo/orphan-002.bin"
+      ],
+      [
+        "s3_orphan_objects",
+        "files/demo/orphan-003.bin"
+      ],
+      [
+        "reverse_metadata_orphan",
+        "reverse-orphan"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-000.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-001.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-002.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-003.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-004.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-005.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-006.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-007.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-008.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-009.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-010.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-011.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-012.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-013.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-014.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-015.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-016.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-017.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-018.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-019.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-020.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-021.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-022.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-023.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-024.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-025.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-026.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-027.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-028.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-029.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-030.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-031.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-032.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-033.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-034.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-035.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-036.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-037.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-038.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-039.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-040.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-041.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-042.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-043.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-044.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-045.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-046.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-047.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-048.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-049.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-050.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-051.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-052.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-053.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-054.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-055.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-056.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-057.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-058.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-059.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-060.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-061.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-062.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-063.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-064.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-065.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-066.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-067.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-068.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-069.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-070.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-071.bin"
+      ]
+    ],
+    "actual_set": [
+      [
+        "s3_orphan_objects",
+        "files/demo/orphan-000.bin"
+      ],
+      [
+        "s3_orphan_objects",
+        "files/demo/orphan-001.bin"
+      ],
+      [
+        "s3_orphan_objects",
+        "files/demo/orphan-002.bin"
+      ],
+      [
+        "s3_orphan_objects",
+        "files/demo/orphan-003.bin"
+      ],
+      [
+        "reverse_metadata_orphan",
+        "reverse-orphan"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-000.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-001.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-002.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-003.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-004.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-005.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-006.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-007.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-008.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-009.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-010.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-011.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-012.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-013.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-014.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-015.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-016.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-017.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-018.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-019.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-020.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-021.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-022.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-023.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-024.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-025.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-026.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-027.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-028.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-029.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-030.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-031.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-032.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-033.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-034.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-035.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-036.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-037.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-038.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-039.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-040.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-041.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-042.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-043.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-044.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-045.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-046.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-047.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-048.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-049.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-050.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-051.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-052.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-053.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-054.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-055.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-056.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-057.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-058.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-059.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-060.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-061.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-062.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-063.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-064.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-065.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-066.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-067.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-068.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-069.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-070.bin"
+      ],
+      [
+        "referenced_objects_untouched",
+        "files/demo/file-071.bin"
+      ]
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "cost_savings_estimate (contract coverage_gap): the legacy report's hardcoded per-GB dollar figure is presentation-only and is not reproduced; freed bytes are compared instead.",
+    "event_delivery_eventual_consistency (contract coverage_gap): per-object event delivery has no daily batch boundary, so no batch-instant equality is asserted; the event path itself is exercised live and the resulting orphan set compared as a set.",
+    "Quarantine lifecycle expiry is verified as configuration only; the 30-day deletion cannot be observed inside a validation window.",
+    "The legacy savings report artifact (s3://otterworks-data-lake/reports/storage-cleanup/) is intentionally not emitted by the config-first replacement, so no byte-parity claim is made; the observable zero-orphan outcome is the sweep summary item instead.",
+    "DLQ delivery on repeated handler failure is not exercised: no failure was injected, only the Lambda and EventBridge target dead-letter configuration were read back.",
+    "IAM least privilege is asserted by policy shape, not by a negative denial test.",
+    "Post-teardown tag/prefix emptiness (CLN-08) belongs to the parent's teardown step and is outside this run.",
+    "run_mode=fixture: every value is recomputed from the LocalStack fixture estate (-fixture suffixed stand-in buckets and tables), not from the deployed AWS target; only the parent's live run satisfies the contract's read-back requirement.",
+    "run_mode=fixture: EventBridge delivery itself is not exercised. The rule, its target and the object-created pattern do not exist in the fixture, so the handler is invoked in-process with synthetic envelopes of the shape the rule would deliver.",
+    "run_mode=fixture: the deployed-only configuration checks reported as skipped (bucket EventBridge notification, quarantine lifecycle expiry, rule schedule/state/pattern, EventBridge target and Lambda DLQ, provisioned concurrency, resource tags) can only be read back from AWS.",
+    "run_mode=fixture: the event-path write-order recheck runs with RECHECK_DELAY_SECONDS=0, so the bounded young-object wait is not exercised; the fixture seeds each metadata item before its object, which is the ordering that recheck exists to tolerate."
+  ]
+}

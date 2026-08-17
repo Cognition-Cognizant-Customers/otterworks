@@ -29,6 +29,23 @@ python3 scripts/tp_aws/audit_archive_recon.py --mode live \
 make tp-validate-recon FILE=docs/tech-partnerships/recon/cron-archive-demo.recon.json
 ```
 
+Live mode shifts only the seeded TTL horizon to a whole-second wall-clock
+reference one hour ahead, keeping the immutable golden identities, payloads,
+and expected sets unchanged. After both sweeps it seeds two uniquely marked
+ASCII/multibyte TTL-removal probes and waits up to ten minutes for each
+removal to be archived in S3 and absent from DynamoDB. A timeout is skipped
+while a probe remains in DynamoDB, when both probes were never first observed
+present by strongly consistent composite-key reads, or when full absence was
+first observed less than 120 seconds before the nominal deadline; the latter
+case continues through the remaining stream-batching grace period to allow a
+healthy archive to arrive, then remains skipped if it does not. If both probes
+were first observed present and then absent from DynamoDB for more than that
+grace period by the nominal deadline while an archive object is still missing,
+the check fails. The `--skip-ttl-probe` flag records an explicit omission.
+Cleanup derives each probe's archive key directly from the seeded record,
+deletes those keys unconditionally, and performs a short post-delete listing
+to catch a stream write racing cleanup.
+
 The committed `*.fixture.recon.json` is the child's LocalStack run of the same
 script (`--mode fixture`, isolated `-fixture` table/bucket).
 
@@ -42,3 +59,19 @@ terraform fmt -check
 
 The parent owns the apply. Do not run `terraform apply` or `terraform destroy`
 from a child session.
+
+## Cron cleanup (parent-applied only)
+
+The cron-cleanup unit adds the event-driven `ow-tp-orphan-quarantine` Lambda,
+its EventBridge S3 object-created rule, DLQ, IAM policy, and quarantine
+lifecycle rule. It has no schedule, provisioned concurrency, or other hourly
+cost resource. The parent applies this root; child sessions only validate it.
+
+The handler also exposes an on-demand `{"mode": "reconcile"}` sweep for manual
+reconciliation. A production variant would use an SQS delay queue for the
+metadata write-order recheck rather than waiting inside Lambda. This bounded
+in-invocation wait keeps the resource set to the contract's list.
+
+Each event still performs a full metadata scan, mirroring the legacy daily
+scan. A future `s3_key` GSI is the follow-up optimization and belongs to the
+parent because it would alter the shared metadata table.
