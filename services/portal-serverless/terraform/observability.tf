@@ -76,7 +76,14 @@ resource "aws_cloudwatch_event_rule" "alarm_to_devin" {
   event_pattern = jsonencode({
     source      = ["aws.cloudwatch"]
     detail-type = ["CloudWatch Alarm State Change"]
-    resources   = [for a in aws_cloudwatch_metric_alarm.lambda_errors : a.arn]
+    resources = concat(
+      [for a in aws_cloudwatch_metric_alarm.lambda_errors : a.arn],
+      [
+        aws_cloudwatch_metric_alarm.feedback_dlq_messages.arn,
+        aws_cloudwatch_metric_alarm.moderation_errors.arn,
+        aws_cloudwatch_metric_alarm.feedback_queue_age.arn,
+      ],
+    )
     detail = {
       state = { value = ["ALARM"] }
     }

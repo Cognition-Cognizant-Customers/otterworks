@@ -182,7 +182,7 @@ resource "aws_sqs_queue" "feedback_events_dlq" {
 
 resource "aws_sqs_queue" "feedback_events" {
   name                       = "${local.prefix}-feedback-events"
-  visibility_timeout_seconds = 5
+  visibility_timeout_seconds = 10
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.feedback_events_dlq.arn
     maxReceiveCount     = 2
@@ -305,12 +305,8 @@ resource "aws_lambda_function" "moderation" {
   filename         = "${path.module}/../feedback-moderation/target/feedback-moderation.jar"
   source_code_hash = filebase64sha256("${path.module}/../feedback-moderation/target/feedback-moderation.jar")
   memory_size      = var.lambda_memory_mb
-  timeout          = 15
+  timeout          = 10
   publish          = true
-
-  snap_start {
-    apply_on = "PublishedVersions"
-  }
 
   tracing_config {
     mode = "Active"

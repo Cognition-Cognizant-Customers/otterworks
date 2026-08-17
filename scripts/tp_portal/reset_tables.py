@@ -12,12 +12,45 @@ from __future__ import annotations
 import argparse
 
 import boto3
+from botocore.exceptions import ClientError
 
 TABLE_KEYS = {
     "announcements": "pk",
     "preferences": "userId",
     "feedback": "pk",
+    "moderation": "idempotencyKey",
 }
+
+
+def drain_queue(sqs, queue_url: str) -> int:
+    deleted = 0
+    while True:
+        response = sqs.receive_message(
+            QueueUrl=queue_url,
+            MaxNumberOfMessages=10,
+            WaitTimeSeconds=0,
+            VisibilityTimeout=0,
+        )
+        messages = response.get("Messages", [])
+        if not messages:
+            return deleted
+        for message in messages:
+            sqs.delete_message(
+                QueueUrl=queue_url, ReceiptHandle=message["ReceiptHandle"]
+            )
+            deleted += 1
+
+
+def reset_queue(sqs, queue_name: str) -> None:
+    queue_url = sqs.get_queue_url(QueueName=queue_name)["QueueUrl"]
+    try:
+        sqs.purge_queue(QueueUrl=queue_url)
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") != "PurgeQueueInProgress":
+            raise
+        print(f"{queue_name}: purge in progress; draining explicitly")
+    deleted = drain_queue(sqs, queue_url)
+    print(f"{queue_name}: drained {deleted} messages")
 
 
 def main():
@@ -44,6 +77,10 @@ def main():
                 ExclusiveStartKey=scan["LastEvaluatedKey"],
             )
         print(f"{table.name}: deleted {deleted} items")
+
+    sqs = boto3.client("sqs", region_name=args.region)
+    for queue_suffix in ("feedback-events", "feedback-events-dlq"):
+        reset_queue(sqs, f"{args.prefix}-{queue_suffix}")
 
 
 if __name__ == "__main__":
