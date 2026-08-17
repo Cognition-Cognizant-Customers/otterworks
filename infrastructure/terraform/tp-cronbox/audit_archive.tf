@@ -56,16 +56,12 @@ data "aws_iam_policy_document" "audit_archive" {
 
   # Without ListBucket, S3 answers HeadObject for an absent key with 403 rather
   # than 404, so the archiver's "already written?" probe could never see a miss.
+  # Unconditioned deliberately: s3:prefix is only populated for list calls, so a
+  # condition on it never matches HeadObject authorization.
   statement {
     sid       = "ProbeArchiveObjects"
     actions   = ["s3:ListBucket"]
     resources = [aws_s3_bucket.audit_archive.arn]
-
-    condition {
-      test     = "StringLike"
-      variable = "s3:prefix"
-      values   = ["${var.audit_archive_prefix}/*"]
-    }
   }
 
   statement {
