@@ -137,22 +137,13 @@ function NotificationRow({
     if (!notification.read) onMarkRead();
   };
 
+  const rowClassName = cn(
+    "flex w-full items-start gap-4 px-5 py-4 text-left transition cursor-pointer",
+    !notification.read ? "bg-otter-50/30" : "hover:bg-gray-50"
+  );
+
   const content = (
-    <div
-      role="button"
-      tabIndex={0}
-      className={cn(
-        "flex items-start gap-4 px-5 py-4 transition cursor-pointer",
-        !notification.read ? "bg-otter-50/30" : "hover:bg-gray-50"
-      )}
-      onClick={handleActivate}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          handleActivate();
-        }
-      }}
-    >
+    <>
       {notification.actorName ? (
         <div
           className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
@@ -184,12 +175,20 @@ function NotificationRow({
       {!notification.read && (
         <div className="w-2.5 h-2.5 rounded-full bg-otter-600 flex-shrink-0 mt-1.5" />
       )}
-    </div>
+    </>
   );
 
   if (href) {
-    return <Link to={href}>{content}</Link>;
+    return (
+      <Link to={href} className={rowClassName} onClick={handleActivate}>
+        {content}
+      </Link>
+    );
   }
 
-  return content;
+  return (
+    <button type="button" className={rowClassName} onClick={handleActivate}>
+      {content}
+    </button>
+  );
 }
