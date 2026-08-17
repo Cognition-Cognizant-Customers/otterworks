@@ -184,9 +184,9 @@ Parent-run live rollup, after the last commit on the run branch:
 |---|---|
 | `CMD=recon NS=demo` | `checks: 49, failed: 0, anomalies expected/actual: 30/30, missing: 0, unexpected: 0`, idempotency rerun pass |
 | `CMD=status NS=demo` | bronze 3,024 / files 72 / 2019–2024 / silver 2,856 / quarantined 30 / gold 1,439,098,122 cents / 36 expectation rows |
-| `CMD=timetravel NS=demo` | 19 Delta versions on `ow_tp.gold.custbill_annual_demo`, as-of totals identical across the last two versions |
+| `CMD=timetravel NS=demo` | 22 Delta versions on `ow_tp.gold.custbill_annual_demo`, as-of totals identical across the last two versions |
 | `CMD=lineage NS=demo` | volume → bronze, bronze → silver, silver → gold all `resolved` |
-| Green recon job run | [961038345502176](https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/runs/961038345502176) — `recon_check: SUCCESS`, `notify_devin: EXCLUDED` |
+| Green recon job run | [623591991032711](https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/runs/623591991032711) — `recon_check: SUCCESS`, `notify_devin: EXCLUDED` (revalidated after the conversion PRs merged) |
 
 Artifacts:
 
@@ -212,6 +212,20 @@ run [373323304874944](https://dbc-8bc9474f-40ae.cloud.databricks.com/?o=74746511
 <https://github.com/Cognition-Partner-Workshops/otterworks/pull/966>. Both
 rehearsal namespaces were torn down and verified absent
 (`silver_tables: [], recon_job: false, pipeline: false, alert: false, dashboard: false, landed_paths: []`).
+
+Legacy units converted on this run, one PR per unit, all merged into the run
+branch after live recon and green CI:
+
+| Unit | Namespace | PR | Live recon |
+|---|---|---|---|
+| `sftp_ingest_poll.ksh` → atomic landing + bronze | `cnvingest` | [#967](https://github.com/Cognition-Partner-Workshops/otterworks/pull/967) | 7/7 |
+| `parse_custbill_fixedwidth.sh` → schema-validated silver + quarantine | `cnvparse` | [#968](https://github.com/Cognition-Partner-Workshops/otterworks/pull/968) | 9/9 |
+| `finance_excel_report.pl` → gold aggregate + verified export | `cnvfinance` | [#974](https://github.com/Cognition-Partner-Workshops/otterworks/pull/974) | 14/14 |
+| `crontab` + `run_all.sh` → dependency-driven Workflow | `cnvorch` | [#971](https://github.com/Cognition-Partner-Workshops/otterworks/pull/971) | 9/9 |
+
+The five Python cron jobs under `etl/legacy-extra/jobs/` (`analytics_daily.py`,
+`audit_archive_weekly.py`, `search_reindex_weekly.py`, `storage_cleanup_daily.py`,
+`user_activity_daily.py`) are not part of this run.
 
 Cost state at hand-off: recon job schedule PAUSED, SQL alert PAUSED, pipeline
 `IDLE` with no schedule and `continuous: false`, **0** clusters, one pre-existing
