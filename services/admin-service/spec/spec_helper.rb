@@ -1,4 +1,8 @@
 require 'simplecov'
+
+# Must be set before rails_helper loads config/environment.
+ENV['RAILS_ENV'] ||= 'test'
+
 SimpleCov.start 'rails' do
   add_filter '/spec/'
   add_filter '/config/'

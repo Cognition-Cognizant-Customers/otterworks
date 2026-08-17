@@ -7,10 +7,9 @@ require 'active_record/railtie'
 require 'action_controller/railtie'
 require 'action_mailer/railtie'
 require 'rails/test_unit/railtie'
+require_relative '../app/middleware/jwt_authenticator'
 
 Bundler.require(*Rails.groups)
-
-require_relative '../app/middleware/jwt_authenticator'
 
 module AdminService
   class Application < Rails::Application
@@ -18,7 +17,7 @@ module AdminService
     config.api_only = true
 
     # Exclude middleware from Zeitwerk autoloading — it is manually
-    # required via require_relative above, and Zeitwerk's inflection
+    # required via require_relative at the top of this file, and Zeitwerk's inflection
     # rules would expect JWTAuthenticator instead of JwtAuthenticator.
     config.autoload_paths -= [root.join('app/middleware').to_s]
     config.eager_load_paths -= [root.join('app/middleware').to_s]
