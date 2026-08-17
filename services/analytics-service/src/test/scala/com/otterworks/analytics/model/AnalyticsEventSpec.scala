@@ -9,17 +9,19 @@ import java.time.Instant
 
 class AnalyticsEventSpec extends AnyFlatSpec with Matchers:
 
+  private val UserId = "user-1"
+
   "AnalyticsEvent.create" should "generate a unique event ID and current timestamp" in {
     val event = AnalyticsEvent.create(
       eventType = EventType.DocumentCreated,
-      userId = "user-1",
+      userId = UserId,
       resourceId = "doc-1",
       resourceType = "document"
     )
 
     event.eventId should not be empty
     event.eventType shouldBe EventType.DocumentCreated
-    event.userId shouldBe "user-1"
+    event.userId shouldBe UserId
     event.resourceId shouldBe "doc-1"
     event.resourceType shouldBe "document"
     event.metadata shouldBe empty
@@ -43,7 +45,7 @@ class AnalyticsEventSpec extends AnyFlatSpec with Matchers:
     val event = AnalyticsEvent(
       eventId = "evt-123",
       eventType = EventType.DocumentViewed,
-      userId = "user-1",
+      userId = UserId,
       resourceId = "doc-1",
       resourceType = "document",
       metadata = Map("source" -> "web"),
@@ -61,7 +63,7 @@ class AnalyticsEventSpec extends AnyFlatSpec with Matchers:
     val request = jsonStr.parseJson.convertTo[TrackEventRequest]
 
     request.eventType shouldBe "document.created"
-    request.userId shouldBe "user-1"
+    request.userId shouldBe UserId
     request.resourceId shouldBe "doc-1"
     request.resourceType shouldBe "document"
     request.metadata shouldBe Some(Map("title" -> "Test"))
