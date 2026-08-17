@@ -402,7 +402,7 @@ def alert_webhook_config():
                   "Atlas alertConfigs GET", "denied",
                   "create outcome was ambiguous; manual cleanup required")
     else:
-        m.add("alert-webhook-config", "Create a temporary webhook-notification alert configuration",
+        m.add("alert-webhook-config-cleanup", "Reconcile a temporary webhook-notification alert configuration",
               "Atlas alertConfigs POST", "denied",
               f"create succeeded but no alert id was returned or found; run marker {run_marker}; manual cleanup required")
 
