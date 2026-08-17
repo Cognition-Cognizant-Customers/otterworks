@@ -1,0 +1,266 @@
+{
+  "kind": "recon-report",
+  "unit": "dbx-finance",
+  "namespace": "cnvfinance",
+  "generated_at": "2026-08-17T06:54:04Z",
+  "run_mode": "live",
+  "checks": [
+    {
+      "id": "finance-independent-recompute",
+      "expected": {
+        "rows": [
+          "EUR,INVOICE,23,146588.31",
+          "EUR,CREDIT,8,43269.62",
+          "GBP,INVOICE,31,162322.68",
+          "GBP,CREDIT,10,37930.19",
+          "USD,INVOICE,20,94945.18",
+          "USD,CREDIT,8,54737.57"
+        ],
+        "sha256": "ef1ad83223ebf1e902d57b15126f63fed91510b3228e8883d3c1bb6f03cadde0"
+      },
+      "actual": {
+        "rows": [
+          "EUR,INVOICE,23,146588.31",
+          "EUR,CREDIT,8,43269.62",
+          "GBP,INVOICE,31,162322.68",
+          "GBP,CREDIT,10,37930.19",
+          "USD,INVOICE,20,94945.18",
+          "USD,CREDIT,8,54737.57"
+        ],
+        "sha256": "ef1ad83223ebf1e902d57b15126f63fed91510b3228e8883d3c1bb6f03cadde0"
+      },
+      "source_of_truth": "legacy parsed .psv drops recomputed independently (runbook Beat 4 awk one-liner) vs golden legacy output: $OTTERWORKS_LEGACY_ROOT/reports/finance_billing_*.csv (finance_billing_20260115.csv)",
+      "result": "pass"
+    },
+    {
+      "id": "finance-aggregate-parity",
+      "expected": {
+        "run_succeeded": true,
+        "groups": [
+          "EUR,INVOICE,23,146588.31",
+          "EUR,CREDIT,8,43269.62",
+          "GBP,INVOICE,31,162322.68",
+          "GBP,CREDIT,10,37930.19",
+          "USD,INVOICE,20,94945.18",
+          "USD,CREDIT,8,54737.57"
+        ]
+      },
+      "actual": {
+        "run_succeeded": true,
+        "groups": [
+          "EUR,INVOICE,23,146588.31",
+          "EUR,CREDIT,8,43269.62",
+          "GBP,INVOICE,31,162322.68",
+          "GBP,CREDIT,10,37930.19",
+          "USD,INVOICE,20,94945.18",
+          "USD,CREDIT,8,54737.57"
+        ]
+      },
+      "source_of_truth": "golden legacy output: $OTTERWORKS_LEGACY_ROOT/reports/finance_billing_*.csv; actual recomputed from ow_tp.gold.custbill_billing_summary_cnvfinance after run 238271887829293",
+      "result": "pass"
+    },
+    {
+      "id": "finance-aggregate-parity/EUR/INVOICE",
+      "expected": "23|14658831",
+      "actual": "23|14658831",
+      "source_of_truth": "legacy parsed .psv drops recomputed independently (runbook Beat 4 awk one-liner); actual from ow_tp.gold.custbill_billing_summary_cnvfinance",
+      "result": "pass"
+    },
+    {
+      "id": "finance-aggregate-parity/EUR/CREDIT",
+      "expected": "8|4326962",
+      "actual": "8|4326962",
+      "source_of_truth": "legacy parsed .psv drops recomputed independently (runbook Beat 4 awk one-liner); actual from ow_tp.gold.custbill_billing_summary_cnvfinance",
+      "result": "pass"
+    },
+    {
+      "id": "finance-aggregate-parity/GBP/INVOICE",
+      "expected": "31|16232268",
+      "actual": "31|16232268",
+      "source_of_truth": "legacy parsed .psv drops recomputed independently (runbook Beat 4 awk one-liner); actual from ow_tp.gold.custbill_billing_summary_cnvfinance",
+      "result": "pass"
+    },
+    {
+      "id": "finance-aggregate-parity/GBP/CREDIT",
+      "expected": "10|3793019",
+      "actual": "10|3793019",
+      "source_of_truth": "legacy parsed .psv drops recomputed independently (runbook Beat 4 awk one-liner); actual from ow_tp.gold.custbill_billing_summary_cnvfinance",
+      "result": "pass"
+    },
+    {
+      "id": "finance-aggregate-parity/USD/INVOICE",
+      "expected": "20|9494518",
+      "actual": "20|9494518",
+      "source_of_truth": "legacy parsed .psv drops recomputed independently (runbook Beat 4 awk one-liner); actual from ow_tp.gold.custbill_billing_summary_cnvfinance",
+      "result": "pass"
+    },
+    {
+      "id": "finance-aggregate-parity/USD/CREDIT",
+      "expected": "8|5473757",
+      "actual": "8|5473757",
+      "source_of_truth": "legacy parsed .psv drops recomputed independently (runbook Beat 4 awk one-liner); actual from ow_tp.gold.custbill_billing_summary_cnvfinance",
+      "result": "pass"
+    },
+    {
+      "id": "finance-real-artifact",
+      "expected": {
+        "name": "finance_billing.csv",
+        "header": "Currency,RecordType,RecordCount,TotalAmount",
+        "is_csv_bytes": true,
+        "sha256_equals_legacy_csv": true,
+        "xls_artifacts": []
+      },
+      "actual": {
+        "name": "finance_billing.csv",
+        "header": "Currency,RecordType,RecordCount,TotalAmount",
+        "is_csv_bytes": true,
+        "sha256_equals_legacy_csv": true,
+        "xls_artifacts": []
+      },
+      "source_of_truth": "export object at /Volumes/ow_tp/gold/exports/cnvfinance/finance_billing.csv read back from the volume",
+      "result": "pass"
+    },
+    {
+      "id": "finance-verified-delivery",
+      "expected": {
+        "exists": true,
+        "byte_size": 185,
+        "row_count": 6,
+        "undelivered_run_fails": true,
+        "mislabelled_run_fails": true,
+        "probe_artifact_left_behind": false
+      },
+      "actual": {
+        "exists": true,
+        "byte_size": 185,
+        "row_count": 6,
+        "undelivered_run_fails": true,
+        "mislabelled_run_fails": true,
+        "probe_artifact_left_behind": false
+      },
+      "source_of_truth": "/Volumes/ow_tp/gold/exports/cnvfinance/finance_billing.csv read back from the volume; probe runs 657272932355022 / 818598053697604",
+      "result": "pass"
+    },
+    {
+      "id": "finance-managed-recipients",
+      "expected": {
+        "legacy_hard_coded_recipients": 3,
+        "converted_hard_coded_recipients": [],
+        "destination_is_configuration": true
+      },
+      "actual": {
+        "legacy_hard_coded_recipients": 3,
+        "converted_hard_coded_recipients": [],
+        "destination_is_configuration": true
+      },
+      "source_of_truth": "static scan of the converted job and harness sources vs the legacy Perl script",
+      "result": "pass"
+    },
+    {
+      "id": "finance-empty-input",
+      "expected": {
+        "run_succeeded": true,
+        "input_dir_exists": true,
+        "input_dir_empty": true,
+        "gold_rows": 0,
+        "empty_export": "Currency,RecordType,RecordCount,TotalAmount\n",
+        "prior_export_preserved": true
+      },
+      "actual": {
+        "run_succeeded": true,
+        "input_dir_exists": true,
+        "input_dir_empty": true,
+        "gold_rows": 0,
+        "empty_export": "Currency,RecordType,RecordCount,TotalAmount\n",
+        "prior_export_preserved": true
+      },
+      "source_of_truth": "verified empty input dir /Volumes/ow_tp/bronze/landing/cnvfinance/parsed_empty exists and list_dir is empty; run 200128617500023 used that directory",
+      "result": "pass"
+    },
+    {
+      "id": "finance-verified-delivery",
+      "expected": {
+        "stale_artifact_run_fails": true,
+        "prior_artifact_survives_failure": true
+      },
+      "actual": {
+        "stale_artifact_run_fails": true,
+        "prior_artifact_survives_failure": true
+      },
+      "source_of_truth": "probe run 793719702864169 skipped the write with a byte-identical artifact already at /Volumes/ow_tp/gold/exports/cnvfinance/finance_billing.csv",
+      "result": "pass"
+    },
+    {
+      "id": "finance-idempotency",
+      "expected": {
+        "reruns_succeeded": true,
+        "gold_rows_identical": true,
+        "export_sha256": "ef1ad83223ebf1e902d57b15126f63fed91510b3228e8883d3c1bb6f03cadde0",
+        "rebuild_after_empty_batch_identical": true
+      },
+      "actual": {
+        "reruns_succeeded": true,
+        "gold_rows_identical": true,
+        "export_sha256": "ef1ad83223ebf1e902d57b15126f63fed91510b3228e8883d3c1bb6f03cadde0",
+        "rebuild_after_empty_batch_identical": true
+      },
+      "source_of_truth": "reruns 962116680851839 and 1113178343975874 recomputed from ow_tp.gold.custbill_billing_summary_cnvfinance and the delivered export",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "job re-run 962116680851839 reproduced run 238271887829293 byte-identically (185 bytes, sha256 ef1ad83223ebf1e9...), and run 1113178343975874 restored the same gold rows and export after the empty-input run 200128617500023"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      [
+        "mislabelled_artifact_type",
+        "run_failed"
+      ],
+      [
+        "silent_delivery_noop",
+        "run_failed"
+      ]
+    ],
+    "actual_set": [
+      [
+        "mislabelled_artifact_type",
+        "run_failed"
+      ],
+      [
+        "silent_delivery_noop",
+        "run_failed"
+      ]
+    ],
+    "missing": [],
+    "unexpected": [],
+    "coverage_gaps": [
+      {
+        "id": "non_numeric_amount",
+        "reason": "contract coverage_gap: record-level anomalies are quarantined upstream by dbx-parse, so this gold aggregate only ever consumes validated silver rows"
+      }
+    ]
+  },
+  "unverified_paths": [
+    "legacy sendmail delivery of the finance report (no SMTP in the demo estate; the converted job delivers to a volume and verifies it instead)",
+    "email/SMTP or shared-drive distribution of the converted export (out of scope for this unit)",
+    "the null_raw_line rejection: read_files() never produced a NULL line in the live batches, so that validation branch is proven by static reasoning only, not by a run"
+  ],
+  "evidence": {
+    "golden_baseline": "/tmp/otterworks-legacy-cnvfinance/reports/finance_billing_20260115.csv",
+    "job_runs": {
+      "build": "https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/runs/238271887829293",
+      "idempotency": "https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/runs/962116680851839",
+      "delivery_noop_probe": "https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/runs/657272932355022",
+      "mislabel_probe": "https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/runs/818598053697604",
+      "empty_input": "https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/runs/200128617500023",
+      "restore": "https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/runs/1113178343975874"
+    },
+    "gold_table": "https://dbc-8bc9474f-40ae.cloud.databricks.com/explore/data/ow_tp/gold/custbill_billing_summary_cnvfinance",
+    "export_object": "/Volumes/ow_tp/gold/exports/cnvfinance/finance_billing.csv",
+    "capability_preflight": "parent orchestration session's `make tp-preflight PLATFORM=databricks` (11 probes, 0 denied) carried into this unit; this unit re-exercised the paths it needs itself \u2014 Files API PUT to /Volumes/ow_tp/bronze/landing/cnvfinance, GET readback of /Volumes/ow_tp/gold/exports/cnvfinance/finance_billing.csv, Unity Catalog create/insert on its own _cnvfinance tables, and job create/run on ow_tp_finance_cnvfinance"
+  }
+}
