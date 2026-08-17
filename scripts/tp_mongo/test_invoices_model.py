@@ -7,6 +7,7 @@ Run with:
 """
 from __future__ import annotations
 
+import argparse
 import datetime as _dt
 import decimal
 import sys
@@ -16,6 +17,7 @@ import pytest
 from bson import Decimal128
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import migrate_invoices as migration
 from invoices_model import (
     DecodingError,
     NullRequiredField,
@@ -26,6 +28,7 @@ from invoices_model import (
 )
 from migrate_invoices import (
     invoice_document,
+    line_document,
     normalize_line,
     quarantine_document,
 )
@@ -75,6 +78,14 @@ def test_legacy_date_retains_raw_value_when_unparseable():
     assert parsed is None
     assert raw is None
     assert invalid is None
+    parsed, raw, invalid = parse_legacy_date("05-JAN-69")
+    assert parsed == _dt.datetime(2069, 1, 5, tzinfo=_dt.timezone.utc)
+    assert raw == "05-JAN-69"
+    assert invalid is False
+    parsed, raw, invalid = parse_legacy_date("05-JAN-70")
+    assert parsed == _dt.datetime(1970, 1, 5, tzinfo=_dt.timezone.utc)
+    assert raw == "05-JAN-70"
+    assert invalid is False
 
 
 def test_money_rejects_float_and_produces_decimal128():
@@ -165,6 +176,60 @@ def test_required_numeric_fields_are_explicitly_attributed(field, value, error_t
     with pytest.raises(error_type) as error:
         normalize_line(raw_quarantine_line(**{field: value}))
     assert error.value.field == field.upper()
+
+
+def test_posted_null_and_unparseable_values_are_distinct():
+    null_line = line_document(normalize_line(raw_quarantine_line(posted_yn=None)))
+    assert null_line["posted"] is None
+    assert null_line["posted_raw"] is None
+
+    invalid_line = line_document(normalize_line(raw_quarantine_line(posted_yn="X")))
+    assert invalid_line["posted"] is None
+    assert invalid_line["posted_raw"] == "X"
+
+    document = invoice_document(
+        {
+            "invoice_id": "1",
+            "invoice_no": "INV-1",
+            "cust_id": "CUST-1",
+            "tenant_id": "demo",
+            "status_cd": 1,
+            "invoice_dt": "05-JAN-24",
+            "due_dt": "06-JAN-24",
+            "total_amt": decimal.Decimal("2.50"),
+        },
+        [normalize_line(raw_quarantine_line(posted_yn="X"))],
+        "demo",
+        85559852,
+    )
+    assert "unparseable_posted_yn" in document["data_quality"]
+
+
+def test_empty_header_read_refuses_before_target_touch(monkeypatch):
+    class FakeConnection:
+        def close(self):
+            pass
+
+    class FakeCursor:
+        def fetchone(self):
+            return ("line",)
+
+    args = argparse.Namespace(ns="demo", batch_no=85559852)
+    target_touched = False
+
+    def unexpected_target_access(_args):
+        nonlocal target_touched
+        target_touched = True
+        raise AssertionError("target must not be opened for an empty source read")
+
+    monkeypatch.setattr(migration, "oracle_connection", lambda _args: FakeConnection())
+    monkeypatch.setattr(migration, "fetch_headers", lambda _connection, _batch: {})
+    monkeypatch.setattr(migration, "line_cursor", lambda _connection, _batch: FakeCursor())
+    monkeypatch.setattr(migration, "mongo_database", unexpected_target_access)
+
+    with pytest.raises(SystemExit, match="invoice_header read 0 rows"):
+        migration.migrate(args)
+    assert target_touched is False
 
 
 def test_invoice_total_is_exact_line_sum_and_flags_legacy_mismatch():

@@ -499,7 +499,7 @@ def report(
             1
             for document in embedded_docs
             for line in document["lines"]
-            if line["posted"] is None
+            if line["posted"] is None and line["posted_raw"] is None
         )
         target_mismatch = sum(
             1
@@ -596,7 +596,8 @@ def report(
             "invoices.null_posted_lines",
             source_null_posted,
             target_null_posted,
-            "Oracle non-orphan POSTED_YN IS NULL count versus target embedded posted:null count",
+            "Oracle non-orphan POSTED_YN IS NULL count versus target embedded "
+            "posted:null and posted_raw:null count",
         ),
         make_check(
             "invoices.legacy_total_mismatch_lines",

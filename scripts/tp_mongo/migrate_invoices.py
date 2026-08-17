@@ -177,11 +177,15 @@ def normalize_line(raw: dict[str, Any]) -> dict[str, Any]:
 def line_document(line: dict[str, Any]) -> dict[str, Any]:
     invoice_date, invoice_date_raw, _ = line["invoice_dt"]
     posted_value = line["posted_yn"]
+    posted_value_upper = None if posted_value is None else posted_value.upper()
     posted = (
         None
-        if posted_value is None
-        else posted_value.upper() == "Y"
-        if posted_value.upper() in {"Y", "N"}
+        if posted_value_upper is None or posted_value_upper not in {"Y", "N"}
+        else posted_value_upper == "Y"
+    )
+    posted_raw = (
+        posted_value
+        if posted_value_upper is not None and posted_value_upper not in {"Y", "N"}
         else None
     )
     gl_csv = line["gl_acct_csv"]
@@ -201,6 +205,7 @@ def line_document(line: dict[str, Any]) -> dict[str, Any]:
         "invoice_dt_raw": invoice_date_raw,
         "service_period": line["service_period"],
         "posted": posted,
+        "posted_raw": posted_raw,
         "gl_accts": gl_accts,
         "gl_acct_csv": gl_csv,
         "src_system": line["src_system"],
@@ -238,6 +243,8 @@ def invoice_document(
         )
     if due_date_bad is not False:
         quality.append("unparseable_due_dt" if due_date_bad else "null_due_dt")
+    if any(line["posted_raw"] is not None for line in line_documents):
+        quality.append("unparseable_posted_yn")
     if header.get("duplicate_invoice_no"):
         quality.append("duplicate_invoice_no")
     if not matches:
@@ -403,9 +410,15 @@ def migrate(args: argparse.Namespace) -> None:
         headers = fetch_headers(connection, batch_no)
         cursor = line_cursor(connection, batch_no)
         first_row = cursor.fetchone()
-        if not headers and first_row is None:
+        if not headers or first_row is None:
+            empty_sources = []
+            if not headers:
+                empty_sources.append("invoice_header")
+            if first_row is None:
+                empty_sources.append("invoice_line")
             raise SystemExit(
-                f"empty batch input: no invoice_header or invoice_line rows for batch {batch_no}"
+                f"empty batch input: {', '.join(empty_sources)} read 0 rows "
+                f"for batch {batch_no}"
             )
 
         mongo_client, database = mongo_database(args)

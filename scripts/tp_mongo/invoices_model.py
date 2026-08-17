@@ -239,7 +239,7 @@ def parse_legacy_date(
         month = DATE_MONTHS[month_text.upper()]
         day = int(day_text)
         year_number = int(year_text)
-        year = 2000 + year_number if year_number <= 68 else 1900 + year_number
+        year = 2000 + year_number if year_number <= 69 else 1900 + year_number
         value = datetime(year, month, day, tzinfo=timezone.utc)
     except (KeyError, TypeError, ValueError):
         return None, raw, True
@@ -303,6 +303,7 @@ def line_validator() -> dict[str, Any]:
             "invoice_dt_raw",
             "service_period",
             "posted",
+            "posted_raw",
             "gl_accts",
             "gl_acct_csv",
             "src_system",
@@ -323,6 +324,7 @@ def line_validator() -> dict[str, Any]:
             "invoice_dt_raw": {"bsonType": ["string", "null"]},
             "service_period": {"bsonType": ["string", "null"]},
             "posted": {"bsonType": ["bool", "null"]},
+            "posted_raw": {"bsonType": ["string", "null"]},
             "gl_accts": {
                 "bsonType": "array",
                 "items": {"bsonType": "string"},

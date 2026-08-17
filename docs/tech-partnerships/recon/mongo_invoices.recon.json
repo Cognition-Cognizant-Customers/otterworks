@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_invoices",
   "namespace": "demo",
-  "generated_at": "2026-08-17T05:23:18.558664Z",
+  "generated_at": "2026-08-17T05:34:53.178645Z",
   "run_mode": "fixture",
   "checks": [
     {
@@ -86,7 +86,7 @@
       "id": "invoices.null_posted_lines",
       "expected": 29937,
       "actual": 29937,
-      "source_of_truth": "Oracle non-orphan POSTED_YN IS NULL count versus target embedded posted:null count",
+      "source_of_truth": "Oracle non-orphan POSTED_YN IS NULL count versus target embedded posted:null and posted_raw:null count",
       "result": "pass"
     },
     {
@@ -121,7 +121,7 @@
   "idempotency_rerun": {
     "performed": true,
     "result": "pass",
-    "evidence": "fingerprint_a={'invoice_doc_count': 18750, 'total_embedded_line_count': 149963, 'all_lines_checksum': '88a66751f0b08b476b492105a2efc537', 'quarantine_count': 37, 'sorted_quarantine_id_hash': '53d9562b0327c3abbe767bed019dede1', 'full_documents_hash': 'bf70452bca9591121e03a8a450f913fe'}; fingerprint_b={'invoice_doc_count': 18750, 'total_embedded_line_count': 149963, 'all_lines_checksum': '88a66751f0b08b476b492105a2efc537', 'quarantine_count': 37, 'sorted_quarantine_id_hash': '53d9562b0327c3abbe767bed019dede1', 'full_documents_hash': 'bf70452bca9591121e03a8a450f913fe'}"
+    "evidence": "fingerprint_a={'invoice_doc_count': 18750, 'total_embedded_line_count': 149963, 'all_lines_checksum': '88a66751f0b08b476b492105a2efc537', 'quarantine_count': 37, 'sorted_quarantine_id_hash': '53d9562b0327c3abbe767bed019dede1', 'full_documents_hash': '88dee8a2039d6a26dca6d47443182f78'}; fingerprint_b={'invoice_doc_count': 18750, 'total_embedded_line_count': 149963, 'all_lines_checksum': '88a66751f0b08b476b492105a2efc537', 'quarantine_count': 37, 'sorted_quarantine_id_hash': '53d9562b0327c3abbe767bed019dede1', 'full_documents_hash': '88dee8a2039d6a26dca6d47443182f78'}"
   },
   "planted_anomaly_detections": {
     "expected_set": [
@@ -140,6 +140,7 @@
     "null_required_field quarantine branch is unverified because the baseline has no NULL or unparseable required non-amount line fields.",
     "invalid_encoding quarantine branch is unverified because the baseline has zero non-decodable values.",
     "Malformed GL_ACCT_CSV tolerate-and-attribute path is unverified because baseline CSVs are all well-formed.",
-    "Duplicate non-null invoice_no attribution is unverified because the demo baseline has no duplicate INVOICE_NO values."
+    "Duplicate non-null invoice_no attribution is unverified because the demo baseline has no duplicate INVOICE_NO values.",
+    "Unparseable POSTED_YN attribution is unverified because the demo baseline has zero non-null values outside Y/N."
   ]
 }
