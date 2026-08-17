@@ -273,6 +273,15 @@ class Target:
         statement = template.format(ns=self.ns, ds=self.ds, **extra)
         return self.dbx.sql_ok(statement).dicts()
 
+    def existing_tables(self) -> list[str]:
+        """Which target objects exist yet. Read from information_schema, so it is
+        safe to call before the job's DDL tasks have ever run."""
+        names = ", ".join(sql_literal(name) for _, name in TARGET_TABLES)
+        return [
+            f"{row['table_schema']}.{row['table_name']}"
+            for row in self.query(Q_TABLES, names=names)
+        ]
+
     def snapshot(self) -> dict:
         by_source = {row["source"]: as_int(row["events"]) for row in self.query(Q_BY_SOURCE)}
 
@@ -305,7 +314,6 @@ class Target:
         ]
 
         report_rows = self.query(Q_REPORT)
-        table_names = ", ".join(sql_literal(name) for _, name in TARGET_TABLES)
 
         return {
             "events_by_source": by_source,
@@ -324,10 +332,7 @@ class Target:
             "rows_with_replacement_char": as_int(
                 self.query(Q_REPLACEMENT, char=REPLACEMENT_CHAR)[0]["rows_with_replacement_char"]
             ),
-            "tables": [
-                f"{row['table_schema']}.{row['table_name']}"
-                for row in self.query(Q_TABLES, names=table_names)
-            ],
+            "tables": self.existing_tables(),
             "report": json.loads(report_rows[0]["report_json"]) if report_rows else {},
         }
 
@@ -664,9 +669,31 @@ def main() -> int:
     dbx = Databricks(warehouse_id=args.warehouse_id or None)
     target = Target(dbx, ns, args.ds)
 
-    before = target.snapshot()
     job_shape = target.job_shape()
-    rerun_ok, evidence = rerun_job(target, job_shape) if args.rerun_mode == "job" else rerun_sql(target)
+
+    def run_once() -> tuple[bool, str]:
+        return rerun_job(target, job_shape) if args.rerun_mode == "job" else rerun_sql(target)
+
+    # Idempotency is only meaningful between two populated runs. On a freshly
+    # deployed slice the job has never run (it is PAUSED by contract), so the
+    # target objects do not exist yet and the slice holds nothing; prime it and
+    # read `before` after that run. Comparing an empty slice against a populated
+    # one would otherwise report RED on a correct environment.
+    complete = len(target.existing_tables()) == len(TARGET_TABLES)
+    before = target.snapshot() if complete else {}
+    prime_ok, prime_evidence = True, ""
+    if not complete or not (before["total_events"] or before["summary"]):
+        reason = "target objects did not exist" if not complete else "target slice was empty"
+        prime_ok, prime_run_evidence = run_once()
+        prime_evidence = (
+            f"{reason} for ns={ns} ds={args.ds}, so it was populated first "
+            f"({prime_run_evidence}); the idempotency comparison is between that run and the rerun. "
+        )
+        before = target.snapshot()
+
+    rerun_ok, evidence = run_once()
+    evidence = prime_evidence + evidence
+    rerun_ok = rerun_ok and prime_ok
     after = target.snapshot()
 
     unchanged = canonical(before) == canonical(after)

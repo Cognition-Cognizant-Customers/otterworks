@@ -7,6 +7,7 @@ import base64
 import decimal
 import hashlib
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -21,6 +22,7 @@ EVENTS_TABLE = "otterworks-analytics-events"
 LANDING_ROOT = Path(".tp-preflight/databricks-fixture/landing")
 RELATIVE_LANDING = "Volumes/ow_tp/bronze/landing/cronbox/analytics"
 RERUN_SNAPSHOT_ROOT = Path(".tp-preflight/databricks-fixture/analytics-rerun-snapshots")
+DS_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def json_default(value):
@@ -176,6 +178,8 @@ def main() -> int:
     parser.add_argument("--target", choices=("local-fixture", "databricks", "stdout"), default="local-fixture")
     args = parser.parse_args()
     ns = require_ns(args.ns)
+    if not DS_RE.fullmatch(args.ds):
+        raise SystemExit(f"--ds must be YYYY-MM-DD: {args.ds!r}")
     records = extract(ns, args.ds)
     land(ns, args.ds, records, args.target)
     return 0

@@ -22,11 +22,22 @@ The second seed/extract supplies the rerun evidence used by the fixture report.
 The extractor does not delete SQS messages. `--target databricks` is reserved
 for the parent live run; local verification uses `local-fixture`.
 
-The parent runs the single documented live reconciliation command:
+The parent deploys the bundle, lands the batch into the real landing volume, then
+runs the single documented live reconciliation command:
 
 ```sh
+databricks bundle deploy -t demo            # from infrastructure/databricks/cronbox/
+make cronbox-seed NS=demo                   # inputs for the extraction
+make tp-cron-analytics-extract NS=demo DS=2026-01-15 TARGET=databricks
 make tp-cron-analytics-recon NS=demo DS=2026-01-15 OUT=docs/tech-partnerships/recon/cron-analytics-demo.recon.json
 ```
+
+The recon needs a populated slice to compare against. If the target objects do
+not exist yet, or hold nothing for `(ns, ds)` — the normal state right after a
+deploy, since the job is PAUSED and has never run — it runs the job once to
+populate the slice, reads its `before` values from that run, and reports the
+priming in `idempotency_rerun.evidence`. The ANL-06 comparison is therefore
+always between two populated runs, never between an empty slice and a full one.
 
 ## Public gold interface
 

@@ -72,8 +72,8 @@ tp-fixture-verify: ## Verify local fixture bytes and checksums (NS=<ns>)
 tp-fixture-clean: ## Remove local Databricks transport fixture (NS=<ns>)
 	python3 scripts/tp_databricks/local_fixture.py clean --ns $${NS:-fixture}
 
-tp-cron-analytics-extract: ## Extract analytics inputs into the local fixture (NS=<ns>, DS=<date>)
-	@PYTHON=$$(scripts/tp_cronbox/ensure_venv.sh); AWS_ENDPOINT_URL=$${AWS_ENDPOINT_URL:-http://localhost:4566} "$$PYTHON" scripts/tp_cron_analytics/extract_analytics.py --ns $${NS:-demo} --ds $${DS:-2026-01-15} --target local-fixture
+tp-cron-analytics-extract: ## Extract analytics inputs (NS=<ns>, DS=<date>, TARGET=local-fixture|databricks)
+	@PYTHON=$$(scripts/tp_cronbox/ensure_venv.sh); AWS_ENDPOINT_URL=$${AWS_ENDPOINT_URL:-http://localhost:4566} "$$PYTHON" scripts/tp_cron_analytics/extract_analytics.py --ns $${NS:-demo} --ds $${DS:-2026-01-15} --target $${TARGET:-local-fixture}
 
 tp-cron-analytics-verify: ## Verify analytics landing and write the fixture recon report (NS=<ns>, DS=<date>)
 	python3 scripts/tp_cron_analytics/verify_landing.py --ns $${NS:-demo} --ds $${DS:-2026-01-15}
