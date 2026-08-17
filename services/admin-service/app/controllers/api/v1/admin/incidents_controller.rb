@@ -91,6 +91,8 @@ module Api
             @incident.close!
           when 'investigating'
             @incident.investigate!
+          else
+            raise Incident::InvalidTransitionError, "Unsupported target status '#{new_status}'"
           end
 
           AuditLogger.log(
