@@ -89,7 +89,7 @@ export function TextFilePreview({ presignedUrl, fileName }: TextFilePreviewProps
     );
   }
 
-  const lines = content.split("\n");
+  const lines = content.split("\n").map((text, i) => ({ number: i + 1, text }));
   const gutterWidth = String(lines.length).length;
 
   return (
@@ -106,16 +106,16 @@ export function TextFilePreview({ presignedUrl, fileName }: TextFilePreviewProps
         <div className="overflow-auto max-h-[600px]">
           <table className="w-full border-collapse">
             <tbody>
-              {lines.map((line, i) => (
-                <tr key={i} className="hover:bg-gray-50">
+              {lines.map((line) => (
+                <tr key={line.number} className="hover:bg-gray-50">
                   <td
                     className="sticky left-0 bg-gray-50 text-right select-none px-3 py-0 text-xs text-gray-400 font-mono border-r border-gray-200"
                     style={{ minWidth: `${gutterWidth + 2}ch` }}
                   >
-                    {i + 1}
+                    {line.number}
                   </td>
                   <td className="px-4 py-0 whitespace-pre font-mono text-sm text-gray-800 overflow-x-auto">
-                    {line || "\u00A0"}
+                    {line.text || "\u00A0"}
                   </td>
                 </tr>
               ))}

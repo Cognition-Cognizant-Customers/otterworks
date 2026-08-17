@@ -1,5 +1,10 @@
 import { cn } from "@/lib/utils";
 
+/** Stable identities for fixed-length placeholder lists. */
+export function placeholderKeys(prefix: string, count: number): string[] {
+  return Array.from({ length: count }, (_, i) => `${prefix}-${i}`);
+}
+
 function Skeleton({ className }: { className?: string }) {
   return (
     <div
@@ -39,8 +44,8 @@ export function FileListRowSkeleton() {
 export function FileGridSkeleton({ count = 8 }: { count?: number }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-      {Array.from({ length: count }).map((_, i) => (
-        <FileCardSkeleton key={i} />
+      {placeholderKeys("file-card", count).map((key) => (
+        <FileCardSkeleton key={key} />
       ))}
     </div>
   );
@@ -49,8 +54,8 @@ export function FileGridSkeleton({ count = 8 }: { count?: number }) {
 export function FileListSkeleton({ count = 6 }: { count?: number }) {
   return (
     <div className="space-y-1">
-      {Array.from({ length: count }).map((_, i) => (
-        <FileListRowSkeleton key={i} />
+      {placeholderKeys("file-row", count).map((key) => (
+        <FileListRowSkeleton key={key} />
       ))}
     </div>
   );
@@ -61,8 +66,8 @@ export function DashboardSkeleton() {
     <div className="max-w-7xl mx-auto space-y-8">
       {/* Stats row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-white rounded-xl border border-gray-200 p-5">
+        {placeholderKeys("stat", 4).map((key) => (
+          <div key={key} className="bg-white rounded-xl border border-gray-200 p-5">
             <Skeleton className="h-3 w-20 mb-3" />
             <Skeleton className="h-8 w-16 mb-2" />
             <Skeleton className="h-2 w-24" />
@@ -74,8 +79,8 @@ export function DashboardSkeleton() {
         <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-6">
           <Skeleton className="h-5 w-32 mb-4" />
           <div className="space-y-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3">
+            {placeholderKeys("activity-row", 4).map((key) => (
+              <div key={key} className="flex items-center gap-3">
                 <Skeleton className="w-10 h-10 rounded-lg" />
                 <div className="flex-1">
                   <Skeleton className="h-4 w-40 mb-1" />

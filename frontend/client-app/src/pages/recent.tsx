@@ -7,6 +7,7 @@ import { FileCard } from "@/components/files/file-card";
 import { DocumentCard } from "@/components/documents/document-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { placeholderKeys } from "@/components/ui/skeleton";
 import { filesApi, documentsApi } from "@/lib/api";
 import type { FileItem, Document } from "@/types";
 
@@ -169,9 +170,9 @@ function RecentSkeleton() {
         <div key={section}>
           <div className="h-4 w-20 bg-gray-200 rounded animate-pulse mb-3" />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: 3 }).map((_, i) => (
+            {placeholderKeys(`${section}-card`, 3).map((key) => (
               <div
-                key={i}
+                key={key}
                 className="flex flex-col rounded-xl border border-gray-200 bg-white p-4"
               >
                 <div className="flex items-start justify-between mb-3">

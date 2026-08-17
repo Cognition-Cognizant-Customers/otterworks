@@ -20,8 +20,8 @@ export function Breadcrumb({ items }: BreadcrumbProps) {
       >
         <Home size={16} />
       </Link>
-      {items.map((item, index) => (
-        <span key={index} className="flex items-center gap-1">
+      {items.map((item) => (
+        <span key={item.href ?? item.label} className="flex items-center gap-1">
           <ChevronRight size={14} className="text-gray-400" />
           {item.href ? (
             <Link
