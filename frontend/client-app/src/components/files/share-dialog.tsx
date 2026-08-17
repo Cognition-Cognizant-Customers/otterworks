@@ -90,7 +90,7 @@ export function ShareDialog({
   };
 
   const handleCopyLink = async () => {
-    const shareUrl = `${window.location.origin}/files/${fileId}`;
+    const shareUrl = `${globalThis.location.origin}/files/${fileId}`;
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
@@ -376,8 +376,8 @@ export function ShareDialog({
                   <Link2 size={20} className="text-gray-400 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-700 truncate">
-                      {typeof window !== "undefined"
-                        ? `${window.location.origin}/files/${fileId}`
+                      {typeof globalThis.window !== "undefined"
+                        ? `${globalThis.location.origin}/files/${fileId}`
                         : `/files/${fileId}`}
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">

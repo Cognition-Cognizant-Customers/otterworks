@@ -41,7 +41,7 @@ export const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use((config) => {
-  if (typeof window !== "undefined") {
+  if (typeof globalThis.window !== "undefined") {
     const token = localStorage.getItem("otter_access_token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -60,7 +60,7 @@ apiClient.interceptors.response.use(
     return response;
   },
   async (error) => {
-    if (error.response?.status === 401 && typeof window !== "undefined") {
+    if (error.response?.status === 401 && typeof globalThis.window !== "undefined") {
       const url = error.config?.url || "";
       if (!url.includes("/auth/")) {
         if (isVerifyingToken) {
@@ -78,7 +78,7 @@ apiClient.interceptors.response.use(
           if (status === 401) {
             localStorage.removeItem("otter_access_token");
             localStorage.removeItem("otter_refresh_token");
-            window.location.href = "/login";
+            globalThis.location.href = "/login";
           }
         } finally {
           isVerifyingToken = false;
