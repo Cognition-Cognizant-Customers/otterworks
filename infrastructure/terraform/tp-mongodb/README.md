@@ -19,8 +19,9 @@ Terraform state; do not commit state files. Terraform state is isolated in a
 workspace named exactly after the namespace; never apply or destroy from the
 `default` workspace. Atlas access-list entries are keyed by host IP, so exactly
 one namespace per host may manage the entry. On this host that owner is
-`demo`; every other namespace must set
-`manage_caller_access_list=false` and rely on the existing entry.
+`demo`. The variable defaults to `false` as a fail-safe; the `demo` owner must
+pass `manage_caller_access_list=true` explicitly, while every other namespace
+must pass `manage_caller_access_list=false` and rely on the existing entry.
 
 When upgrading an already-applied pre-flag `demo` workspace, migrate the
 resource address before planning; this changes Terraform state only and does
@@ -45,13 +46,22 @@ terraform -chdir=infrastructure/terraform/tp-mongodb workspace select "$NS" ||
 test "$(terraform -chdir=infrastructure/terraform/tp-mongodb workspace show)" = "$NS"
 terraform -chdir=infrastructure/terraform/tp-mongodb validate
 terraform -chdir=infrastructure/terraform/tp-mongodb plan \
-  -var="ns=$NS" -var="manage_caller_access_list=$([[ "$NS" == demo ]] && echo true || echo false)"
+  -var="ns=demo" -var="manage_caller_access_list=true"
 # When the plan is clean, apply the same namespace explicitly:
 # terraform -chdir=infrastructure/terraform/tp-mongodb apply \
-#   -var="ns=$NS" -var="manage_caller_access_list=$([[ "$NS" == demo ]] && echo true || echo false)"
+#   -var="ns=demo" -var="manage_caller_access_list=true"
 ```
 
 For a second namespace, use its own workspace (for example, `NS=sidekickws`);
-never reuse `default` or another namespace's workspace. The teardown target
-selects or creates the matching workspace before checking ownership, dropping
-the namespace database, or running `terraform destroy`.
+never reuse `default` or another namespace's workspace. Apply it with the
+non-owner setting:
+
+```bash
+terraform -chdir=infrastructure/terraform/tp-mongodb plan \
+  -var="ns=sidekickws" -var="manage_caller_access_list=false"
+# terraform -chdir=infrastructure/terraform/tp-mongodb apply \
+#   -var="ns=sidekickws" -var="manage_caller_access_list=false"
+```
+
+The teardown target selects or creates the matching workspace before checking
+ownership, dropping the namespace database, or running `terraform destroy`.

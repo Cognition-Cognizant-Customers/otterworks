@@ -47,5 +47,5 @@ variable "caller_ip" {
 variable "manage_caller_access_list" {
   description = "Whether this namespace owns the host caller access-list entry. Only one namespace per host may set this true."
   type        = bool
-  default     = true
+  default     = false
 }

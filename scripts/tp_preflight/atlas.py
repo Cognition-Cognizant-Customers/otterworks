@@ -169,37 +169,39 @@ def cleanup_collection(name, database):
     return "present" if present else "absent"
 
 
-def cleanup_detail(name, result):
+def cleanup_detail(name, result, state):
     if result == "present":
         return f"{name} remains in ow_tp_preflight after cleanup attempt; manual cleanup required"
+    if state == "ambiguous":
+        return f"{name} may remain in ow_tp_preflight; verify; manual cleanup required if present"
     return f"{name} cleanup could not be confirmed; manual cleanup required"
 
 
 def emit_cleanup_failures(names):
-    for name, result in names.items():
+    for name, (result, state) in names.items():
         if result != "absent":
             m.add("db-user-write-cleanup", "Drop the temporary probe collection",
-                  "MongoDB wire protocol", "denied", cleanup_detail(name, result))
+                  "MongoDB wire protocol", "denied", cleanup_detail(name, result, state))
 
 
 def reconcile_collection(name):
     entry = pending_collections.pop(name, None)
     if entry is None:
         return None
-    client, database, _state = entry
+    client, database, state = entry
     result = cleanup_collection(name, database)
     try:
         client.close()
     except Exception:
         pass
-    return result
+    return result, state
 
 
 def reconcile_collections():
     failures = {}
     for name in list(pending_collections):
         result = reconcile_collection(name)
-        if result is not None and result != "absent":
+        if result is not None and result[0] != "absent":
             failures[name] = result
     emit_cleanup_failures(failures)
 
@@ -210,7 +212,24 @@ def resolve_cleanup_candidates(candidates, database):
         if result == "absent":
             candidates.pop(name, None)
         else:
-            candidates[name] = result
+            candidates[name] = (result, candidates[name][1])
+
+
+def classify_insert_failure(exc):
+    from pymongo.errors import (
+        AutoReconnect,
+        ConnectionFailure,
+        NetworkTimeout,
+        OperationFailure,
+        ServerSelectionTimeoutError,
+        WriteConcernError,
+    )
+
+    if isinstance(exc, (ServerSelectionTimeoutError, OperationFailure)):
+        return "not-created"
+    if isinstance(exc, (AutoReconnect, NetworkTimeout, WriteConcernError, ConnectionFailure)):
+        return "ambiguous"
+    return "not-created"
 
 
 def reconcile_validator_collections():
@@ -242,18 +261,22 @@ def db_user_write():
         try:
             client = MongoClient(os.environ["MONGODB_ATLAS_URI"], serverSelectionTimeoutMS=10000)
             database = client["ow_tp_preflight"]
-            pending_collections[name] = (client, database, "possibly-created")
-            database[name].insert_one({"_id": "probe"})
-            pending_collections[name] = (client, database, "definitely-created")
+            pending_collections[name] = (client, database, "ambiguous")
+            try:
+                database[name].insert_one({"_id": "probe"})
+            except Exception as insert_exc:
+                if classify_insert_failure(insert_exc) == "not-created":
+                    pending_collections.pop(name, None)
+                raise
+            pending_collections[name] = (client, database, "created")
             database[name].delete_one({"_id": "probe"})
             database.drop_collection(name)
             pending_collections.pop(name, None)
             resolve_cleanup_candidates(cleanup_candidates, database)
+            m.add("db-user-write", "Insert and delete a temporary document with the DB user",
+                  "MongoDB wire protocol", "verified", "temporary collection cleaned")
             if cleanup_candidates:
                 emit_cleanup_failures(cleanup_candidates)
-            else:
-                m.add("db-user-write", "Insert and delete a temporary document with the DB user",
-                      "MongoDB wire protocol", "verified", "temporary collection cleaned")
             try:
                 client.close()
             except Exception:
@@ -262,7 +285,7 @@ def db_user_write():
         except Exception as exc:
             last_error = exc
             result = reconcile_collection(name)
-            if result is not None and result != "absent":
+            if result is not None and result[0] != "absent":
                 cleanup_candidates[name] = result
             elif client is not None and name not in pending_collections:
                 try:
