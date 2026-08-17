@@ -25,6 +25,7 @@ import gzip
 import json
 import os
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -36,8 +37,10 @@ GOLDEN = ROOT / "testdata/legacy/golden/cronbox"
 LEGACY_TABLE = "otterworks-audit-events"
 RETENTION_DAYS = 90
 UNEXPIRABLE_PROBE = "recon-unexpirable-0"
+TTL_PROBE_GRACE_SECONDS = 120
 BOUNDARY_ARCHIVED = "boundary-0"
 BOUNDARY_RETAINED = ("boundary-1", "boundary-2")
+TTL_PROBE_IDS = ("recon-ttl-probe-ascii", "recon-ttl-probe-unicode")
 LOCALSTACK_ENDPOINT = "http://localhost:4566"
 FIXTURE_CREDENTIALS = {
     "aws_access_key_id": "000000000000",
@@ -66,12 +69,15 @@ def golden_retained_ids(namespace: str) -> list:
     return sorted(manifest["dynamodb"][LEGACY_TABLE]["ids"])
 
 
-def seed_corpus(namespace: str, run_date: str) -> list:
+def seed_corpus(
+    namespace: str, run_date: str, live_reference_time: datetime | None = None
+) -> list:
     """Reproduce the deterministic audit corpus, with the TTL attribute added.
 
     ``expires_at = timestamp + 90d`` is the whole retention horizon: the legacy test
     ``timestamp < run_date - 90d`` becomes ``expires_at < run_date``, so the cutoff
-    stays exclusive.
+    stays exclusive. Live runs may provide a wall-clock reference so DynamoDB TTL
+    cannot delete the seeded records before the reconciliation sweep observes them.
     """
     cutoff = datetime.strptime(run_date, "%Y-%m-%d").replace(tzinfo=timezone.utc) - timedelta(
         days=RETENTION_DAYS
@@ -111,8 +117,20 @@ def seed_corpus(namespace: str, run_date: str) -> list:
                 "raw_payload": "{}",
             }
         )
-    for record in records:
-        record["expires_at"] = epoch(record["timestamp"]) + RETENTION_DAYS * 86400
+    if live_reference_time is None:
+        for record in records:
+            record["expires_at"] = (
+                epoch(record["timestamp"]) + RETENTION_DAYS * 86400
+            )
+    else:
+        for index, record in enumerate(records[:80]):
+            record["expires_at"] = epoch(iso(live_reference_time)) - 600 - index
+        for index, record in enumerate(records[80:83]):
+            record["expires_at"] = epoch(iso(live_reference_time)) + index - 1
+        for index, record in enumerate(records[83:]):
+            record["expires_at"] = (
+                epoch(iso(live_reference_time)) + 3600 + index
+            )
     # Malformed-record probe: no TTL attribute at all. Contract requires it to be
     # retained and attributed, never silently expired.
     records.append(
@@ -134,6 +152,53 @@ def iso(value: datetime) -> str:
 
 def epoch(stamp: str) -> int:
     return int(datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp())
+
+
+def archive_key(record: dict, prefix: str) -> str:
+    stamp = str(record["timestamp"]).replace("-", "").replace(":", "")
+    expiry = record.get("expires_at")
+    partition = (
+        "unknown"
+        if expiry is None
+        else datetime.fromtimestamp(int(expiry), tz=timezone.utc).strftime("%Y-%m-%d")
+    )
+    return f"{prefix}/dt={partition}/{record['event_id']}__{stamp}.jsonl.gz"
+
+
+def live_reference_time(now: datetime | None = None) -> datetime:
+    """Return the wall-clock TTL horizon used by both live sweep invokes."""
+    current = now or datetime.now(timezone.utc)
+    return current.astimezone(timezone.utc).replace(microsecond=0) + timedelta(
+        hours=1
+    )
+
+
+def ttl_probe_records(namespace: str, now: datetime | None = None) -> list[dict]:
+    current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).replace(
+        microsecond=0
+    )
+    expires_at = int((current - timedelta(seconds=60)).timestamp())
+    run_marker = int(current.timestamp())
+    return [
+        {
+            "event_id": f"{namespace}-{TTL_PROBE_IDS[0]}-{run_marker}",
+            "timestamp": iso(current),
+            "actor": "recon-probe",
+            "action": "ttl-probe",
+            "target_id": "recon-probe",
+            "raw_payload": '{"probe":"ascii"}',
+            "expires_at": expires_at,
+        },
+        {
+            "event_id": f"{namespace}-{TTL_PROBE_IDS[1]}-{run_marker}",
+            "timestamp": iso(current + timedelta(seconds=1)),
+            "actor": "recon-probe",
+            "action": "ttl-probe",
+            "target_id": "recon-probe",
+            "raw_payload": '{"probe":"Δ ☕"}',
+            "expires_at": expires_at,
+        },
+    ]
 
 
 # --------------------------------------------------------------------------- target access
@@ -224,6 +289,21 @@ class Target:
             if not page.get("LastEvaluatedKey"):
                 return sorted(ids)
             kwargs["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+
+    def probe_present(self, records: list[dict]) -> set[str]:
+        present = set()
+        for record in records:
+            response = self.dynamodb.get_item(
+                TableName=self.table,
+                Key={
+                    "event_id": {"S": record["event_id"]},
+                    "timestamp": {"S": record["timestamp"]},
+                },
+                ConsistentRead=True,
+            )
+            if response.get("Item"):
+                present.add(record["event_id"])
+        return present
 
     def archive_objects(self) -> dict:
         """Archived objects under the unit prefix, keyed by S3 key."""
@@ -386,6 +466,107 @@ def check(checks, cid, expected, actual, source) -> None:
     )
 
 
+def wait_for_ttl_probe(
+    target: Target,
+    records: list[dict],
+    timeout_seconds: int = 600,
+    interval_seconds: int = 15,
+    grace_seconds: int = TTL_PROBE_GRACE_SECONDS,
+    clock=None,
+    sleeper=None,
+) -> dict:
+    """Wait for both TTL removals to reach S3 and disappear from DynamoDB."""
+    clock = clock or time.monotonic
+    sleeper = sleeper or time.sleep
+    expected_ids = {record["event_id"] for record in records}
+    deadline = clock() + timeout_seconds
+    observed_all_present = False
+    first_absent_at = None
+    while True:
+        present_ids = target.probe_present(records)
+        absent_ids = expected_ids - present_ids
+        observed_all_present |= present_ids == expected_ids
+        keys = target.archive_objects()
+        archived_ids = {
+            event_id_of(key) for key in keys if event_id_of(key) in expected_ids
+        }
+        if archived_ids == expected_ids and absent_ids == expected_ids:
+            return {
+                "result": "pass",
+                "archived_objects": sorted(archived_ids),
+                "absent_from_table": sorted(absent_ids),
+            }
+        now = clock()
+        if (
+            observed_all_present
+            and absent_ids == expected_ids
+            and first_absent_at is None
+        ):
+            first_absent_at = now
+        remaining = deadline - now
+        if remaining <= 0:
+            if (
+                first_absent_at is not None
+                and deadline - first_absent_at > grace_seconds
+                and archived_ids != expected_ids
+            ):
+                return {
+                    "result": "fail",
+                    "archived_objects": sorted(archived_ids),
+                    "absent_from_table": sorted(absent_ids),
+                }
+            if first_absent_at is None:
+                return {
+                    "result": "skipped",
+                    "archived_objects": sorted(archived_ids),
+                    "absent_from_table": sorted(absent_ids),
+                }
+            grace_remaining = grace_seconds - (now - first_absent_at)
+            if grace_remaining <= 0:
+                return {
+                    "result": "skipped",
+                    "archived_objects": sorted(archived_ids),
+                    "absent_from_table": sorted(absent_ids),
+                }
+            sleeper(min(interval_seconds, grace_remaining))
+        else:
+            sleeper(min(interval_seconds, remaining))
+
+
+def delete_probe_objects(
+    target: Target,
+    probe_keys: set[str],
+    interval_seconds: int = 5,
+    max_seconds: int = 45,
+    batching_window_seconds: int = 30,
+    clock=None,
+    sleeper=None,
+) -> None:
+    """Delete deterministic probe keys, then catch a write racing cleanup."""
+    if not probe_keys:
+        return
+    clock = clock or time.monotonic
+    sleeper = sleeper or time.sleep
+    target.delete_objects(sorted(probe_keys))
+    started_at = clock()
+    deadline = started_at + max_seconds
+    quiet_deadline = started_at + batching_window_seconds + interval_seconds
+    while True:
+        pending = probe_keys & set(target.archive_objects())
+        now = clock()
+        if pending:
+            target.delete_objects(sorted(pending))
+            quiet_deadline = min(
+                deadline, now + batching_window_seconds + interval_seconds
+            )
+        elif now >= quiet_deadline:
+            return
+        remaining = deadline - now
+        if remaining <= 0:
+            return
+        sleeper(min(interval_seconds, remaining))
+
+
 def run(args) -> dict:
     namespace = args.namespace
     target = Target(args.mode, args.table, args.bucket, args.prefix, args.function)
@@ -410,7 +591,8 @@ def run(args) -> dict:
     expected_records = golden_archive_records(namespace)
     expected_archived = sorted(expected_records)
     expected_retained = golden_retained_ids(namespace)
-    corpus = seed_corpus(namespace, args.run_date)
+    live_reference = live_reference_time() if args.mode == "live" else None
+    corpus = seed_corpus(namespace, args.run_date, live_reference)
     corpus_event_ids = {record["event_id"] for record in corpus}
     baseline_ids = corpus_event_ids - {UNEXPIRABLE_PROBE}
     pre_existing_objects = set(target.archive_objects())
@@ -433,6 +615,13 @@ def run(args) -> dict:
             "verified as deployed configuration via GetBucketLifecycleConfiguration."
         ),
     ]
+    if args.mode == "live":
+        unverified.append(
+            "The fixture expiry horizons lie roughly eight months in the wall-clock past, "
+            "so this live run re-anchors the same corpus to now+1h; only the TTL horizon "
+            "is shifted, while every compared identity, payload and expected set still "
+            "comes from the immutable golden baseline."
+        )
 
     # ---- ARC-01 / ARC-07: configuration, read back from the deployed platform
     ttl = target.ttl_spec()
@@ -564,12 +753,90 @@ def run(args) -> dict:
 
     # ---- exercise the expiry-driven archive path
     target.put_records(corpus)
-    reference_time = f"{args.run_date}T00:00:00Z"
+    reference_time = (
+        iso(live_reference)
+        if live_reference is not None
+        else f"{args.run_date}T00:00:00Z"
+    )
     first = target.sweep(reference_time)
     # Inventory taken between the two sweeps: the second sweep's object delta is
     # only evidence of convergence if it is measured against this listing.
     objects = target.archive_objects()
     second = target.sweep(reference_time)
+    ttl_probe = []
+    ttl_probe_result = None
+    if args.mode == "live":
+        probe_records = ttl_probe_records(namespace)
+        if args.skip_ttl_probe:
+            checks.append(
+                {
+                    "id": "ARC-01/live-ttl-removal-archived",
+                    "expected": sorted(
+                        record["event_id"] for record in probe_records
+                    ),
+                    "actual": None,
+                    "source_of_truth": (
+                        "s3:ListObjectsV2 after DynamoDB TTL deletion plus "
+                        "dynamodb:Scan absence of the items"
+                    ),
+                    "result": "skipped",
+                }
+            )
+            unverified.append(
+                "--skip-ttl-probe was supplied, so the bounded live TTL-removal "
+                "probe was not seeded or observed."
+            )
+        else:
+            ttl_probe = probe_records
+            target.put_records(ttl_probe)
+            ttl_probe_result = wait_for_ttl_probe(target, ttl_probe)
+            probe_ids = sorted(record["event_id"] for record in ttl_probe)
+            if ttl_probe_result["result"] == "pass":
+                checks.append(
+                    {
+                        "id": "ARC-01/live-ttl-removal-archived",
+                        "expected": {
+                            "archived_objects": probe_ids,
+                            "absent_from_table": probe_ids,
+                        },
+                        "actual": {
+                            "archived_objects": ttl_probe_result["archived_objects"],
+                            "absent_from_table": ttl_probe_result["absent_from_table"],
+                        },
+                        "source_of_truth": (
+                            "s3:ListObjectsV2 after DynamoDB TTL deletion plus "
+                            "dynamodb:GetItem ConsistentRead absence of the items"
+                        ),
+                        "result": "pass",
+                    }
+                )
+            else:
+                checks.append(
+                    {
+                        "id": "ARC-01/live-ttl-removal-archived",
+                        "expected": {
+                            "archived_objects": probe_ids,
+                            "absent_from_table": probe_ids,
+                        },
+                        "actual": {
+                            "archived_objects": ttl_probe_result["archived_objects"],
+                            "absent_from_table": ttl_probe_result["absent_from_table"],
+                        },
+                        "source_of_truth": (
+                            "s3:ListObjectsV2 after DynamoDB TTL deletion plus "
+                            "dynamodb:GetItem ConsistentRead absence of the items"
+                        ),
+                        "result": ttl_probe_result["result"],
+                    }
+                )
+                if ttl_probe_result["result"] == "skipped":
+                    unverified.append(
+                        "The bounded live TTL-removal probe reached its 10-minute "
+                        "deadline before both probe objects appeared in S3 after "
+                        "DynamoDB TTL deletion; the existing 48-hour TTL latency "
+                        "coverage-gap note remains in force."
+                    )
+    final_objects = target.archive_objects()
 
     new_keys = sorted(set(objects) - pre_existing_objects)
     # In live mode the sweep also archives real expiring events, and the stream can
@@ -738,16 +1005,32 @@ def run(args) -> dict:
     actual_set = sorted(name for name, detected in detections.items() if detected)
 
     if not args.keep:
-        target.delete_records(corpus)
+        cleanup_objects = target.archive_objects()
+        probe_keys = {
+            archive_key(record, args.prefix) for record in ttl_probe
+        }
+        target.delete_records(
+            corpus + ttl_probe
+        )
         # Anything this run's events produced, including objects the second sweep
         # would have written; never an object belonging to a real audit event.
         target.delete_objects(
             sorted(
                 key
-                for key in (set(recount) | set(new_keys)) - pre_existing_objects
-                if event_id_of(key) in corpus_event_ids
+                for key in (
+                    set(final_objects)
+                    | set(recount)
+                    | set(new_keys)
+                    | set(cleanup_objects)
+                )
+                - pre_existing_objects
+                if event_id_of(key)
+                in corpus_event_ids
+                | {record["event_id"] for record in ttl_probe}
             )
         )
+        if probe_keys:
+            delete_probe_objects(target, probe_keys)
         unverified.append(
             "The seeded corpus and the archive objects it produced were removed after the "
             "run; the report is the retained evidence."
@@ -796,6 +1079,11 @@ def main() -> int:
         "--keep",
         action="store_true",
         help="leave the seeded corpus and archived objects in place for browsing",
+    )
+    parser.add_argument(
+        "--skip-ttl-probe",
+        action="store_true",
+        help="skip the bounded live DynamoDB TTL-removal probe",
     )
     args = parser.parse_args()
     report = run(args)

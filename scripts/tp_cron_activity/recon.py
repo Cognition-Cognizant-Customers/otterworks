@@ -231,7 +231,7 @@ def digest(snapshot: dict) -> str:
 
 def live(ns: str, ds: str, warehouse_id: str | None, rerun_mode: str) -> dict:
     dbx = Databricks(warehouse_id=warehouse_id or None)
-    actual = {name: dbx.sql_ok(query.format(ns=ns, ds=ds)).dicts()
+    actual = {name: dbx.sql_ok(query.format(ns=ns, ds=ds)).dicts(typed=True)
               for name, query in QUERIES.items()}
     report, users, objects = baseline()
     expected_users = [user_shape(row) for row in users]
@@ -313,7 +313,10 @@ def live(ns: str, ds: str, warehouse_id: str | None, rerun_mode: str) -> dict:
         rerun["state"] = "SUCCESS"
     else:
         rerun["state"] = "JOB_NOT_FOUND"
-    after_actual = {name: dbx.sql_ok(query.format(ns=ns, ds=ds)).dicts() for name, query in QUERIES.items()}
+    after_actual = {
+        name: dbx.sql_ok(query.format(ns=ns, ds=ds)).dicts(typed=True)
+        for name, query in QUERIES.items()
+    }
     rerun["after"] = digest({"users": after_actual["Q_USER_SUMMARIES"], "report": after_actual["Q_REPORT"]})
     rerun["result"] = "pass" if rerun_ok and rerun["before"] == rerun["after"] else "fail"
     check(checks, "ACT-03/job_run_succeeded", "SUCCESS", rerun.get("state", {}).get("result_state", rerun.get("state")), "idempotency rerun")

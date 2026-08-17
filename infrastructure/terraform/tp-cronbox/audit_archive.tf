@@ -54,6 +54,14 @@ data "aws_iam_policy_document" "audit_archive" {
     resources = ["${aws_s3_bucket.audit_archive.arn}/${var.audit_archive_prefix}/*"]
   }
 
+  # Without ListBucket, S3 answers HeadObject on an absent key with 403 rather
+  # than 404, so the archive writer cannot tell "not archived yet" from "denied".
+  statement {
+    sid       = "ProbeArchiveObjects"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.audit_archive.arn]
+  }
+
   statement {
     sid       = "PublishArchiveMetrics"
     actions   = ["cloudwatch:PutMetricData"]

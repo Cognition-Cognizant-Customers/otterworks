@@ -11,6 +11,7 @@ from scripts.tp_cron_activity.extract_history import (
     parse_history,
     round_daily_average,
 )
+from scripts.tp_dbx.client import Databricks
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE = ROOT / "testdata/legacy/golden/cronbox/demo/user_activity_daily/artifacts/otterworks-data-lake"
@@ -80,3 +81,70 @@ def test_trends_rounding_and_empty_result():
     assert round_daily_average(998, 30) == 33.27
     assert round_daily_average(0, 0) == 0.0
     assert aggregate_history([]) == []
+
+
+def test_sql_result_typed_dicts_coerce_manifest_types_and_preserve_untyped_values():
+    payload = {
+        "status": {"state": "SUCCEEDED"},
+        "manifest": {
+            "schema": {
+                "columns": [
+                    {"name": "int_value", "type_name": "INT"},
+                    {"name": "long_value", "type_name": "LONG"},
+                    {"name": "double_value", "type_name": "DOUBLE"},
+                    {"name": "boolean_value", "type_name": "BOOLEAN"},
+                    {"name": "string_value", "type_name": "STRING"},
+                ]
+            }
+        },
+        "result": {
+            "data_array": [
+                ["7", "-8", "1.25", "false", "hello"],
+                [None, None, None, None, None],
+            ]
+        },
+    }
+    dbx = Databricks.__new__(Databricks)
+    dbx._warehouse_id = "warehouse"
+    dbx.call = lambda method, path, body=None: (200, payload)
+
+    result = dbx.sql("SELECT 1")
+
+    assert result.dicts() == [
+        {
+            "int_value": "7",
+            "long_value": "-8",
+            "double_value": "1.25",
+            "boolean_value": "false",
+            "string_value": "hello",
+        },
+        {
+            "int_value": None,
+            "long_value": None,
+            "double_value": None,
+            "boolean_value": None,
+            "string_value": None,
+        },
+    ]
+    typed = result.dicts(typed=True)
+    assert typed == [
+        {
+            "int_value": 7,
+            "long_value": -8,
+            "double_value": 1.25,
+            "boolean_value": False,
+            "string_value": "hello",
+        },
+        {
+            "int_value": None,
+            "long_value": None,
+            "double_value": None,
+            "boolean_value": None,
+            "string_value": None,
+        },
+    ]
+    assert type(typed[0]["int_value"]) is int
+    assert type(typed[0]["long_value"]) is int
+    assert type(typed[0]["double_value"]) is float
+    assert typed[0]["boolean_value"] is False
+    assert type(typed[0]["string_value"]) is str
