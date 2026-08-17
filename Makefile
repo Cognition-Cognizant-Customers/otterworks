@@ -2,6 +2,10 @@
 
 SHELL := /bin/bash
 
+define validate_ns
+$(if $(filter ok,$(shell echo '$(NS)' | grep -qE '^[A-Za-z0-9_]+$$' && echo ok)),,$(error NS must contain only letters, digits, and underscores))
+endef
+
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
@@ -17,7 +21,10 @@ tp-preflight-databricks: ## Check Databricks capability paths and emit a manifes
 	scripts/tp-preflight-databricks.sh
 
 tp-preflight-atlas: ## Check MongoDB Atlas capability paths and emit a manifest
-	@set -e; \
+ifneq ($(strip $(NS)),)
+	$(call validate_ns)
+endif
+	@set -euo pipefail; \
 	tf_dir="infrastructure/terraform/tp-mongodb"; \
 	previous_workspace="$$(terraform -chdir=$$tf_dir workspace show 2>/dev/null || true)"; \
 	restore_workspace() { \
@@ -33,7 +40,7 @@ tp-preflight-atlas: ## Check MongoDB Atlas capability paths and emit a manifest
 			probe_password="$$(terraform -chdir=$$tf_dir output -raw database_password 2>/dev/null || true)"; \
 			if [ -n "$$probe_user" ] && [ -n "$$probe_password" ] && [ -n "$${MONGODB_ATLAS_URI:-}" ]; then \
 				probe_host="$$(MONGO_BASE_URI="$$MONGODB_ATLAS_URI" python3 -c 'import os; from urllib.parse import urlsplit; host = urlsplit(os.environ["MONGO_BASE_URI"]).hostname; import sys; sys.exit("cluster host missing") if not host else None; print(host)')"; \
-				export OW_TP_PREFLIGHT_MONGO_URI="$$(MONGO_USER="$$probe_user" MONGO_PASSWORD="$$probe_password" MONGO_HOST="$$probe_host" python3 -c 'import os; from urllib.parse import quote; print("mongodb+srv://{}:{}@{}/?retryWrites=true&w=majority".format(quote(os.environ["MONGO_USER"], safe=""), quote(os.environ["MONGO_PASSWORD"], safe=""), os.environ["MONGO_HOST"]))')"; \
+				export OW_TP_PREFLIGHT_MONGO_URI="$$(printf %s "$$probe_password" | MONGO_USER="$$probe_user" MONGO_HOST="$$probe_host" python3 -c 'import os, sys; from urllib.parse import quote; password = sys.stdin.read(); print("mongodb+srv://{}:{}@{}/?retryWrites=true&w=majority".format(quote(os.environ["MONGO_USER"], safe=""), quote(password, safe=""), os.environ["MONGO_HOST"]))')"; \
 			fi; \
 		fi; \
 		if [ -z "$${OW_TP_PREFLIGHT_DB:-}" ]; then \
@@ -370,11 +377,6 @@ lint: ## Lint all services
 	@echo "=== Admin Dashboard ===" && cd frontend/admin-dashboard && npm run lint
 
 # --- Synthetic Test Data ---
-
-# Guard: NS must be alphanumeric/underscore only (prevents SQL injection)
-define validate_ns
-$(if $(filter ok,$(shell echo '$(NS)' | grep -qE '^[A-Za-z0-9_]+$$' && echo ok)),,$(error NS must contain only letters, digits, and underscores))
-endef
 
 testdata-validate: ## Validate generated test data (NS=<namespace>, CRITERIA=<file>)
 ifndef NS

@@ -366,6 +366,8 @@ def validator_ddl():
             raise RuntimeError("the validator accepted a violating document")
         database[name].insert_one({"_id": "valid", "kind": "conforming"})
         database[name].delete_one({"_id": "valid"})
+        ddl_result = "verified"
+        ddl_detail = "$jsonSchema validator rejected a violating insert and accepted a conforming insert"
         collmod_attempted = True
         database.command({
             "collMod": name,
@@ -389,15 +391,16 @@ def validator_ddl():
         collmod_detail = "collMod changed the existing validator and rejected a document missing phase"
         database.drop_collection(name)
         pending_validator_collections.pop(name, None)
+        ddl_detail += "; collection cleaned"
+        collmod_detail += "; collection cleaned"
         client.close()
-        ddl_result = "verified"
-        ddl_detail = "$jsonSchema validator rejected a violating insert and accepted a conforming insert; collection cleaned"
     except Exception as exc:
         error_detail = validator_error_detail(exc)
-        ddl_detail = error_detail
-        if collmod_attempted:
+        if ddl_result != "verified":
+            ddl_detail = error_detail
+        if collmod_result != "verified" and collmod_attempted:
             collmod_detail = error_detail
-        else:
+        elif collmod_result != "verified":
             collmod_detail = f"collMod was not attempted: {error_detail}"
         reconcile_validator_collections()
         if client is not None:
