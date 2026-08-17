@@ -1,5 +1,7 @@
 """Health check and metrics endpoints."""
 
+from typing import Annotated
+
 import structlog
 from fastapi import APIRouter, Depends
 from fastapi.responses import PlainTextResponse
@@ -11,9 +13,11 @@ from app.db.session import get_db
 logger = structlog.get_logger()
 router = APIRouter()
 
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+
 
 @router.get("/health")
-async def health(db: AsyncSession = Depends(get_db)):
+async def health(db: DbSession):
     """Health check with DB connectivity verification."""
     try:
         await db.execute(text("SELECT 1"))

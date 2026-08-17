@@ -1,5 +1,7 @@
 """Template API endpoints."""
 
+from typing import Annotated
+
 import structlog
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,10 +13,12 @@ from app.services.document_service import DocumentService
 logger = structlog.get_logger()
 router = APIRouter()
 
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+
 
 @router.get("/", response_model=list[TemplateResponse])
 async def list_templates(
-    db: AsyncSession = Depends(get_db),
+    db: DbSession,
 ):
     """List all templates."""
     service = DocumentService(db)
@@ -26,7 +30,7 @@ async def list_templates(
 )
 async def create_template(
     body: TemplateCreate,
-    db: AsyncSession = Depends(get_db),
+    db: DbSession,
 ):
     """Create a new template."""
     service = DocumentService(db)
