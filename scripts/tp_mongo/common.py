@@ -21,6 +21,7 @@ DOCUMENTS = "documents"
 SNAPSHOTS = "document_snapshots"
 QUARANTINE = "documents_quarantine"
 
+
 def mongo_uri() -> str:
     fixture_uri = f"mongodb://localhost:{os.environ.get('MONGO_FIXTURE_PORT', '27017')}"
     return os.environ.get("MONGO_URI") or fixture_uri
