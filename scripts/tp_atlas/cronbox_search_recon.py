@@ -89,6 +89,7 @@ def _multibyte_check(
     queries: Sequence[Mapping[str, Any]],
     query_results: Mapping[str, Sequence[str]],
     records: Mapping[str, Sequence[Mapping[str, Any]]],
+    source_of_truth: str,
 ) -> dict[str, Any]:
     query_evidence = {}
     stored_evidence = []
@@ -146,9 +147,7 @@ def _multibyte_check(
             "queries": query_evidence,
             "stored_values": stored_evidence,
         },
-        "source_of_truth": (
-            "committed multi-byte golden queries and stored values in the target records"
-        ),
+        "source_of_truth": source_of_truth,
         "result": "pass" if query_sets_pass and stored_values_pass else "fail",
     }
 
@@ -488,7 +487,14 @@ def recon_live(namespace: str) -> dict[str, Any]:
                     {"id": {"$in": ids}}, {"_id": 0, "id": 1, field: 1}
                 )
             )
-        checks.append(_multibyte_check(queries, first, multibyte_records))
+        checks.append(
+            _multibyte_check(
+                queries,
+                first,
+                multibyte_records,
+                "committed multi-byte golden queries and values read back from deployed Atlas collections",
+            )
+        )
 
         try:
             deployed = []
@@ -606,7 +612,14 @@ def recon_fixture(namespace: str, source_url: str) -> dict[str, Any]:
                 "golden query set evaluated by the fixture $search evaluator",
             )
         )
-    checks.append(_multibyte_check(queries, first, corpus))
+    checks.append(
+        _multibyte_check(
+            queries,
+            first,
+            corpus,
+            "committed multi-byte golden queries and locally transformed fixture corpus",
+        )
+    )
     checks.extend(
         role_checks(load_definitions(), "committed index definitions (offline)")
     )
@@ -649,6 +662,8 @@ def recon_fixture(namespace: str, source_url: str) -> dict[str, Any]:
             "$search execution, index field-role read-back, and continuous index maintenance "
             "(SRC-02/SRC-03/SRC-05 on the real engine): fixture mode evaluates query semantics "
             "locally and only the parent's live run proves them on Atlas",
+            "SRC-04/multibyte-query: query matching was evaluated by the local fixture evaluator "
+            "rather than Atlas $search",
             "MeiliSearch relevance ordering and scores (contract coverage gap: "
             "meili_ranking_rules_not_portable)",
             "MeiliSearch typo tolerance parity (contract coverage gap: typo_tolerance_semantics)",

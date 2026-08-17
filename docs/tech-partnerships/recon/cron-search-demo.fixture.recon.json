@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "cron-search",
   "namespace": "demo",
-  "generated_at": "2026-08-17T05:56:46Z",
+  "generated_at": "2026-08-17T06:00:53Z",
   "run_mode": "fixture",
   "checks": [
     {
@@ -224,7 +224,7 @@
           }
         ]
       },
-      "source_of_truth": "committed multi-byte golden queries and stored values in the target records",
+      "source_of_truth": "committed multi-byte golden queries and locally transformed fixture corpus",
       "result": "pass"
     },
     {
@@ -360,6 +360,7 @@
   },
   "unverified_paths": [
     "$search execution, index field-role read-back, and continuous index maintenance (SRC-02/SRC-03/SRC-05 on the real engine): fixture mode evaluates query semantics locally and only the parent's live run proves them on Atlas",
+    "SRC-04/multibyte-query: query matching was evaluated by the local fixture evaluator rather than Atlas $search",
     "MeiliSearch relevance ordering and scores (contract coverage gap: meili_ranking_rules_not_portable)",
     "MeiliSearch typo tolerance parity (contract coverage gap: typo_tolerance_semantics)",
     "Crontab and legacy script deletion (SRC-07): landed by the parent's decommission PR"

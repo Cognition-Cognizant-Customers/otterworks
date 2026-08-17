@@ -225,6 +225,15 @@ def test_fixture_report_labels_multibyte_and_attribution_checks(monkeypatch) -> 
     assert "SRC-04/multibyte-query" in check_ids
     assert "POLICY/malformed-record-attribution" in check_ids
     assert "SRC-04/attribution" not in check_ids
+    multibyte = next(
+        check for check in report["checks"] if check["id"] == "SRC-04/multibyte-query"
+    )
+    assert "locally transformed fixture corpus" in multibyte["source_of_truth"]
+    assert "target" not in multibyte["source_of_truth"]
+    assert any(
+        entry.startswith("SRC-04/multibyte-query:")
+        for entry in report["unverified_paths"]
+    )
 
 
 def test_multibyte_check_fails_for_ascii_folded_stored_value() -> None:
@@ -250,6 +259,7 @@ def test_multibyte_check_fails_for_ascii_folded_stored_value() -> None:
             "documents": [{"id": "doc-004", "title": "Document coffee"}],
             "files": [{"id": "file-007", "name": "Fichier Δ ☕"}],
         },
+        "committed multi-byte golden queries and locally transformed fixture corpus",
     )
     assert check["id"] == "SRC-04/multibyte-query"
     assert check["result"] == "fail"
@@ -266,6 +276,7 @@ def test_multibyte_check_fails_when_a_required_query_is_missing() -> None:
         ],
         {"DOC-UNICODE-TITLE": ["doc-004"]},
         {"documents": [{"id": "doc-004", "title": "Δocument ☕"}]},
+        "committed multi-byte golden queries and locally transformed fixture corpus",
     )
     assert check["result"] == "fail"
     assert check["actual"]["evaluated_query_ids"] == ["DOC-UNICODE-TITLE"]
@@ -293,6 +304,7 @@ def test_multibyte_check_fails_when_an_expected_record_is_missing() -> None:
             "documents": [],
             "files": [{"id": "file-007", "name": "Fichier Δ ☕"}],
         },
+        "committed multi-byte golden queries and locally transformed fixture corpus",
     )
     assert check["result"] == "fail"
     assert check["actual"]["stored_values"][0]["contains_non_ascii"] is False
