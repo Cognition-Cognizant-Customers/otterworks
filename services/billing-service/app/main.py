@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from datetime import date
 from typing import Annotated
@@ -9,16 +10,30 @@ import psycopg
 from fastapi import FastAPI, HTTPException, Path, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from app.config import settings
-from app.db import connect, migrate, reset
-from app.domain import catalog, change_plan, entitlement
-from app.repository import PostgresPlansRepository
+from app.db import connect, ensure_rating_indexes, migrate, mongo_client, mongo_database, reset
+from app.domain import (
+    calculate_rating,
+    catalog,
+    change_plan,
+    entitlement,
+    finalize_result,
+    usage_summary,
+)
+from app.repository import MongoRatingRepository, PostgresPlansRepository
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     migrate()
+    try:
+        ensure_rating_indexes()
+    except PyMongoError:
+        logger.warning("Mongo index warm-up failed", exc_info=True)
     yield
 
 
@@ -44,6 +59,10 @@ def health() -> dict[str, str]:
             connection.execute("SELECT 1")
     except psycopg.Error as error:
         raise HTTPException(status_code=503, detail="database unavailable") from error
+    try:
+        mongo_client().admin.command("ping")
+    except PyMongoError as error:
+        raise HTTPException(status_code=503, detail="mongo unavailable") from error
     return {"status": "healthy", "service": settings.app_name}
 
 
@@ -127,3 +146,97 @@ def change_tenant_plan(tenant_id: Annotated[UUID, Path()], request: PlanChange) 
             status_code=409,
             detail="this plan change has already been requested",
         ) from error
+
+
+def _rating(tenant_id: UUID, period_start: date, period_end: date):
+    with connect() as connection:
+        plans_repository = PostgresPlansRepository(connection)
+        subscriptions = plans_repository.list_subscriptions(tenant_id)
+        plans = plans_repository.list_plans()
+    rating_repository = MongoRatingRepository(mongo_database())
+    rating = calculate_rating(
+        subscriptions,
+        plans,
+        rating_repository.list_usage(tenant_id, period_start, period_end),
+        rating_repository.list_periods(tenant_id),
+        tenant_id,
+        period_start,
+        period_end,
+    )
+    return rating, rating_repository
+
+
+def _rating_payload(tenant_id: UUID, period_start: date, period_end: date, rating) -> dict:
+    return {
+        "tenant_id": str(tenant_id),
+        "period_start": period_start.isoformat(),
+        "period_end": period_end.isoformat(),
+        "used_units": rating.used_units,
+        "quota_units": rating.quota_units,
+        "rollover_units": rating.rollover_units,
+        "billable_units": rating.billable_units,
+        "first_tier_units": rating.first_tier_units,
+        "second_tier_units": rating.second_tier_units,
+        "overage_amount": (
+            f"{rating.overage_amount:.2f}" if rating.overage_amount is not None else None
+        ),
+    }
+
+
+@app.get("/api/tenants/{tenant_id}/rating")
+def get_rating(
+    tenant_id: Annotated[UUID, Path()],
+    period_start: Annotated[date, Query()],
+    period_end: Annotated[date, Query()],
+) -> dict:
+    rating, _ = _rating(tenant_id, period_start, period_end)
+    return _rating_payload(tenant_id, period_start, period_end, rating)
+
+
+@app.get("/api/tenants/{tenant_id}/usage-summary")
+def get_usage_summary(
+    tenant_id: Annotated[UUID, Path()],
+    period_start: Annotated[date, Query()],
+    period_end: Annotated[date, Query()],
+) -> list[dict]:
+    repository = MongoRatingRepository(mongo_database())
+    events = repository.list_usage(tenant_id, period_start, period_end)
+    return usage_summary(events, tenant_id, period_start, period_end)
+
+
+class RatingFinalize(BaseModel):
+    period_start: date
+    period_end: date
+
+
+@app.post("/api/tenants/{tenant_id}/rating-finalize")
+def finalize_rating(tenant_id: Annotated[UUID, Path()], request: RatingFinalize) -> dict:
+    rating, repository = _rating(tenant_id, request.period_start, request.period_end)
+    period_id, result = finalize_result(
+        rating,
+        tenant_id,
+        request.period_start,
+        request.period_end,
+    )
+    try:
+        persisted = repository.upsert_rating(
+            period_id, tenant_id, request.period_start, request.period_end, result
+        )
+    except DuplicateKeyError as error:
+        raise HTTPException(
+            status_code=409,
+            detail="rating period identity conflicts with an existing period",
+        ) from error
+    persisted_result = persisted.result
+    row = {
+        "used_units": persisted_result.used_units,
+        "quota_units": persisted_result.quota_units,
+        "rollover_units": persisted_result.rollover_units,
+        "billable_units": persisted_result.billable_units,
+        "overage_amount": (
+            f"{persisted_result.overage_amount:.2f}"
+            if persisted_result.overage_amount is not None
+            else None
+        ),
+    }
+    return {**row, "rating_result": [row]}
