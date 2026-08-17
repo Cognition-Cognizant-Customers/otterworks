@@ -10,7 +10,7 @@ interface UserPresenceAvatarsProps {
 export function UserPresenceAvatars({
   collaborators,
   maxVisible = 5,
-}: UserPresenceAvatarsProps) {
+}: Readonly<UserPresenceAvatarsProps>) {
   const visible = collaborators.slice(0, maxVisible);
   const remaining = collaborators.length - maxVisible;
 

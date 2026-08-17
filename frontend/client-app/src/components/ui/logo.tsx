@@ -6,7 +6,7 @@ interface LogoProps {
   className?: string;
 }
 
-export function Logo({ size = 32, className }: LogoProps) {
+export function Logo({ size = 32, className }: Readonly<LogoProps>) {
   return (
     <img
       src={otterLogo}

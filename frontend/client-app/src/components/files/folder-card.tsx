@@ -24,7 +24,7 @@ export function FolderCard({
   selected = false,
   onSelect,
   selectionActive = false,
-}: FolderCardProps) {
+}: Readonly<FolderCardProps>) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(folder.name);
@@ -200,13 +200,13 @@ function FolderMenu({
   onDelete,
   onShare,
   onRename,
-}: {
+}: Readonly<{
   folder: FileItem;
   onClose: () => void;
   onDelete?: (id: string) => void;
   onShare?: (id: string) => void;
   onRename?: () => void;
-}) {
+}>) {
   return (
     <>
       <div className="fixed inset-0 z-10" onClick={onClose} />

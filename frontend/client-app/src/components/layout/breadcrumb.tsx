@@ -10,7 +10,7 @@ interface BreadcrumbProps {
   items: BreadcrumbItem[];
 }
 
-export function Breadcrumb({ items }: BreadcrumbProps) {
+export function Breadcrumb({ items }: Readonly<BreadcrumbProps>) {
   return (
     <nav className="flex items-center gap-1 text-sm text-gray-500" aria-label="Breadcrumb">
       <Link

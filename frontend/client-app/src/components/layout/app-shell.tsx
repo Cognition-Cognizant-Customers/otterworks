@@ -12,7 +12,7 @@ interface AppShellProps {
   children: ReactNode;
 }
 
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ children }: Readonly<AppShellProps>) {
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const { user } = useAuthStore();
 
