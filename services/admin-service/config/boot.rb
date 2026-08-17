@@ -1,3 +1,3 @@
-ENV['BUNDLE_GEMFILE'] ||= File.expand_path('../Gemfile', __dir__)
+require_relative 'bundle_gemfile'
 require 'bundler/setup'
 require 'bootsnap/setup'

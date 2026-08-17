@@ -7,10 +7,9 @@ require 'active_record/railtie'
 require 'action_controller/railtie'
 require 'action_mailer/railtie'
 require 'rails/test_unit/railtie'
+require_relative '../app/middleware/jwt_authenticator'
 
 Bundler.require(*Rails.groups)
-
-require_relative '../app/middleware/jwt_authenticator'
 
 module AdminService
   class Application < Rails::Application

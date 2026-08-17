@@ -1,11 +1,10 @@
+require_relative 'env'
 require 'spec_helper'
-ENV['RAILS_ENV'] ||= 'test'
 require_relative '../config/environment'
-
-abort('The Rails environment is running in production mode!') if Rails.env.production?
-
 require 'rspec/rails'
 require 'database_cleaner/active_record'
+
+abort('The Rails environment is running in production mode!') if Rails.env.production?
 
 Rails.root.glob('spec/support/**/*.rb').each { |f| require f }
 
