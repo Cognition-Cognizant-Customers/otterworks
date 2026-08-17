@@ -4,9 +4,8 @@
 # Pulls events from SQS + DynamoDB, aggregates, loads to S3 and PostgreSQL
 #
 # Owner: Jake (data-team@otterworks.dev) -- Jake left mid-2020
-# TODO ETL-078: Refactor this into proper modules (deferred Q4 2019)
-# TODO ETL-142: Move credentials to secrets manager (deferred Q3 2020)
-# TODO ETL-201: Add unit tests (never prioritized)
+# Known gaps (ETL-078 modularization, ETL-142 secrets manager, ETL-201 tests) are
+# tracked in the backlog table of etl/ETL_UPGRADE_GUIDE.md.
 
 import configparser
 import gzip
@@ -48,7 +47,7 @@ def main():
     print("[%s] Processing analytics for date: %s" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ds))
 
     # ---- Extract from SQS ----
-    # TODO ETL-089: Make queue URL configurable per environment (2019-11-15)
+    # Per-environment queue URL is tracked as ETL-089 in etl/ETL_UPGRADE_GUIDE.md.
     sqs_queue_url = "https://sqs.us-east-1.amazonaws.com/123456789012/otterworks-analytics"
     sqs_client = boto3.client(
         "sqs",
@@ -76,7 +75,7 @@ def main():
             )
             consecutive_errors = 0
         except:
-            # TODO ETL-103: Add dead-letter queue for failed SQS calls (2020-01-08)
+            # Dead-lettering of failed SQS calls is tracked as ETL-103.
             consecutive_errors += 1
             print("[%s] WARNING: SQS receive failed (%d consecutive)" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), consecutive_errors))
             if consecutive_errors >= 3:
@@ -98,7 +97,7 @@ def main():
                     {"Id": msg["MessageId"], "ReceiptHandle": msg["ReceiptHandle"]}
                 )
             except:
-                # TODO ETL-103: Add dead-letter queue for malformed messages (2020-01-08)
+                # Dead-lettering of malformed messages is tracked as ETL-103.
                 pass
 
         if entries_to_delete:
@@ -150,7 +149,7 @@ def main():
         sys.exit(0)
 
     # ---- Transform and aggregate using pandas ----
-    # TODO ETL-155: This pandas approach is slow for large datasets, consider PySpark (2020-03-22)
+    # In-memory pandas aggregation does not scale; the PySpark move is tracked as ETL-155.
     df = pd.DataFrame(all_events)
 
     # Normalize event type field name

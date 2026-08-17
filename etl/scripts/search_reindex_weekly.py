@@ -5,9 +5,8 @@
 # file-service APIs, bulk-indexes into MeiliSearch, validates counts
 #
 # Owner: Jake (data-team@otterworks.dev) -- Jake left mid-2020
-# TODO ETL-112: Add retry logic for transient API failures (2019-12-20)
-# TODO ETL-145: Use connection pooling for requests (deferred Q3 2020)
-# TODO ETL-188: Add timeout handling everywhere (never done)
+# Known gaps (ETL-112 retries, ETL-145 connection pooling, ETL-188 timeouts) are
+# tracked in the backlog table of etl/ETL_UPGRADE_GUIDE.md.
 
 import configparser
 import json

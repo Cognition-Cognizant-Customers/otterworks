@@ -5,9 +5,8 @@
 # activity reports, stores to S3 for admin-service consumption
 #
 # Owner: Jake (data-team@otterworks.dev) -- Jake left mid-2020
-# TODO ETL-098: Optimize S3 reads with range requests (2019-12-01)
-# TODO ETL-160: Cache PostgreSQL connection across runs (deferred Q2 2020)
-# TODO ETL-210: Add email notification for report generation (never done)
+# Known gaps (ETL-098 S3 range reads, ETL-160 connection reuse, ETL-210 notifications)
+# are tracked in the backlog table of etl/ETL_UPGRADE_GUIDE.md.
 
 import configparser
 import gzip
@@ -172,7 +171,7 @@ def main():
 
         except:
             # S3 key might not exist for every day -- silently skip
-            # TODO ETL-098: Log missing days for debugging
+            # Logging of missing days is tracked as ETL-098.
             pass
 
     user_list = sorted(user_totals.values(), key=lambda x: x["total_actions"], reverse=True)

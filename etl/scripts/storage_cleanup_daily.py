@@ -5,9 +5,8 @@
 # generates storage savings report
 #
 # Owner: Jake (data-team@otterworks.dev) -- Jake left mid-2020
-# TODO ETL-091: Add S3 lifecycle rules instead of manual cleanup (2019-11-20)
-# TODO ETL-156: Parallelize S3 listing for large buckets (deferred Q1 2020)
-# TODO ETL-203: Add dry-run mode for testing (never implemented)
+# Known gaps (ETL-091 lifecycle rules, ETL-156 parallel listing, ETL-203 dry-run mode)
+# are tracked in the backlog table of etl/ETL_UPGRADE_GUIDE.md.
 
 import configparser
 import json

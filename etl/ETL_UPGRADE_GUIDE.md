@@ -207,3 +207,32 @@ The OtterWorks ETL pipeline consists of five Python scripts executed via system 
 8. **Decommission cron** -- Remove cron entries from the EC2 instance. Archive the legacy scripts.
 
 9. **Delete `config.ini`** -- Remove the plaintext credentials file from the repository and rotate all exposed secrets.
+
+---
+
+## Tracked Backlog Items
+
+The legacy scripts previously carried these items as inline `TODO` comments. They are
+recorded here (and in the issue tracker under the same IDs) so the code stays free of
+untracked tags; each is resolved by the corresponding migration step above.
+
+| ID | Script | Item |
+|----|--------|------|
+| ETL-078 | `analytics_daily.py` | Split the monolithic `main()` into extract/transform/load modules |
+| ETL-089 | `analytics_daily.py` | Make the SQS queue URL configurable per environment |
+| ETL-103 | `analytics_daily.py` | Dead-letter queue for failed SQS calls and malformed messages |
+| ETL-142 | `analytics_daily.py` | Move `config.ini` credentials to a secrets manager (and rotate them) |
+| ETL-155 | `analytics_daily.py` | Replace in-memory pandas aggregation with PySpark |
+| ETL-201 | `analytics_daily.py` | Add unit tests |
+| ETL-134 | `audit_archive_weekly.py` | Incremental archival instead of a full DynamoDB scan |
+| ETL-167 | `audit_archive_weekly.py` | Handle DynamoDB throughput throttling and partial batch failures |
+| ETL-199 | `audit_archive_weekly.py` | Add tests |
+| ETL-112 | `search_reindex_weekly.py` | Retry logic for transient API failures |
+| ETL-145 | `search_reindex_weekly.py` | Connection pooling for outbound HTTP requests |
+| ETL-188 | `search_reindex_weekly.py` | Timeout handling on all HTTP calls |
+| ETL-091 | `storage_cleanup_daily.py` | S3 lifecycle rules instead of manual cleanup |
+| ETL-156 | `storage_cleanup_daily.py` | Parallelize S3 listing for large buckets |
+| ETL-203 | `storage_cleanup_daily.py` | Dry-run mode |
+| ETL-098 | `user_activity_daily.py` | S3 range requests, and logging of missing days |
+| ETL-160 | `user_activity_daily.py` | Reuse the PostgreSQL connection across runs |
+| ETL-210 | `user_activity_daily.py` | Notification on report generation |
