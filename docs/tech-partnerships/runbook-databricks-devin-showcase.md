@@ -17,12 +17,12 @@ for a given namespace, so on-screen output matches this document exactly.
 
 ## Playbooks
 
-| Macro | Role |
-|---|---|
-| `!tp_dbx_demo_stage` | Parent: stages the whole demo, fans out children, leaves it rehearsal-ready |
-| `!tp_dbx_backfill` | Child: multi-year history load + per-year recon + Delta time travel |
-| `!tp_dbx_platform` | Child: declarative pipeline, lineage, dashboard, alert, recon job + failure-to-Devin loop |
-| `!tp_migrate_databricks` | Existing: legacy-script conversion fan-out (unchanged) |
+| Macro | Playbook id | Role |
+|---|---|---|
+| `!tp_dbx_demo_stage` | `playbook-2943e3f2b522444f85c2f61a09743701` | Parent: stages the whole demo, fans out children, leaves it rehearsal-ready |
+| `!tp_dbx_backfill` | `playbook-377124a498024799a93ed571e5612cc0` | Child: multi-year history load + per-year recon + Delta time travel |
+| `!tp_dbx_platform` | `playbook-eea8d3bfe3f14691a7895c45d2743d99` | Child: declarative pipeline, lineage, dashboard, alert, recon job + failure-to-Devin loop |
+| `!tp_migrate_databricks` | `playbook-292f26f986d743d2832c427bd9992e84` | Existing: legacy-script conversion fan-out (unchanged) |
 
 ## Staged state (`NS=demo`)
 
