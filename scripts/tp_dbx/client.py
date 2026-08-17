@@ -97,6 +97,23 @@ class Databricks:
             raise DbxError(f"{method} {path} -> HTTP {status}: {json.dumps(payload)[:400]}")
         return payload
 
+    def list_all(self, path: str, key: str, page_size: int = 100) -> list[dict]:
+        """Shared workspace: a namespace's alert or dashboard can sit past the first
+        page, and a lookup that stops there duplicates on create and misses on
+        teardown, so follow next_page_token to exhaustion."""
+        separator = "&" if "?" in path else "?"
+        page_token = ""
+        items: list[dict] = []
+        while True:
+            url = f"{path}{separator}page_size={page_size}"
+            if page_token:
+                url += f"&page_token={urllib.parse.quote(page_token)}"
+            payload = self.ok("GET", url)
+            items.extend(payload.get(key, []))
+            page_token = payload.get("next_page_token", "")
+            if not page_token:
+                return items
+
     # --- SQL ----------------------------------------------------------------
     @property
     def warehouse_id(self) -> str:

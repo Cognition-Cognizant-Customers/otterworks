@@ -59,10 +59,16 @@ def esc(value: str) -> str:
 
 def find_alert(dbx: Databricks, name: str) -> dict | None:
     # the alerts API returns the page under `alerts`; older docs say `results`
-    listed = dbx.ok("GET", "/api/2.0/alerts?page_size=100")
-    for alert in listed.get("alerts", listed.get("results", [])):
+    for alert in dbx.list_all("/api/2.0/alerts", "alerts"):
         if alert.get("display_name") == name and alert.get("lifecycle_state") == "ACTIVE":
             return alert
+    return None
+
+
+def find_dashboard(dbx: Databricks, name: str) -> dict | None:
+    for dashboard in dbx.list_all("/api/2.0/lakeview/dashboards", "dashboards"):
+        if dashboard.get("display_name") == name and dashboard.get("lifecycle_state") == "ACTIVE":
+            return dashboard
     return None
 
 
@@ -71,6 +77,15 @@ def as_int(value) -> int:
     means the manifest is not necessarily one we generated."""
     if isinstance(value, bool) or not isinstance(value, int):
         raise SystemExit(f"expectations manifest carried a non-integer numeric: {value!r}")
+    return value
+
+
+def as_code(value, label: str) -> str:
+    """Currency and record-type codes reach SQL as literals, and --expectations-file
+    means the manifest is not necessarily ours, so accept only short alphanumerics
+    rather than trusting the escaper with arbitrary text."""
+    if not isinstance(value, str) or not value.isalnum() or len(value) > 8:
+        raise SystemExit(f"expectations manifest carried an invalid {label}: {value!r}")
     return value
 
 
@@ -134,7 +149,8 @@ def cmd_expectations(dbx: Databricks, args) -> int:
         year = year_block["year"]
         for total in year_block["totals"]:
             rows.append(
-                f"({as_int(year)}, '{esc(total['currency'])}', '{esc(total['record_type'])}', "
+                f"({as_int(year)}, '{as_code(total['currency'], 'currency')}', "
+                f"'{as_code(total['record_type'], 'record type')}', "
                 f"{as_int(total['record_count'])}, {as_int(total['total_amount_cents'])}, "
                 f"{as_int(year_block['quarantine_record_count'])}, "
                 f"{as_int(files_per_year.get(year, 0))})"
@@ -475,12 +491,7 @@ def cmd_dashboard(dbx: Databricks, args) -> int:
             }
         ],
     }
-    existing = None
-    payload = dbx.ok("GET", "/api/2.0/lakeview/dashboards?page_size=100")
-    for dashboard in payload.get("dashboards", []):
-        if dashboard.get("display_name") == name and dashboard.get("lifecycle_state") == "ACTIVE":
-            existing = dashboard
-            break
+    existing = find_dashboard(dbx, name)
     body = {
         "display_name": name,
         "warehouse_id": dbx.warehouse_id,
@@ -770,8 +781,7 @@ def cmd_teardown(dbx: Databricks, args) -> int:
         dbx.sql(f"DROP MATERIALIZED VIEW IF EXISTS {view}")
         dbx.sql(f"DROP TABLE IF EXISTS {view}")
         print(f"dropped {view}")
-    dashboards = dbx.ok("GET", "/api/2.0/lakeview/dashboards?page_size=100")
-    for dashboard in dashboards.get("dashboards", []):
+    for dashboard in dbx.list_all("/api/2.0/lakeview/dashboards", "dashboards"):
         if dashboard.get("display_name") == f"ow_tp_billing_history_{n.ns}":
             dbx.call("DELETE", f"/api/2.0/lakeview/dashboards/{dashboard['dashboard_id']}")
             print(f"trashed dashboard {dashboard['dashboard_id']}")
@@ -786,17 +796,15 @@ def cmd_teardown(dbx: Databricks, args) -> int:
         print(f"workspace delete {path}: HTTP {status}")
     # negative verification across every object class teardown touches, so a
     # survivor like the alert cannot hide behind a table-only scan
-    remaining = dbx.sql(f"SHOW TABLES IN {n.catalog}.silver LIKE '*_{n.ns}'")
+    # sql_ok, not sql: an errored scan returns no rows, which would read as proof
+    # of absence and let teardown report a namespace it never cleaned
+    remaining = dbx.sql_ok(f"SHOW TABLES IN {n.catalog}.silver LIKE '*_{n.ns}'")
     leftovers = {
         "silver_tables": remaining.rows,
         "recon_job": dbx.find_job(f"ow_tp_billing_history_recon_{n.ns}") is not None,
         "pipeline": find_pipeline(dbx, pipeline_name(n)) is not None,
         "alert": find_alert(dbx, f"ow_tp_recon_failed_{n.ns}") is not None,
-        "dashboard": any(
-            d.get("display_name") == f"ow_tp_billing_history_{n.ns}"
-            and d.get("lifecycle_state") == "ACTIVE"
-            for d in dbx.ok("GET", "/api/2.0/lakeview/dashboards?page_size=100").get("dashboards", [])
-        ),
+        "dashboard": find_dashboard(dbx, f"ow_tp_billing_history_{n.ns}") is not None,
         "landed_paths": [e.get("path") for e in dbx.list_dir(n.history_dir)],
     }
     print("negative verification: " + json.dumps(leftovers))
