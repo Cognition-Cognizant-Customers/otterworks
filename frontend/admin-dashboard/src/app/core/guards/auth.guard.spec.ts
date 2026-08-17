@@ -4,10 +4,8 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
 import { authGuard } from './auth.guard';
-import { AuthService } from '../services/auth.service';
 
 describe('authGuard', () => {
-  let authService: AuthService;
   let router: Router;
   const mockRoute = {} as ActivatedRouteSnapshot;
   const mockState = { url: '/dashboard' } as RouterStateSnapshot;
@@ -17,7 +15,6 @@ describe('authGuard', () => {
     TestBed.configureTestingModule({
       imports: [HttpClientTestingModule, RouterTestingModule],
     });
-    authService = TestBed.inject(AuthService);
     router = TestBed.inject(Router);
   });
 

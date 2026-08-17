@@ -5,7 +5,7 @@ import { IncidentsComponent } from './incidents.component';
 import { AdminApiService } from '../../core/services/admin-api.service';
 import { Incident } from '../../core/models/incident.model';
 import { of, throwError } from 'rxjs';
-import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatDialogModule } from '@angular/material/dialog';
 import { OverlayModule } from '@angular/cdk/overlay';
 
 function makeIncident(overrides: Partial<Incident> = {}): Incident {
@@ -33,7 +33,6 @@ describe('IncidentsComponent', () => {
   let component: IncidentsComponent;
   let fixture: ComponentFixture<IncidentsComponent>;
   let apiSpy: jasmine.SpyObj<AdminApiService>;
-  let dialog: MatDialog;
 
   beforeEach(async () => {
     apiSpy = jasmine.createSpyObj('AdminApiService', [
@@ -60,7 +59,6 @@ describe('IncidentsComponent', () => {
 
     fixture = TestBed.createComponent(IncidentsComponent);
     component = fixture.componentInstance;
-    dialog = TestBed.inject(MatDialog);
   });
 
   it('should create', () => {
