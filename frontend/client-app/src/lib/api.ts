@@ -48,6 +48,14 @@ interface RawFileListResponse {
   pageSize: number;
 }
 
+// Coerce an untyped API value to a string, ignoring non-primitive values
+// that would otherwise stringify as "[object Object]"
+function toStringField(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return "";
+}
+
 // Normalize a single file from the file-service format to the frontend FileItem shape
 function mapRawFile(raw: RawFileItem): FileItem {
   return {
@@ -381,12 +389,12 @@ export const searchApi = {
     const ps = (data.page_size as number) ?? (data.pageSize as number) ?? 20;
     return {
       data: rawResults.map((r): SearchResult => ({
-        id: String(r.id ?? ""),
+        id: toStringField(r.id),
         type: (r.type as SearchResult["type"]) ?? "file",
-        name: String(r.title ?? r.name ?? r.id ?? ""),
-        snippet: String(r.content_snippet ?? r.contentSnippet ?? ""),
+        name: toStringField(r.title ?? r.name ?? r.id),
+        snippet: toStringField(r.content_snippet ?? r.contentSnippet),
         path: "",
-        updatedAt: String(r.updated_at ?? r.updatedAt ?? ""),
+        updatedAt: toStringField(r.updated_at ?? r.updatedAt),
         ownerName: "",
       })),
       total,
