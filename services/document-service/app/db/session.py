@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.config import settings
 from app.db.base import Base
+from app.db.mongo import MongoDocumentStore
 
 engine = create_async_engine(
     settings.database_url,
@@ -14,6 +15,7 @@ engine = create_async_engine(
     max_overflow=settings.db_max_overflow,
 )
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+mongo_store = MongoDocumentStore()
 
 
 async def init_db() -> None:
@@ -29,3 +31,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             yield session
         finally:
             await session.close()
+
+
+async def get_mongo_store() -> MongoDocumentStore:
+    return mongo_store

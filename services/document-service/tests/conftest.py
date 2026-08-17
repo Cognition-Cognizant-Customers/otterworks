@@ -1,16 +1,24 @@
 """Shared test fixtures."""
 
+import os
 import uuid
 from collections.abc import AsyncGenerator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from pymongo import MongoClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.db.base import Base
-from app.db.session import get_db
-from app.main import app
-from app.models.document import Comment, Document, DocumentVersion, Template  # noqa: F401
+TEST_MONGO_DB = f"ow_tp_document_tests_{uuid.uuid4().hex}"
+TEST_MONGO_URI = os.environ.get("DOC_SVC_MONGO_URI", "mongodb://localhost:27017")
+os.environ["DOC_SVC_MONGO_URI"] = TEST_MONGO_URI
+os.environ["DOC_SVC_MONGO_DB"] = TEST_MONGO_DB
+os.environ["DOC_SVC_NAMESPACE"] = "test"
+
+from app.db.base import Base  # noqa: E402
+from app.db.session import get_db, mongo_store  # noqa: E402
+from app.main import app  # noqa: E402
+from app.models.document import Comment, Document, DocumentVersion, Template  # noqa: E402,F401
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -22,11 +30,20 @@ TestingSessionLocal = async_sessionmaker(
 
 @pytest.fixture(autouse=True)
 async def setup_db():
+    mongo_store.documents.delete_many({"ns": "test"})
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+
+
+@pytest.fixture(scope="session", autouse=True)
+async def cleanup_mongo():
+    yield
+    client = MongoClient(TEST_MONGO_URI)
+    client.drop_database(TEST_MONGO_DB)
+    client.close()
 
 
 @pytest.fixture

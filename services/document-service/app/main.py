@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import comments, documents, health, templates
 from app.config import settings
-from app.db.session import engine, init_db
+from app.db.session import engine, init_db, mongo_store
 
 logger = structlog.get_logger()
 
@@ -45,6 +45,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
     logger.info("document_service_shutting_down")
     await engine.dispose()
+    mongo_store.close()
 
 
 app = FastAPI(
