@@ -134,7 +134,15 @@ def spec_fingerprint():
 
 def build_checks(golden, results, source_of_truth):
     checks = []
+    if len(golden["steps"]) != len(results):
+        raise SystemExit(
+            f"golden transcript has {len(golden['steps'])} steps but the spec produced "
+            f"{len(results)}; re-record the golden transcript")
     for g, r in zip(golden["steps"], results):
+        if g["id"] != r["id"]:
+            raise SystemExit(
+                f"step order diverged: golden={g['id']} live={r['id']}; "
+                "re-record the golden transcript")
         mismatches = []
         if g["status"] != r["status"]:
             mismatches.append(f"status: golden={g['status']} live={r['status']}")
