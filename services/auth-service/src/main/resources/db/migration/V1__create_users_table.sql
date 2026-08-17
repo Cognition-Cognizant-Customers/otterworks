@@ -22,21 +22,21 @@ CREATE TABLE IF NOT EXISTS user_roles (
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_created_at ON users(created_at);
 
--- Seed admin user for local development.
--- The password comes from the Flyway placeholder `seedAdminPassword`
--- (env AUTH_SEED_ADMIN_PASSWORD, defaulted only in the dev profile) and is hashed
--- here with a freshly salted bcrypt digest. When the placeholder is empty -- as it
--- is in prod -- no admin user is seeded and no credential exists in the schema.
+-- Seed admin user. The password comes from the Flyway placeholder `seedAdminPassword`
+-- (env AUTH_SEED_ADMIN_PASSWORD) and is hashed here with a freshly salted bcrypt
+-- digest, so no password digest is stored in the source tree. When the placeholder is
+-- empty no admin user is seeded at all. The value is dollar-quoted so that passwords
+-- containing quotes cannot break out of the literal.
 DO $seed$
 BEGIN
-    IF '${seedAdminPassword}' <> '' THEN
+    IF $pw$${seedAdminPassword}$pw$ <> '' THEN
         EXECUTE 'CREATE EXTENSION IF NOT EXISTS pgcrypto';
 
         INSERT INTO users (id, email, password_hash, display_name, email_verified, created_at, updated_at)
         VALUES (
             'a0000000-0000-0000-0000-000000000001',
             'admin@otterworks.dev',
-            crypt('${seedAdminPassword}', gen_salt('bf', 10)),
+            crypt($pw$${seedAdminPassword}$pw$, gen_salt('bf', 10)),
             'Admin User',
             true,
             NOW(),
