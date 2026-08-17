@@ -375,7 +375,7 @@ def probe_validator(db, ns: str) -> dict:
     Probes are only written when a validator is present. Without one, the
     missing validator fails the check without risking a malformed write.
     """
-    from pymongo.errors import WriteError
+    from pymongo.errors import DuplicateKeyError, WriteError
 
     result = {}
     probes = {
@@ -392,6 +392,7 @@ def probe_validator(db, ns: str) -> dict:
     }
     for name, bad in probes.items():
         scope = {"ns": ns}
+        db[name].delete_one({"_id": bad["_id"], "ns": ns})
         before = db[name].count_documents(scope)
         info = next(iter(db.list_collections(filter={"name": name})), {})
         has_validator = "validator" in info.get("options", {})
@@ -399,15 +400,21 @@ def probe_validator(db, ns: str) -> dict:
         if has_validator:
             try:
                 db[name].insert_one(bad)
+            except DuplicateKeyError:
+                rejected = False
             except WriteError:
                 rejected = True
             else:
                 db[name].delete_one({"_id": bad["_id"], "ns": ns})
         after = db[name].count_documents(scope)
+        probe_absent = (
+            db[name].count_documents({"_id": bad["_id"], "ns": ns}) == 0
+        )
         result[name] = {
             "validator_present": has_validator,
             "violating_insert_rejected": rejected,
             "count_unchanged": before == after,
+            "probe_absent": probe_absent,
         }
     return result
 
@@ -573,7 +580,8 @@ def build_checks(ns: str, mf: dict, expected: dict, facts: dict) -> list[dict]:
               target_src),
         check("documents.validators_reject_invalid",
               {name: {"validator_present": True, "violating_insert_rejected": True,
-                      "count_unchanged": True} for name in facts["validators"]},
+                      "count_unchanged": True, "probe_absent": True}
+              for name in facts["validators"]},
               facts["validators"], target_src),
         contract_check,
     ]

@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_documents",
   "namespace": "demo",
-  "generated_at": "2026-08-17T06:58:54Z",
+  "generated_at": "2026-08-17T07:10:45Z",
   "run_mode": "fixture",
   "target": {
     "database": "ow_tp_demo",
@@ -189,24 +189,28 @@
         "documents": {
           "validator_present": true,
           "violating_insert_rejected": true,
-          "count_unchanged": true
+          "count_unchanged": true,
+          "probe_absent": true
         },
         "document_snapshots": {
           "validator_present": true,
           "violating_insert_rejected": true,
-          "count_unchanged": true
+          "count_unchanged": true,
+          "probe_absent": true
         }
       },
       "actual": {
         "documents": {
           "validator_present": true,
           "violating_insert_rejected": true,
-          "count_unchanged": true
+          "count_unchanged": true,
+          "probe_absent": true
         },
         "document_snapshots": {
           "validator_present": true,
           "violating_insert_rejected": true,
-          "count_unchanged": true
+          "count_unchanged": true,
+          "probe_absent": true
         }
       },
       "source_of_truth": "mongodb ow_tp_demo (recomputed after write)",
