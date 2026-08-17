@@ -11,7 +11,9 @@ WORKDIR /app
 COPY --from=builder /usr/local/bundle /usr/local/bundle
 COPY . .
 
-RUN useradd -r -u 1001 appuser && mkdir -p /app/tmp/pids /app/tmp/cache /app/log && chown -R appuser:appuser /app/tmp /app/log
+RUN useradd -r -u 1001 appuser \
+    && mkdir -p /app/tmp/pids /app/tmp/cache /app/log \
+    && chown -R appuser:appuser /app/tmp /app/log
 USER appuser
 
 EXPOSE 8089
