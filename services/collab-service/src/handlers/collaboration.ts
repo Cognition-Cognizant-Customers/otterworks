@@ -30,6 +30,9 @@ export interface CollaborationDeps {
   snapshotIntervalMs: number;
 }
 
+const DEFAULT_PERSIST_INTERVAL_MS = 30000;
+const DEFAULT_SNAPSHOT_INTERVAL_MS = 300000;
+
 export class CollaborationManager {
   private documents: Map<string, Y.Doc> = new Map();
   private documentInitPromises: Map<string, Promise<Y.Doc>> = new Map();
@@ -566,26 +569,20 @@ export class CollaborationManager {
   }
 }
 
-/** Convenience function matching the original API for backward compatibility */
+export type CollaborationOptions = Omit<
+  CollaborationDeps,
+  'persistIntervalMs' | 'snapshotIntervalMs'
+> &
+  Partial<Pick<CollaborationDeps, 'persistIntervalMs' | 'snapshotIntervalMs'>>;
+
+/** Convenience function that builds and starts a CollaborationManager */
 export function setupCollaborationHandlers(
-  io: SocketIOServer,
-  documentStore: DocumentStore,
-  awareness: AwarenessService,
-  presenceHandler: PresenceHandler,
-  metrics: MetricsCollector,
-  logger: Logger,
-  persistIntervalMs = 30000,
-  snapshotIntervalMs = 300000,
+  options: CollaborationOptions,
 ): CollaborationManager {
   const manager = new CollaborationManager({
-    io,
-    documentStore,
-    awareness,
-    presenceHandler,
-    metrics,
-    logger,
-    persistIntervalMs,
-    snapshotIntervalMs,
+    ...options,
+    persistIntervalMs: options.persistIntervalMs ?? DEFAULT_PERSIST_INTERVAL_MS,
+    snapshotIntervalMs: options.snapshotIntervalMs ?? DEFAULT_SNAPSHOT_INTERVAL_MS,
   });
   manager.start();
   return manager;

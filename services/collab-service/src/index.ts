@@ -116,16 +116,16 @@ const awareness = new AwarenessService(logger);
 const presenceHandler = new PresenceHandler(awareness, logger);
 
 // Setup collaboration handlers
-const collabManager = setupCollaborationHandlers(
+const collabManager = setupCollaborationHandlers({
   io,
   documentStore,
   awareness,
   presenceHandler,
   metrics,
   logger,
-  config.persistence.intervalMs,
-  config.persistence.snapshotIntervalMs,
-);
+  persistIntervalMs: config.persistence.intervalMs,
+  snapshotIntervalMs: config.persistence.snapshotIntervalMs,
+});
 
 // y-websocket server for TipTap/Yjs collaborative editing
 const wss = new WebSocketServer({ noServer: true });
