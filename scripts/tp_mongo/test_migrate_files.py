@@ -144,6 +144,16 @@ def test_out_of_range_value_is_quarantined_not_left_to_the_validator():
         assert record["reason"] == f"out_of_range_attribute:{attr}"
 
 
+def test_non_integral_or_oversized_number_is_quarantined_not_written_as_a_double():
+    """DynamoDB N values are Decimals; only int64 integers satisfy the validator."""
+    doc, record = transform(item(size_bytes=Decimal("1.5")))
+    assert doc is None
+    assert record["reason"] == "non_integral_attribute:size_bytes"
+    doc, record = transform(item(version=Decimal("2" + "0" * 19)))
+    assert doc is None
+    assert record["reason"] == "out_of_range_attribute:version"
+
+
 def test_absent_optional_attributes_still_migrate():
     doc, bad = transform(item(version=..., is_trashed=..., created_at=..., name=...))
     assert bad is None

@@ -67,7 +67,11 @@ ATTR_TYPES: dict[str, type | tuple[type, ...]] = {
     "folder_id": str, "owner_id": str, "size_bytes": (int, Decimal),
     "version": (int, Decimal), "is_trashed": bool,
 }
+# The validator takes int/long only, and BSON cannot encode past int64, so a
+# fractional or oversized DynamoDB number is quarantined rather than becoming a
+# double the validator rejects or an OverflowError at encode time.
 ATTR_MINIMUMS = {"size_bytes": 0, "version": 1}
+INT64_MAX = 2**63 - 1
 CARRIED_ATTRS = ("name", "mime_type", "size_bytes", "s3_key", "folder_id",
                  "owner_id", "version", "is_trashed")
 TIMESTAMP_ATTRS = ("created_at", "updated_at")
@@ -211,8 +215,11 @@ def transform(item: dict) -> tuple[dict | None, dict | None]:
         if isinstance(value, bool) is not (expected is bool) or not isinstance(value, expected):
             required = "_required" if attr in REQUIRED_ATTRS else ""
             return rejected(f"wrongly_typed{required}_attribute:{attr}")
-        if attr in ATTR_MINIMUMS and value < ATTR_MINIMUMS[attr]:
-            return rejected(f"out_of_range_attribute:{attr}")
+        if attr in ATTR_MINIMUMS:
+            if isinstance(value, Decimal) and value != value.to_integral_value():
+                return rejected(f"non_integral_attribute:{attr}")
+            if not ATTR_MINIMUMS[attr] <= value <= INT64_MAX:
+                return rejected(f"out_of_range_attribute:{attr}")
 
     doc: dict[str, Any] = {"_id": item["id"], "tenant": item["ns"]}
     for attr in CARRIED_ATTRS:
