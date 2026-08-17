@@ -1,5 +1,6 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { createServer } from 'http';
+import { randomBytes } from 'crypto';
 import { io as clientIO, Socket as ClientSocket } from 'socket.io-client';
 import jwt from 'jsonwebtoken';
 import * as Y from 'yjs';
@@ -11,7 +12,7 @@ import { MetricsCollector } from '../metrics';
 import { createAuthMiddleware } from '../middleware/auth';
 import { RedisAdapter } from '../services/redis-adapter';
 
-const JWT_SECRET = 'test-secret-key-for-unit-tests';
+const JWT_SECRET = process.env.TEST_JWT_SECRET || randomBytes(32).toString('hex');
 let PORT: number;
 
 function createToken(payload: Record<string, unknown>): string {
