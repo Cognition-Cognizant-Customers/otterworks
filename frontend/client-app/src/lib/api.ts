@@ -131,7 +131,7 @@ function getOwnerIdFromJwt(): string | null {
   const token = localStorage.getItem("otter_access_token");
   if (!token) return null;
   try {
-    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, '+').replace(/_/g, '/')));
+    const payload = JSON.parse(atob(token.split(".")[1].replaceAll("-", "+").replaceAll("_", "/")));
     return payload.sub ?? null;
   } catch {
     return null;
