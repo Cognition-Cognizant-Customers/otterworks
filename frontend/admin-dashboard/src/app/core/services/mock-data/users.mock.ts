@@ -134,16 +134,16 @@ export const MOCK_USERS: User[] = [
 ];
 
 export const MOCK_USER_ACTIVITIES: UserActivity[] = [
-  { id: 'act-001', userId: 'usr-001', action: 'Uploaded file', resource: 'Q4-Report.docx', timestamp: '2026-04-17T10:30:00Z', ipAddress: '192.168.1.10' },
-  { id: 'act-002', userId: 'usr-001', action: 'Shared document', resource: 'Budget-2026.xlsx', timestamp: '2026-04-17T09:15:00Z', ipAddress: '192.168.1.10' },
-  { id: 'act-003', userId: 'usr-001', action: 'Edited document', resource: 'Team-Notes.docx', timestamp: '2026-04-16T16:00:00Z', ipAddress: '192.168.1.10' },
-  { id: 'act-004', userId: 'usr-002', action: 'Created folder', resource: 'Marketing-Assets', timestamp: '2026-04-17T09:00:00Z', ipAddress: '10.0.0.25' },
-  { id: 'act-005', userId: 'usr-002', action: 'Uploaded file', resource: 'Campaign-Brief.pdf', timestamp: '2026-04-16T14:30:00Z', ipAddress: '10.0.0.25' },
-  { id: 'act-006', userId: 'usr-003', action: 'Downloaded file', resource: 'Design-System.fig', timestamp: '2026-04-16T16:45:00Z', ipAddress: '10.0.0.42' },
-  { id: 'act-007', userId: 'usr-003', action: 'Edited document', resource: 'UI-Guidelines.docx', timestamp: '2026-04-16T15:00:00Z', ipAddress: '10.0.0.42' },
-  { id: 'act-008', userId: 'usr-005', action: 'Shared document', resource: 'Product-Roadmap.docx', timestamp: '2026-04-17T08:20:00Z', ipAddress: '172.16.0.5' },
-  { id: 'act-009', userId: 'usr-006', action: 'Deleted file', resource: 'old-backup.zip', timestamp: '2026-04-17T12:00:00Z', ipAddress: '192.168.1.15' },
-  { id: 'act-010', userId: 'usr-008', action: 'Created document', resource: 'API-Docs-v2.md', timestamp: '2026-04-16T14:30:00Z', ipAddress: '10.0.0.80' },
-  { id: 'act-011', userId: 'usr-009', action: 'Uploaded file', resource: 'Blog-Post-Draft.docx', timestamp: '2026-04-17T11:00:00Z', ipAddress: '172.16.0.12' },
-  { id: 'act-012', userId: 'usr-001', action: 'Login', resource: 'Admin Portal', timestamp: '2026-04-17T08:00:00Z', ipAddress: '192.168.1.10' },
+  { id: 'act-001', userId: 'usr-001', action: 'Uploaded file', resource: 'Q4-Report.docx', timestamp: '2026-04-17T10:30:00Z', ipAddress: '198.51.100.10' },
+  { id: 'act-002', userId: 'usr-001', action: 'Shared document', resource: 'Budget-2026.xlsx', timestamp: '2026-04-17T09:15:00Z', ipAddress: '198.51.100.10' },
+  { id: 'act-003', userId: 'usr-001', action: 'Edited document', resource: 'Team-Notes.docx', timestamp: '2026-04-16T16:00:00Z', ipAddress: '198.51.100.10' },
+  { id: 'act-004', userId: 'usr-002', action: 'Created folder', resource: 'Marketing-Assets', timestamp: '2026-04-17T09:00:00Z', ipAddress: '192.0.2.25' },
+  { id: 'act-005', userId: 'usr-002', action: 'Uploaded file', resource: 'Campaign-Brief.pdf', timestamp: '2026-04-16T14:30:00Z', ipAddress: '192.0.2.25' },
+  { id: 'act-006', userId: 'usr-003', action: 'Downloaded file', resource: 'Design-System.fig', timestamp: '2026-04-16T16:45:00Z', ipAddress: '192.0.2.42' },
+  { id: 'act-007', userId: 'usr-003', action: 'Edited document', resource: 'UI-Guidelines.docx', timestamp: '2026-04-16T15:00:00Z', ipAddress: '192.0.2.42' },
+  { id: 'act-008', userId: 'usr-005', action: 'Shared document', resource: 'Product-Roadmap.docx', timestamp: '2026-04-17T08:20:00Z', ipAddress: '203.0.113.5' },
+  { id: 'act-009', userId: 'usr-006', action: 'Deleted file', resource: 'old-backup.zip', timestamp: '2026-04-17T12:00:00Z', ipAddress: '198.51.100.15' },
+  { id: 'act-010', userId: 'usr-008', action: 'Created document', resource: 'API-Docs-v2.md', timestamp: '2026-04-16T14:30:00Z', ipAddress: '192.0.2.80' },
+  { id: 'act-011', userId: 'usr-009', action: 'Uploaded file', resource: 'Blog-Post-Draft.docx', timestamp: '2026-04-17T11:00:00Z', ipAddress: '203.0.113.12' },
+  { id: 'act-012', userId: 'usr-001', action: 'Login', resource: 'Admin Portal', timestamp: '2026-04-17T08:00:00Z', ipAddress: '198.51.100.10' },
 ];
