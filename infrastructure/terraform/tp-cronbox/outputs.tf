@@ -21,3 +21,23 @@ output "file_metadata_table" {
 output "orphan_audit_table" {
   value = aws_dynamodb_table.orphan_audit.name
 }
+
+output "orphan_quarantine_function_name" {
+  value = aws_lambda_function.orphan_quarantine.function_name
+}
+
+output "orphan_detect_rule_name" {
+  value = aws_cloudwatch_event_rule.orphan_detect.name
+}
+
+output "orphan_quarantine_dlq_url" {
+  value = aws_sqs_queue.orphan_quarantine_dlq.url
+}
+
+output "orphan_quarantine_dlq_arn" {
+  value = aws_sqs_queue.orphan_quarantine_dlq.arn
+}
+
+output "quarantine_lifecycle_bucket" {
+  value = aws_s3_bucket.file_quarantine.bucket
+}
