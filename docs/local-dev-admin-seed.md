@@ -22,9 +22,10 @@ belongs to a different account.
 ## Cluster deployments
 
 `scripts/deploy-dev.sh` and `scripts/deploy-tenant.sh` pass `AUTH_ADMIN_SEED_PASSWORD` to the
-auth-service release as a Helm secret, defaulting to a freshly generated value. Export a stable
-`ADMIN_SEED_PASSWORD` (and optionally `ADMIN_SEED_EMAIL`) across redeploys to keep the same admin
-login working, exactly as with `JWT_SECRET`.
+auth-service release as a Helm secret and set `AUTH_FLYWAY_REPAIR_ON_MIGRATE=true` (existing cluster
+and tenant databases were migrated by the previous `V1`). They default to the same documented demo
+credential as local dev so deployed environments keep a usable admin login; export
+`ADMIN_SEED_PASSWORD` (and optionally `ADMIN_SEED_EMAIL`) for anything that is not a demo.
 
 ## Local development
 

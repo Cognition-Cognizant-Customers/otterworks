@@ -21,8 +21,8 @@
 #       [--profile core|full]
 #
 # Required env: AWS creds (exported), DB_PASSWORD. Stable JWT_SECRET /
-#   SECRET_KEY_BASE / ADMIN_SEED_PASSWORD recommended across redeploys
-#   (auto-generated if unset).
+#   SECRET_KEY_BASE recommended across redeploys (auto-generated if unset).
+#   ADMIN_SEED_PASSWORD overrides the demo admin password.
 # ------------------------------------------------------------------------------
 set -euo pipefail
 
@@ -70,8 +70,9 @@ DB_PASSWORD="${DB_PASSWORD:?ERROR: DB_PASSWORD must be set}"
 JWT_SECRET="${JWT_SECRET:-$(openssl rand -hex 32)}"
 SECRET_KEY_BASE="${SECRET_KEY_BASE:-$(openssl rand -hex 64)}"
 # Password of the seeded admin account (auth-service seeds it on boot; it is no
-# longer in the Flyway migration). Generated per deploy unless supplied.
-ADMIN_SEED_PASSWORD="${ADMIN_SEED_PASSWORD:-$(openssl rand -base64 24)}"
+# longer in the Flyway migration). Defaults to the documented demo credential so
+# attendees keep a usable admin login; override for anything real.
+ADMIN_SEED_PASSWORD="${ADMIN_SEED_PASSWORD:-Admin123!}"
 
 NS="$(tenant_namespace "${ATTENDEE_ID}")"
 T_DB_NAME="$(tenant_db_name "${ATTENDEE_ID}")"

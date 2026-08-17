@@ -316,10 +316,12 @@ build_helm_args() {
       add_secret SPRING_FLYWAY_PASSWORD "${DB_PASSWORD}"
       add_secret SPRING_DATASOURCE_PASSWORD "${DB_PASSWORD}"
       # The admin account is seeded at boot from this secret (it is no longer in
-      # the Flyway migration); pass a stable ADMIN_SEED_PASSWORD across redeploys
-      # to keep the same login working.
+      # the Flyway migration); override ADMIN_SEED_PASSWORD for anything real.
       EXTRA_ARGS+=(--set-string "config.AUTH_ADMIN_SEED_EMAIL=${ADMIN_SEED_EMAIL:-admin@otterworks.dev}")
-      add_secret AUTH_ADMIN_SEED_PASSWORD "${ADMIN_SEED_PASSWORD}" ;;
+      # Tenant databases migrated before the admin seed left V1 carry the old
+      # checksum; repair realigns it instead of crash-looping the service.
+      EXTRA_ARGS+=(--set-string "config.AUTH_FLYWAY_REPAIR_ON_MIGRATE=${AUTH_FLYWAY_REPAIR_ON_MIGRATE:-true}")
+      add_secret AUTH_ADMIN_SEED_PASSWORD "${ADMIN_SEED_PASSWORD:-Admin123!}" ;;
     file-service)
       EXTRA_ARGS+=(--set-string "config.AWS_REGION=${AWS_REGION}")
       EXTRA_ARGS+=(--set-string "config.S3_BUCKET=${S3_FILE_BUCKET}")
