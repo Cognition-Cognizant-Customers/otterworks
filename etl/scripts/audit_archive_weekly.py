@@ -30,6 +30,69 @@ class DecimalEncoder(json.JSONEncoder):
         return super().default(o)
 
 
+def scan_expired_events(table, cutoff_date):
+    """Scan the audit table for every event older than the cutoff."""
+    events = []
+    scan_kwargs = {
+        "FilterExpression": "#ts < :cutoff",
+        "ExpressionAttributeNames": {"#ts": "timestamp"},
+        "ExpressionAttributeValues": {":cutoff": cutoff_date},
+    }
+
+    while True:
+        response = table.scan(**scan_kwargs)
+        events.extend(response.get("Items", []))
+
+        last_key = response.get("LastEvaluatedKey")
+        if not last_key:
+            return events
+        scan_kwargs["ExclusiveStartKey"] = last_key
+
+
+def compress_events(events):
+    """Serialize events as gzipped JSONL."""
+    buf = io.BytesIO()
+    with gzip.GzipFile(fileobj=buf, mode="wb") as gz:
+        for event in events:
+            line = json.dumps(event, cls=DecimalEncoder)
+            gz.write(line.encode("utf-8"))
+            gz.write(b"\n")
+    return buf
+
+
+def delete_batch(table, batch):
+    """Delete one batch of keys, returning how many were deleted."""
+    try:
+        with table.batch_writer() as batch_writer:
+            for key in batch:
+                batch_writer.delete_item(Key=key)
+    except Exception:
+        # TODO ETL-167: Handle throttling / partial failures
+        return 0
+    return len(batch)
+
+
+def delete_archived_events(table, events, batch_size):
+    """Batch-delete archived events from DynamoDB."""
+    deleted_count = 0
+    batch = []
+
+    for event in events:
+        batch.append({
+            "event_id": event["event_id"],
+            "timestamp": event["timestamp"],
+        })
+
+        if len(batch) >= batch_size:
+            deleted_count += delete_batch(table, batch)
+            batch = []
+
+    if batch:
+        deleted_count += delete_batch(table, batch)
+
+    return deleted_count
+
+
 def main():
     print("[%s] audit_archive_weekly.py starting..." % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
@@ -66,22 +129,7 @@ def main():
     )
     table = dynamodb.Table(dynamodb_table_name)
 
-    events_to_archive = []
-    scan_kwargs = {
-        "FilterExpression": "#ts < :cutoff",
-        "ExpressionAttributeNames": {"#ts": "timestamp"},
-        "ExpressionAttributeValues": {":cutoff": cutoff_date},
-    }
-
-    while True:
-        response = table.scan(**scan_kwargs)
-        items = response.get("Items", [])
-        events_to_archive.extend(items)
-
-        last_key = response.get("LastEvaluatedKey")
-        if not last_key:
-            break
-        scan_kwargs["ExclusiveStartKey"] = last_key
+    events_to_archive = scan_expired_events(table, cutoff_date)
 
     archive_count = len(events_to_archive)
     print("[%s] Found %d audit events older than %d days" % (
@@ -95,12 +143,7 @@ def main():
     # ---- Compress to JSONL.gz ----
     archive_key = "%s/year=%s/week=%s/audit_events.jsonl.gz" % (s3_prefix, ds[:4], ds)
 
-    buf = io.BytesIO()
-    with gzip.GzipFile(fileobj=buf, mode="wb") as gz:
-        for event in events_to_archive:
-            line = json.dumps(event, cls=DecimalEncoder)
-            gz.write(line.encode("utf-8"))
-            gz.write(b"\n")
+    buf = compress_events(events_to_archive)
 
     compressed_size = buf.tell()
     print("[%s] Compressed %d events to %.2f MB" % (
@@ -133,36 +176,9 @@ def main():
         datetime.now().strftime("%Y-%m-%d %H:%M:%S"), archive_count
     ))
 
-    deleted_count = 0
-    batch = []
-
-    for event in events_to_archive:
-        key = {
-            "event_id": event["event_id"],
-            "timestamp": event["timestamp"],
-        }
-        batch.append(key)
-
-        if len(batch) >= dynamodb_batch_size:
-            try:
-                with table.batch_writer() as batch_writer:
-                    for k in batch:
-                        batch_writer.delete_item(Key=k)
-                deleted_count += len(batch)
-            except:
-                # TODO ETL-167: Handle throttling / partial failures
-                pass
-            batch = []
-
-    # flush remaining batch
-    if batch:
-        try:
-            with table.batch_writer() as batch_writer:
-                for k in batch:
-                    batch_writer.delete_item(Key=k)
-            deleted_count += len(batch)
-        except:
-            pass
+    deleted_count = delete_archived_events(
+        table, events_to_archive, dynamodb_batch_size
+    )
 
     print("[%s] Deleted %d events from DynamoDB" % (
         datetime.now().strftime("%Y-%m-%d %H:%M:%S"), deleted_count

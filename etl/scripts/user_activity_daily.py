@@ -19,6 +19,125 @@ import boto3
 import psycopg2
 
 
+SUMMARY_COLUMNS = [
+    "report_date",
+    "active_users",
+    "active_documents",
+    "active_files",
+    "total_events",
+    "documents_created",
+    "documents_edited",
+    "comments_added",
+    "files_uploaded",
+    "files_shared",
+    "files_deleted",
+    "bytes_uploaded",
+]
+
+SUMMARY_SQL = """
+    SELECT
+        report_date,
+        active_users,
+        active_documents,
+        active_files,
+        total_events,
+        documents_created,
+        documents_edited,
+        comments_added,
+        files_uploaded,
+        files_shared,
+        files_deleted,
+        bytes_uploaded
+    FROM analytics_daily_summary
+    WHERE report_date BETWEEN %s::date - interval '%s days' AND %s::date
+    ORDER BY report_date;
+"""
+
+
+def row_to_summary(row):
+    """Map a result row onto the summary columns, normalizing dates."""
+    record = {}
+    for i, col in enumerate(SUMMARY_COLUMNS):
+        val = row[i]
+        if hasattr(val, "isoformat"):
+            val = val.isoformat()
+        record[col] = val
+    return record
+
+
+def fetch_daily_summaries(db_params, ds, lookback_days):
+    """Read the analytics daily aggregates for the lookback window."""
+    conn = None
+    cursor = None
+    try:
+        conn = psycopg2.connect(**db_params)
+        cursor = conn.cursor()
+        cursor.execute(SUMMARY_SQL, (ds, lookback_days, ds))
+        return [row_to_summary(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print("[%s] ERROR: PostgreSQL query failed: %s" % (
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"), str(e)
+        ))
+        sys.exit(1)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+def accumulate_user_day(user_totals, user_data):
+    """Fold one day's per-user record into the running totals."""
+    uid = user_data.get("user_id", "unknown")
+    totals = user_totals.setdefault(uid, {
+        "user_id": uid,
+        "total_actions": 0,
+        "active_days": 0,
+        "actions_by_type": {},
+    })
+
+    totals["total_actions"] += user_data.get("total", 0)
+    totals["active_days"] += 1
+
+    for action_type, count in user_data.get("actions", {}).items():
+        prev = totals["actions_by_type"].get(action_type, 0)
+        totals["actions_by_type"][action_type] = prev + count
+
+
+def read_day_user_totals(s3_client, bucket, key, user_totals):
+    """Fold one day's top_users file (if present) into the running totals."""
+    try:
+        response = s3_client.get_object(Bucket=bucket, Key=key)
+        decompressed = gzip.decompress(response["Body"].read()).decode("utf-8")
+    except Exception:
+        # S3 key might not exist for every day -- silently skip
+        # TODO ETL-098: Log missing days for debugging
+        return
+
+    for line in decompressed.strip().split("\n"):
+        if line:
+            accumulate_user_day(user_totals, json.loads(line))
+
+
+def aggregate_user_activity(s3_client, bucket, ds, lookback_days):
+    """Aggregate per-user activity across the lookback window."""
+    user_totals = {}
+    execution_date = datetime.strptime(ds, "%Y-%m-%d")
+
+    for day_offset in range(lookback_days):
+        check_date = execution_date - timedelta(days=day_offset)
+        key = "analytics/daily/year=%s/month=%s/day=%s/top_users.jsonl.gz" % (
+            check_date.strftime("%Y"),
+            check_date.strftime("%m"),
+            check_date.strftime("%d"),
+        )
+        read_day_user_totals(s3_client, bucket, key, user_totals)
+
+    return sorted(
+        user_totals.values(), key=lambda x: x["total_actions"], reverse=True
+    )
+
+
 def main():
     print("[%s] user_activity_daily.py starting..." % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
@@ -47,79 +166,21 @@ def main():
         datetime.now().strftime("%Y-%m-%d %H:%M:%S"), lookback_days
     ))
 
-    conn = None
-    cursor = None
-    daily_summaries = []
+    daily_summaries = fetch_daily_summaries(
+        {
+            "host": db_host,
+            "port": db_port,
+            "dbname": db_name,
+            "user": db_user,
+            "password": db_password,
+        },
+        ds,
+        lookback_days,
+    )
 
-    try:
-        conn = psycopg2.connect(
-            host=db_host,
-            port=db_port,
-            dbname=db_name,
-            user=db_user,
-            password=db_password,
-        )
-        cursor = conn.cursor()
-
-        summary_sql = """
-            SELECT
-                report_date,
-                active_users,
-                active_documents,
-                active_files,
-                total_events,
-                documents_created,
-                documents_edited,
-                comments_added,
-                files_uploaded,
-                files_shared,
-                files_deleted,
-                bytes_uploaded
-            FROM analytics_daily_summary
-            WHERE report_date BETWEEN %s::date - interval '%s days' AND %s::date
-            ORDER BY report_date;
-        """
-
-        cursor.execute(summary_sql, (ds, lookback_days, ds))
-        rows = cursor.fetchall()
-
-        columns = [
-            "report_date",
-            "active_users",
-            "active_documents",
-            "active_files",
-            "total_events",
-            "documents_created",
-            "documents_edited",
-            "comments_added",
-            "files_uploaded",
-            "files_shared",
-            "files_deleted",
-            "bytes_uploaded",
-        ]
-
-        for row in rows:
-            record = {}
-            for i, col in enumerate(columns):
-                val = row[i]
-                if hasattr(val, "isoformat"):
-                    val = val.isoformat()
-                record[col] = val
-            daily_summaries.append(record)
-
-        print("[%s] Retrieved %d daily summary records" % (
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"), len(daily_summaries)
-        ))
-    except Exception as e:
-        print("[%s] ERROR: PostgreSQL query failed: %s" % (
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S"), str(e)
-        ))
-        sys.exit(1)
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
+    print("[%s] Retrieved %d daily summary records" % (
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"), len(daily_summaries)
+    ))
 
     # ---- Read per-user activity data from S3 ----
     print("[%s] Reading per-user activity data from S3 (lookback: %d days)..." % (
@@ -133,49 +194,9 @@ def main():
         region_name=aws_region,
     )
 
-    user_totals = {}
-    execution_date = datetime.strptime(ds, "%Y-%m-%d")
-
-    for day_offset in range(lookback_days):
-        check_date = execution_date - timedelta(days=day_offset)
-        year = check_date.strftime("%Y")
-        month = check_date.strftime("%m")
-        day = check_date.strftime("%d")
-        key = "analytics/daily/year=%s/month=%s/day=%s/top_users.jsonl.gz" % (year, month, day)
-
-        try:
-            response = s3_client.get_object(Bucket=data_lake_bucket, Key=key)
-            body = response["Body"].read()
-            decompressed = gzip.decompress(body).decode("utf-8")
-
-            for line in decompressed.strip().split("\n"):
-                if not line:
-                    continue
-                user_data = json.loads(line)
-                uid = user_data.get("user_id", "unknown")
-                total = user_data.get("total", 0)
-
-                if uid not in user_totals:
-                    user_totals[uid] = {
-                        "user_id": uid,
-                        "total_actions": 0,
-                        "active_days": 0,
-                        "actions_by_type": {},
-                    }
-
-                user_totals[uid]["total_actions"] += total
-                user_totals[uid]["active_days"] += 1
-
-                for action_type, count in user_data.get("actions", {}).items():
-                    prev = user_totals[uid]["actions_by_type"].get(action_type, 0)
-                    user_totals[uid]["actions_by_type"][action_type] = prev + count
-
-        except:
-            # S3 key might not exist for every day -- silently skip
-            # TODO ETL-098: Log missing days for debugging
-            pass
-
-    user_list = sorted(user_totals.values(), key=lambda x: x["total_actions"], reverse=True)
+    user_list = aggregate_user_activity(
+        s3_client, data_lake_bucket, ds, lookback_days
+    )
     print("[%s] Aggregated activity for %d users over %d days" % (
         datetime.now().strftime("%Y-%m-%d %H:%M:%S"), len(user_list), lookback_days
     ))

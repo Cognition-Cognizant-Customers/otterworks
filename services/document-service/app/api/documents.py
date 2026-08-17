@@ -62,29 +62,34 @@ def _get_jwt_secret() -> str:
     return os.environ.get("JWT_SECRET", "")
 
 
+def _parse_uuid(value: object | None) -> UUID | None:
+    if not value:
+        return None
+    try:
+        return UUID(str(value))
+    except ValueError:
+        return None
+
+
+def _user_id_from_token(token: str, secret: str) -> UUID | None:
+    try:
+        payload = jwt.decode(token, secret, algorithms=["HS256", "HS384"])
+    except jwt.PyJWTError:
+        return None
+    return _parse_uuid(payload.get("user_id") or payload.get("sub"))
+
+
 def _extract_user_id(request: Request) -> UUID | None:
     """Extract user ID from the Authorization JWT."""
     auth_header = request.headers.get("Authorization")
-    if auth_header and auth_header.startswith("Bearer "):
-        token = auth_header[len("Bearer "):]
-        secret = _get_jwt_secret()
-        if secret:
-            try:
-                payload = jwt.decode(token, secret, algorithms=["HS256", "HS384"])
-                user_id_str = payload.get("user_id") or payload.get("sub")
-                if user_id_str:
-                    return UUID(str(user_id_str))
-            except (jwt.PyJWTError, ValueError):
-                pass
-        else:
-            forwarded_user_id = request.headers.get("X-User-ID")
-            if forwarded_user_id:
-                try:
-                    return UUID(str(forwarded_user_id))
-                except ValueError:
-                    pass
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None
 
-    return None
+    secret = _get_jwt_secret()
+    if not secret:
+        return _parse_uuid(request.headers.get("X-User-ID"))
+
+    return _user_id_from_token(auth_header[len("Bearer "):], secret)
 
 
 def _require_user_id(request: Request) -> UUID:

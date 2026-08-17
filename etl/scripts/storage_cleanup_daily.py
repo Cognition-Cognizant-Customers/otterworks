@@ -17,6 +17,76 @@ from datetime import datetime, timezone
 import boto3
 
 
+def list_stored_objects(s3_client, bucket, prefix):
+    """List every object under a prefix with its size and mtime."""
+    objects = []
+    paginator = s3_client.get_paginator("list_objects_v2")
+
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            objects.append({
+                "key": obj["Key"],
+                "size": obj["Size"],
+                "last_modified": obj["LastModified"].isoformat(),
+            })
+
+    return objects
+
+
+def scan_referenced_keys(table):
+    """Collect every S3 key referenced by the file metadata table."""
+    referenced_keys = set()
+    scan_kwargs = {"ProjectionExpression": "s3_key"}
+
+    while True:
+        response = table.scan(**scan_kwargs)
+        for item in response.get("Items", []):
+            s3_key = item.get("s3_key", "")
+            if s3_key:
+                referenced_keys.add(s3_key)
+
+        last_key = response.get("LastEvaluatedKey")
+        if not last_key:
+            return referenced_keys
+        scan_kwargs["ExclusiveStartKey"] = last_key
+
+
+def quarantine_object(s3_client, source_bucket, source_key, quarantine_bucket, dest_key):
+    """Copy one object to quarantine and delete the original."""
+    try:
+        s3_client.copy_object(
+            Bucket=quarantine_bucket,
+            Key=dest_key,
+            CopySource={"Bucket": source_bucket, "Key": source_key},
+            MetadataDirective="COPY",
+        )
+        s3_client.delete_object(Bucket=source_bucket, Key=source_key)
+    except Exception as e:
+        print("[%s] WARNING: Failed to quarantine %s: %s" % (
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"), source_key, str(e)
+        ))
+        return False
+    return True
+
+
+def quarantine_orphans(s3_client, orphaned, source_bucket, quarantine_bucket, quarantine_prefix, ds):
+    """Move orphaned objects to quarantine, returning (moved, failed) counts."""
+    moved_count = 0
+    failed_count = 0
+
+    for obj in orphaned:
+        source_key = obj["key"]
+        dest_key = "%s/%s/%s" % (quarantine_prefix, ds, source_key)
+        if quarantine_object(
+            s3_client, source_bucket, source_key, quarantine_bucket, dest_key
+        ):
+            moved_count += 1
+        else:
+            failed_count += 1
+
+    return moved_count, failed_count
+
+
 def main():
     print("[%s] storage_cleanup_daily.py starting..." % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
@@ -50,16 +120,7 @@ def main():
         region_name=aws_region,
     )
 
-    all_objects = []
-    paginator = s3_client.get_paginator("list_objects_v2")
-
-    for page in paginator.paginate(Bucket=file_storage_bucket, Prefix=files_prefix):
-        for obj in page.get("Contents", []):
-            all_objects.append({
-                "key": obj["Key"],
-                "size": obj["Size"],
-                "last_modified": obj["LastModified"].isoformat(),
-            })
+    all_objects = list_stored_objects(s3_client, file_storage_bucket, files_prefix)
 
     total_objects = len(all_objects)
     total_size_bytes = sum(o["size"] for o in all_objects)
@@ -81,35 +142,15 @@ def main():
     )
     table = dynamodb.Table(dynamodb_table_name)
 
-    referenced_keys = set()
-    scan_kwargs = {
-        "ProjectionExpression": "s3_key",
-    }
-
-    while True:
-        response = table.scan(**scan_kwargs)
-        for item in response.get("Items", []):
-            s3_key = item.get("s3_key", "")
-            if s3_key:
-                referenced_keys.add(s3_key)
-
-        last_key = response.get("LastEvaluatedKey")
-        if not last_key:
-            break
-        scan_kwargs["ExclusiveStartKey"] = last_key
+    referenced_keys = scan_referenced_keys(table)
 
     print("[%s] Found %d S3 keys referenced in metadata" % (
         datetime.now().strftime("%Y-%m-%d %H:%M:%S"), len(referenced_keys)
     ))
 
     # ---- Find orphaned objects ----
-    orphaned = []
-    orphaned_bytes = 0
-
-    for obj in all_objects:
-        if obj["key"] not in referenced_keys:
-            orphaned.append(obj)
-            orphaned_bytes += obj["size"]
+    orphaned = [obj for obj in all_objects if obj["key"] not in referenced_keys]
+    orphaned_bytes = sum(obj["size"] for obj in orphaned)
 
     orphaned_count = len(orphaned)
 
@@ -128,27 +169,14 @@ def main():
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"), orphaned_count
         ))
 
-    moved_count = 0
-    failed_count = 0
-
-    for obj in orphaned:
-        source_key = obj["key"]
-        dest_key = "%s/%s/%s" % (quarantine_prefix, ds, source_key)
-
-        try:
-            s3_client.copy_object(
-                Bucket=quarantine_bucket,
-                Key=dest_key,
-                CopySource={"Bucket": file_storage_bucket, "Key": source_key},
-                MetadataDirective="COPY",
-            )
-            s3_client.delete_object(Bucket=file_storage_bucket, Key=source_key)
-            moved_count += 1
-        except Exception as e:
-            print("[%s] WARNING: Failed to quarantine %s: %s" % (
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S"), source_key, str(e)
-            ))
-            failed_count += 1
+    moved_count, failed_count = quarantine_orphans(
+        s3_client,
+        orphaned,
+        file_storage_bucket,
+        quarantine_bucket,
+        quarantine_prefix,
+        ds,
+    )
 
     if orphaned_count > 0:
         print("[%s] Quarantined %d objects (%d failed) to s3://%s/%s/%s/" % (
