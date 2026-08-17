@@ -1,0 +1,206 @@
+module: invoicing
+rules:
+  - id: INVOICING-001
+    statement: >-
+      The preview plan line prices the plan of the latest subscription overlapping the
+      requested period, ordered by starts_on descending, at round(monthly_fee, 2) and
+      describes it with the plan code.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [23, 47]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [line_no, line_type, description, amount, total]
+    confidence: high
+    scenarios: [INVOICE-001, INVOICE-002]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-17"
+      note: >-
+        Overlap is inclusive on both ends and an open-ended subscription (ends_on NULL)
+        always overlaps; ties on starts_on are not disambiguated by the legacy ORDER BY
+        and no fixture tenant has two subscriptions starting the same day. A tenant with
+        no overlapping subscription is refused (HTTP 409) instead of emitting five
+        all-NULL lines: the legacy NULL path runs plan fee and tax as NULL through
+        LEAST(v_credit, NULL), whose NULL-ignoring semantics would apply the tenant's
+        whole credit balance to an invoice with no charges. No transcript records that
+        path and confirming it would require re-recording, which this wave prohibits, so
+        the extraction refuses rather than guessing. Declared divergence, no transcript
+        coverage.
+  - id: INVOICING-002
+    statement: >-
+      The preview usage line carries the overage returned by live usage rating rounded to
+      two decimals, described as 'usage overage'; invoicing composes with rating rather
+      than recomputing its algorithm.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [31, 50]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [line_no, line_type, description, amount, total]
+    confidence: high
+    scenarios: [INVOICE-001, INVOICE-002]
+    question: >-
+      billing.fn_usage_rating belongs to the rating module, which is extracted separately.
+      How does invoicing compose with that extracted module?
+    answer: >-
+      It calls the rating domain with the usage events and prior rating periods read
+      through MongoRatingRepository. Issuance first finalizes the live rating result in
+      the same Mongo transaction, then builds the invoice from the live rating result.
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-17"
+      note: >-
+        Rating already rounds overage_amount to two decimals at the source, so the
+        preview's round(overage_amount, 2) is value-preserving; the unrounded amount is
+        still what feeds the tax base in INVOICING-003.
+  - id: INVOICING-003
+    statement: >-
+      Tax is 8.25% of plan fee plus overage, zero for a tax-exempt tenant, and split
+      unrounded in half across a regional and a local tax line whose own tax_amount
+      column is zero.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [39, 54]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [line_no, line_type, description, amount, tax_amount, total]
+    confidence: high
+    scenarios: [INVOICE-001, INVOICE-002]
+    question: >-
+      The tax lines carry the tax in `amount` while `tax_amount` is 0 on every preview
+      line. Is that a defect to correct during extraction?
+    answer: >-
+      No. The recorded transcripts are the specification: INVOICE-002 pins tax_amount to
+      0.00 on all five lines, so the extraction reproduces tax as a line amount and keeps
+      tax_amount zero rather than "fixing" the shape.
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-17"
+      note: >-
+        The halves are divided before rounding and each half is only rounded where it is
+        persisted (INVOICING-007), which is why a half-cent tax base still yields two
+        equal 2.25 lines.
+  - id: INVOICING-004
+    statement: >-
+      The preview credit line applies the lesser of the tenant's total remaining positive
+      credit and round(plan fee + overage + tax, 2) as credit_applied, with the negated
+      applied credit as the line total and a zero line amount.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [34, 58]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [line_no, line_type, description, amount, credit_applied, total]
+    confidence: high
+    scenarios: [INVOICE-001, INVOICE-002]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-17"
+      note: >-
+        Credit is summed across all of the tenant's notes with remaining_amount > 0
+        regardless of period or invoice, and the cap is computed from the unrounded tax so
+        it can differ by a cent from the persisted subtotal plus persisted tax.
+  - id: INVOICING-005
+    statement: >-
+      Reading an invoice's lines returns the persisted lines ordered by line_no with their
+      line_no, line_type, description, and amount.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [62, 75]
+    inputs: [invoice_id]
+    outputs: [line_no, line_type, description, amount]
+    confidence: high
+    scenarios: [INVOICE-006]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-17"
+      note: >-
+        An unknown invoice id is an empty line list, not an error, matching the legacy
+        set-returning function.
+  - id: INVOICING-006
+    statement: >-
+      Issuing an invoice keys it deterministically by period id md5(tenant_id || period_start)
+      and invoice id md5(period_id || 'invoice'), sets status 'issued' with issued_at at the
+      period end on first insert while retaining the existing issued_at on re-issuance, and
+      replaces the invoice's lines with the preview lines, storing every line amount rounded to
+      two decimals and storing the credit line's total — a negative amount — as its amount.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [85, 113]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [invoice_id, period_id, status, issued_at, lines]
+    confidence: high
+    scenarios: [INVOICE-003, INVOICE-005]
+    question: >-
+      The legacy procedure inserts or updates the header, deletes the old lines, and
+      inserts the new lines inside one relational transaction. How is that atomicity
+      preserved in MongoDB?
+    answer: >-
+      The header and its lines are one document with an embedded, line_no-ordered `lines`
+      array in the billing invoices collection, so the delete-and-rebuild is a single
+      atomic document write (upsert-replace) rather than three statements. The subsequent
+      credit-note consumption spans other documents, so the whole issue path runs inside a
+      MongoDB multi-document transaction on a session, keeping the header, its lines, and
+      the credit-note decrements a single all-or-nothing unit exactly as the relational
+      transaction did.
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-17"
+      note: >-
+        Re-issuing the same tenant and period is idempotent on the header identity and
+        rebuilds the lines rather than appending, so line ids stay md5(invoice_id || line_no).
+  - id: INVOICING-007
+    statement: >-
+      Issuing accumulates the subtotal from the rounded plan and usage line amounts and the
+      tax from the rounded tax line amounts, takes the credit from the credit line's
+      credit_applied, and persists total = round(subtotal + tax - credit_applied, 2).
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [114, 125]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [subtotal, tax, total, status]
+    confidence: high
+    scenarios: [INVOICE-003, INVOICE-004, INVOICE-005]
+    question: >-
+      The legacy invoices table constrains total >= 0. Because the credit cap is computed
+      from the unrounded tax, a rounding split can make subtotal + tax a cent below the
+      cap. What happens then?
+    answer: >-
+      The legacy write raises a check-constraint violation and the whole issue transaction
+      rolls back. The extraction keeps that error case: a negative computed total aborts the
+      transaction and is refused with an error rather than being clamped to zero, which
+      would silently invent a value the legacy procedure never persisted. No transcript
+      records this case, so it is covered by a target test only.
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-17"
+      note: >-
+        Money is Decimal throughout and stored as Decimal128; no float arithmetic is used
+        anywhere on the path, and rounding is half-up to match numeric(12,2).
+  - id: INVOICING-008
+    statement: >-
+      Credit notes with remaining balance are consumed oldest first by (issued_on, id):
+      each note's remaining becomes max(remaining - credit outstanding, 0) and the
+      outstanding credit is then reduced by that note's pre-update remaining, stopping once
+      the outstanding credit reaches zero.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [127, 138]
+    inputs: [tenant_id]
+    outputs: [credit_note_id, issued_on, remaining_amount]
+    confidence: high
+    scenarios: [INVOICE-003, INVOICE-004]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-17"
+      note: >-
+        Notes sharing an issued_on are ordered by id, and the loop's exit test runs before
+        each update so a fully consumed credit leaves later notes untouched. The legacy
+        decrement uses the note's pre-update remaining, so a note larger than the
+        outstanding credit still zeroes the outstanding credit; that arithmetic is
+        preserved verbatim.

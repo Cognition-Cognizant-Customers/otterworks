@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 from datetime import date
+from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
@@ -13,16 +14,28 @@ from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from app.config import settings
-from app.db import connect, ensure_rating_indexes, migrate, mongo_client, mongo_database, reset
+from app.db import (
+    close_mongo_client,
+    connect,
+    ensure_rating_indexes,
+    migrate,
+    mongo_client,
+    mongo_database,
+    reset,
+)
 from app.domain import (
+    InvoicingRefusal,
     calculate_rating,
     catalog,
     change_plan,
     entitlement,
     finalize_result,
+    format_money,
+    preview,
+    stored_line_amount,
     usage_summary,
 )
-from app.repository import MongoRatingRepository, PostgresPlansRepository
+from app.repository import MongoInvoicingRepository, MongoRatingRepository, PostgresPlansRepository
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +47,14 @@ async def lifespan(_app: FastAPI):
         ensure_rating_indexes()
     except PyMongoError:
         logger.warning("Mongo index warm-up failed", exc_info=True)
-    yield
+    try:
+        MongoInvoicingRepository(mongo_database()).ensure_schema()
+    except PyMongoError:
+        logger.warning("Mongo invoicing schema warm-up failed", exc_info=True)
+    try:
+        yield
+    finally:
+        close_mongo_client()
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
@@ -240,3 +260,130 @@ def finalize_rating(tenant_id: Annotated[UUID, Path()], request: RatingFinalize)
         ),
     }
     return {**row, "rating_result": [row]}
+
+
+@app.get("/api/tenants/{tenant_id}/invoice-preview")
+def invoice_preview(
+    tenant_id: Annotated[UUID, Path()],
+    period_start: Annotated[date, Query()],
+    period_end: Annotated[date, Query()],
+) -> dict:
+    try:
+        with connect() as connection:
+            plan, tax_exempt = PostgresPlansRepository(connection).invoice_context(
+                tenant_id, period_start, period_end
+            )
+        rating, _ = _rating(tenant_id, period_start, period_end)
+        if rating.overage_amount is None:
+            raise InvoicingRefusal("subscription not found")
+        mongo = MongoInvoicingRepository(mongo_database())
+        credit = sum(
+            (note.remaining_amount for note in mongo.credit_notes(tenant_id, positive_only=True)),
+            Decimal("0"),
+        )
+        result = preview(
+            tenant_id, period_start, period_end, plan, rating.overage_amount, tax_exempt, credit
+        )
+    except InvoicingRefusal as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return {
+        "tenant_id": str(tenant_id),
+        "period_start": period_start.isoformat(),
+        "period_end": period_end.isoformat(),
+        "lines": [
+            {
+                "line_no": line.line_no,
+                "line_type": line.line_type,
+                "description": line.description,
+                "amount": format_money(line.amount),
+                "tax_amount": format_money(line.tax_amount),
+                "credit_applied": format_money(line.credit_applied),
+                "total": format_money(line.total),
+            }
+            for line in result.lines
+        ],
+    }
+
+
+@app.get("/api/invoices/{invoice_id}/lines")
+def get_invoice_lines(invoice_id: Annotated[UUID, Path()]) -> dict:
+    repository = MongoInvoicingRepository(mongo_database())
+    return {
+        "invoice_id": str(invoice_id),
+        "lines": [
+            {
+                "line_no": line.line_no,
+                "line_type": line.line_type,
+                "description": line.description,
+                "amount": format_money(line.amount),
+            }
+            for line in repository.invoice_lines(invoice_id)
+        ],
+    }
+
+
+class InvoiceIssue(BaseModel):
+    period_start: date
+    period_end: date
+
+
+@app.post("/api/tenants/{tenant_id}/invoices")
+def issue_invoice(tenant_id: Annotated[UUID, Path()], request: InvoiceIssue) -> dict:
+    try:
+        with connect() as connection:
+            plan, tax_exempt = PostgresPlansRepository(connection).invoice_context(
+                tenant_id, request.period_start, request.period_end
+            )
+        rating, _ = _rating(tenant_id, request.period_start, request.period_end)
+        if rating.overage_amount is None:
+            raise InvoicingRefusal("subscription not found")
+        mongo = MongoInvoicingRepository(mongo_database())
+        rating_repository = MongoRatingRepository(mongo_database())
+        invoice = mongo.issue(
+            plan,
+            tax_exempt,
+            tenant_id,
+            request.period_start,
+            request.period_end,
+            rating_repository,
+            rating,
+        )
+    except DuplicateKeyError as error:
+        raise HTTPException(
+            status_code=409,
+            detail="rating period identity conflicts with an existing period",
+        ) from error
+    except InvoicingRefusal as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    notes = mongo.credit_notes(tenant_id)
+    return {
+        "invoice": {
+            "invoice_id": str(invoice.invoice_id),
+            "tenant_id": str(invoice.tenant_id),
+            "period_id": str(invoice.period_id),
+            "issued_at": invoice.issued_at.isoformat(),
+            "status": invoice.status,
+            "subtotal": format_money(invoice.subtotal),
+            "tax": format_money(invoice.tax),
+            "total": format_money(invoice.total),
+            "lines": [
+                {
+                    "line_no": line.line_no,
+                    "line_type": line.line_type,
+                    "description": line.description,
+                    "amount": format_money(stored_line_amount(line)),
+                }
+                for line in invoice.lines
+            ],
+        },
+        "credit_notes": [
+            {
+                "id": str(note.note_id),
+                "issued_on": note.issued_on.isoformat(),
+                "amount": format_money(note.amount),
+                "remaining_amount": format_money(note.remaining_amount),
+            }
+            for note in notes
+        ],
+        "invoice_state": [mongo.invoice_state(invoice.invoice_id)],
+    }

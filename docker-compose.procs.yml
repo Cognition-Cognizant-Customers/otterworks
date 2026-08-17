@@ -55,9 +55,9 @@ services:
         condition: service_healthy
     environment:
       BILLING_SVC_DATABASE_URL: postgresql://billing_svc:billing_svc@billing-service-db:5432/billing_svc_${NS:-dev}
-      BILLING_SVC_ALLOW_INTERNAL_RESET: "true"
-      BILLING_SVC_MONGO_URI: mongodb://billing-service-mongo:27017
+      BILLING_SVC_MONGO_URI: mongodb://billing-service-mongo:27017/?replicaSet=rs0
       BILLING_SVC_MONGO_DB: ow_tp_${NS:-dev}
+      BILLING_SVC_ALLOW_INTERNAL_RESET: "true"
     ports:
       - "127.0.0.1:${PROCS_TARGET_PORT:-8097}:8097"
     healthcheck:
@@ -84,15 +84,20 @@ services:
 
   billing-service-mongo:
     image: mongo:7
-    volumes:
-      - billing-service-mongo-data:/data/db
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     ports:
       - "127.0.0.1:${PROCS_MONGO_PORT:-27017}:27017"
+    volumes:
+      - billing-service-mongo-data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet --eval
+          "try { if (rs.status().myState !== 1) { throw new Error('replica set is not PRIMARY') } } catch (e) { try { rs.initiate({_id:'rs0',members:[{_id:0,host:'billing-service-mongo:27017'}]}) } catch (_) {} quit(1) }"
       interval: 3s
-      timeout: 5s
-      retries: 20
+      timeout: 10s
+      retries: 30
 
 volumes:
   legacy-billing-db-data:

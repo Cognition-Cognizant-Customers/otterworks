@@ -11,6 +11,7 @@ from psycopg.rows import dict_row
 from pymongo import MongoClient
 
 from app.config import settings
+from app.repository import MongoInvoicingRepository
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "db" / "migrations" / "001_initial.sql"
@@ -37,6 +38,13 @@ def mongo_client() -> MongoClient:
 
 def mongo_database():
     return mongo_client()[settings.mongo_db]
+
+
+def close_mongo_client() -> None:
+    global _MONGO_CLIENT
+    if _MONGO_CLIENT is not None:
+        _MONGO_CLIENT.close()
+        _MONGO_CLIENT = None
 
 
 def ensure_rating_indexes() -> None:
@@ -98,6 +106,7 @@ def reset() -> None:
         ]
     )
     ensure_rating_indexes()
+    MongoInvoicingRepository(database).reset()
 
 
 def _utc_datetime(value: str):
