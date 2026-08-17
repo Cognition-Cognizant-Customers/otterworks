@@ -14,6 +14,11 @@ If a service token is configured the middleware will accept it on any
 endpoint; if it is not configured (e.g. local dev), only the gateway
 identity path is available and internal endpoints become reachable only
 via the gateway.
+
+Neither mode uses cookies, so a cross-site request carries no ambient
+authority and CSRF tokens are not applicable. To keep that true, unsafe
+requests sent with a content type a browser can produce from a plain
+HTML form (which would not require a CORS preflight) are rejected.
 """
 
 from __future__ import annotations
@@ -24,6 +29,13 @@ from flask import jsonify, request
 logger = structlog.get_logger()
 
 PUBLIC_PREFIXES = ("/health", "/metrics")
+
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+# Content types a plain HTML form can submit cross-site without a preflight.
+FORM_CONTENT_TYPES = frozenset(
+    {"application/x-www-form-urlencoded", "multipart/form-data", "text/plain"}
+)
 
 
 def require_auth(app):
@@ -38,11 +50,17 @@ def require_auth(app):
 
     @app.before_request
     def _check_auth():
-        if not auth_config.require_auth:
-            return None
-
         path = request.path
         if any(path.startswith(p) for p in PUBLIC_PREFIXES):
+            return None
+
+        if request.method not in SAFE_METHODS:
+            content_type = (request.content_type or "").split(";")[0].strip().lower()
+            if content_type in FORM_CONTENT_TYPES:
+                logger.warning("form_content_type_rejected", path=path, content_type=content_type)
+                return jsonify({"error": "unsupported media type"}), 415
+
+        if not auth_config.require_auth:
             return None
 
         # Accept a valid service token if one is configured.

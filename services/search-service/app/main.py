@@ -8,6 +8,7 @@ import time
 
 import structlog
 from flask import Flask, g, request as flask_request
+from flask.sessions import SessionInterface
 from flask_cors import CORS
 
 from app.api.health import REQUEST_COUNT, REQUEST_LATENCY, health_bp
@@ -19,6 +20,16 @@ from app.services.meilisearch_client import MeiliSearchService
 from app.services.sqs_consumer import SQSConsumer
 
 logger = structlog.get_logger()
+
+
+class CookielessSessionInterface(SessionInterface):
+    """Session interface that never reads or writes a session cookie."""
+
+    def open_session(self, app, request):  # type: ignore[no-untyped-def]
+        return None
+
+    def save_session(self, app, session, response) -> None:  # type: ignore[no-untyped-def]
+        return None
 
 
 def configure_logging(log_level: str) -> None:
@@ -56,7 +67,23 @@ def create_app(config: AppConfig | None = None) -> Flask:
     configure_logging(config.log_level)
 
     app = Flask(__name__)
-    CORS(app, origins=["http://localhost:3000", "http://localhost:4200"])
+
+    # This service is a stateless JSON API. Callers authenticate with the
+    # ``Authorization`` / ``X-User-ID`` request headers only, so there is no
+    # cookie-borne ambient authority for a cross-site request to ride on and
+    # token-based CSRF protection does not apply. The properties that make
+    # that true are enforced rather than assumed: sessions (and therefore
+    # session cookies) are disabled, CORS is restricted to the first-party
+    # origins and never allows credentials, and the auth middleware rejects
+    # unsafe requests sent with browser-form content types.
+    app.session_interface = CookielessSessionInterface()
+    CORS(
+        app,
+        origins=["http://localhost:3000", "http://localhost:4200"],
+        supports_credentials=False,
+        allow_headers=["Content-Type", "Authorization", "X-User-ID"],
+        methods=["GET", "POST", "DELETE", "OPTIONS"],
+    )
 
     # Store config on the app
     app.config["APP_CONFIG"] = config
