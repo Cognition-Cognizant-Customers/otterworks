@@ -30,55 +30,79 @@ func DefaultCORSConfig() CORSConfig {
 	}
 }
 
+// corsPolicy is the precomputed form of a CORSConfig used to serve requests.
+type corsPolicy struct {
+	allowedOrigins   map[string]bool
+	allowAnyOrigin   bool
+	allowCredentials bool
+	methods          string
+	headers          string
+	exposed          string
+	maxAge           string
+}
+
+func newCORSPolicy(cfg CORSConfig) corsPolicy {
+	p := corsPolicy{
+		allowedOrigins:   make(map[string]bool, len(cfg.AllowedOrigins)),
+		allowCredentials: cfg.AllowCredentials,
+		methods:          strings.Join(cfg.AllowedMethods, ", "),
+		headers:          strings.Join(cfg.AllowedHeaders, ", "),
+		exposed:          strings.Join(cfg.ExposedHeaders, ", "),
+		maxAge:           strconv.Itoa(cfg.MaxAge),
+	}
+	for _, o := range cfg.AllowedOrigins {
+		if o == "*" {
+			p.allowAnyOrigin = true
+		}
+		p.allowedOrigins[o] = true
+	}
+	return p
+}
+
+func (p corsPolicy) allows(origin string) bool {
+	return origin != "" && (p.allowAnyOrigin || p.allowedOrigins[origin])
+}
+
+func (p corsPolicy) writeOriginHeaders(w http.ResponseWriter, origin string) {
+	h := w.Header()
+	h.Set("Access-Control-Allow-Origin", origin)
+	if p.allowCredentials {
+		h.Set("Access-Control-Allow-Credentials", "true")
+	}
+	if p.exposed != "" {
+		h.Set("Access-Control-Expose-Headers", p.exposed)
+	}
+	h.Set("Vary", "Origin")
+}
+
+func (p corsPolicy) writePreflight(w http.ResponseWriter) {
+	h := w.Header()
+	h.Set("Access-Control-Allow-Methods", p.methods)
+	h.Set("Access-Control-Allow-Headers", p.headers)
+	h.Set("Access-Control-Max-Age", p.maxAge)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // CORS returns an HTTP middleware that handles Cross-Origin Resource Sharing.
 func CORS(cfg CORSConfig) func(http.Handler) http.Handler {
-	allowedOrigins := make(map[string]bool, len(cfg.AllowedOrigins))
-	for _, o := range cfg.AllowedOrigins {
-		allowedOrigins[o] = true
-	}
-
-	methodsStr := strings.Join(cfg.AllowedMethods, ", ")
-	headersStr := strings.Join(cfg.AllowedHeaders, ", ")
-	exposedStr := strings.Join(cfg.ExposedHeaders, ", ")
-	maxAgeStr := strconv.Itoa(cfg.MaxAge)
+	policy := newCORSPolicy(cfg)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
+			allowed := policy.allows(origin)
 
-			if origin != "" && isOriginAllowed(origin, allowedOrigins, cfg.AllowedOrigins) {
-				w.Header().Set("Access-Control-Allow-Origin", origin)
-				if cfg.AllowCredentials {
-					w.Header().Set("Access-Control-Allow-Credentials", "true")
-				}
-				if exposedStr != "" {
-					w.Header().Set("Access-Control-Expose-Headers", exposedStr)
-				}
-				w.Header().Set("Vary", "Origin")
+			if allowed {
+				policy.writeOriginHeaders(w, origin)
 			}
 
 			// Handle preflight (only for allowed origins)
-			if r.Method == http.MethodOptions && origin != "" && isOriginAllowed(origin, allowedOrigins, cfg.AllowedOrigins) {
-				w.Header().Set("Access-Control-Allow-Methods", methodsStr)
-				w.Header().Set("Access-Control-Allow-Headers", headersStr)
-				w.Header().Set("Access-Control-Max-Age", maxAgeStr)
-				w.WriteHeader(http.StatusNoContent)
+			if allowed && r.Method == http.MethodOptions {
+				policy.writePreflight(w)
 				return
 			}
 
 			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-func isOriginAllowed(origin string, lookup map[string]bool, origins []string) bool {
-	if lookup[origin] {
-		return true
-	}
-	for _, o := range origins {
-		if o == "*" {
-			return true
-		}
-	}
-	return false
 }
