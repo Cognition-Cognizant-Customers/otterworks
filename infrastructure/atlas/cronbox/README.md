@@ -11,9 +11,13 @@ schedule — there is none in this unit, and none is needed.
 
 | Object | Owner |
 | --- | --- |
-| `ow_tp_demo.documents`, `ow_tp_demo.files` | parent (already bootstrapped) |
-| Atlas Search index `default` on `ow_tp_demo.documents` | this unit's definition, parent-applied |
-| Atlas Search index `default` on `ow_tp_demo.files` | this unit's definition, parent-applied |
+| `ow_tp_cronbox_demo.documents`, `ow_tp_cronbox_demo.files` | parent (already bootstrapped) |
+| Atlas Search index `default` on `ow_tp_cronbox_demo.documents` | this unit's definition, parent-applied |
+| Atlas Search index `default` on `ow_tp_cronbox_demo.files` | this unit's definition, parent-applied |
+
+The shared `ow_tp_demo` database contains unrelated workshop data, so this unit
+uses the isolated `ow_tp_cronbox_demo` namespace and leaves foreign data
+untouched.
 
 Two indexes on the free-tier M0, which allows three. No cluster, no additional
 index, no hourly-cost resource is created by this unit.
@@ -41,7 +45,7 @@ type-by-type rather than a claim of equivalence.
 A field in two roles gets two mappings (a `string` for search plus a `token` for
 filtering) — `tags` on both collections and `mime_type` on `files`.
 
-### `ow_tp_demo.documents`
+### `ow_tp_cronbox_demo.documents`
 
 | MeiliSearch role | Attribute | Atlas Search mapping |
 | --- | --- | --- |
@@ -54,7 +58,7 @@ filtering) — `tags` on both collections and `mime_type` on `files`.
 | filterable, sortable | `updated_at` | `date` |
 | — (identity) | `id` | `token` |
 
-### `ow_tp_demo.files`
+### `ow_tp_cronbox_demo.files`
 
 | MeiliSearch role | Attribute | Atlas Search mapping |
 | --- | --- | --- |

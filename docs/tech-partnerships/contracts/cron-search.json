@@ -12,10 +12,11 @@
     "MeiliSearch documents and files indexes, deleted and recreated on every run"
   ],
   "target_objects": [
-    "MongoDB collection ow_tp_demo.documents",
-    "MongoDB collection ow_tp_demo.files",
-    "Atlas Search index ow_tp_demo.documents.default",
-    "Atlas Search index ow_tp_demo.files.default",
+    "MongoDB collection ow_tp_cronbox_demo.documents",
+    "MongoDB collection ow_tp_cronbox_demo.files",
+    "Atlas Search index ow_tp_cronbox_demo.documents.default",
+    "Atlas Search index ow_tp_cronbox_demo.files.default",
+    "The shared ow_tp_demo database contains unrelated workshop data, so this unit uses the isolated ow_tp_cronbox_demo namespace and leaves foreign data untouched.",
     "Golden query set docs/tech-partnerships/recon/cron-search-golden-queries.json"
   ],
   "golden_baseline_location": "testdata/legacy/golden/cronbox/demo/search_reindex_weekly/",

@@ -4,8 +4,9 @@
 Live mode recomputes every value from the deployed target: collection membership
 from the Atlas collections, golden-query results from the `$search` aggregation
 stage (never `$text`, `$regex`, or a plain `find` fallback), and index field
-roles from the Atlas Admin API. Fixture mode evaluates the same golden query set
-against the local fixture corpus with a small in-process evaluator so the child
+roles from the Atlas Search data plane. Fixture mode evaluates the same golden
+query set against the local fixture corpus with a small in-process evaluator so
+the child
 can self-check without any Atlas write; fixture runs are reported as
 `run_mode: "fixture"` with `values_recomputed_from_target: false`.
 
@@ -255,11 +256,22 @@ def role_checks(
         expected_roles = {
             role: sorted(fields) for role, fields in ROLES[collection].items()
         }
+        actual = (
+            {"violations": problems}
+            if problems
+            else {"roles": expected_roles}
+        )
+        actual.update(
+            {
+                "status": definition.get("status"),
+                "queryable": definition.get("queryable"),
+            }
+        )
         checks.append(
             {
                 "id": f"SRC-03/{collection}",
                 "expected": expected_roles,
-                "actual": {"violations": problems} if problems else expected_roles,
+                "actual": actual,
                 "source_of_truth": source,
                 "result": "pass" if not problems else "fail",
             }
@@ -404,7 +416,22 @@ def recon_live(namespace: str) -> dict[str, Any]:
         try:
             deployed = []
             for definition in load_definitions():
-                for item in read_back(database, definition["collectionName"]):
+                items = read_back(database, definition["collectionName"])
+                current = next(
+                    (
+                        item
+                        for item in items
+                        if item.get("name") == definition["name"]
+                    ),
+                    None,
+                )
+                if current is None:
+                    raise RuntimeError(
+                        f"search index {definition['name']} on "
+                        f"{database}.{definition['collectionName']} "
+                        "was not returned by list_search_indexes"
+                    )
+                for item in (current,):
                     deployed.append(
                         {
                             "collectionName": item.get(
@@ -412,17 +439,34 @@ def recon_live(namespace: str) -> dict[str, Any]:
                             ),
                             "database": item.get("database", database),
                             "name": item.get("name"),
+                            "status": item.get("status"),
+                            "queryable": item.get("queryable"),
                             "definition": item.get("latestDefinition")
                             or item.get("definition")
                             or {},
                         }
                     )
             checks.extend(
-                role_checks(deployed, "Atlas Admin API search index read-back")
+                role_checks(
+                    deployed, "Atlas Search data-plane list_search_indexes read-back"
+                )
             )
         except (Exception, SystemExit) as exc:  # noqa: BLE001 - reported, never silently dropped
+            reason = (
+                "SRC-03 index field roles: Atlas Search data-plane read-back "
+                f"failed ({type(exc).__name__}: {exc})"
+            )
+            checks.append(
+                {
+                    "id": "SRC-03/index-field-roles",
+                    "expected": "deployed index definitions with preserved roles",
+                    "actual": {"error": reason},
+                    "source_of_truth": "Atlas Search data-plane list_search_indexes read-back",
+                    "result": "fail",
+                }
+            )
             unverified.append(
-                f"SRC-03 index field roles: Atlas Admin API read-back failed ({type(exc).__name__})"
+                reason
             )
 
         probe = probe_continuous_maintenance(db)

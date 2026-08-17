@@ -20,7 +20,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-DATABASE = "ow_tp_demo"
+DATABASE = "ow_tp_cronbox_demo"
 URI_ENV = "MONGODB_ATLAS_URI"
 DOCUMENTS = "documents"
 FILES = "files"
