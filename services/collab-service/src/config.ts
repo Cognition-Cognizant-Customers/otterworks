@@ -50,9 +50,15 @@ export function loadConfig(): Config {
     },
     persistence: {
       intervalMs: Number.parseInt(process.env.PERSIST_INTERVAL_MS || '30000', 10),
-      snapshotIntervalMs: Number.parseInt(process.env.SNAPSHOT_INTERVAL_MS || '300000', 10),
+      snapshotIntervalMs: Number.parseInt(
+        process.env.SNAPSHOT_INTERVAL_MS || '300000',
+        10,
+      ),
       documentTtlSeconds: Number.parseInt(process.env.DOC_TTL_SECONDS || '86400', 10),
-      snapshotTtlSeconds: Number.parseInt(process.env.SNAPSHOT_TTL_SECONDS || '604800', 10),
+      snapshotTtlSeconds: Number.parseInt(
+        process.env.SNAPSHOT_TTL_SECONDS || '604800',
+        10,
+      ),
       maxSnapshotsPerDocument: Number.parseInt(process.env.MAX_SNAPSHOTS || '50', 10),
     },
     logLevel: process.env.LOG_LEVEL || 'info',
