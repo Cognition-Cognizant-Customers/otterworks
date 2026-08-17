@@ -33,12 +33,12 @@ class NotificationServiceTest {
     fun `resolveTargetUserId returns sharedWithUserId for file_shared events`() {
         val event = SqsNotificationMessage(
             eventType = "file_shared",
-            fileId = "file-123",
-            ownerId = "owner-1",
-            sharedWithUserId = "user-2",
-            timestamp = "2024-01-01T00:00:00Z",
+            fileId = FILE_ID,
+            ownerId = OWNER_ID,
+            sharedWithUserId = USER_2,
+            timestamp = TIMESTAMP,
         )
-        assertEquals("user-2", NotificationService.resolveTargetUserId(event))
+        assertEquals(USER_2, NotificationService.resolveTargetUserId(event))
     }
 
     @Test
@@ -48,7 +48,7 @@ class NotificationServiceTest {
             mentionedUserId = "mentioned-user",
             actorId = "actor-1",
             documentId = "doc-1",
-            timestamp = "2024-01-01T00:00:00Z",
+            timestamp = TIMESTAMP,
         )
         assertEquals("mentioned-user", NotificationService.resolveTargetUserId(event))
     }
@@ -57,25 +57,25 @@ class NotificationServiceTest {
     fun `resolveTargetUserId returns userId for comment_added events`() {
         val event = SqsNotificationMessage(
             eventType = "comment_added",
-            userId = "doc-owner",
+            userId = DOC_OWNER,
             actorId = "commenter",
             documentId = "doc-1",
             commentId = "comment-1",
-            timestamp = "2024-01-01T00:00:00Z",
+            timestamp = TIMESTAMP,
         )
-        assertEquals("doc-owner", NotificationService.resolveTargetUserId(event))
+        assertEquals(DOC_OWNER, NotificationService.resolveTargetUserId(event))
     }
 
     @Test
     fun `resolveTargetUserId returns userId for document_edited events`() {
         val event = SqsNotificationMessage(
             eventType = "document_edited",
-            userId = "doc-owner",
+            userId = DOC_OWNER,
             actorId = "editor",
             documentId = "doc-1",
-            timestamp = "2024-01-01T00:00:00Z",
+            timestamp = TIMESTAMP,
         )
-        assertEquals("doc-owner", NotificationService.resolveTargetUserId(event))
+        assertEquals(DOC_OWNER, NotificationService.resolveTargetUserId(event))
     }
 
     @Test
@@ -83,7 +83,7 @@ class NotificationServiceTest {
         val event = SqsNotificationMessage(
             eventType = "file_shared",
             fileId = "file-abc",
-            timestamp = "2024-01-01T00:00:00Z",
+            timestamp = TIMESTAMP,
         )
         assertEquals("file-abc", NotificationService.resolveResourceId(event))
     }
@@ -94,7 +94,7 @@ class NotificationServiceTest {
             eventType = "comment_added",
             commentId = "comment-xyz",
             documentId = "doc-1",
-            timestamp = "2024-01-01T00:00:00Z",
+            timestamp = TIMESTAMP,
         )
         assertEquals("comment-xyz", NotificationService.resolveResourceId(event))
     }
@@ -104,7 +104,7 @@ class NotificationServiceTest {
         val event = SqsNotificationMessage(
             eventType = "document_edited",
             documentId = "doc-123",
-            timestamp = "2024-01-01T00:00:00Z",
+            timestamp = TIMESTAMP,
         )
         assertEquals("doc-123", NotificationService.resolveResourceId(event))
     }
@@ -112,19 +112,19 @@ class NotificationServiceTest {
     @Test
     fun `resolveResourceType returns correct types`() {
         assertEquals("file", NotificationService.resolveResourceType(
-            SqsNotificationMessage(eventType = "file_shared", timestamp = "2024-01-01T00:00:00Z")
+            SqsNotificationMessage(eventType = "file_shared", timestamp = TIMESTAMP)
         ))
         assertEquals("comment", NotificationService.resolveResourceType(
-            SqsNotificationMessage(eventType = "comment_added", timestamp = "2024-01-01T00:00:00Z")
+            SqsNotificationMessage(eventType = "comment_added", timestamp = TIMESTAMP)
         ))
         assertEquals("document", NotificationService.resolveResourceType(
-            SqsNotificationMessage(eventType = "document_edited", timestamp = "2024-01-01T00:00:00Z")
+            SqsNotificationMessage(eventType = "document_edited", timestamp = TIMESTAMP)
         ))
         assertEquals("document", NotificationService.resolveResourceType(
-            SqsNotificationMessage(eventType = "user_mentioned", timestamp = "2024-01-01T00:00:00Z")
+            SqsNotificationMessage(eventType = "user_mentioned", timestamp = TIMESTAMP)
         ))
         assertEquals("unknown", NotificationService.resolveResourceType(
-            SqsNotificationMessage(eventType = "other_event", timestamp = "2024-01-01T00:00:00Z")
+            SqsNotificationMessage(eventType = "other_event", timestamp = TIMESTAMP)
         ))
     }
 
@@ -132,13 +132,13 @@ class NotificationServiceTest {
     fun `processEvent stores in-app notification and sends email for file_shared`() = runTest {
         val event = SqsNotificationMessage(
             eventType = "file_shared",
-            fileId = "file-123",
-            ownerId = "owner-1",
-            sharedWithUserId = "user-2",
-            timestamp = "2024-01-01T00:00:00Z",
+            fileId = FILE_ID,
+            ownerId = OWNER_ID,
+            sharedWithUserId = USER_2,
+            timestamp = TIMESTAMP,
         )
 
-        coEvery { repository.getPreferences("user-2") } returns NotificationPreference(userId = "user-2")
+        coEvery { repository.getPreferences(USER_2) } returns NotificationPreference(userId = USER_2)
         coEvery { emailSender.sendEmail(any(), any(), any()) } returns true
 
         service.processEvent(event)
@@ -147,7 +147,7 @@ class NotificationServiceTest {
         coVerify(atLeast = 1) { repository.saveNotification(capture(savedNotifications)) }
 
         val lastSaved = savedNotifications.last()
-        assertEquals("user-2", lastSaved.userId)
+        assertEquals(USER_2, lastSaved.userId)
         assertEquals("file_shared", lastSaved.type)
         assertEquals("File Shared With You", lastSaved.title)
         assertTrue(lastSaved.deliveredVia.contains("in_app"))
@@ -157,17 +157,17 @@ class NotificationServiceTest {
     fun `processEvent skips email when not in preferences`() = runTest {
         val event = SqsNotificationMessage(
             eventType = "document_edited",
-            userId = "user-1",
+            userId = USER_1,
             actorId = "editor-1",
             documentId = "doc-1",
-            timestamp = "2024-01-01T00:00:00Z",
+            timestamp = TIMESTAMP,
         )
 
         val prefs = NotificationPreference(
-            userId = "user-1",
+            userId = USER_1,
             channels = mapOf("document_edited" to listOf(DeliveryChannel.IN_APP)),
         )
-        coEvery { repository.getPreferences("user-1") } returns prefs
+        coEvery { repository.getPreferences(USER_1) } returns prefs
 
         service.processEvent(event)
 
@@ -179,10 +179,10 @@ class NotificationServiceTest {
     fun `processEvent does nothing for blank target user`() = runTest {
         val event = SqsNotificationMessage(
             eventType = "file_shared",
-            fileId = "file-123",
-            ownerId = "owner-1",
+            fileId = FILE_ID,
+            ownerId = OWNER_ID,
             sharedWithUserId = "",
-            timestamp = "2024-01-01T00:00:00Z",
+            timestamp = TIMESTAMP,
         )
 
         service.processEvent(event)
@@ -196,16 +196,16 @@ class NotificationServiceTest {
         val notifications = listOf(
             Notification(
                 id = "n-1",
-                userId = "user-1",
+                userId = USER_1,
                 type = "file_shared",
                 title = "Test",
                 message = "Test msg",
-                createdAt = "2024-01-01T00:00:00Z",
+                createdAt = TIMESTAMP,
             )
         )
-        coEvery { repository.getNotificationsByUserId("user-1", 1, 20) } returns Pair(notifications, 1)
+        coEvery { repository.getNotificationsByUserId(USER_1, 1, 20) } returns Pair(notifications, 1)
 
-        val (result, total) = service.getNotifications("user-1", 1, 20)
+        val (result, total) = service.getNotifications(USER_1, 1, 20)
         assertEquals(1, result.size)
         assertEquals(1, total)
         assertEquals("n-1", result[0].id)
@@ -219,31 +219,41 @@ class NotificationServiceTest {
 
     @Test
     fun `markAllAsRead delegates to repository`() = runTest {
-        coEvery { repository.markAllAsRead("user-1") } returns 5
-        assertEquals(5, service.markAllAsRead("user-1"))
+        coEvery { repository.markAllAsRead(USER_1) } returns 5
+        assertEquals(5, service.markAllAsRead(USER_1))
     }
 
     @Test
     fun `getUnreadCount delegates to repository`() = runTest {
-        coEvery { repository.getUnreadCount("user-1") } returns 3
-        assertEquals(3, service.getUnreadCount("user-1"))
+        coEvery { repository.getUnreadCount(USER_1) } returns 3
+        assertEquals(3, service.getUnreadCount(USER_1))
     }
 
     @Test
     fun `processEvent sends push notification when PUSH channel enabled`() = runTest {
         val event = SqsNotificationMessage(
             eventType = "user_mentioned",
-            mentionedUserId = "user-3",
+            mentionedUserId = USER_3,
             actorId = "actor-1",
             documentId = "doc-1",
-            timestamp = "2024-01-01T00:00:00Z",
+            timestamp = TIMESTAMP,
         )
 
-        coEvery { repository.getPreferences("user-3") } returns NotificationPreference(userId = "user-3")
+        coEvery { repository.getPreferences(USER_3) } returns NotificationPreference(userId = USER_3)
         coEvery { emailSender.sendEmail(any(), any(), any()) } returns true
 
         service.processEvent(event)
 
-        coVerify { webSocketManager.pushNotification("user-3", any()) }
+        coVerify { webSocketManager.pushNotification(USER_3, any()) }
+    }
+
+    private companion object {
+        const val FILE_ID = "file-123"
+        const val OWNER_ID = "owner-1"
+        const val USER_1 = "user-1"
+        const val USER_2 = "user-2"
+        const val USER_3 = "user-3"
+        const val DOC_OWNER = "doc-owner"
+        const val TIMESTAMP = "2024-01-01T00:00:00Z"
     }
 }
