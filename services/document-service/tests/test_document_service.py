@@ -48,10 +48,10 @@ async def test_list_documents_with_filters(
         DocumentCreate(title="C", content="", owner_id=other_owner)
     )
 
-    items, total = await service.list_documents(owner_id=owner_id)
+    _, total = await service.list_documents(owner_id=owner_id)
     assert total == 2
 
-    items, total = await service.list_documents(folder_id=folder_id)
+    _, total = await service.list_documents(folder_id=folder_id)
     assert total == 1
 
 
