@@ -543,6 +543,8 @@ def delete_probe_objects(
     sleeper=None,
 ) -> None:
     """Delete deterministic probe keys, then catch a write racing cleanup."""
+    if not probe_keys:
+        return
     clock = clock or time.monotonic
     sleeper = sleeper or time.sleep
     target.delete_objects(sorted(probe_keys))
@@ -1027,7 +1029,8 @@ def run(args) -> dict:
                 | {record["event_id"] for record in ttl_probe}
             )
         )
-        delete_probe_objects(target, probe_keys)
+        if probe_keys:
+            delete_probe_objects(target, probe_keys)
         unverified.append(
             "The seeded corpus and the archive objects it produced were removed after the "
             "run; the report is the retained evidence."

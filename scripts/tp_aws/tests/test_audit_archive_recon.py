@@ -201,6 +201,15 @@ def test_probe_cleanup_deletes_derived_keys_even_when_listing_misses_them() -> N
     assert target.deleted == [key]
 
 
+def test_probe_cleanup_does_nothing_without_probe_keys() -> None:
+    target = StubCleanupTarget()
+    clock, sleeper = fake_clock()
+    delete_probe_objects(target, set(), clock=clock, sleeper=sleeper)
+    assert target.list_calls == 0
+    assert target.deleted == []
+    assert clock() == 0
+
+
 def test_probe_cleanup_catches_key_appearing_on_later_poll() -> None:
     key = "audit-archive/expired/dt=unknown/demo-probe__stamp.jsonl.gz"
     target = StubCleanupTarget([[], [], [key], []])
