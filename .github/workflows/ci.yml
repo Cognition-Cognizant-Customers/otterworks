@@ -136,9 +136,23 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.document-service == 'true'
     runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand(\"ping\").ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: services/document-service
+    env:
+      DOC_SVC_MONGO_URI: mongodb://localhost:27017
+      DOC_SVC_MONGO_DB: ow_tp_document_tests
+      DOC_SVC_NAMESPACE: test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

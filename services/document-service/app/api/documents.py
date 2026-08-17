@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.mongo import MongoDocument
 from app.db.session import get_db
 from app.schemas.document import (
     DocumentCreate,
@@ -94,8 +95,8 @@ def _require_user_id(request: Request) -> UUID:
     return user_id
 
 
-def _ensure_owner(document: object, user_id: UUID) -> None:
-    if getattr(document, "owner_id", None) != user_id:
+def _ensure_owner(document: MongoDocument, user_id: UUID) -> None:
+    if document.owner_id != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
 

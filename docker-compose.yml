@@ -131,6 +131,21 @@ services:
     read_only: true
     tmpfs:
     - /tmp
+  document-mongo:
+    image: mongo:7
+    container_name: otterworks-document-mongo
+    healthcheck:
+      test:
+      - CMD
+      - mongosh
+      - --quiet
+      - --eval
+      - "db.adminCommand('ping').ok"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+    - document_mongo_data:/data/db
   document-service:
     build:
       context: ./services/document-service
@@ -153,12 +168,17 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_SERVICE_NAME: document-service
       DOC_SVC_DATABASE_URL: postgresql+asyncpg://otterworks:otterworks_dev@postgres:5432/otterworks
+      DOC_SVC_MONGO_URI: ${DOC_SVC_MONGO_URI:-mongodb://document-mongo:27017}
+      DOC_SVC_MONGO_DB: ${DOC_SVC_MONGO_DB:-ow_tp_demo}
+      DOC_SVC_NAMESPACE: ${DOC_SVC_NAMESPACE:-demo}
       DOC_SVC_SNS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:otterworks-events
       DOC_SVC_AWS_ENDPOINT_URL: http://localstack:4566
       DOC_SVC_SNS_ENABLED: 'true'
       JWT_SECRET: ${JWT_SECRET:-otterworks-local-dev-jwt-secret-change-me-in-production}
     depends_on:
       postgres:
+        condition: service_healthy
+      document-mongo:
         condition: service_healthy
     healthcheck:
       test:
@@ -531,4 +551,4 @@ networks:
 volumes:
   postgres_data: null
   localstack_data: null
-
+  document_mongo_data: null

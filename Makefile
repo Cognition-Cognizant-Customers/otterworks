@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean tp-atlas-teardown tp-mongo-fixture-up tp-mongo-fixture-down tp-mongo-customers tp-mongo-customers-recon tp-mongo-test tp-mongo-migrate-files tp-mongo-recon-files tp-mongo-invoices tp-mongo-invoices-recon tp-mongo-documents tp-mongo-documents-recon
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean tp-atlas-teardown tp-mongo-fixture-up tp-mongo-fixture-down tp-mongo-customers tp-mongo-customers-recon tp-mongo-test tp-mongo-migrate-files tp-mongo-recon-files tp-mongo-invoices tp-mongo-invoices-recon tp-mongo-documents tp-mongo-documents-recon document-service-test
 
 SHELL := /bin/bash
 
@@ -255,6 +255,51 @@ endif
 		$(MONGO_DOCUMENTS_RECON_RERUN) \
 		--out "$(MONGO_DOCUMENTS_RECON_OUT)"
 
+# --- MongoDB platform showcase (validators, aggregation, aggregate recon, drift) ---
+
+MONGO_PLATFORM_UV = $(MONGO_DOCUMENTS_UV) --with boto3==1.35.36
+MONGO_PLATFORM_ENV = $(MONGO_ENV) ORACLE_BILLING_DB_PORT=$(ORACLE_BILLING_DB_PORT) \
+	DOCUMENTS_DB_PORT=$(or $(DOCUMENTS_DB_PORT),5432)
+MONGO_REPORT_OUT = $(or $(OUT),build/tp-mongo/$(NS).segment-revenue.md)
+MONGO_PLATFORM_RECON_OUT = $(or $(OUT),docs/tech-partnerships/recon/mongo_platform.recon.json)
+
+tp-mongo-validators: ## Print each migrated collection's validator and MongoDB's refusal of a bad insert (NS=<namespace>)
+ifndef NS
+	$(error NS is required, e.g. make tp-mongo-validators NS=demo)
+endif
+	$(call validate_ns)
+	$(MONGO_ENV) $(MONGO_UV) python3 scripts/tp_mongo/validator_showcase.py --ns $(NS) \
+		$(if $(JSON_OUT),--json-out $(JSON_OUT),)
+
+tp-mongo-report: ## Generate the revenue/usage-by-segment aggregation report (NS=<namespace>, OUT=<path>)
+ifndef NS
+	$(error NS is required, e.g. make tp-mongo-report NS=demo)
+endif
+	$(call validate_ns)
+	@mkdir -p "$(dir $(MONGO_REPORT_OUT))"
+	$(MONGO_ENV) $(MONGO_UV) python3 scripts/tp_mongo/aggregation_report.py --ns $(NS) \
+		--out "$(MONGO_REPORT_OUT)" $(if $(JSON_OUT),--json-out $(JSON_OUT),)
+
+tp-mongo-recon-platform: ## Reconcile the whole migrated estate against the baseline; RED exits non-zero and notifies Devin (NS=<namespace>, RUN_MODE=fixture|live)
+ifndef NS
+	$(error NS is required, e.g. make tp-mongo-recon-platform NS=demo)
+endif
+	$(call validate_ns)
+	@mkdir -p "$(dir $(MONGO_PLATFORM_RECON_OUT))"
+	$(MONGO_PLATFORM_ENV) $(MONGO_PLATFORM_UV) python3 scripts/tp_mongo/recon_platform.py --ns $(NS) \
+		--run-mode $(or $(RUN_MODE),fixture) \
+		$(if $(UNITS),--units $(UNITS),) \
+		--out "$(MONGO_PLATFORM_RECON_OUT)"
+
+tp-mongo-stage-drift: ## Mutate migrated target data to stage REAL drift (NS=<namespace>, MUTATION=..., COUNT=..., FORCE=1 for demo)
+ifndef NS
+	$(error NS is required, e.g. make tp-mongo-stage-drift NS=drift01)
+endif
+	$(call validate_ns)
+	$(MONGO_ENV) $(MONGO_UV) python3 scripts/tp_mongo/stage_drift.py --ns $(NS) \
+		--mutation $(or $(MUTATION),drop_documents) --count $(or $(COUNT),25) \
+		$(if $(filter 1 true yes,$(FORCE)),--force,)
+
 # --- Legacy Billing: Oracle billing estate (before-state for modernization demos) ---
 
 ORACLE_BILLING_COMPOSE = docker compose -f docker-compose.oracle-billing.yml -p otterworks-oracle-billing
@@ -290,6 +335,10 @@ oracle-parity: procs-validate ## Oracle vs Postgres parity run (NS=<namespace>; 
 
 # --- Local Development ---
 
+DOC_SVC_MONGO_URI ?= mongodb://localhost:27017
+DOC_SVC_MONGO_DB ?= ow_tp_demo
+DOC_SVC_NAMESPACE ?= demo
+
 infra-up: ## Start local infrastructure (Postgres, Redis, LocalStack, MeiliSearch)
 	docker compose -f docker-compose.infra.yml up -d
 
@@ -297,7 +346,7 @@ infra-down: ## Stop local infrastructure
 	docker compose -f docker-compose.infra.yml down
 
 up: ## Start all services (add seed=1 to seed after start)
-	docker compose -f docker-compose.infra.yml -f docker-compose.yml up -d --build
+	DOC_SVC_MONGO_URI=mongodb://document-mongo:27017 DOC_SVC_MONGO_DB=$(DOC_SVC_MONGO_DB) DOC_SVC_NAMESPACE=$(DOC_SVC_NAMESPACE) docker compose -f docker-compose.infra.yml -f docker-compose.yml up -d --build
  ifdef seed
 	@$(MAKE) --no-print-directory wait-for-db seed
  endif
@@ -398,7 +447,7 @@ test: ## Run tests for all services
 	@echo "=== API Gateway (Go) ===" && cd services/api-gateway && go test ./...
 	@echo "=== Auth Service (Java) ===" && cd services/auth-service && ./gradlew test
 	@echo "=== File Service (Rust) ===" && cd services/file-service && cargo test
-	@echo "=== Document Service (Python) ===" && cd services/document-service && pytest
+	@echo "=== Document Service (Python) ===" && $(MAKE) --no-print-directory document-service-test
 	@echo "=== Collab Service (Node.js) ===" && cd services/collab-service && npm test
 	@echo "=== Notification Service (Kotlin) ===" && cd services/notification-service && ./gradlew test
 	@echo "=== Search Service (Python) ===" && cd services/search-service && pytest
@@ -407,6 +456,9 @@ test: ## Run tests for all services
 	@echo "=== Audit Service (C#) ===" && cd services/audit-service && dotnet test
 	@echo "=== Web Frontend ===" && cd frontend/web-app && npm test
 	@echo "=== Admin Dashboard ===" && cd frontend/admin-dashboard && npm test
+
+document-service-test: tp-mongo-fixture-up ## Run document-service tests against the local Mongo fixture
+	cd services/document-service && DOC_SVC_MONGO_URI=$(DOC_SVC_MONGO_URI) DOC_SVC_MONGO_DB=$(DOC_SVC_MONGO_DB) DOC_SVC_NAMESPACE=$(DOC_SVC_NAMESPACE) poetry run pytest
 
 test-coverage: ## Run tests with coverage for all services
 	@echo "=== Document Service ===" && cd services/document-service && pytest --cov=app --cov-report=term-missing || true

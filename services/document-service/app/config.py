@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     )
     db_pool_size: int = 10
     db_max_overflow: int = 20
+    mongo_uri: str = "mongodb://localhost:27017"
+    mongo_db: str = "ow_tp_demo"
+    namespace: str = "demo"
 
     sns_topic_arn: str = ""
     aws_endpoint_url: str = ""
