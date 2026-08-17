@@ -10,6 +10,7 @@ data "archive_file" "audit_archive" {
   type        = "zip"
   source_dir  = "${path.module}/lambda/audit_archive"
   output_path = "${path.module}/build/audit_archive.zip"
+  excludes    = ["__pycache__"]
 }
 
 resource "aws_iam_role" "audit_archive" {
@@ -86,6 +87,7 @@ resource "aws_cloudwatch_log_group" "audit_archive" {
 resource "aws_sqs_queue" "audit_archive_dlq" {
   name                      = "${local.name_prefix}audit-archive-dlq"
   message_retention_seconds = 1209600
+  sqs_managed_sse_enabled   = true
 }
 
 resource "aws_lambda_function" "audit_archive" {
@@ -119,7 +121,13 @@ resource "aws_lambda_event_source_mapping" "audit_archive_ttl" {
   starting_position                  = "LATEST"
   batch_size                         = 100
   maximum_batching_window_in_seconds = 30
-  maximum_retry_attempts             = 3
+
+  # A TTL removal is the item's last copy: retry until the stream's own 24h
+  # retention expires, isolate the failing record, and report per-record
+  # failures so one unarchivable item cannot discard its batch.
+  maximum_retry_attempts         = -1
+  bisect_batch_on_function_error = true
+  function_response_types        = ["ReportBatchItemFailures"]
 
   # TTL expiries only: DynamoDB attributes its own deletions to the service
   # principal, so operator/application deletes never reach the function.

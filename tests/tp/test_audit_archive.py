@@ -203,6 +203,36 @@ def test_non_ttl_removal_is_not_archived(stub_clients):
     assert stub_clients["s3"].objects == {}
 
 
+def test_stream_reports_failures_per_record(stub_clients, monkeypatch):
+    """A TTL removal is the item's last copy: one failure must not drop the batch."""
+    stamp = CUTOFF - timedelta(days=3)
+    original = handler.put_archive
+
+    def flaky(s3, record):
+        if record["event_id"] == "demo-audit-0005":
+            raise handler.ClientError({"Error": {"Code": "InternalError"}}, "PutObject")
+        return original(s3, record)
+
+    monkeypatch.setattr(handler, "put_archive", flaky)
+    event = {
+        "Records": [
+            {
+                "eventID": str(index),
+                "eventName": "REMOVE",
+                "userIdentity": {"principalId": "dynamodb.amazonaws.com"},
+                "dynamodb": {
+                    "SequenceNumber": f"seq-{index}",
+                    "OldImage": item(f"demo-audit-000{index}", stamp, ttl_epoch(stamp)),
+                },
+            }
+            for index in (4, 5, 6)
+        ]
+    }
+    result = handler.handle_stream(event)
+    assert result["archived"] == ["demo-audit-0004", "demo-audit-0006"]
+    assert result["batchItemFailures"] == [{"itemIdentifier": "seq-5"}]
+
+
 def test_stream_and_sweep_agree_on_the_archive_key(stub_clients):
     """The two paths must never produce two objects for the same item."""
     stamp = CUTOFF - timedelta(days=3)

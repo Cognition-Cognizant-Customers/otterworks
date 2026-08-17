@@ -156,27 +156,42 @@ def is_ttl_removal(record):
 
 
 def handle_stream(event):
+    """Archive TTL removals, reporting per-record failures.
+
+    The item is already gone from the table when its removal reaches the stream,
+    so a failed write must not discard the rest of the batch: each failure is
+    reported by sequence number (``ReportBatchItemFailures``) and retried until
+    it succeeds or the stream's own retention expires.
+    """
     s3 = _client("s3")
-    archived, already, skipped = [], [], []
+    archived, already, skipped, failures = [], [], [], []
     for record in event.get("Records", []):
         image = (record.get("dynamodb") or {}).get("OldImage")
         if not is_ttl_removal(record) or not image:
             skipped.append(record.get("eventID"))
             continue
-        item = deserialize(image)
-        _, written = put_archive(s3, item)
+        try:
+            item = deserialize(image)
+            _, written = put_archive(s3, item)
+        except Exception as error:  # noqa: BLE001 - one bad record must not drop the batch
+            sequence = (record.get("dynamodb") or {}).get("SequenceNumber")
+            print(f"archive failed for sequence {sequence}: {error}")
+            failures.append({"itemIdentifier": sequence})
+            continue
         (archived if written else already).append(item["event_id"])
     result = {
         "mode": "stream",
         "archived": sorted(archived),
         "already_archived": sorted(already),
         "skipped_non_ttl": [item for item in skipped if item],
+        "batchItemFailures": failures,
     }
     emit_metrics(
         {
             "ArchivedRecords": len(archived),
             "AlreadyArchivedRecords": len(already),
             "SkippedNonTtlRemovals": len(result["skipped_non_ttl"]),
+            "FailedArchiveRecords": len(failures),
         }
     )
     return result

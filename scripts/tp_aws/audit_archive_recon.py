@@ -566,9 +566,11 @@ def run(args) -> dict:
     target.put_records(corpus)
     reference_time = f"{args.run_date}T00:00:00Z"
     first = target.sweep(reference_time)
+    # Inventory taken between the two sweeps: the second sweep's object delta is
+    # only evidence of convergence if it is measured against this listing.
+    objects = target.archive_objects()
     second = target.sweep(reference_time)
 
-    objects = target.archive_objects()
     new_keys = sorted(set(objects) - pre_existing_objects)
     # In live mode the sweep also archives real expiring events, and the stream can
     # write concurrently: only keys naming a corpus event belong to this run.
@@ -737,7 +739,15 @@ def run(args) -> dict:
 
     if not args.keep:
         target.delete_records(corpus)
-        target.delete_objects(corpus_keys)
+        # Anything this run's events produced, including objects the second sweep
+        # would have written; never an object belonging to a real audit event.
+        target.delete_objects(
+            sorted(
+                key
+                for key in (set(recount) | set(new_keys)) - pre_existing_objects
+                if event_id_of(key) in corpus_event_ids
+            )
+        )
         unverified.append(
             "The seeded corpus and the archive objects it produced were removed after the "
             "run; the report is the retained evidence."
