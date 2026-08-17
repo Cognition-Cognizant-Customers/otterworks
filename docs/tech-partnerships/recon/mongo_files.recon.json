@@ -1,0 +1,264 @@
+{
+  "kind": "recon-report",
+  "unit": "mongo_files",
+  "namespace": "demo",
+  "generated_at": "2026-08-17T04:49:40Z",
+  "run_mode": "fixture",
+  "checks": [
+    {
+      "id": "files.count",
+      "expected": 10000,
+      "actual": 10000,
+      "source_of_truth": "testdata/legacy/manifests/demo.json (dynamodb.file-metadata)",
+      "result": "pass"
+    },
+    {
+      "id": "files.checksum",
+      "expected": "db614663b2c6d41141cae82261b416d5",
+      "actual": "db614663b2c6d41141cae82261b416d5",
+      "source_of_truth": "testdata/legacy/manifests/demo.json (dynamodb.file-metadata); recomputed as md5-sum over id|size_bytes|s3_key read back from ow_tp_demo.files",
+      "result": "pass"
+    },
+    {
+      "id": "files.tenant_field",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "ow_tp_demo.files documents lacking a non-empty tenant field",
+      "result": "pass"
+    },
+    {
+      "id": "files.attribute_types_preserved",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "BSON type of size_bytes/version/is_trashed/created_at/updated_at read back from the target",
+      "result": "pass"
+    },
+    {
+      "id": "files.orphans_reported",
+      "expected": 40,
+      "actual": 40,
+      "source_of_truth": "testdata/legacy/manifests/demo.json (dynamodb.file-metadata) planted_anomalies.orphaned_metadata vs documents carrying s3_object_missing=true in the target",
+      "result": "pass"
+    },
+    {
+      "id": "files.orphan_keys_match_source",
+      "expected": [
+        "09469cfc-94b5-40b7-95cd-39d4f2d610f1",
+        "0bea2d95-5c0b-4905-a77f-cfe8fa8ef266",
+        "1537f253-8392-4835-960b-7745159186b9",
+        "193c5636-a5d3-4b27-80f3-9ad9cc0db8ad",
+        "1e94ec4c-daa3-4312-b9b0-a25a2e2dc5a4",
+        "22bbaccf-7d13-43b5-85b6-e39c24ba3010",
+        "2728be0a-4ea7-4193-9ea2-bf01730362e2",
+        "4fad10a0-6596-4702-82cf-0a3c61adbc88",
+        "5978a85e-d875-4c5e-8330-bd84d7185772",
+        "5eb7c396-1a06-4de5-b3b6-e40612983e07",
+        "5ee20541-ad1b-4719-b12f-2d1741cb7b50",
+        "638a536f-f10c-445b-9fad-dc2c46fe27cd",
+        "68ae546a-4ba4-4d74-aa97-8ffd318a7d39",
+        "69ebada0-9b3a-47f3-861f-8a9b004bdd01",
+        "75a55eff-9502-4d6b-8cb1-f08adc2f8757",
+        "7729c46f-ade2-4e77-9189-4f0d3e214951",
+        "7926f16a-a543-4281-ac1f-6c7a17c6b26e",
+        "7b95f7a6-7d63-4f5c-9ac4-f92e970fded4",
+        "7c6096ae-6dea-4ff9-af1d-c032b828f925",
+        "7c98ea5a-9b9b-4b3d-a1ad-4cabc54203e0",
+        "855830df-b727-4a3d-b3b4-5a28257bca15",
+        "87f85b2d-c10f-4684-b23e-2dbd47a1f403",
+        "94d2bd79-a773-4c49-9158-6a2da6d0dbcb",
+        "9becd831-0b0d-43c6-a037-8fac0dd9ff54",
+        "9d84308b-9d65-4d22-af39-17850fbd6b30",
+        "ab7c7723-1407-4509-a735-1e93430456a2",
+        "ae07a85c-019d-4a6f-bc8c-5ce34b8095fa",
+        "afef0026-1a90-4133-8d3a-307c9fbbaa8a",
+        "b461b24a-eb45-47a6-a71d-036a8deb3edc",
+        "b90c47cc-29b5-4dc2-b705-bb4db20a9ac5",
+        "caf96d17-eb4b-4ea9-b622-29940983926a",
+        "cbe7fb30-3b41-4d38-9cd4-ce5065306e04",
+        "daee66fc-51fb-432c-b522-8c858801b673",
+        "e1747410-571d-48b2-8243-34fece905486",
+        "e2cc82b9-f2b0-401d-8766-5869bf36d1d3",
+        "e5194447-f0a5-4bc3-9f57-d8bb5916cce6",
+        "fd0c5f0b-a57e-470e-afe4-ef1b461b859e",
+        "fdbe4ce4-e958-47e7-87cc-f9c88dbb9f96",
+        "fed95d77-150e-4587-a75b-2f2b23bb0e1c",
+        "ff00ab82-f830-4c99-97bf-710c23d16fe6"
+      ],
+      "actual": [
+        "09469cfc-94b5-40b7-95cd-39d4f2d610f1",
+        "0bea2d95-5c0b-4905-a77f-cfe8fa8ef266",
+        "1537f253-8392-4835-960b-7745159186b9",
+        "193c5636-a5d3-4b27-80f3-9ad9cc0db8ad",
+        "1e94ec4c-daa3-4312-b9b0-a25a2e2dc5a4",
+        "22bbaccf-7d13-43b5-85b6-e39c24ba3010",
+        "2728be0a-4ea7-4193-9ea2-bf01730362e2",
+        "4fad10a0-6596-4702-82cf-0a3c61adbc88",
+        "5978a85e-d875-4c5e-8330-bd84d7185772",
+        "5eb7c396-1a06-4de5-b3b6-e40612983e07",
+        "5ee20541-ad1b-4719-b12f-2d1741cb7b50",
+        "638a536f-f10c-445b-9fad-dc2c46fe27cd",
+        "68ae546a-4ba4-4d74-aa97-8ffd318a7d39",
+        "69ebada0-9b3a-47f3-861f-8a9b004bdd01",
+        "75a55eff-9502-4d6b-8cb1-f08adc2f8757",
+        "7729c46f-ade2-4e77-9189-4f0d3e214951",
+        "7926f16a-a543-4281-ac1f-6c7a17c6b26e",
+        "7b95f7a6-7d63-4f5c-9ac4-f92e970fded4",
+        "7c6096ae-6dea-4ff9-af1d-c032b828f925",
+        "7c98ea5a-9b9b-4b3d-a1ad-4cabc54203e0",
+        "855830df-b727-4a3d-b3b4-5a28257bca15",
+        "87f85b2d-c10f-4684-b23e-2dbd47a1f403",
+        "94d2bd79-a773-4c49-9158-6a2da6d0dbcb",
+        "9becd831-0b0d-43c6-a037-8fac0dd9ff54",
+        "9d84308b-9d65-4d22-af39-17850fbd6b30",
+        "ab7c7723-1407-4509-a735-1e93430456a2",
+        "ae07a85c-019d-4a6f-bc8c-5ce34b8095fa",
+        "afef0026-1a90-4133-8d3a-307c9fbbaa8a",
+        "b461b24a-eb45-47a6-a71d-036a8deb3edc",
+        "b90c47cc-29b5-4dc2-b705-bb4db20a9ac5",
+        "caf96d17-eb4b-4ea9-b622-29940983926a",
+        "cbe7fb30-3b41-4d38-9cd4-ce5065306e04",
+        "daee66fc-51fb-432c-b522-8c858801b673",
+        "e1747410-571d-48b2-8243-34fece905486",
+        "e2cc82b9-f2b0-401d-8766-5869bf36d1d3",
+        "e5194447-f0a5-4bc3-9f57-d8bb5916cce6",
+        "fd0c5f0b-a57e-470e-afe4-ef1b461b859e",
+        "fdbe4ce4-e958-47e7-87cc-f9c88dbb9f96",
+        "fed95d77-150e-4587-a75b-2f2b23bb0e1c",
+        "ff00ab82-f830-4c99-97bf-710c23d16fe6"
+      ],
+      "source_of_truth": "item keys from a fresh scan of otterworks-file-metadata vs keys marked in the target",
+      "result": "pass"
+    },
+    {
+      "id": "files.idempotent",
+      "expected": "pass",
+      "actual": "pass",
+      "source_of_truth": "second migration run followed by a fresh recomputation from the target",
+      "result": "pass"
+    },
+    {
+      "id": "files.validator_present",
+      "expected": true,
+      "actual": true,
+      "source_of_truth": "listCollections options for files and files_quarantine",
+      "result": "pass"
+    },
+    {
+      "id": "files.validator_rejects_violation",
+      "expected": true,
+      "actual": true,
+      "source_of_truth": "insert rejected: Document failed validation",
+      "result": "pass"
+    },
+    {
+      "id": "files.no_foreign_tenant_documents",
+      "expected": 10000,
+      "actual": 10000,
+      "source_of_truth": "ow_tp_demo.files total document count vs tenant=demo count",
+      "result": "pass"
+    },
+    {
+      "id": "files.quarantine_count",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "ow_tp_demo.files_quarantine documents for tenant=demo; the seeded estate plants no malformed metadata items, so quarantine must be empty",
+      "result": "pass"
+    },
+    {
+      "id": "files.extras_attribution",
+      "expected": {
+        "docs_with_extras": 0,
+        "extra_attribute_names": []
+      },
+      "actual": {
+        "docs_with_extras": 0,
+        "extra_attribute_names": []
+      },
+      "source_of_truth": "extras subdocuments read back from the target; the seeded estate carries no attributes outside the known set",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "rerun of `uv run scripts/tp_mongo/migrate_files.py --ns demo`: count 10000->10000, checksum db614663b2c6d41141cae82261b416d5->db614663b2c6d41141cae82261b416d5, orphan keys 40->40, quarantined 0->0"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      "orphaned_metadata"
+    ],
+    "actual_set": [
+      "orphaned_metadata"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "orphaned_metadata_item_keys": [
+    "09469cfc-94b5-40b7-95cd-39d4f2d610f1",
+    "0bea2d95-5c0b-4905-a77f-cfe8fa8ef266",
+    "1537f253-8392-4835-960b-7745159186b9",
+    "193c5636-a5d3-4b27-80f3-9ad9cc0db8ad",
+    "1e94ec4c-daa3-4312-b9b0-a25a2e2dc5a4",
+    "22bbaccf-7d13-43b5-85b6-e39c24ba3010",
+    "2728be0a-4ea7-4193-9ea2-bf01730362e2",
+    "4fad10a0-6596-4702-82cf-0a3c61adbc88",
+    "5978a85e-d875-4c5e-8330-bd84d7185772",
+    "5eb7c396-1a06-4de5-b3b6-e40612983e07",
+    "5ee20541-ad1b-4719-b12f-2d1741cb7b50",
+    "638a536f-f10c-445b-9fad-dc2c46fe27cd",
+    "68ae546a-4ba4-4d74-aa97-8ffd318a7d39",
+    "69ebada0-9b3a-47f3-861f-8a9b004bdd01",
+    "75a55eff-9502-4d6b-8cb1-f08adc2f8757",
+    "7729c46f-ade2-4e77-9189-4f0d3e214951",
+    "7926f16a-a543-4281-ac1f-6c7a17c6b26e",
+    "7b95f7a6-7d63-4f5c-9ac4-f92e970fded4",
+    "7c6096ae-6dea-4ff9-af1d-c032b828f925",
+    "7c98ea5a-9b9b-4b3d-a1ad-4cabc54203e0",
+    "855830df-b727-4a3d-b3b4-5a28257bca15",
+    "87f85b2d-c10f-4684-b23e-2dbd47a1f403",
+    "94d2bd79-a773-4c49-9158-6a2da6d0dbcb",
+    "9becd831-0b0d-43c6-a037-8fac0dd9ff54",
+    "9d84308b-9d65-4d22-af39-17850fbd6b30",
+    "ab7c7723-1407-4509-a735-1e93430456a2",
+    "ae07a85c-019d-4a6f-bc8c-5ce34b8095fa",
+    "afef0026-1a90-4133-8d3a-307c9fbbaa8a",
+    "b461b24a-eb45-47a6-a71d-036a8deb3edc",
+    "b90c47cc-29b5-4dc2-b705-bb4db20a9ac5",
+    "caf96d17-eb4b-4ea9-b622-29940983926a",
+    "cbe7fb30-3b41-4d38-9cd4-ce5065306e04",
+    "daee66fc-51fb-432c-b522-8c858801b673",
+    "e1747410-571d-48b2-8243-34fece905486",
+    "e2cc82b9-f2b0-401d-8766-5869bf36d1d3",
+    "e5194447-f0a5-4bc3-9f57-d8bb5916cce6",
+    "fd0c5f0b-a57e-470e-afe4-ef1b461b859e",
+    "fdbe4ce4-e958-47e7-87cc-f9c88dbb9f96",
+    "fed95d77-150e-4587-a75b-2f2b23bb0e1c",
+    "ff00ab82-f830-4c99-97bf-710c23d16fe6"
+  ],
+  "recon_command_for_live_recompute": "MONGO_URI=<atlas-uri> uv run scripts/tp_mongo/recon_files.py --ns demo --run-mode live",
+  "unverified_paths": [
+    "Atlas cluster write path, $jsonSchema validator DDL on Atlas, and Atlas index creation: this run targets the local mongo:7 fixture only (docker-compose.tp-mongodb.yml); the parent owns the single live window.",
+    "Atlas-side authentication, TLS, and access-list behaviour are exercised only by the parent's live run.",
+    "Per-object S3 existence for the 9,960 non-orphan items: the seeded estate writes no objects to the otterworks-files bucket, so 'no backing object' is taken from the seed's planted /missing/ key segment, which is the same definition the immutable baseline validator (testdata/legacy/validate.py) uses.",
+    "Binary (BSON binary) attribute conversion: the seeded ns=demo estate contains no DynamoDB binary attributes, so that branch of the type mapping is implemented and unit-tested locally but not exercised by production seed data."
+  ],
+  "self_check": {
+    "null_and_missing_attribution_cannot_fail_open": "pass: missing/NULL required attributes and unparseable timestamps are quarantined with the reason (files.quarantine_count check; branches covered by make tp-mongo-test)",
+    "all_references_namespace_scoped_with_ow_tp_prefix": "pass: only ow_tp_<ns>.files and ow_tp_<ns>.files_quarantine are written; the namespace is validated against [A-Za-z0-9_]+",
+    "no_ddl_drops_replaces_or_alters_a_shared_table": "pass: collections are created if absent and otherwise only collMod'd to apply the validator. The only delete in the unit is the recon validator probe removing its own __recon_probe__ document, and only if the validator wrongly accepted it",
+    "rerun_safe_retention_and_cleanup": "pass: writes are _id-keyed upserts, so a rerun replaces its own documents and removes nothing; the unit has no retention or cleanup path",
+    "cleanup_retains_run_evidence": "pass: the recon report is a committed repo artifact and no cleanup path deletes it",
+    "no_secrets_or_real_addresses_in_source_or_evidence": "pass: the target is reached only through MONGO_URI, and the logged host is taken from the part after any credentials; the report contains no URI, token, or address",
+    "parity_versus_tolerance_matches_the_contract": "pass: exact equality on count, checksum, orphan count, and orphan key set, per the contract's acceptance_checks; no tolerance was introduced",
+    "idempotency_proven_by_an_actual_rerun": "pass: the migration is re-executed by this script and the target is recomputed afterwards (idempotency_rerun.performed)",
+    "recon_values_recomputed_from_the_target": "pass: every number is read back from the target with find/count/aggregate after the write; no value comes from the writer's counters",
+    "unverified_paths_listed": "pass: see unverified_paths",
+    "recon_report_kind_and_artifact_name": "pass: kind=recon-report at docs/tech-partnerships/recon/mongo_files.recon.json",
+    "capability_preflight_passed_for_required_paths": "inherited: the parent's Atlas preflight verified validator DDL and the wire write path; this unit ran no preflight of its own and performs no live work",
+    "tp_smoke_green": "pass: make tp-smoke reported all checks passed on this branch"
+  },
+  "coverage_gaps": [
+    "The missing hourly S3 event partition under data-lake/events/demo/ belongs to the Databricks track; this unit ingests no S3 event objects and does not report that anomaly."
+  ]
+}
