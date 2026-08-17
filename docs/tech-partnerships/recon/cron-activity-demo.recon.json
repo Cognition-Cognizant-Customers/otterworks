@@ -1,0 +1,3045 @@
+{
+  "kind": "recon-report",
+  "unit": "cron-activity",
+  "namespace": "demo",
+  "generated_at": "2026-08-17T07:03:00.414415Z",
+  "run_mode": "live",
+  "checks": [
+    {
+      "id": "ACT-01/summary_window_row_count",
+      "expected": 30,
+      "actual": 30,
+      "source_of_truth": "baseline activity_report.json",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-01/summary_window_dates",
+      "expected": [
+        "2025-12-17",
+        "2025-12-18",
+        "2025-12-19",
+        "2025-12-20",
+        "2025-12-21",
+        "2025-12-22",
+        "2025-12-23",
+        "2025-12-24",
+        "2025-12-25",
+        "2025-12-26",
+        "2025-12-27",
+        "2025-12-28",
+        "2025-12-29",
+        "2025-12-30",
+        "2025-12-31",
+        "2026-01-01",
+        "2026-01-02",
+        "2026-01-03",
+        "2026-01-04",
+        "2026-01-05",
+        "2026-01-06",
+        "2026-01-07",
+        "2026-01-08",
+        "2026-01-09",
+        "2026-01-10",
+        "2026-01-11",
+        "2026-01-12",
+        "2026-01-13",
+        "2026-01-14",
+        "2026-01-15"
+      ],
+      "actual": [
+        "2025-12-17",
+        "2025-12-18",
+        "2025-12-19",
+        "2025-12-20",
+        "2025-12-21",
+        "2025-12-22",
+        "2025-12-23",
+        "2025-12-24",
+        "2025-12-25",
+        "2025-12-26",
+        "2025-12-27",
+        "2025-12-28",
+        "2025-12-29",
+        "2025-12-30",
+        "2025-12-31",
+        "2026-01-01",
+        "2026-01-02",
+        "2026-01-03",
+        "2026-01-04",
+        "2026-01-05",
+        "2026-01-06",
+        "2026-01-07",
+        "2026-01-08",
+        "2026-01-09",
+        "2026-01-10",
+        "2026-01-11",
+        "2026-01-12",
+        "2026-01-13",
+        "2026-01-14",
+        "2026-01-15"
+      ],
+      "source_of_truth": "baseline activity_report.json",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-01/summary_window_values",
+      "expected": [
+        {
+          "report_date": "2025-12-17",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 26,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 31200
+        },
+        {
+          "report_date": "2025-12-18",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 27,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 32400
+        },
+        {
+          "report_date": "2025-12-19",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 28,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 33600
+        },
+        {
+          "report_date": "2025-12-20",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 29,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 34800
+        },
+        {
+          "report_date": "2025-12-21",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 30,
+          "documents_created": 6,
+          "documents_edited": 7,
+          "comments_added": 5,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 36000
+        },
+        {
+          "report_date": "2025-12-22",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 20,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 2,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 24000
+        },
+        {
+          "report_date": "2025-12-23",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 21,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 25200
+        },
+        {
+          "report_date": "2025-12-24",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 22,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 26400
+        },
+        {
+          "report_date": "2025-12-25",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 23,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 27600
+        },
+        {
+          "report_date": "2025-12-26",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 24,
+          "documents_created": 4,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 28800
+        },
+        {
+          "report_date": "2025-12-27",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 25,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 30000
+        },
+        {
+          "report_date": "2025-12-28",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 26,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 31200
+        },
+        {
+          "report_date": "2025-12-29",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 27,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 32400
+        },
+        {
+          "report_date": "2025-12-30",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 28,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 33600
+        },
+        {
+          "report_date": "2025-12-31",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 29,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 34800
+        },
+        {
+          "report_date": "2026-01-01",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 21,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 25200
+        },
+        {
+          "report_date": "2026-01-02",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 22,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 26400
+        },
+        {
+          "report_date": "2026-01-03",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 23,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 27600
+        },
+        {
+          "report_date": "2026-01-04",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 24,
+          "documents_created": 4,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 28800
+        },
+        {
+          "report_date": "2026-01-05",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 25,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 30000
+        },
+        {
+          "report_date": "2026-01-06",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 26,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 31200
+        },
+        {
+          "report_date": "2026-01-07",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 27,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 32400
+        },
+        {
+          "report_date": "2026-01-08",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 28,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 33600
+        },
+        {
+          "report_date": "2026-01-09",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 29,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 34800
+        },
+        {
+          "report_date": "2026-01-10",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 30,
+          "documents_created": 6,
+          "documents_edited": 7,
+          "comments_added": 5,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 36000
+        },
+        {
+          "report_date": "2026-01-11",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 20,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 2,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 24000
+        },
+        {
+          "report_date": "2026-01-12",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 21,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 25200
+        },
+        {
+          "report_date": "2026-01-13",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 22,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 26400
+        },
+        {
+          "report_date": "2026-01-14",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 23,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 27600
+        },
+        {
+          "report_date": "2026-01-15",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 9,
+          "total_events": 272,
+          "documents_created": 46,
+          "documents_edited": 46,
+          "comments_added": 45,
+          "files_uploaded": 45,
+          "files_shared": 45,
+          "files_deleted": 45,
+          "bytes_uploaded": 54875
+        }
+      ],
+      "actual": [
+        {
+          "report_date": "2025-12-17",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 26,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 31200
+        },
+        {
+          "report_date": "2025-12-18",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 27,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 32400
+        },
+        {
+          "report_date": "2025-12-19",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 28,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 33600
+        },
+        {
+          "report_date": "2025-12-20",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 29,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 34800
+        },
+        {
+          "report_date": "2025-12-21",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 30,
+          "documents_created": 6,
+          "documents_edited": 7,
+          "comments_added": 5,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 36000
+        },
+        {
+          "report_date": "2025-12-22",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 20,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 2,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 24000
+        },
+        {
+          "report_date": "2025-12-23",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 21,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 25200
+        },
+        {
+          "report_date": "2025-12-24",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 22,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 26400
+        },
+        {
+          "report_date": "2025-12-25",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 23,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 27600
+        },
+        {
+          "report_date": "2025-12-26",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 24,
+          "documents_created": 4,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 28800
+        },
+        {
+          "report_date": "2025-12-27",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 25,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 30000
+        },
+        {
+          "report_date": "2025-12-28",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 26,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 31200
+        },
+        {
+          "report_date": "2025-12-29",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 27,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 32400
+        },
+        {
+          "report_date": "2025-12-30",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 28,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 33600
+        },
+        {
+          "report_date": "2025-12-31",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 29,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 34800
+        },
+        {
+          "report_date": "2026-01-01",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 21,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 25200
+        },
+        {
+          "report_date": "2026-01-02",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 22,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 26400
+        },
+        {
+          "report_date": "2026-01-03",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 23,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 27600
+        },
+        {
+          "report_date": "2026-01-04",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 24,
+          "documents_created": 4,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 28800
+        },
+        {
+          "report_date": "2026-01-05",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 25,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 30000
+        },
+        {
+          "report_date": "2026-01-06",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 26,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 31200
+        },
+        {
+          "report_date": "2026-01-07",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 27,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 32400
+        },
+        {
+          "report_date": "2026-01-08",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 28,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 33600
+        },
+        {
+          "report_date": "2026-01-09",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 29,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 34800
+        },
+        {
+          "report_date": "2026-01-10",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 30,
+          "documents_created": 6,
+          "documents_edited": 7,
+          "comments_added": 5,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 36000
+        },
+        {
+          "report_date": "2026-01-11",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 20,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 2,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 24000
+        },
+        {
+          "report_date": "2026-01-12",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 21,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 25200
+        },
+        {
+          "report_date": "2026-01-13",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 22,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 26400
+        },
+        {
+          "report_date": "2026-01-14",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 23,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 27600
+        },
+        {
+          "report_date": "2026-01-15",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 9,
+          "total_events": 272,
+          "documents_created": 46,
+          "documents_edited": 46,
+          "comments_added": 45,
+          "files_uploaded": 45,
+          "files_shared": 45,
+          "files_deleted": 45,
+          "bytes_uploaded": 54875
+        }
+      ],
+      "source_of_truth": "baseline activity_report.json",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-01/no_legacy_source_references",
+      "expected": false,
+      "actual": false,
+      "source_of_truth": "committed daily-job SQL",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-02/user_row_count",
+      "expected": 13,
+      "actual": 13,
+      "source_of_truth": "baseline user_summaries.jsonl",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-02/user_aggregates",
+      "expected": [
+        {
+          "user_id": "user-005",
+          "total_actions": 639,
+          "active_days": 29,
+          "actions_by_type": {
+            "file_deleted": 21,
+            "document_edited": 84,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-004",
+          "total_actions": 611,
+          "active_days": 29,
+          "actions_by_type": {
+            "file_shared": 21,
+            "document_edited": 56,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-003",
+          "total_actions": 583,
+          "active_days": 29,
+          "actions_by_type": {
+            "file_uploaded": 49,
+            "document_edited": 28
+          }
+        },
+        {
+          "user_id": "user-002",
+          "total_actions": 556,
+          "active_days": 29,
+          "actions_by_type": {
+            "comment_added": 22,
+            "document_edited": 84,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-001",
+          "total_actions": 528,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 78,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-000",
+          "total_actions": 499,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_created": 21,
+            "document_edited": 28,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "unknown",
+          "total_actions": 22,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_created": 4,
+            "file_deleted": 4,
+            "file_shared": 4,
+            "file_uploaded": 4,
+            "comment_added": 3,
+            "document_edited": 3
+          }
+        },
+        {
+          "user_id": "user-006",
+          "total_actions": 21,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_created": 21
+          }
+        },
+        {
+          "user_id": "user-007",
+          "total_actions": 21,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_edited": 21
+          }
+        },
+        {
+          "user_id": "user-008",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "comment_added": 20
+          }
+        },
+        {
+          "user_id": "user-009",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_uploaded": 20
+          }
+        },
+        {
+          "user_id": "user-010",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_shared": 20
+          }
+        },
+        {
+          "user_id": "user-011",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_deleted": 20
+          }
+        }
+      ],
+      "actual": [
+        {
+          "user_id": "user-005",
+          "total_actions": 639,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 84,
+            "file_deleted": 21,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-004",
+          "total_actions": 611,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 56,
+            "file_shared": 21,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-003",
+          "total_actions": 583,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 28,
+            "file_uploaded": 49
+          }
+        },
+        {
+          "user_id": "user-002",
+          "total_actions": 556,
+          "active_days": 29,
+          "actions_by_type": {
+            "comment_added": 22,
+            "document_edited": 84,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-001",
+          "total_actions": 528,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 78,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-000",
+          "total_actions": 499,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_created": 21,
+            "document_edited": 28,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "unknown",
+          "total_actions": 22,
+          "active_days": 1,
+          "actions_by_type": {
+            "comment_added": 3,
+            "document_created": 4,
+            "document_edited": 3,
+            "file_deleted": 4,
+            "file_shared": 4,
+            "file_uploaded": 4
+          }
+        },
+        {
+          "user_id": "user-006",
+          "total_actions": 21,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_created": 21
+          }
+        },
+        {
+          "user_id": "user-007",
+          "total_actions": 21,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_edited": 21
+          }
+        },
+        {
+          "user_id": "user-008",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "comment_added": 20
+          }
+        },
+        {
+          "user_id": "user-009",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_uploaded": 20
+          }
+        },
+        {
+          "user_id": "user-010",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_shared": 20
+          }
+        },
+        {
+          "user_id": "user-011",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_deleted": 20
+          }
+        }
+      ],
+      "source_of_truth": "baseline user_summaries.jsonl",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-03/history_days_present",
+      "expected": 29,
+      "actual": 29,
+      "source_of_truth": "baseline history gzip objects",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-03/missing_history_days",
+      "expected": [
+        "2026-01-02"
+      ],
+      "actual": [
+        "2026-01-02"
+      ],
+      "source_of_truth": "baseline history artifacts",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-03/gap_day_contributes_nothing",
+      "expected": 181,
+      "actual": 181,
+      "source_of_truth": "baseline user_summaries.jsonl",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-03/analytics_rundate_row_intact",
+      "expected": [
+        {
+          "report_date": "2026-01-15",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 9,
+          "total_events": 272,
+          "documents_created": 46,
+          "documents_edited": 46,
+          "comments_added": 45,
+          "files_uploaded": 45,
+          "files_shared": 45,
+          "files_deleted": 45,
+          "bytes_uploaded": 54875
+        }
+      ],
+      "actual": [
+        {
+          "report_date": "2026-01-15",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 9,
+          "total_events": 272,
+          "documents_created": 46,
+          "documents_edited": 46,
+          "comments_added": 45,
+          "files_uploaded": 45,
+          "files_shared": 45,
+          "files_deleted": 45,
+          "bytes_uploaded": 54875
+        }
+      ],
+      "source_of_truth": "baseline activity_report.json",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-04/latest_resolves_to_run_date",
+      "expected": "2026-01-15",
+      "actual": "2026-01-15",
+      "source_of_truth": "baseline report date",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-04/latest_matches_dated_report",
+      "expected": "1fb48dbf3945b1e5fd42eb17e0b41f8c799eb4abc008c9fa714b207efc586b69",
+      "actual": "1fb48dbf3945b1e5fd42eb17e0b41f8c799eb4abc008c9fa714b207efc586b69",
+      "source_of_truth": "dated report and latest view",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-06/report_trends",
+      "expected": {
+        "total_events": 998,
+        "peak_active_users": 12,
+        "avg_daily_events": 33.27,
+        "reporting_days": 30
+      },
+      "actual": {
+        "total_events": 998,
+        "peak_active_users": 12,
+        "avg_daily_events": 33.27,
+        "reporting_days": 30
+      },
+      "source_of_truth": "baseline activity_report.json",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-06/report_daily_summaries",
+      "expected": [
+        {
+          "report_date": "2025-12-17",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 26,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 31200
+        },
+        {
+          "report_date": "2025-12-18",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 27,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 32400
+        },
+        {
+          "report_date": "2025-12-19",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 28,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 33600
+        },
+        {
+          "report_date": "2025-12-20",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 29,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 34800
+        },
+        {
+          "report_date": "2025-12-21",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 30,
+          "documents_created": 6,
+          "documents_edited": 7,
+          "comments_added": 5,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 36000
+        },
+        {
+          "report_date": "2025-12-22",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 20,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 2,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 24000
+        },
+        {
+          "report_date": "2025-12-23",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 21,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 25200
+        },
+        {
+          "report_date": "2025-12-24",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 22,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 26400
+        },
+        {
+          "report_date": "2025-12-25",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 23,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 27600
+        },
+        {
+          "report_date": "2025-12-26",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 24,
+          "documents_created": 4,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 28800
+        },
+        {
+          "report_date": "2025-12-27",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 25,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 30000
+        },
+        {
+          "report_date": "2025-12-28",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 26,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 31200
+        },
+        {
+          "report_date": "2025-12-29",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 27,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 32400
+        },
+        {
+          "report_date": "2025-12-30",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 28,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 33600
+        },
+        {
+          "report_date": "2025-12-31",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 29,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 34800
+        },
+        {
+          "report_date": "2026-01-01",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 21,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 25200
+        },
+        {
+          "report_date": "2026-01-02",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 22,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 26400
+        },
+        {
+          "report_date": "2026-01-03",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 23,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 27600
+        },
+        {
+          "report_date": "2026-01-04",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 24,
+          "documents_created": 4,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 28800
+        },
+        {
+          "report_date": "2026-01-05",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 25,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 30000
+        },
+        {
+          "report_date": "2026-01-06",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 26,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 31200
+        },
+        {
+          "report_date": "2026-01-07",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 27,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 32400
+        },
+        {
+          "report_date": "2026-01-08",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 28,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 33600
+        },
+        {
+          "report_date": "2026-01-09",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 29,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 34800
+        },
+        {
+          "report_date": "2026-01-10",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 30,
+          "documents_created": 6,
+          "documents_edited": 7,
+          "comments_added": 5,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 36000
+        },
+        {
+          "report_date": "2026-01-11",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 20,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 2,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 24000
+        },
+        {
+          "report_date": "2026-01-12",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 21,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 25200
+        },
+        {
+          "report_date": "2026-01-13",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 22,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 26400
+        },
+        {
+          "report_date": "2026-01-14",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 23,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 27600
+        },
+        {
+          "report_date": "2026-01-15",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 9,
+          "total_events": 272,
+          "documents_created": 46,
+          "documents_edited": 46,
+          "comments_added": 45,
+          "files_uploaded": 45,
+          "files_shared": 45,
+          "files_deleted": 45,
+          "bytes_uploaded": 54875
+        }
+      ],
+      "actual": [
+        {
+          "report_date": "2025-12-17",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 26,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 31200
+        },
+        {
+          "report_date": "2025-12-18",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 27,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 32400
+        },
+        {
+          "report_date": "2025-12-19",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 28,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 33600
+        },
+        {
+          "report_date": "2025-12-20",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 29,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 34800
+        },
+        {
+          "report_date": "2025-12-21",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 30,
+          "documents_created": 6,
+          "documents_edited": 7,
+          "comments_added": 5,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 36000
+        },
+        {
+          "report_date": "2025-12-22",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 20,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 2,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 24000
+        },
+        {
+          "report_date": "2025-12-23",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 21,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 25200
+        },
+        {
+          "report_date": "2025-12-24",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 22,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 26400
+        },
+        {
+          "report_date": "2025-12-25",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 23,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 27600
+        },
+        {
+          "report_date": "2025-12-26",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 24,
+          "documents_created": 4,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 28800
+        },
+        {
+          "report_date": "2025-12-27",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 25,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 30000
+        },
+        {
+          "report_date": "2025-12-28",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 26,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 31200
+        },
+        {
+          "report_date": "2025-12-29",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 27,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 32400
+        },
+        {
+          "report_date": "2025-12-30",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 28,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 33600
+        },
+        {
+          "report_date": "2025-12-31",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 29,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 34800
+        },
+        {
+          "report_date": "2026-01-01",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 21,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 25200
+        },
+        {
+          "report_date": "2026-01-02",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 22,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 26400
+        },
+        {
+          "report_date": "2026-01-03",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 23,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 27600
+        },
+        {
+          "report_date": "2026-01-04",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 24,
+          "documents_created": 4,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 28800
+        },
+        {
+          "report_date": "2026-01-05",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 25,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 30000
+        },
+        {
+          "report_date": "2026-01-06",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 26,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 31200
+        },
+        {
+          "report_date": "2026-01-07",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 27,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 32400
+        },
+        {
+          "report_date": "2026-01-08",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 28,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 33600
+        },
+        {
+          "report_date": "2026-01-09",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 29,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 34800
+        },
+        {
+          "report_date": "2026-01-10",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 30,
+          "documents_created": 6,
+          "documents_edited": 7,
+          "comments_added": 5,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 36000
+        },
+        {
+          "report_date": "2026-01-11",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 20,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 2,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 24000
+        },
+        {
+          "report_date": "2026-01-12",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 21,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 25200
+        },
+        {
+          "report_date": "2026-01-13",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 22,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 26400
+        },
+        {
+          "report_date": "2026-01-14",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 23,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 27600
+        },
+        {
+          "report_date": "2026-01-15",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 9,
+          "total_events": 272,
+          "documents_created": 46,
+          "documents_edited": 46,
+          "comments_added": 45,
+          "files_uploaded": 45,
+          "files_shared": 45,
+          "files_deleted": 45,
+          "bytes_uploaded": 54875
+        }
+      ],
+      "source_of_truth": "baseline activity_report.json",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-06/report_user_summaries",
+      "expected": [
+        {
+          "user_id": "user-005",
+          "total_actions": 639,
+          "active_days": 29,
+          "actions_by_type": {
+            "file_deleted": 21,
+            "document_edited": 84,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-004",
+          "total_actions": 611,
+          "active_days": 29,
+          "actions_by_type": {
+            "file_shared": 21,
+            "document_edited": 56,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-003",
+          "total_actions": 583,
+          "active_days": 29,
+          "actions_by_type": {
+            "file_uploaded": 49,
+            "document_edited": 28
+          }
+        },
+        {
+          "user_id": "user-002",
+          "total_actions": 556,
+          "active_days": 29,
+          "actions_by_type": {
+            "comment_added": 22,
+            "document_edited": 84,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-001",
+          "total_actions": 528,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 78,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-000",
+          "total_actions": 499,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_created": 21,
+            "document_edited": 28,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "unknown",
+          "total_actions": 22,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_created": 4,
+            "file_deleted": 4,
+            "file_shared": 4,
+            "file_uploaded": 4,
+            "comment_added": 3,
+            "document_edited": 3
+          }
+        },
+        {
+          "user_id": "user-006",
+          "total_actions": 21,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_created": 21
+          }
+        },
+        {
+          "user_id": "user-007",
+          "total_actions": 21,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_edited": 21
+          }
+        },
+        {
+          "user_id": "user-008",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "comment_added": 20
+          }
+        },
+        {
+          "user_id": "user-009",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_uploaded": 20
+          }
+        },
+        {
+          "user_id": "user-010",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_shared": 20
+          }
+        },
+        {
+          "user_id": "user-011",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_deleted": 20
+          }
+        }
+      ],
+      "actual": [
+        {
+          "user_id": "user-005",
+          "total_actions": 639,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 84,
+            "file_deleted": 21,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-004",
+          "total_actions": 611,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 56,
+            "file_shared": 21,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-003",
+          "total_actions": 583,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 28,
+            "file_uploaded": 49
+          }
+        },
+        {
+          "user_id": "user-002",
+          "total_actions": 556,
+          "active_days": 29,
+          "actions_by_type": {
+            "comment_added": 22,
+            "document_edited": 84,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-001",
+          "total_actions": 528,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 78,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-000",
+          "total_actions": 499,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_created": 21,
+            "document_edited": 28,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "unknown",
+          "total_actions": 22,
+          "active_days": 1,
+          "actions_by_type": {
+            "comment_added": 3,
+            "document_created": 4,
+            "document_edited": 3,
+            "file_deleted": 4,
+            "file_shared": 4,
+            "file_uploaded": 4
+          }
+        },
+        {
+          "user_id": "user-006",
+          "total_actions": 21,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_created": 21
+          }
+        },
+        {
+          "user_id": "user-007",
+          "total_actions": 21,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_edited": 21
+          }
+        },
+        {
+          "user_id": "user-008",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "comment_added": 20
+          }
+        },
+        {
+          "user_id": "user-009",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_uploaded": 20
+          }
+        },
+        {
+          "user_id": "user-010",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_shared": 20
+          }
+        },
+        {
+          "user_id": "user-011",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_deleted": 20
+          }
+        }
+      ],
+      "source_of_truth": "baseline activity_report.json",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-06/report_top_users",
+      "expected": [
+        {
+          "user_id": "user-005",
+          "total_actions": 639,
+          "active_days": 29,
+          "actions_by_type": {
+            "file_deleted": 21,
+            "document_edited": 84,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-004",
+          "total_actions": 611,
+          "active_days": 29,
+          "actions_by_type": {
+            "file_shared": 21,
+            "document_edited": 56,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-003",
+          "total_actions": 583,
+          "active_days": 29,
+          "actions_by_type": {
+            "file_uploaded": 49,
+            "document_edited": 28
+          }
+        },
+        {
+          "user_id": "user-002",
+          "total_actions": 556,
+          "active_days": 29,
+          "actions_by_type": {
+            "comment_added": 22,
+            "document_edited": 84,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-001",
+          "total_actions": 528,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 78,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-000",
+          "total_actions": 499,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_created": 21,
+            "document_edited": 28,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "unknown",
+          "total_actions": 22,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_created": 4,
+            "file_deleted": 4,
+            "file_shared": 4,
+            "file_uploaded": 4,
+            "comment_added": 3,
+            "document_edited": 3
+          }
+        },
+        {
+          "user_id": "user-006",
+          "total_actions": 21,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_created": 21
+          }
+        },
+        {
+          "user_id": "user-007",
+          "total_actions": 21,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_edited": 21
+          }
+        },
+        {
+          "user_id": "user-008",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "comment_added": 20
+          }
+        },
+        {
+          "user_id": "user-009",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_uploaded": 20
+          }
+        },
+        {
+          "user_id": "user-010",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_shared": 20
+          }
+        },
+        {
+          "user_id": "user-011",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_deleted": 20
+          }
+        }
+      ],
+      "actual": [
+        {
+          "user_id": "user-005",
+          "total_actions": 639,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 84,
+            "file_deleted": 21,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-004",
+          "total_actions": 611,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 56,
+            "file_shared": 21,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-003",
+          "total_actions": 583,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 28,
+            "file_uploaded": 49
+          }
+        },
+        {
+          "user_id": "user-002",
+          "total_actions": 556,
+          "active_days": 29,
+          "actions_by_type": {
+            "comment_added": 22,
+            "document_edited": 84,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-001",
+          "total_actions": 528,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 78,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-000",
+          "total_actions": 499,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_created": 21,
+            "document_edited": 28,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "unknown",
+          "total_actions": 22,
+          "active_days": 1,
+          "actions_by_type": {
+            "comment_added": 3,
+            "document_created": 4,
+            "document_edited": 3,
+            "file_deleted": 4,
+            "file_shared": 4,
+            "file_uploaded": 4
+          }
+        },
+        {
+          "user_id": "user-006",
+          "total_actions": 21,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_created": 21
+          }
+        },
+        {
+          "user_id": "user-007",
+          "total_actions": 21,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_edited": 21
+          }
+        },
+        {
+          "user_id": "user-008",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "comment_added": 20
+          }
+        },
+        {
+          "user_id": "user-009",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_uploaded": 20
+          }
+        },
+        {
+          "user_id": "user-010",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_shared": 20
+          }
+        },
+        {
+          "user_id": "user-011",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_deleted": 20
+          }
+        }
+      ],
+      "source_of_truth": "baseline activity_report.json",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-06/user_order",
+      "expected": [
+        "user-005",
+        "user-004",
+        "user-003",
+        "user-002",
+        "user-001",
+        "user-000",
+        "unknown",
+        "user-006",
+        "user-007",
+        "user-008",
+        "user-009",
+        "user-010",
+        "user-011"
+      ],
+      "actual": [
+        "user-005",
+        "user-004",
+        "user-003",
+        "user-002",
+        "user-001",
+        "user-000",
+        "unknown",
+        "user-006",
+        "user-007",
+        "user-008",
+        "user-009",
+        "user-010",
+        "user-011"
+      ],
+      "source_of_truth": "legacy tie-break ordering",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-06/user_summaries_jsonl_equivalent",
+      "expected": [
+        {
+          "user_id": "user-005",
+          "total_actions": 639,
+          "active_days": 29,
+          "actions_by_type": {
+            "file_deleted": 21,
+            "document_edited": 84,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-004",
+          "total_actions": 611,
+          "active_days": 29,
+          "actions_by_type": {
+            "file_shared": 21,
+            "document_edited": 56,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-003",
+          "total_actions": 583,
+          "active_days": 29,
+          "actions_by_type": {
+            "file_uploaded": 49,
+            "document_edited": 28
+          }
+        },
+        {
+          "user_id": "user-002",
+          "total_actions": 556,
+          "active_days": 29,
+          "actions_by_type": {
+            "comment_added": 22,
+            "document_edited": 84,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-001",
+          "total_actions": 528,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 78,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-000",
+          "total_actions": 499,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_created": 21,
+            "document_edited": 28,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "unknown",
+          "total_actions": 22,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_created": 4,
+            "file_deleted": 4,
+            "file_shared": 4,
+            "file_uploaded": 4,
+            "comment_added": 3,
+            "document_edited": 3
+          }
+        },
+        {
+          "user_id": "user-006",
+          "total_actions": 21,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_created": 21
+          }
+        },
+        {
+          "user_id": "user-007",
+          "total_actions": 21,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_edited": 21
+          }
+        },
+        {
+          "user_id": "user-008",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "comment_added": 20
+          }
+        },
+        {
+          "user_id": "user-009",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_uploaded": 20
+          }
+        },
+        {
+          "user_id": "user-010",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_shared": 20
+          }
+        },
+        {
+          "user_id": "user-011",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_deleted": 20
+          }
+        }
+      ],
+      "actual": [
+        {
+          "user_id": "user-005",
+          "total_actions": 639,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 84,
+            "file_deleted": 21,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-004",
+          "total_actions": 611,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 56,
+            "file_shared": 21,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-003",
+          "total_actions": 583,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 28,
+            "file_uploaded": 49
+          }
+        },
+        {
+          "user_id": "user-002",
+          "total_actions": 556,
+          "active_days": 29,
+          "actions_by_type": {
+            "comment_added": 22,
+            "document_edited": 84,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-001",
+          "total_actions": 528,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_edited": 78,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "user-000",
+          "total_actions": 499,
+          "active_days": 29,
+          "actions_by_type": {
+            "document_created": 21,
+            "document_edited": 28,
+            "file_uploaded": 28
+          }
+        },
+        {
+          "user_id": "unknown",
+          "total_actions": 22,
+          "active_days": 1,
+          "actions_by_type": {
+            "comment_added": 3,
+            "document_created": 4,
+            "document_edited": 3,
+            "file_deleted": 4,
+            "file_shared": 4,
+            "file_uploaded": 4
+          }
+        },
+        {
+          "user_id": "user-006",
+          "total_actions": 21,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_created": 21
+          }
+        },
+        {
+          "user_id": "user-007",
+          "total_actions": 21,
+          "active_days": 1,
+          "actions_by_type": {
+            "document_edited": 21
+          }
+        },
+        {
+          "user_id": "user-008",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "comment_added": 20
+          }
+        },
+        {
+          "user_id": "user-009",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_uploaded": 20
+          }
+        },
+        {
+          "user_id": "user-010",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_shared": 20
+          }
+        },
+        {
+          "user_id": "user-011",
+          "total_actions": 20,
+          "active_days": 1,
+          "actions_by_type": {
+            "file_deleted": 20
+          }
+        }
+      ],
+      "source_of_truth": "baseline user_summaries.jsonl",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-06/report_scalar_fields",
+      "expected": {
+        "report_type": "user_activity",
+        "report_date": "2026-01-15",
+        "lookback_days": 30
+      },
+      "actual": {
+        "report_type": "user_activity",
+        "report_date": "2026-01-15",
+        "lookback_days": 30
+      },
+      "source_of_truth": "baseline activity_report.json",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-06/generated_at_volatile",
+      "expected": "generated_at is excluded from parity comparison because it is volatile",
+      "actual": "target report generated_at is excluded from the queried parity shape",
+      "source_of_truth": "contract volatility policy",
+      "result": "skipped"
+    },
+    {
+      "id": "TARGET/objects_present",
+      "expected": true,
+      "actual": true,
+      "source_of_truth": "target SQL queries",
+      "result": "pass"
+    },
+    {
+      "id": "TARGET/schedule_paused",
+      "expected": true,
+      "actual": true,
+      "source_of_truth": "Jobs API",
+      "result": "pass"
+    },
+    {
+      "id": "TARGET/serverless_only",
+      "expected": true,
+      "actual": true,
+      "source_of_truth": "Jobs API",
+      "result": "pass"
+    },
+    {
+      "id": "TARGET/landing_volume_present",
+      "expected": true,
+      "actual": true,
+      "source_of_truth": "Files API",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-03/job_run_succeeded",
+      "expected": "SUCCESS",
+      "actual": "SUCCESS",
+      "source_of_truth": "idempotency rerun",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-05/no_duplicate_users_after_rerun",
+      "expected": {
+        "row_count": 13,
+        "distinct_users": 13,
+        "distinct_ordinals": 13
+      },
+      "actual": {
+        "row_count": 13,
+        "distinct_users": 13,
+        "distinct_ordinals": 13
+      },
+      "source_of_truth": "post-rerun user_summaries query",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-05/report_row_singleton_after_rerun",
+      "expected": 1,
+      "actual": 1,
+      "source_of_truth": "post-rerun dated report query",
+      "result": "pass"
+    },
+    {
+      "id": "ACT-05/values_stable_across_rerun",
+      "expected": "c12b8e876e72374b4e79790bdaf3171975b901aa0b323f34c65be0b913ec47b7",
+      "actual": "c12b8e876e72374b4e79790bdaf3171975b901aa0b323f34c65be0b913ec47b7",
+      "source_of_truth": "before/after target digests",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "method": "job",
+    "before": "c12b8e876e72374b4e79790bdaf3171975b901aa0b323f34c65be0b913ec47b7",
+    "job_id": 1105935376976908,
+    "run_id": 71976049268573,
+    "run_url": "https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/runs/71976049268573",
+    "state": {
+      "life_cycle_state": "TERMINATED",
+      "result_state": "SUCCESS",
+      "state_message": "",
+      "user_cancelled_or_timedout": false
+    },
+    "after": "c12b8e876e72374b4e79790bdaf3171975b901aa0b323f34c65be0b913ec47b7",
+    "result": "pass"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      [
+        "missing_history_day",
+        "2026-01-02"
+      ],
+      [
+        "window_boundary_inclusive",
+        "2026-01-15"
+      ]
+    ],
+    "actual_set": [
+      [
+        "missing_history_day",
+        "2026-01-02"
+      ],
+      [
+        "window_boundary_inclusive",
+        "2026-01-15"
+      ]
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "generated_at is intentionally omitted from target report parity; its volatility is recorded by ACT-06/generated_at_volatile.",
+    "actions_by_type map key order is not bitwise comparable; recon compares key/value content.",
+    "This recon does not assert the backfill/bronze landing path; TARGET/landing_volume_present covers only the dated landing directory."
+  ]
+}

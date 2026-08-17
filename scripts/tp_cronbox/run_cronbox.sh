@@ -4,6 +4,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 JOB="${1:?job name required}"
 NS="${NS:-demo}"
 STATE="$ROOT/scripts/tp_cronbox/state"
+if [ ! -d "$ROOT/etl/scripts" ]; then
+  echo "the legacy cron jobs are decommissioned on this branch; the immutable baselines" >&2
+  echo "live in testdata/legacy/golden/cronbox and re-recording needs tech-partnerships" >&2
+  exit 2
+fi
 mkdir -p "$STATE/logs" "$STATE"
 PYTHON="$("$ROOT/scripts/tp_cronbox/ensure_venv.sh")"
 cat > "$STATE/config.ini" <<EOF

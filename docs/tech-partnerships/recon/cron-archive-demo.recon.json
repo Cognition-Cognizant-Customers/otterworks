@@ -1,0 +1,646 @@
+{
+  "kind": "recon-report",
+  "unit": "cron-archive",
+  "namespace": "demo",
+  "generated_at": "2026-08-17T08:39:30Z",
+  "run_mode": "live",
+  "checks": [
+    {
+      "id": "ARC-01/ttl-specification",
+      "expected": {
+        "attribute": "expires_at",
+        "status": "ENABLED"
+      },
+      "actual": {
+        "attribute": "expires_at",
+        "status": "ENABLED"
+      },
+      "source_of_truth": "dynamodb:DescribeTimeToLive ow-tp-audit-events",
+      "result": "pass"
+    },
+    {
+      "id": "ARC-01/retention-days-deployed",
+      "expected": "90",
+      "actual": "90",
+      "source_of_truth": "lambda:GetFunctionConfiguration environment",
+      "result": "pass"
+    },
+    {
+      "id": "ARC-01/archive-lifecycle-glacier",
+      "expected": [
+        [
+          "ow-tp-audit-archive-glacier",
+          "GLACIER",
+          0
+        ]
+      ],
+      "actual": [
+        [
+          "ow-tp-audit-archive-glacier",
+          "GLACIER",
+          0
+        ]
+      ],
+      "source_of_truth": "s3:GetBucketLifecycleConfiguration ow-tp-audit-archive",
+      "result": "pass"
+    },
+    {
+      "id": "ARC-01/archive-lifecycle-no-expiration",
+      "expected": [],
+      "actual": [],
+      "source_of_truth": "s3:GetBucketLifecycleConfiguration ow-tp-audit-archive",
+      "result": "pass"
+    },
+    {
+      "id": "ARC-07/no-schedule",
+      "expected": {
+        "scheduled_rules": [],
+        "event_sources": [
+          "dynamodb-stream"
+        ]
+      },
+      "actual": {
+        "scheduled_rules": [],
+        "event_sources": [
+          "dynamodb-stream"
+        ]
+      },
+      "source_of_truth": "events:ListRules + lambda:ListEventSourceMappings",
+      "result": "pass"
+    },
+    {
+      "id": "ARC-07/stream-trigger-is-ttl-only",
+      "expected": {
+        "event_name": [
+          "REMOVE"
+        ],
+        "principal": [
+          "dynamodb.amazonaws.com"
+        ]
+      },
+      "actual": {
+        "event_name": [
+          "REMOVE"
+        ],
+        "principal": [
+          "dynamodb.amazonaws.com"
+        ]
+      },
+      "source_of_truth": "lambda:ListEventSourceMappings filter criteria",
+      "result": "pass"
+    },
+    {
+      "id": "ARC-07/tagged-and-prefixed",
+      "expected": {
+        "project_tag": "otterworks-tp",
+        "prefixed": true
+      },
+      "actual": {
+        "project_tag": "otterworks-tp",
+        "prefixed": true
+      },
+      "source_of_truth": "lambda:GetFunction tags",
+      "result": "pass"
+    },
+    {
+      "id": "ARC-07/on-demand-capacity",
+      "expected": "PAY_PER_REQUEST",
+      "actual": "PAY_PER_REQUEST",
+      "source_of_truth": "dynamodb:DescribeTable ow-tp-audit-events",
+      "result": "pass"
+    },
+    {
+      "id": "ARC-01/live-ttl-removal-archived",
+      "expected": {
+        "archived_objects": [
+          "demo-recon-ttl-probe-ascii-1786955312",
+          "demo-recon-ttl-probe-unicode-1786955312"
+        ],
+        "absent_from_table": [
+          "demo-recon-ttl-probe-ascii-1786955312",
+          "demo-recon-ttl-probe-unicode-1786955312"
+        ]
+      },
+      "actual": {
+        "archived_objects": [
+          "demo-recon-ttl-probe-unicode-1786955312"
+        ],
+        "absent_from_table": [
+          "demo-recon-ttl-probe-unicode-1786955312"
+        ]
+      },
+      "source_of_truth": "s3:ListObjectsV2 after DynamoDB TTL deletion plus dynamodb:GetItem ConsistentRead absence of the items",
+      "result": "skipped"
+    },
+    {
+      "id": "ARC-02/archived-event-id-set",
+      "expected": [
+        "demo-audit-0000",
+        "demo-audit-0001",
+        "demo-audit-0002",
+        "demo-audit-0003",
+        "demo-audit-0004",
+        "demo-audit-0005",
+        "demo-audit-0006",
+        "demo-audit-0007",
+        "demo-audit-0008",
+        "demo-audit-0009",
+        "demo-audit-0010",
+        "demo-audit-0011",
+        "demo-audit-0012",
+        "demo-audit-0013",
+        "demo-audit-0014",
+        "demo-audit-0015",
+        "demo-audit-0016",
+        "demo-audit-0017",
+        "demo-audit-0018",
+        "demo-audit-0019",
+        "demo-audit-0020",
+        "demo-audit-0021",
+        "demo-audit-0022",
+        "demo-audit-0023",
+        "demo-audit-0024",
+        "demo-audit-0025",
+        "demo-audit-0026",
+        "demo-audit-0027",
+        "demo-audit-0028",
+        "demo-audit-0029",
+        "demo-audit-0030",
+        "demo-audit-0031",
+        "demo-audit-0032",
+        "demo-audit-0033",
+        "demo-audit-0034",
+        "demo-audit-0035",
+        "demo-audit-0036",
+        "demo-audit-0037",
+        "demo-audit-0038",
+        "demo-audit-0039",
+        "demo-audit-0040",
+        "demo-audit-0041",
+        "demo-audit-0042",
+        "demo-audit-0043",
+        "demo-audit-0044",
+        "demo-audit-0045",
+        "demo-audit-0046",
+        "demo-audit-0047",
+        "demo-audit-0048",
+        "demo-audit-0049",
+        "demo-audit-0050",
+        "demo-audit-0051",
+        "demo-audit-0052",
+        "demo-audit-0053",
+        "demo-audit-0054",
+        "demo-audit-0055",
+        "demo-audit-0056",
+        "demo-audit-0057",
+        "demo-audit-0058",
+        "demo-audit-0059",
+        "demo-audit-0060",
+        "demo-audit-0061",
+        "demo-audit-0062",
+        "demo-audit-0063",
+        "demo-audit-0064",
+        "demo-audit-0065",
+        "demo-audit-0066",
+        "demo-audit-0067",
+        "demo-audit-0068",
+        "demo-audit-0069",
+        "demo-audit-0070",
+        "demo-audit-0071",
+        "demo-audit-0072",
+        "demo-audit-0073",
+        "demo-audit-0074",
+        "demo-audit-0075",
+        "demo-audit-0076",
+        "demo-audit-0077",
+        "demo-audit-0078",
+        "demo-audit-0079",
+        "demo-boundary-0"
+      ],
+      "actual": [
+        "demo-audit-0000",
+        "demo-audit-0001",
+        "demo-audit-0002",
+        "demo-audit-0003",
+        "demo-audit-0004",
+        "demo-audit-0005",
+        "demo-audit-0006",
+        "demo-audit-0007",
+        "demo-audit-0008",
+        "demo-audit-0009",
+        "demo-audit-0010",
+        "demo-audit-0011",
+        "demo-audit-0012",
+        "demo-audit-0013",
+        "demo-audit-0014",
+        "demo-audit-0015",
+        "demo-audit-0016",
+        "demo-audit-0017",
+        "demo-audit-0018",
+        "demo-audit-0019",
+        "demo-audit-0020",
+        "demo-audit-0021",
+        "demo-audit-0022",
+        "demo-audit-0023",
+        "demo-audit-0024",
+        "demo-audit-0025",
+        "demo-audit-0026",
+        "demo-audit-0027",
+        "demo-audit-0028",
+        "demo-audit-0029",
+        "demo-audit-0030",
+        "demo-audit-0031",
+        "demo-audit-0032",
+        "demo-audit-0033",
+        "demo-audit-0034",
+        "demo-audit-0035",
+        "demo-audit-0036",
+        "demo-audit-0037",
+        "demo-audit-0038",
+        "demo-audit-0039",
+        "demo-audit-0040",
+        "demo-audit-0041",
+        "demo-audit-0042",
+        "demo-audit-0043",
+        "demo-audit-0044",
+        "demo-audit-0045",
+        "demo-audit-0046",
+        "demo-audit-0047",
+        "demo-audit-0048",
+        "demo-audit-0049",
+        "demo-audit-0050",
+        "demo-audit-0051",
+        "demo-audit-0052",
+        "demo-audit-0053",
+        "demo-audit-0054",
+        "demo-audit-0055",
+        "demo-audit-0056",
+        "demo-audit-0057",
+        "demo-audit-0058",
+        "demo-audit-0059",
+        "demo-audit-0060",
+        "demo-audit-0061",
+        "demo-audit-0062",
+        "demo-audit-0063",
+        "demo-audit-0064",
+        "demo-audit-0065",
+        "demo-audit-0066",
+        "demo-audit-0067",
+        "demo-audit-0068",
+        "demo-audit-0069",
+        "demo-audit-0070",
+        "demo-audit-0071",
+        "demo-audit-0072",
+        "demo-audit-0073",
+        "demo-audit-0074",
+        "demo-audit-0075",
+        "demo-audit-0076",
+        "demo-audit-0077",
+        "demo-audit-0078",
+        "demo-audit-0079",
+        "demo-boundary-0"
+      ],
+      "source_of_truth": "s3:ListObjectsV2 s3://ow-tp-audit-archive/audit-archive/expired/",
+      "result": "pass"
+    },
+    {
+      "id": "ARC-02/retained-event-id-set",
+      "expected": [
+        "demo-boundary-1",
+        "demo-boundary-2",
+        "demo-new-0000",
+        "demo-new-0001",
+        "demo-new-0002",
+        "demo-new-0003",
+        "demo-new-0004",
+        "demo-new-0005",
+        "demo-new-0006",
+        "demo-new-0007",
+        "demo-new-0008",
+        "demo-new-0009",
+        "demo-new-0010",
+        "demo-new-0011",
+        "demo-new-0012",
+        "demo-new-0013",
+        "demo-new-0014",
+        "demo-new-0015",
+        "demo-new-0016",
+        "demo-new-0017",
+        "demo-new-0018",
+        "demo-new-0019"
+      ],
+      "actual": [
+        "demo-boundary-1",
+        "demo-boundary-2",
+        "demo-new-0000",
+        "demo-new-0001",
+        "demo-new-0002",
+        "demo-new-0003",
+        "demo-new-0004",
+        "demo-new-0005",
+        "demo-new-0006",
+        "demo-new-0007",
+        "demo-new-0008",
+        "demo-new-0009",
+        "demo-new-0010",
+        "demo-new-0011",
+        "demo-new-0012",
+        "demo-new-0013",
+        "demo-new-0014",
+        "demo-new-0015",
+        "demo-new-0016",
+        "demo-new-0017",
+        "demo-new-0018",
+        "demo-new-0019"
+      ],
+      "source_of_truth": "s3:ListObjectsV2 + dynamodb:Scan ow-tp-audit-events",
+      "result": "pass"
+    },
+    {
+      "id": "ARC-02/counts",
+      "expected": {
+        "archived": 81,
+        "retained": 22
+      },
+      "actual": {
+        "archived": 81,
+        "retained": 22
+      },
+      "source_of_truth": "recomputed from the two sets above",
+      "result": "pass"
+    },
+    {
+      "id": "ARC-03/exclusive-cutoff",
+      "expected": {
+        "demo-boundary-0": "archived",
+        "demo-boundary-1": "retained",
+        "demo-boundary-2": "retained"
+      },
+      "actual": {
+        "demo-boundary-0": "archived",
+        "demo-boundary-1": "retained",
+        "demo-boundary-2": "retained"
+      },
+      "source_of_truth": "s3:ListObjectsV2 s3://ow-tp-audit-archive/audit-archive/expired/",
+      "result": "pass"
+    },
+    {
+      "id": "ARC-04/archive-lifecycle-transition-applies",
+      "expected": {
+        "prefix_covered": true,
+        "storage_class": "GLACIER"
+      },
+      "actual": {
+        "prefix_covered": true,
+        "storage_class": "GLACIER"
+      },
+      "source_of_truth": "s3:GetBucketLifecycleConfiguration ow-tp-audit-archive",
+      "result": "pass"
+    },
+    {
+      "id": "ARC-04/observed-object-storage-class",
+      "expected": "STANDARD until the daily lifecycle transition runs",
+      "actual": "STANDARD",
+      "source_of_truth": "s3:HeadObject s3://ow-tp-audit-archive/audit-archive/expired/dt=2026-08-17/demo-audit-0000__20251016T000000Z.jsonl.gz",
+      "result": "skipped"
+    },
+    {
+      "id": "ARC-05/payload-attribute-fidelity",
+      "expected": [],
+      "actual": [],
+      "source_of_truth": "s3:GetObject s3://ow-tp-audit-archive/audit-archive/expired/ decoded",
+      "result": "pass"
+    },
+    {
+      "id": "ARC-05/raw-payload-preserved",
+      "expected": [
+        "{\"i\": 0}",
+        "{\"i\": 10}",
+        "{\"i\": 11}",
+        "{\"i\": 12}",
+        "{\"i\": 13}",
+        "{\"i\": 14}",
+        "{\"i\": 15}",
+        "{\"i\": 16}",
+        "{\"i\": 17}",
+        "{\"i\": 18}",
+        "{\"i\": 19}",
+        "{\"i\": 1}",
+        "{\"i\": 20}",
+        "{\"i\": 21}",
+        "{\"i\": 22}",
+        "{\"i\": 23}",
+        "{\"i\": 24}",
+        "{\"i\": 25}",
+        "{\"i\": 26}",
+        "{\"i\": 27}",
+        "{\"i\": 28}",
+        "{\"i\": 29}",
+        "{\"i\": 2}",
+        "{\"i\": 30}",
+        "{\"i\": 31}",
+        "{\"i\": 32}",
+        "{\"i\": 33}",
+        "{\"i\": 34}",
+        "{\"i\": 35}",
+        "{\"i\": 36}",
+        "{\"i\": 37}",
+        "{\"i\": 38}",
+        "{\"i\": 39}",
+        "{\"i\": 3}",
+        "{\"i\": 40}",
+        "{\"i\": 41}",
+        "{\"i\": 42}",
+        "{\"i\": 43}",
+        "{\"i\": 44}",
+        "{\"i\": 45}",
+        "{\"i\": 46}",
+        "{\"i\": 47}",
+        "{\"i\": 48}",
+        "{\"i\": 49}",
+        "{\"i\": 4}",
+        "{\"i\": 50}",
+        "{\"i\": 51}",
+        "{\"i\": 52}",
+        "{\"i\": 53}",
+        "{\"i\": 54}",
+        "{\"i\": 55}",
+        "{\"i\": 56}",
+        "{\"i\": 57}",
+        "{\"i\": 58}",
+        "{\"i\": 59}",
+        "{\"i\": 5}",
+        "{\"i\": 60}",
+        "{\"i\": 61}",
+        "{\"i\": 62}",
+        "{\"i\": 63}",
+        "{\"i\": 64}",
+        "{\"i\": 65}",
+        "{\"i\": 66}",
+        "{\"i\": 67}",
+        "{\"i\": 68}",
+        "{\"i\": 69}",
+        "{\"i\": 6}",
+        "{\"i\": 70}",
+        "{\"i\": 71}",
+        "{\"i\": 72}",
+        "{\"i\": 73}",
+        "{\"i\": 74}",
+        "{\"i\": 75}",
+        "{\"i\": 76}",
+        "{\"i\": 77}",
+        "{\"i\": 78}",
+        "{\"i\": 79}",
+        "{\"i\": 7}",
+        "{\"i\": 8}",
+        "{\"i\": 9}",
+        "{}"
+      ],
+      "actual": [
+        "{\"i\": 0}",
+        "{\"i\": 10}",
+        "{\"i\": 11}",
+        "{\"i\": 12}",
+        "{\"i\": 13}",
+        "{\"i\": 14}",
+        "{\"i\": 15}",
+        "{\"i\": 16}",
+        "{\"i\": 17}",
+        "{\"i\": 18}",
+        "{\"i\": 19}",
+        "{\"i\": 1}",
+        "{\"i\": 20}",
+        "{\"i\": 21}",
+        "{\"i\": 22}",
+        "{\"i\": 23}",
+        "{\"i\": 24}",
+        "{\"i\": 25}",
+        "{\"i\": 26}",
+        "{\"i\": 27}",
+        "{\"i\": 28}",
+        "{\"i\": 29}",
+        "{\"i\": 2}",
+        "{\"i\": 30}",
+        "{\"i\": 31}",
+        "{\"i\": 32}",
+        "{\"i\": 33}",
+        "{\"i\": 34}",
+        "{\"i\": 35}",
+        "{\"i\": 36}",
+        "{\"i\": 37}",
+        "{\"i\": 38}",
+        "{\"i\": 39}",
+        "{\"i\": 3}",
+        "{\"i\": 40}",
+        "{\"i\": 41}",
+        "{\"i\": 42}",
+        "{\"i\": 43}",
+        "{\"i\": 44}",
+        "{\"i\": 45}",
+        "{\"i\": 46}",
+        "{\"i\": 47}",
+        "{\"i\": 48}",
+        "{\"i\": 49}",
+        "{\"i\": 4}",
+        "{\"i\": 50}",
+        "{\"i\": 51}",
+        "{\"i\": 52}",
+        "{\"i\": 53}",
+        "{\"i\": 54}",
+        "{\"i\": 55}",
+        "{\"i\": 56}",
+        "{\"i\": 57}",
+        "{\"i\": 58}",
+        "{\"i\": 59}",
+        "{\"i\": 5}",
+        "{\"i\": 60}",
+        "{\"i\": 61}",
+        "{\"i\": 62}",
+        "{\"i\": 63}",
+        "{\"i\": 64}",
+        "{\"i\": 65}",
+        "{\"i\": 66}",
+        "{\"i\": 67}",
+        "{\"i\": 68}",
+        "{\"i\": 69}",
+        "{\"i\": 6}",
+        "{\"i\": 70}",
+        "{\"i\": 71}",
+        "{\"i\": 72}",
+        "{\"i\": 73}",
+        "{\"i\": 74}",
+        "{\"i\": 75}",
+        "{\"i\": 76}",
+        "{\"i\": 77}",
+        "{\"i\": 78}",
+        "{\"i\": 79}",
+        "{\"i\": 7}",
+        "{\"i\": 8}",
+        "{\"i\": 9}",
+        "{}"
+      ],
+      "source_of_truth": "s3:GetObject s3://ow-tp-audit-archive/audit-archive/expired/ decoded",
+      "result": "pass"
+    },
+    {
+      "id": "malformed/unexpirable-retained-and-attributed",
+      "expected": {
+        "archived": false,
+        "in_table": true,
+        "attributed": true
+      },
+      "actual": {
+        "archived": false,
+        "in_table": true,
+        "attributed": true
+      },
+      "source_of_truth": "dynamodb:Scan + s3:ListObjectsV2 + sweep response",
+      "result": "pass"
+    },
+    {
+      "id": "ARC-06/convergent-reevaluation",
+      "expected": {
+        "second_run_archived": [],
+        "object_count_delta": 0,
+        "duplicate_event_ids": []
+      },
+      "actual": {
+        "second_run_archived": [],
+        "object_count_delta": 0,
+        "duplicate_event_ids": []
+      },
+      "source_of_truth": "second sweep invoke + s3:ListObjectsV2 recount",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "{\"duplicate_event_ids\": [], \"object_count_delta\": 0, \"second_run_archived\": []}"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      "audit_cutoff_exact",
+      "audit_cutoff_minus_one_second",
+      "audit_cutoff_plus_one_second",
+      "retained_recent_records"
+    ],
+    "actual_set": [
+      "audit_cutoff_exact",
+      "audit_cutoff_minus_one_second",
+      "audit_cutoff_plus_one_second",
+      "retained_recent_records"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "DynamoDB TTL physically deletes expired items on a best-effort basis (roughly 48h), so the deletion instant itself is not observed in the validation window; contract coverage_gap ttl_deletion_latency.",
+    "The Streams TTL-removal envelope (userIdentity principalId dynamodb.amazonaws.com) is exercised only by synthetic events in the fixture suite; a live TTL deletion is required to observe the real envelope.",
+    "S3 lifecycle transitions run asynchronously (daily), so archived objects still read back as STANDARD immediately after the run; the GLACIER transition is verified as deployed configuration via GetBucketLifecycleConfiguration.",
+    "The fixture expiry horizons lie roughly eight months in the wall-clock past, so this live run re-anchors the same corpus to now+1h; only the TTL horizon is shifted, while every compared identity, payload and expected set still comes from the immutable golden baseline.",
+    "The bounded live TTL-removal probe reached its 10-minute deadline before both probe objects appeared in S3 after DynamoDB TTL deletion; the existing 48-hour TTL latency coverage-gap note remains in force.",
+    "The seeded corpus and the archive objects it produced were removed after the run; the report is the retained evidence."
+  ]
+}

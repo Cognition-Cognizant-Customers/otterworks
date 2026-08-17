@@ -1,0 +1,884 @@
+{
+  "kind": "recon-report",
+  "unit": "cron-analytics",
+  "namespace": "demo",
+  "generated_at": "2026-08-17T06:42:51Z",
+  "run_mode": "live",
+  "checks": [
+    {
+      "id": "ANL-01/total_events",
+      "expected": 272,
+      "actual": 272,
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (analytics/daily/**/summary.json.gz)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-01/events_from_sqs",
+      "expected": 240,
+      "actual": 240,
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (total_events minus the run-date DynamoDB ids in manifest.json)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-01/events_from_dynamodb",
+      "expected": 32,
+      "actual": 32,
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (manifest.json otterworks-analytics-events ids for the run date)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-02/active_users",
+      "expected": 12,
+      "actual": 12,
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (analytics/daily/**/summary.json.gz)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-02/active_documents",
+      "expected": 25,
+      "actual": 25,
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (analytics/daily/**/summary.json.gz)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-02/active_files",
+      "expected": 9,
+      "actual": 9,
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (analytics/daily/**/summary.json.gz)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-02/total_events",
+      "expected": 272,
+      "actual": 272,
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (analytics/daily/**/summary.json.gz)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-02/documents_created",
+      "expected": 46,
+      "actual": 46,
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (analytics/daily/**/summary.json.gz)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-02/documents_edited",
+      "expected": 46,
+      "actual": 46,
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (analytics/daily/**/summary.json.gz)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-02/comments_added",
+      "expected": 45,
+      "actual": 45,
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (analytics/daily/**/summary.json.gz)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-02/files_uploaded",
+      "expected": 45,
+      "actual": 45,
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (analytics/daily/**/summary.json.gz)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-02/files_shared",
+      "expected": 45,
+      "actual": 45,
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (analytics/daily/**/summary.json.gz)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-02/files_deleted",
+      "expected": 45,
+      "actual": 45,
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (analytics/daily/**/summary.json.gz)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-02/bytes_uploaded",
+      "expected": 54875,
+      "actual": 54875,
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (analytics/daily/**/summary.json.gz)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-03/top_users_set",
+      "expected": [
+        [
+          "unknown",
+          22,
+          [
+            [
+              "comment_added",
+              3
+            ],
+            [
+              "document_created",
+              4
+            ],
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_deleted",
+              4
+            ],
+            [
+              "file_shared",
+              4
+            ],
+            [
+              "file_uploaded",
+              4
+            ]
+          ]
+        ],
+        [
+          "user-000",
+          21,
+          [
+            [
+              "document_created",
+              21
+            ]
+          ]
+        ],
+        [
+          "user-001",
+          22,
+          [
+            [
+              "document_edited",
+              22
+            ]
+          ]
+        ],
+        [
+          "user-002",
+          22,
+          [
+            [
+              "comment_added",
+              22
+            ]
+          ]
+        ],
+        [
+          "user-003",
+          21,
+          [
+            [
+              "file_uploaded",
+              21
+            ]
+          ]
+        ],
+        [
+          "user-004",
+          21,
+          [
+            [
+              "file_shared",
+              21
+            ]
+          ]
+        ],
+        [
+          "user-005",
+          21,
+          [
+            [
+              "file_deleted",
+              21
+            ]
+          ]
+        ],
+        [
+          "user-006",
+          21,
+          [
+            [
+              "document_created",
+              21
+            ]
+          ]
+        ],
+        [
+          "user-007",
+          21,
+          [
+            [
+              "document_edited",
+              21
+            ]
+          ]
+        ],
+        [
+          "user-008",
+          20,
+          [
+            [
+              "comment_added",
+              20
+            ]
+          ]
+        ],
+        [
+          "user-009",
+          20,
+          [
+            [
+              "file_uploaded",
+              20
+            ]
+          ]
+        ],
+        [
+          "user-010",
+          20,
+          [
+            [
+              "file_shared",
+              20
+            ]
+          ]
+        ],
+        [
+          "user-011",
+          20,
+          [
+            [
+              "file_deleted",
+              20
+            ]
+          ]
+        ]
+      ],
+      "actual": [
+        [
+          "unknown",
+          22,
+          [
+            [
+              "comment_added",
+              3
+            ],
+            [
+              "document_created",
+              4
+            ],
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_deleted",
+              4
+            ],
+            [
+              "file_shared",
+              4
+            ],
+            [
+              "file_uploaded",
+              4
+            ]
+          ]
+        ],
+        [
+          "user-000",
+          21,
+          [
+            [
+              "document_created",
+              21
+            ]
+          ]
+        ],
+        [
+          "user-001",
+          22,
+          [
+            [
+              "document_edited",
+              22
+            ]
+          ]
+        ],
+        [
+          "user-002",
+          22,
+          [
+            [
+              "comment_added",
+              22
+            ]
+          ]
+        ],
+        [
+          "user-003",
+          21,
+          [
+            [
+              "file_uploaded",
+              21
+            ]
+          ]
+        ],
+        [
+          "user-004",
+          21,
+          [
+            [
+              "file_shared",
+              21
+            ]
+          ]
+        ],
+        [
+          "user-005",
+          21,
+          [
+            [
+              "file_deleted",
+              21
+            ]
+          ]
+        ],
+        [
+          "user-006",
+          21,
+          [
+            [
+              "document_created",
+              21
+            ]
+          ]
+        ],
+        [
+          "user-007",
+          21,
+          [
+            [
+              "document_edited",
+              21
+            ]
+          ]
+        ],
+        [
+          "user-008",
+          20,
+          [
+            [
+              "comment_added",
+              20
+            ]
+          ]
+        ],
+        [
+          "user-009",
+          20,
+          [
+            [
+              "file_uploaded",
+              20
+            ]
+          ]
+        ],
+        [
+          "user-010",
+          20,
+          [
+            [
+              "file_shared",
+              20
+            ]
+          ]
+        ],
+        [
+          "user-011",
+          20,
+          [
+            [
+              "file_deleted",
+              20
+            ]
+          ]
+        ]
+      ],
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (analytics/daily/**/top_users.jsonl.gz)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-03/unknown_user_events",
+      "expected": 22,
+      "actual": 22,
+      "source_of_truth": "docs/tech-partnerships/contracts/cron-analytics.json malformed_record_policy.expected_unknown_user_events (agrees with the baseline top_users 'unknown' total)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-03/malformed_bodies_attributed",
+      "expected": 8,
+      "actual": 8,
+      "source_of_truth": "docs/tech-partnerships/contracts/cron-analytics.json malformed_record_policy.expected_malformed_count",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-04/bronze_dynamodb_records",
+      "expected": 48,
+      "actual": 48,
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (manifest.json otterworks-analytics-events count)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-04/excluded_adjacent_days",
+      "expected": {
+        "2026-01-14": 8,
+        "2026-01-16": 8
+      },
+      "actual": {
+        "2026-01-14": 8,
+        "2026-01-16": 8
+      },
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (manifest.json DynamoDB ids bucketed by seeded day offset)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-04/excluded_total",
+      "expected": 16,
+      "actual": 16,
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (manifest.json DynamoDB ids outside the run date)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-05/hourly_breakdown",
+      "expected": {
+        "00": {
+          "document_created": 12
+        },
+        "01": {
+          "document_edited": 12
+        },
+        "02": {
+          "comment_added": 12
+        },
+        "03": {
+          "file_uploaded": 12
+        },
+        "04": {
+          "file_shared": 12
+        },
+        "05": {
+          "file_deleted": 12
+        },
+        "06": {
+          "document_created": 12
+        },
+        "07": {
+          "document_edited": 12
+        },
+        "08": {
+          "comment_added": 11
+        },
+        "09": {
+          "file_uploaded": 11
+        },
+        "10": {
+          "file_shared": 11
+        },
+        "11": {
+          "file_deleted": 11
+        },
+        "12": {
+          "document_created": 11
+        },
+        "13": {
+          "document_edited": 11
+        },
+        "14": {
+          "comment_added": 11
+        },
+        "15": {
+          "file_uploaded": 11
+        },
+        "16": {
+          "file_shared": 11
+        },
+        "17": {
+          "file_deleted": 11
+        },
+        "18": {
+          "document_created": 11
+        },
+        "19": {
+          "document_edited": 11
+        },
+        "20": {
+          "comment_added": 11
+        },
+        "21": {
+          "file_uploaded": 11
+        },
+        "22": {
+          "file_shared": 11
+        },
+        "23": {
+          "file_deleted": 11
+        }
+      },
+      "actual": {
+        "00": {
+          "document_created": 12
+        },
+        "01": {
+          "document_edited": 12
+        },
+        "02": {
+          "comment_added": 12
+        },
+        "03": {
+          "file_uploaded": 12
+        },
+        "04": {
+          "file_shared": 12
+        },
+        "05": {
+          "file_deleted": 12
+        },
+        "06": {
+          "document_created": 12
+        },
+        "07": {
+          "document_edited": 12
+        },
+        "08": {
+          "comment_added": 11
+        },
+        "09": {
+          "file_uploaded": 11
+        },
+        "10": {
+          "file_shared": 11
+        },
+        "11": {
+          "file_deleted": 11
+        },
+        "12": {
+          "document_created": 11
+        },
+        "13": {
+          "document_edited": 11
+        },
+        "14": {
+          "comment_added": 11
+        },
+        "15": {
+          "file_uploaded": 11
+        },
+        "16": {
+          "file_shared": 11
+        },
+        "17": {
+          "file_deleted": 11
+        },
+        "18": {
+          "document_created": 11
+        },
+        "19": {
+          "document_edited": 11
+        },
+        "20": {
+          "comment_added": 11
+        },
+        "21": {
+          "file_uploaded": 11
+        },
+        "22": {
+          "file_shared": 11
+        },
+        "23": {
+          "file_deleted": 11
+        }
+      },
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (analytics/daily/**/hourly_breakdown.json.gz)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-05/top_users_row_count",
+      "expected": 13,
+      "actual": 13,
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (analytics/daily/**/top_users.jsonl.gz line count)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-05/unicode_utf8_bytes",
+      "expected": [
+        [
+          "Réunion café ☕",
+          "52C3A9756E696F6E20636166C3A920E29895"
+        ],
+        [
+          "Δelta",
+          "CE94656C7461"
+        ]
+      ],
+      "actual": [
+        [
+          "Réunion café ☕",
+          "52C3A9756E696F6E20636166C3A920E29895"
+        ],
+        [
+          "Δelta",
+          "CE94656C7461"
+        ]
+      ],
+      "source_of_truth": "docs/tech-partnerships/contracts/cron-analytics.json encoding_policy.byte_transparency (UTF-8 bytes of the seeded literals)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-05/replacement_characters",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "docs/tech-partnerships/contracts/cron-analytics.json encoding_policy.invalid_bytes (never replacement-decode)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-06/gold_summary_rows_for_date",
+      "expected": 1,
+      "actual": 1,
+      "source_of_truth": "docs/tech-partnerships/contracts/cron-analytics.json ANL-06 (legacy ON CONFLICT (report_date) DO UPDATE)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-07/report_content",
+      "expected": {
+        "report_type": "daily_analytics",
+        "report_date": "2026-01-15",
+        "summary": {
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 9,
+          "total_events": 272,
+          "documents_created": 46,
+          "documents_edited": 46,
+          "comments_added": 45,
+          "files_uploaded": 45,
+          "files_shared": 45,
+          "files_deleted": 45,
+          "bytes_uploaded": 54875
+        },
+        "highlights": {
+          "peak_hour": {
+            "hour": "00",
+            "event_count": 12
+          },
+          "most_active_users": [
+            "unknown",
+            "user-001",
+            "user-002",
+            "user-003",
+            "user-004"
+          ]
+        },
+        "document_metrics": {
+          "created": 46,
+          "edited": 46,
+          "comments": 45
+        },
+        "file_metrics": {
+          "uploaded": 45,
+          "shared": 45,
+          "deleted": 45,
+          "bytes_uploaded": 54875
+        }
+      },
+      "actual": {
+        "report_type": "daily_analytics",
+        "report_date": "2026-01-15",
+        "summary": {
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 9,
+          "total_events": 272,
+          "documents_created": 46,
+          "documents_edited": 46,
+          "comments_added": 45,
+          "files_uploaded": 45,
+          "files_shared": 45,
+          "files_deleted": 45,
+          "bytes_uploaded": 54875
+        },
+        "highlights": {
+          "peak_hour": {
+            "hour": "00",
+            "event_count": 12
+          },
+          "most_active_users": [
+            "unknown",
+            "user-001",
+            "user-002",
+            "user-003",
+            "user-004"
+          ]
+        },
+        "document_metrics": {
+          "created": 46,
+          "edited": 46,
+          "comments": 45
+        },
+        "file_metrics": {
+          "uploaded": 45,
+          "shared": 45,
+          "deleted": 45,
+          "bytes_uploaded": 54875
+        }
+      },
+      "source_of_truth": "immutable golden baseline captured from the unmodified legacy analytics_daily.py run (reports/analytics/daily/2026-01-15/report.json, declared volatile fields removed)",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-07/generated_at_excluded",
+      "expected": "<not compared: coverage_gap report_generated_at_wall_clock>",
+      "actual": "2026-01-15T00:00:05.640314+00:00",
+      "source_of_truth": "docs/tech-partnerships/contracts/cron-analytics.json planted_anomalies.report_generated_at_wall_clock",
+      "result": "skipped"
+    },
+    {
+      "id": "TARGET/objects_present",
+      "expected": [
+        "bronze.cronbox_events_raw",
+        "bronze.cronbox_events_rejected",
+        "gold.analytics_daily_report",
+        "gold.analytics_daily_summary",
+        "gold.analytics_daily_top_users",
+        "gold.analytics_hourly_breakdown",
+        "silver.cronbox_events"
+      ],
+      "actual": [
+        "bronze.cronbox_events_raw",
+        "bronze.cronbox_events_rejected",
+        "gold.analytics_daily_report",
+        "gold.analytics_daily_summary",
+        "gold.analytics_daily_top_users",
+        "gold.analytics_hourly_breakdown",
+        "silver.cronbox_events"
+      ],
+      "source_of_truth": "ow_tp.information_schema.tables on the deployed workspace",
+      "result": "pass"
+    },
+    {
+      "id": "TARGET/job_schedule_paused",
+      "expected": "PAUSED",
+      "actual": "PAUSED",
+      "source_of_truth": "Databricks Jobs API settings for ow_tp_cron_analytics_daily",
+      "result": "pass"
+    },
+    {
+      "id": "TARGET/job_compute_serverless_only",
+      "expected": "sql_warehouse_only",
+      "actual": "sql_warehouse_only",
+      "source_of_truth": "Databricks Jobs API settings for ow_tp_cron_analytics_daily (no cluster, no job compute)",
+      "result": "pass"
+    },
+    {
+      "id": "TARGET/landing_volume_populated",
+      "expected": true,
+      "actual": true,
+      "source_of_truth": "Databricks Files API listing of /Volumes/ow_tp/bronze/landing/cronbox/analytics/demo/2026-01-15",
+      "result": "pass"
+    },
+    {
+      "id": "ANL-06/values_unchanged_after_rerun",
+      "expected": "identical",
+      "actual": "identical",
+      "source_of_truth": "two full recomputations from the deployed target, around a rerun of the deployed job",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "reran deployed job ow_tp_cron_analytics_daily (run 550235496345134, https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/runs/550235496345134) for ns=demo ds=2026-01-15: result_state=SUCCESS; all recomputed values identical across the rerun"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      [
+        "malformed_sqs_bodies",
+        "unparseable_json_body",
+        8
+      ],
+      [
+        "unknown_user_events",
+        "unknown",
+        22
+      ],
+      [
+        "dynamodb_adjacent_day_events",
+        "2026-01-14",
+        8
+      ],
+      [
+        "dynamodb_adjacent_day_events",
+        "2026-01-16",
+        8
+      ],
+      [
+        "unicode_payloads",
+        "Réunion café ☕",
+        "52C3A9756E696F6E20636166C3A920E29895"
+      ],
+      [
+        "unicode_payloads",
+        "Δelta",
+        "CE94656C7461"
+      ]
+    ],
+    "actual_set": [
+      [
+        "malformed_sqs_bodies",
+        "unparseable_json_body",
+        8
+      ],
+      [
+        "unknown_user_events",
+        "unknown",
+        22
+      ],
+      [
+        "dynamodb_adjacent_day_events",
+        "2026-01-14",
+        8
+      ],
+      [
+        "dynamodb_adjacent_day_events",
+        "2026-01-16",
+        8
+      ],
+      [
+        "unicode_payloads",
+        "Δelta",
+        "CE94656C7461"
+      ],
+      [
+        "unicode_payloads",
+        "Réunion café ☕",
+        "52C3A9756E696F6E20636166C3A920E29895"
+      ]
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "gzip byte-parity of the legacy S3 artifacts (analytics/daily/**/summary.json.gz, hourly_breakdown.json.gz, top_users.jsonl.gz): the replacement publishes Delta tables and a gold view instead of gzip objects, so parity is asserted over decoded content, not bytes",
+    "the legacy Postgres analytics_daily_summary.updated_at value (coverage_gap postgres_updated_at_wall_clock: database NOW(), not reconcilable)",
+    "the legacy report generated_at value (coverage_gap report_generated_at_wall_clock: datetime.now() with fractional seconds)",
+    "AWS-side extraction behaviour: the SQS drain/receive path and the DynamoDB begins_with scan run on the cron box before landing, so this recon proves the landed batch and everything downstream of it, not the AWS API calls themselves",
+    "legacy SQS message deletion: the extractor deliberately does not delete messages (idempotent re-extraction via stable source_id), so the legacy delete-batch path is intentionally not reproduced",
+    "schedule firing: the job stays PAUSED by contract, so only an explicit run for ns=demo ds=2026-01-15 is exercised, never the 02:00 UTC trigger",
+    "Unity Catalog grants/least-privilege on the ow_tp objects: readable but not asserted by this recon"
+  ]
+}
