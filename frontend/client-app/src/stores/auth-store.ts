@@ -19,13 +19,13 @@ export const useAuthStore = create<AuthState>((set) => ({
   setLoading: (isLoading) => set({ isLoading }),
   logout: () => {
     authApi.logout().catch(() => {});
-    if (typeof window !== "undefined") {
+    if (typeof globalThis.window !== "undefined") {
       localStorage.removeItem("otter_access_token");
       localStorage.removeItem("otter_refresh_token");
     }
     set({ user: null, isAuthenticated: false, isLoading: false });
-    if (typeof window !== "undefined") {
-      window.location.href = "/login";
+    if (typeof globalThis.window !== "undefined") {
+      globalThis.location.href = "/login";
     }
   },
 }));

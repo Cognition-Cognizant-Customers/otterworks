@@ -127,7 +127,7 @@ export const authApi = {
 // ── Helpers ───────────────────────────────────────────────────
 // Extract the user ID from the JWT stored in localStorage.
 function getOwnerIdFromJwt(): string | null {
-  if (typeof window === "undefined") return null;
+  if (typeof globalThis.window === "undefined") return null;
   const token = localStorage.getItem("otter_access_token");
   if (!token) return null;
   try {
@@ -513,7 +513,7 @@ interface StarredEntry {
 }
 
 function getStarredMap(): Record<string, StarredEntry> {
-  if (typeof window === "undefined") return {};
+  if (typeof globalThis.window === "undefined") return {};
   try {
     const raw = localStorage.getItem(STARRED_STORAGE_KEY);
     return raw ? (JSON.parse(raw) as Record<string, StarredEntry>) : {};
@@ -523,7 +523,7 @@ function getStarredMap(): Record<string, StarredEntry> {
 }
 
 function saveStarredMap(map: Record<string, StarredEntry>): void {
-  if (typeof window === "undefined") return;
+  if (typeof globalThis.window === "undefined") return;
   localStorage.setItem(STARRED_STORAGE_KEY, JSON.stringify(map));
 }
 

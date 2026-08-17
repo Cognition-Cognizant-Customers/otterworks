@@ -92,7 +92,7 @@ export default function BillingChangePlanPage() {
     <main className="mx-auto max-w-2xl space-y-6 p-6">
       <button
         type="button"
-        onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/billing/plans"))}
+        onClick={() => (globalThis.history.length > 1 ? navigate(-1) : navigate("/billing/plans"))}
         className="text-sm text-otter-700 hover:underline"
       >
         Back

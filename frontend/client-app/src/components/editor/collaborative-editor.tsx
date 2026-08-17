@@ -40,7 +40,7 @@ interface CollaborativeEditorProps {
 // matching the api-client's plain-http local-dev default.
 // Any real deployment must point VITE_COLLAB_WS_URL at a wss endpoint.
 const WEB_WS_SCHEME =
-  typeof window !== "undefined" && window.location.protocol === "https:" ? "wss" : "ws";
+  typeof globalThis.window !== "undefined" && globalThis.location.protocol === "https:" ? "wss" : "ws";
 const NATIVE_WS_SCHEME = "ws";
 const NATIVE_WS_HOST = Capacitor.getPlatform() === "android" ? "10.0.2.2" : "localhost";
 const COLLAB_WS_URL =
@@ -59,7 +59,7 @@ export function CollaborativeEditor({ documentId, initialContent, onUpdate }: Co
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("otter_access_token") : null;
+    const token = typeof globalThis.window !== "undefined" ? localStorage.getItem("otter_access_token") : null;
     const wsProvider = new WebsocketProvider(
       COLLAB_WS_URL,
       `document-${documentId}`,

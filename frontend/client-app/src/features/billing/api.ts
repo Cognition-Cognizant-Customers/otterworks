@@ -1,6 +1,6 @@
 export const BILLING_BASE_URL =
   import.meta.env.VITE_BILLING_SERVICE_URL ||
-  `${window.location.origin}/billing-api`;
+  `${globalThis.location.origin}/billing-api`;
 
 export class BillingApiError extends Error {
   constructor(
