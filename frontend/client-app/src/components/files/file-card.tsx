@@ -118,6 +118,18 @@ export function FileCard({
     onSelect?.(file.id);
   };
 
+  const cancelRename = () => {
+    renameDoneRef.current = true;
+    setIsRenaming(false);
+    setRenameValue(file.name);
+  };
+
+  const startRename = () => {
+    renameDoneRef.current = false;
+    setIsRenaming(true);
+    setRenameValue(file.name);
+  };
+
   if (view === "list") {
     return (
       <div className="flex items-center gap-4 px-4 py-2.5 hover:bg-gray-50 rounded-lg transition group border-b border-gray-100 last:border-0">
@@ -141,18 +153,12 @@ export function FileCard({
           <div className="flex-1 min-w-0">
             {isRenaming ? (
               <div className="flex items-center gap-1" onClick={(e) => e.preventDefault()}>
-                <input
-                  ref={renameInputRef}
-                  type="text"
+                <RenameInput
+                  inputRef={renameInputRef}
                   value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") submitRename();
-                    if (e.key === "Escape") { renameDoneRef.current = true; setIsRenaming(false); setRenameValue(file.name); }
-                  }}
-                  onBlur={submitRename}
-                  className="text-sm font-medium text-gray-900 px-1 py-0.5 border border-otter-400 rounded focus:outline-none focus:ring-1 focus:ring-otter-500 w-full"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onChange={setRenameValue}
+                  onSubmit={submitRename}
+                  onCancel={cancelRename}
                 />
               </div>
             ) : (
@@ -166,16 +172,11 @@ export function FileCard({
             {file.isFolder ? "\u2014" : formatFileSize(file.size)}
           </span>
         </Link>
-        <button
+        <StarButton
+          starred={starred}
           onClick={handleStarClick}
           className="p-1 rounded hover:bg-gray-200 transition flex-shrink-0"
-          aria-label={starred ? "Unstar" : "Star"}
-        >
-          <Star
-            size={16}
-            className={starred ? "text-yellow-400 fill-yellow-400" : "text-gray-400 opacity-0 group-hover:opacity-100"}
-          />
-        </button>
+        />
         <div className="relative w-8">
           <button
             onClick={(e) => {
@@ -193,7 +194,7 @@ export function FileCard({
               onClose={() => setMenuOpen(false)}
               onDelete={onDelete}
               onShare={onShare}
-              onRename={() => { renameDoneRef.current = false; setIsRenaming(true); setRenameValue(file.name); }}
+              onRename={startRename}
               onDownload={onDownload}
             />
           )}
@@ -223,16 +224,11 @@ export function FileCard({
             <Icon size={24} className="text-otter-600" />
           </div>
           <div className="flex items-center gap-1">
-            <button
+            <StarButton
+              starred={starred}
               onClick={handleStarClick}
               className="p-1 rounded hover:bg-gray-100 transition"
-              aria-label={starred ? "Unstar" : "Star"}
-            >
-              <Star
-                size={16}
-                className={starred ? "text-yellow-400 fill-yellow-400" : "text-gray-400 opacity-0 group-hover:opacity-100"}
-              />
-            </button>
+            />
             <div className="relative">
               <button
                 onClick={(e) => {
@@ -251,7 +247,7 @@ export function FileCard({
                   onDelete={onDelete}
                   onShare={onShare}
                   onDownload={onDownload}
-                  onRename={() => { renameDoneRef.current = false; setIsRenaming(true); setRenameValue(file.name); }}
+                  onRename={startRename}
                 />
               )}
             </div>
@@ -259,18 +255,12 @@ export function FileCard({
         </div>
         {isRenaming ? (
           <div className="mb-1" onClick={(e) => e.preventDefault()}>
-            <input
-              ref={renameInputRef}
-              type="text"
+            <RenameInput
+              inputRef={renameInputRef}
               value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submitRename();
-                if (e.key === "Escape") { renameDoneRef.current = true; setIsRenaming(false); setRenameValue(file.name); }
-              }}
-              onBlur={submitRename}
-              className="text-sm font-medium text-gray-900 px-1 py-0.5 border border-otter-400 rounded focus:outline-none focus:ring-1 focus:ring-otter-500 w-full"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onChange={setRenameValue}
+              onSubmit={submitRename}
+              onCancel={cancelRename}
             />
           </div>
         ) : (
@@ -283,6 +273,55 @@ export function FileCard({
         </p>
       </Link>
     </div>
+  );
+}
+
+interface RenameInputProps {
+  inputRef: React.RefObject<HTMLInputElement>;
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
+}
+
+function RenameInput({ inputRef, value, onChange, onSubmit, onCancel }: RenameInputProps) {
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") onSubmit();
+        if (e.key === "Escape") onCancel();
+      }}
+      onBlur={onSubmit}
+      className="text-sm font-medium text-gray-900 px-1 py-0.5 border border-otter-400 rounded focus:outline-none focus:ring-1 focus:ring-otter-500 w-full"
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+    />
+  );
+}
+
+function StarButton({
+  starred,
+  onClick,
+  className,
+}: {
+  starred: boolean;
+  onClick: (e: React.MouseEvent) => void;
+  className: string;
+}) {
+  return (
+    <button onClick={onClick} className={className} aria-label={starred ? "Unstar" : "Star"}>
+      <Star
+        size={16}
+        className={
+          starred
+            ? "text-yellow-400 fill-yellow-400"
+            : "text-gray-400 opacity-0 group-hover:opacity-100"
+        }
+      />
+    </button>
   );
 }
 
