@@ -145,7 +145,10 @@ describe('AwarenessService', () => {
       const users = awareness.getDocumentUsers('doc-1');
 
       expect(users).toHaveLength(2);
-      expect(users.map((u) => u.userId).sort()).toEqual(['u1', 'u2']);
+      expect(users.map((u) => u.userId).sort((a, b) => a.localeCompare(b))).toEqual([
+        'u1',
+        'u2',
+      ]);
     });
 
     it('should return empty array for unknown document', () => {
@@ -172,7 +175,7 @@ describe('AwarenessService', () => {
       awareness.addUser('doc-2', 's2', 'u2', 'Bob', 'b@t.com');
       awareness.addUser('doc-3', 's3', 'u3', 'Charlie', 'c@t.com');
 
-      const ids = awareness.getActiveDocumentIds().sort();
+      const ids = awareness.getActiveDocumentIds().sort((a, b) => a.localeCompare(b));
       expect(ids).toEqual(['doc-1', 'doc-2', 'doc-3']);
     });
   });
