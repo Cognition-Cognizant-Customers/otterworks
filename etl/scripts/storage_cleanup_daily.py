@@ -11,6 +11,7 @@
 
 import configparser
 import json
+import os
 import sys
 from datetime import datetime, timezone
 
@@ -27,6 +28,12 @@ def main():
     aws_access_key = config.get("aws", "access_key")
     aws_secret_key = config.get("aws", "secret_key")
     aws_region = config.get("aws", "region")
+    expected_bucket_owner = os.environ.get(
+        "ETL_EXPECTED_BUCKET_OWNER",
+        config.get("aws", "expected_bucket_owner", fallback=""),
+    ).strip()
+    if not expected_bucket_owner:
+        sys.exit("ERROR: aws.expected_bucket_owner (or ETL_EXPECTED_BUCKET_OWNER) is not configured")
 
     file_storage_bucket = config.get("s3", "file_storage_bucket")
     quarantine_bucket = config.get("s3", "quarantine_bucket")
@@ -141,8 +148,14 @@ def main():
                 Key=dest_key,
                 CopySource={"Bucket": file_storage_bucket, "Key": source_key},
                 MetadataDirective="COPY",
+                ExpectedBucketOwner=expected_bucket_owner,
+                ExpectedSourceBucketOwner=expected_bucket_owner,
             )
-            s3_client.delete_object(Bucket=file_storage_bucket, Key=source_key)
+            s3_client.delete_object(
+                Bucket=file_storage_bucket,
+                Key=source_key,
+                ExpectedBucketOwner=expected_bucket_owner,
+            )
             moved_count += 1
         except Exception as e:
             print("[%s] WARNING: Failed to quarantine %s: %s" % (
@@ -200,6 +213,7 @@ def main():
         Bucket=data_lake_bucket,
         Key=report_key,
         Body=json.dumps(report, indent=2).encode("utf-8"),
+        ExpectedBucketOwner=expected_bucket_owner,
     )
 
     print("[%s] Storage cleanup report: %d orphans quarantined, %.4f GB freed, ~$%.4f/month saved" % (

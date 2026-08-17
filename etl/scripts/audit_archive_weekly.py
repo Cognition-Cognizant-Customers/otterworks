@@ -13,6 +13,7 @@ import configparser
 import gzip
 import io
 import json
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -40,6 +41,12 @@ def main():
     aws_access_key = config.get("aws", "access_key")
     aws_secret_key = config.get("aws", "secret_key")
     aws_region = config.get("aws", "region")
+    expected_bucket_owner = os.environ.get(
+        "ETL_EXPECTED_BUCKET_OWNER",
+        config.get("aws", "expected_bucket_owner", fallback=""),
+    ).strip()
+    if not expected_bucket_owner:
+        sys.exit("ERROR: aws.expected_bucket_owner (or ETL_EXPECTED_BUCKET_OWNER) is not configured")
 
     archive_bucket = config.get("s3", "archive_bucket")
 
@@ -122,6 +129,7 @@ def main():
         Key=archive_key,
         Body=buf.getvalue(),
         StorageClass="GLACIER",
+        ExpectedBucketOwner=expected_bucket_owner,
     )
 
     print("[%s] Archived to s3://%s/%s (GLACIER)" % (
@@ -204,6 +212,7 @@ def main():
         Bucket=archive_bucket,
         Key=report_key,
         Body=json.dumps(report, indent=2).encode("utf-8"),
+        ExpectedBucketOwner=expected_bucket_owner,
     )
 
     print("[%s] Compliance report: %d archived, %d deleted, stored at s3://%s/%s" % (
