@@ -1,0 +1,308 @@
+{
+  "kind": "golden-transcript",
+  "recorded_at": "2026-08-17T04:07:34.678281+00:00",
+  "source_base_url": "http://localhost:8095",
+  "spec_sha": "6064f4d3031b7a84258e17e1c152183bb5abd9e0950820d258f9ee97c61c0c2f",
+  "steps": [
+    {
+      "id": "health",
+      "method": "GET",
+      "path": "/health",
+      "assert_status_only": false,
+      "status": 200,
+      "body": {
+        "status": "UP",
+        "service": "legacy-portal"
+      },
+      "timestamp_format_problems": []
+    },
+    {
+      "id": "ann-list-empty",
+      "method": "GET",
+      "path": "/api/announcements",
+      "assert_status_only": false,
+      "status": 200,
+      "body": [],
+      "timestamp_format_problems": []
+    },
+    {
+      "id": "ann-create-published",
+      "method": "POST",
+      "path": "/api/announcements",
+      "assert_status_only": false,
+      "status": 201,
+      "body": {
+        "id": 1,
+        "title": "Welcome to OtterWorks",
+        "body": "The portal is live.",
+        "published": true,
+        "createdAt": "<instant>"
+      },
+      "timestamp_format_problems": []
+    },
+    {
+      "id": "ann-create-draft",
+      "method": "POST",
+      "path": "/api/announcements",
+      "assert_status_only": false,
+      "status": 201,
+      "body": {
+        "id": 2,
+        "title": "Scheduled maintenance",
+        "body": "Maintenance window Saturday 02:00 UTC.",
+        "published": false,
+        "createdAt": "<instant>"
+      },
+      "timestamp_format_problems": []
+    },
+    {
+      "id": "ann-list-published-only",
+      "method": "GET",
+      "path": "/api/announcements",
+      "assert_status_only": false,
+      "status": 200,
+      "body": [
+        {
+          "id": 1,
+          "title": "Welcome to OtterWorks",
+          "body": "The portal is live.",
+          "published": true,
+          "createdAt": "<instant>"
+        }
+      ],
+      "timestamp_format_problems": []
+    },
+    {
+      "id": "ann-list-all",
+      "method": "GET",
+      "path": "/api/announcements?publishedOnly=false",
+      "assert_status_only": false,
+      "status": 200,
+      "body": [
+        {
+          "id": 1,
+          "title": "Welcome to OtterWorks",
+          "body": "The portal is live.",
+          "published": true,
+          "createdAt": "<instant>"
+        },
+        {
+          "id": 2,
+          "title": "Scheduled maintenance",
+          "body": "Maintenance window Saturday 02:00 UTC.",
+          "published": false,
+          "createdAt": "<instant>"
+        }
+      ],
+      "timestamp_format_problems": []
+    },
+    {
+      "id": "ann-get-draft",
+      "method": "GET",
+      "path": "/api/announcements/2",
+      "assert_status_only": false,
+      "status": 200,
+      "body": {
+        "id": 2,
+        "title": "Scheduled maintenance",
+        "body": "Maintenance window Saturday 02:00 UTC.",
+        "published": false,
+        "createdAt": "<instant>"
+      },
+      "timestamp_format_problems": []
+    },
+    {
+      "id": "ann-publish-draft",
+      "method": "POST",
+      "path": "/api/announcements/2/publish",
+      "assert_status_only": false,
+      "status": 200,
+      "body": {
+        "id": 2,
+        "title": "Scheduled maintenance",
+        "body": "Maintenance window Saturday 02:00 UTC.",
+        "published": true,
+        "createdAt": "<instant>"
+      },
+      "timestamp_format_problems": []
+    },
+    {
+      "id": "ann-list-after-publish",
+      "method": "GET",
+      "path": "/api/announcements",
+      "assert_status_only": false,
+      "status": 200,
+      "body": [
+        {
+          "id": 2,
+          "title": "Scheduled maintenance",
+          "body": "Maintenance window Saturday 02:00 UTC.",
+          "published": true,
+          "createdAt": "<instant>"
+        },
+        {
+          "id": 1,
+          "title": "Welcome to OtterWorks",
+          "body": "The portal is live.",
+          "published": true,
+          "createdAt": "<instant>"
+        }
+      ],
+      "timestamp_format_problems": []
+    },
+    {
+      "id": "ann-get-missing",
+      "method": "GET",
+      "path": "/api/announcements/999",
+      "assert_status_only": false,
+      "status": 404,
+      "body": {
+        "error": "Not Found",
+        "message": "announcement 999 not found"
+      },
+      "timestamp_format_problems": []
+    },
+    {
+      "id": "pref-get-default",
+      "method": "GET",
+      "path": "/api/preferences/alice",
+      "assert_status_only": false,
+      "status": 200,
+      "body": {
+        "userId": "alice",
+        "theme": "light",
+        "locale": "en-US",
+        "emailNotifications": true
+      },
+      "timestamp_format_problems": []
+    },
+    {
+      "id": "pref-update",
+      "method": "PUT",
+      "path": "/api/preferences/alice",
+      "assert_status_only": false,
+      "status": 200,
+      "body": {
+        "userId": "alice",
+        "theme": "dark",
+        "locale": "fr-FR",
+        "emailNotifications": false
+      },
+      "timestamp_format_problems": []
+    },
+    {
+      "id": "pref-get-updated",
+      "method": "GET",
+      "path": "/api/preferences/alice",
+      "assert_status_only": false,
+      "status": 200,
+      "body": {
+        "userId": "alice",
+        "theme": "dark",
+        "locale": "fr-FR",
+        "emailNotifications": false
+      },
+      "timestamp_format_problems": []
+    },
+    {
+      "id": "fb-average-empty",
+      "method": "GET",
+      "path": "/api/feedback/average-rating",
+      "assert_status_only": false,
+      "status": 200,
+      "body": {
+        "averageRating": 0.0
+      },
+      "timestamp_format_problems": []
+    },
+    {
+      "id": "fb-submit-alice-1",
+      "method": "POST",
+      "path": "/api/feedback",
+      "assert_status_only": false,
+      "status": 201,
+      "body": {
+        "id": 1,
+        "userId": "alice",
+        "rating": 5,
+        "message": "Love the new portal.",
+        "createdAt": "<instant>"
+      },
+      "timestamp_format_problems": []
+    },
+    {
+      "id": "fb-submit-bob",
+      "method": "POST",
+      "path": "/api/feedback",
+      "assert_status_only": false,
+      "status": 201,
+      "body": {
+        "id": 2,
+        "userId": "bob",
+        "rating": 3,
+        "message": "It works.",
+        "createdAt": "<instant>"
+      },
+      "timestamp_format_problems": []
+    },
+    {
+      "id": "fb-submit-alice-2",
+      "method": "POST",
+      "path": "/api/feedback",
+      "assert_status_only": false,
+      "status": 201,
+      "body": {
+        "id": 3,
+        "userId": "alice",
+        "rating": 4,
+        "message": "Even better after the update.",
+        "createdAt": "<instant>"
+      },
+      "timestamp_format_problems": []
+    },
+    {
+      "id": "fb-list-alice",
+      "method": "GET",
+      "path": "/api/feedback?userId=alice",
+      "assert_status_only": false,
+      "status": 200,
+      "body": [
+        {
+          "id": 3,
+          "userId": "alice",
+          "rating": 4,
+          "message": "Even better after the update.",
+          "createdAt": "<instant>"
+        },
+        {
+          "id": 1,
+          "userId": "alice",
+          "rating": 5,
+          "message": "Love the new portal.",
+          "createdAt": "<instant>"
+        }
+      ],
+      "timestamp_format_problems": []
+    },
+    {
+      "id": "fb-average",
+      "method": "GET",
+      "path": "/api/feedback/average-rating",
+      "assert_status_only": false,
+      "status": 200,
+      "body": {
+        "averageRating": 4.0
+      },
+      "timestamp_format_problems": []
+    },
+    {
+      "id": "fb-submit-invalid-rating",
+      "method": "POST",
+      "path": "/api/feedback",
+      "assert_status_only": true,
+      "status": 400,
+      "body": null,
+      "timestamp_format_problems": []
+    }
+  ]
+}
