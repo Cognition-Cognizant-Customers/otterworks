@@ -37,7 +37,7 @@ RSpec.describe AuditLog do
           action: 'user.created',
           resource_type: 'AdminUser',
           resource_id: SecureRandom.uuid,
-          actor_email: 'admin@test.com'
+          actor: described_class::Actor.new(email: 'admin@test.com')
         )
       end.to change(described_class, :count).by(1)
     end

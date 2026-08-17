@@ -6,6 +6,9 @@ class AuditLog < ApplicationRecord
     quota.updated bulk.users_updated
   ].freeze
 
+  Actor = Struct.new(:id, :email, keyword_init: true)
+  RequestContext = Struct.new(:ip_address, :user_agent, keyword_init: true)
+
   validates :action, presence: true
   validates :resource_type, presence: true
 
@@ -19,17 +22,17 @@ class AuditLog < ApplicationRecord
   scope :recent, -> { order(created_at: :desc) }
   scope :since, ->(time) { where('created_at >= ?', time) }
 
-  def self.record!(action:, resource_type:, resource_id: nil, actor_id: nil, actor_email: nil,
-                   changes_made: {}, ip_address: nil, user_agent: nil)
+  def self.record!(action:, resource_type:, resource_id: nil, actor: Actor.new,
+                   request_context: RequestContext.new, changes_made: {})
     create!(
       action: action,
       resource_type: resource_type,
       resource_id: resource_id,
-      actor_id: actor_id,
-      actor_email: actor_email,
+      actor_id: actor.id,
+      actor_email: actor.email,
       changes_made: changes_made,
-      ip_address: ip_address,
-      user_agent: user_agent
+      ip_address: request_context.ip_address,
+      user_agent: request_context.user_agent
     )
   end
 end
