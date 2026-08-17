@@ -290,6 +290,21 @@ class Target:
                 return sorted(ids)
             kwargs["ExclusiveStartKey"] = page["LastEvaluatedKey"]
 
+    def probe_present(self, records: list[dict]) -> set[str]:
+        present = set()
+        for record in records:
+            response = self.dynamodb.get_item(
+                TableName=self.table,
+                Key={
+                    "event_id": {"S": record["event_id"]},
+                    "timestamp": {"S": record["timestamp"]},
+                },
+                ConsistentRead=True,
+            )
+            if response.get("Item"):
+                present.add(record["event_id"])
+        return present
+
     def archive_objects(self) -> dict:
         """Archived objects under the unit prefix, keyed by S3 key."""
         objects, token = {}, None
@@ -465,9 +480,12 @@ def wait_for_ttl_probe(
     sleeper = sleeper or time.sleep
     expected_ids = {record["event_id"] for record in records}
     deadline = clock() + timeout_seconds
+    observed_all_present = False
     first_absent_at = None
     while True:
-        absent_ids = expected_ids - set(target.scan_ids())
+        present_ids = target.probe_present(records)
+        absent_ids = expected_ids - present_ids
+        observed_all_present |= present_ids == expected_ids
         keys = target.archive_objects()
         archived_ids = {
             event_id_of(key) for key in keys if event_id_of(key) in expected_ids
@@ -479,7 +497,11 @@ def wait_for_ttl_probe(
                 "absent_from_table": sorted(absent_ids),
             }
         now = clock()
-        if absent_ids == expected_ids and first_absent_at is None:
+        if (
+            observed_all_present
+            and absent_ids == expected_ids
+            and first_absent_at is None
+        ):
             first_absent_at = now
         remaining = deadline - now
         if remaining <= 0:
@@ -768,7 +790,7 @@ def run(args) -> dict:
                         },
                         "source_of_truth": (
                             "s3:ListObjectsV2 after DynamoDB TTL deletion plus "
-                            "dynamodb:Scan absence of the items"
+                            "dynamodb:GetItem ConsistentRead absence of the items"
                         ),
                         "result": "pass",
                     }
@@ -787,7 +809,7 @@ def run(args) -> dict:
                         },
                         "source_of_truth": (
                             "s3:ListObjectsV2 after DynamoDB TTL deletion plus "
-                            "dynamodb:Scan absence of the items"
+                            "dynamodb:GetItem ConsistentRead absence of the items"
                         ),
                         "result": ttl_probe_result["result"],
                     }

@@ -42,15 +42,31 @@ def test_live_ttl_anchoring_preserves_split_and_boundaries() -> None:
 
 
 class StubProbeTarget:
-    def __init__(self, archived: list[str], present: list[str]) -> None:
+    def __init__(self, archived: list[str], presence: list[list[str]]) -> None:
         self.archived = archived
-        self.present = present
+        self.presence = presence
+        self.probe_calls = 0
 
     def archive_objects(self) -> list[str]:
         return [f"audit-archive/expired/{event_id}__suffix" for event_id in self.archived]
 
-    def scan_ids(self) -> list[str]:
-        return self.present
+    def probe_present(self, records: list[dict]) -> set[str]:
+        del records
+        present = self.presence[min(self.probe_calls, len(self.presence) - 1)]
+        self.probe_calls += 1
+        return set(present)
+
+
+def fake_clock():
+    now = [0.0]
+
+    def clock() -> float:
+        return now[0]
+
+    def sleep(seconds: float) -> None:
+        now[0] += seconds
+
+    return clock, sleep
 
 
 def probe_records() -> list[dict]:
@@ -59,13 +75,17 @@ def probe_records() -> list[dict]:
 
 def test_ttl_probe_passes_when_all_removed_records_are_archived() -> None:
     records = probe_records()
+    clock, sleeper = fake_clock()
     result = wait_for_ttl_probe(
         StubProbeTarget(
             ["demo-probe-ascii", "demo-probe-unicode"],
-            [],
+            [["demo-probe-ascii", "demo-probe-unicode"], []],
         ),
         records,
-        timeout_seconds=0,
+        timeout_seconds=1,
+        interval_seconds=1,
+        clock=clock,
+        sleeper=sleeper,
     )
     assert result == {
         "result": "pass",
@@ -79,7 +99,7 @@ def test_ttl_probe_skips_when_a_probe_remains_in_the_table() -> None:
     result = wait_for_ttl_probe(
         StubProbeTarget(
             ["demo-probe-unicode"],
-            ["demo-probe-ascii"],
+            [["demo-probe-ascii"], ["demo-probe-ascii"]],
         ),
         records,
         timeout_seconds=0,
@@ -91,14 +111,18 @@ def test_ttl_probe_skips_when_a_probe_remains_in_the_table() -> None:
 
 def test_ttl_probe_fails_when_all_removed_probes_are_not_archived() -> None:
     records = probe_records()
+    clock, sleeper = fake_clock()
     result = wait_for_ttl_probe(
         StubProbeTarget(
             ["demo-probe-unicode"],
-            [],
+            [["demo-probe-ascii", "demo-probe-unicode"], [], []],
         ),
         records,
-        timeout_seconds=11,
-        grace_seconds=10,
+        timeout_seconds=20,
+        interval_seconds=10,
+        grace_seconds=5,
+        clock=clock,
+        sleeper=sleeper,
     )
     assert result["result"] == "fail"
     assert result["archived_objects"] == ["demo-probe-unicode"]
@@ -111,10 +135,20 @@ def test_ttl_probe_does_not_fail_before_stream_grace_expires(monkeypatch) -> Non
     monkeypatch.setattr(recon.time, "monotonic", lambda: now[0])
     monkeypatch.setattr(recon.time, "sleep", lambda seconds: now.__setitem__(0, now[0] + seconds))
     result = wait_for_ttl_probe(
-        StubProbeTarget(["demo-probe-unicode"], []),
+        StubProbeTarget(["demo-probe-unicode"], [[], []]),
         records,
         timeout_seconds=0,
         grace_seconds=120,
+    )
+    assert result["result"] == "skipped"
+
+
+def test_ttl_probe_skips_when_consistent_presence_is_never_observed() -> None:
+    records = probe_records()
+    result = wait_for_ttl_probe(
+        StubProbeTarget([], [[], []]),
+        records,
+        timeout_seconds=0,
     )
     assert result["result"] == "skipped"
 
