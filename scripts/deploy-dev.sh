@@ -43,6 +43,8 @@ for arg in "$@"; do
     --skip-platform)  SKIP_PLATFORM=true ;;
     --skip-terraform) SKIP_TERRAFORM=true ;;
     --skip-build)     SKIP_BUILD=true ;;
+    # Colors/log helpers are defined below this loop, so report via echo.
+    *) echo "Unknown argument: $arg" >&2; exit 1 ;;
   esac
 done
 
