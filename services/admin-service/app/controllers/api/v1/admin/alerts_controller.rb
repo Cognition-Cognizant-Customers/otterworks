@@ -72,7 +72,7 @@ module Api
 
           incident = Incident.create!(
             title:            summary.presence || "#{alert_name}: #{affected_service} alert firing",
-            description:      build_description(alert_name, description, labels, annotations),
+            description:      build_description(alert_name, description, annotations),
             severity:         severity,
             status:           auto_investigate ? 'investigating' : 'open',
             affected_service: affected_service,
@@ -116,7 +116,7 @@ module Api
           Rails.logger.warn("Could not auto-resolve incident #{incident.id} for alert #{alert_name}: #{e.message}")
         end
 
-        def build_description(alert_name, base_description, labels, annotations)
+        def build_description(alert_name, base_description, annotations)
           parts = [base_description]
           parts << "**Alert**: #{alert_name}" if alert_name.present?
           if (runbook = annotations[:runbook_url].to_s).present?
