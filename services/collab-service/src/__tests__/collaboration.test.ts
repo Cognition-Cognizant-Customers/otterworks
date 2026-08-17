@@ -39,6 +39,27 @@ const mockRedis = {
   ping: jest.fn().mockResolvedValue(true),
 } as unknown as jest.Mocked<RedisAdapter>;
 
+function connectClient(userId: string, displayName: string): Promise<ClientSocket> {
+  return new Promise((resolve, reject) => {
+    const token = createToken({
+      sub: userId,
+      name: displayName,
+      email: `${userId}@test.com`,
+      roles: ['user'],
+    });
+
+    const client = clientIO(`http://localhost:${PORT}`, {
+      auth: { token },
+      transports: ['websocket'],
+    });
+
+    client.on('connect', () => resolve(client));
+    client.on('connect_error', (err) => reject(err));
+
+    setTimeout(() => reject(new Error('Connection timeout')), 5000);
+  });
+}
+
 const mockLogger = {
   info: jest.fn(),
   warn: jest.fn(),
@@ -100,27 +121,6 @@ describe('CollaborationManager', () => {
   afterEach(() => {
     jest.clearAllMocks();
   });
-
-  function connectClient(userId: string, displayName: string): Promise<ClientSocket> {
-    return new Promise((resolve, reject) => {
-      const token = createToken({
-        sub: userId,
-        name: displayName,
-        email: `${userId}@test.com`,
-        roles: ['user'],
-      });
-
-      const client = clientIO(`http://localhost:${PORT}`, {
-        auth: { token },
-        transports: ['websocket'],
-      });
-
-      client.on('connect', () => resolve(client));
-      client.on('connect_error', (err) => reject(err));
-
-      setTimeout(() => reject(new Error('Connection timeout')), 5000);
-    });
-  }
 
   describe('Authentication', () => {
     it('should reject connections without a token', (done) => {
