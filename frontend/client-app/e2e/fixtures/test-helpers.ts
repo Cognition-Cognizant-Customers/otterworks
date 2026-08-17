@@ -22,7 +22,7 @@ export async function registerUser(
   const name = opts.name ?? "Test User";
   const email = opts.email ?? uniqueEmail();
   const password =
-    opts.password ?? process.env.E2E_TEST_PASSWORD ?? uniqueSecret();
+    opts.password ?? (process.env.E2E_TEST_PASSWORD || uniqueSecret());
 
   await page.goto("/register");
   await page.getByLabel("Full name").fill(name);
