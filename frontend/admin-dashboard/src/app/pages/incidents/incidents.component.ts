@@ -694,7 +694,7 @@ export class IncidentsComponent implements OnInit, OnDestroy {
         this.saveChaosState();
         this.chaosLoading = false;
         const cleared = res.cleared?.length ?? 0;
-        const resolved = (res as any).resolved_incidents?.length ?? 0;
+        const resolved = res.resolved_incidents?.length ?? 0;
         const msg = resolved > 0
           ? `Reset complete — cleared ${cleared} chaos flag(s), resolved ${resolved} incident(s)`
           : `Reset complete — cleared ${cleared} chaos flag(s)`;

@@ -201,7 +201,7 @@ export const filesApi = {
         : undefined,
     });
     // Backend wraps response in { file: {...} }
-    const raw = data.file ?? (data as unknown as RawFileItem);
+    const raw = data.file ?? data;
     return mapRawFile(raw);
   },
   listFolders: async (parentId?: string | null): Promise<FileItem[]> => {
