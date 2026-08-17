@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_invoices",
   "namespace": "demo",
-  "generated_at": "2026-08-17T05:44:25.570896Z",
+  "generated_at": "2026-08-17T05:54:49.591604Z",
   "run_mode": "fixture",
   "checks": [
     {
@@ -66,6 +66,13 @@
       "expected": 0,
       "actual": 0,
       "source_of_truth": "target read-back intersection of Oracle orphan IDs and embedded line IDs",
+      "result": "pass"
+    },
+    {
+      "id": "invoices.null_invoice_id_quarantined",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "Oracle batch INVOICE_ID IS NULL count versus target null_invoice_id quarantine count",
       "result": "pass"
     },
     {

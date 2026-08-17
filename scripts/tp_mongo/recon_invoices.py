@@ -91,6 +91,7 @@ def source_facts(
     int,
     int,
     int,
+    int,
     str,
 ]:
     connection = oracle_connection(args)
@@ -127,7 +128,7 @@ def source_facts(
         non_orphan_lines: list[tuple[str, decimal.Decimal]] = []
         for line_id, invoice_id, amount, _posted in cursor:
             invoice_key = str(invoice_id)
-            if invoice_key in header_totals:
+            if invoice_key in header_totals and amount is not None:
                 line_totals[invoice_key] = (
                     line_totals.get(invoice_key, decimal.Decimal(0)) + amount
                 )
@@ -145,6 +146,7 @@ def source_facts(
                 ON h.invoice_id = l.invoice_id
                AND h.batch_no = :batch_no
              WHERE l.batch_no = :batch_no
+               AND l.invoice_id IS NOT NULL
                AND h.invoice_id IS NULL
             """,
             batch_no=batch_no,
@@ -167,6 +169,18 @@ def source_facts(
         )
         null_posted = int(cursor.fetchone()[0])
         cursor.close()
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+              FROM OW_BILLING.invoice_line
+             WHERE batch_no = :batch_no
+               AND invoice_id IS NULL
+            """,
+            batch_no=batch_no,
+        )
+        null_invoice_id = int(cursor.fetchone()[0])
+        cursor.close()
         zero_line = sum(
             1 for invoice_id in header_totals if invoice_id not in line_totals
         )
@@ -180,6 +194,7 @@ def source_facts(
             header_totals,
             orphan_ids,
             null_posted,
+            null_invoice_id,
             zero_line,
             mismatch,
             checksum(non_orphan_lines),
@@ -353,6 +368,7 @@ def report(
         _source_header_totals,
         source_orphan_ids,
         source_null_posted,
+        source_null_invoice_id,
         source_zero_line,
         source_mismatch,
         source_non_orphan_checksum,
@@ -486,6 +502,9 @@ def report(
         target_orphan_count = quarantine.count_documents(
             {"ns": args.ns, "anomaly_id": "orphaned_rows"}
         )
+        target_null_invoice_id_count = quarantine.count_documents(
+            {"ns": args.ns, "anomaly_id": "null_invoice_id"}
+        )
         target_zero_line_count = invoices.count_documents(
             {"ns": args.ns, "line_count": 0}
         )
@@ -581,6 +600,12 @@ def report(
             "target read-back intersection of Oracle orphan IDs and embedded line IDs",
         ),
         make_check(
+            "invoices.null_invoice_id_quarantined",
+            source_null_invoice_id,
+            target_null_invoice_id_count,
+            "Oracle batch INVOICE_ID IS NULL count versus target null_invoice_id quarantine count",
+        ),
+        make_check(
             "invoices.no_synthesized_headers",
             0,
             len(target_ids - source_header_ids),
@@ -647,6 +672,7 @@ def report(
             "invalid_encoding quarantine branch is unverified because the baseline has zero non-decodable values.",
             "Malformed GL_ACCT_CSV tolerate-and-attribute path is unverified because baseline CSVs are all well-formed.",
             "Duplicate non-null invoice_no attribution is unverified because the demo baseline has no duplicate INVOICE_NO values.",
+            "Unparseable POSTED_YN attribution is unverified because the demo baseline has zero non-null values outside Y/N.",
         ],
     }, passed
 
