@@ -32,6 +32,11 @@ resource "mongodbatlas_database_user" "namespace" {
     role_name     = "readWrite"
     database_name = local.database_name
   }
+
+  roles {
+    role_name     = "dbAdmin"
+    database_name = local.database_name
+  }
 }
 
 resource "mongodbatlas_project_ip_access_list" "caller" {
