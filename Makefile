@@ -39,11 +39,14 @@ endif
 			probe_user="$$(terraform -chdir=$$tf_dir output -raw database_username 2>/dev/null || true)"; \
 			probe_password="$$(terraform -chdir=$$tf_dir output -raw database_password 2>/dev/null || true)"; \
 			if [ -n "$$probe_user" ] && [ -n "$$probe_password" ] && [ -n "$${MONGODB_ATLAS_URI:-}" ]; then \
-				probe_host="$$(MONGO_BASE_URI="$$MONGODB_ATLAS_URI" python3 -c 'import os; from urllib.parse import urlsplit; host = urlsplit(os.environ["MONGO_BASE_URI"]).hostname; import sys; sys.exit("cluster host missing") if not host else None; print(host)')"; \
-				export OW_TP_PREFLIGHT_MONGO_URI="$$(printf %s "$$probe_password" | MONGO_USER="$$probe_user" MONGO_HOST="$$probe_host" python3 -c 'import os, sys; from urllib.parse import quote; password = sys.stdin.read(); print("mongodb+srv://{}:{}@{}/?retryWrites=true&w=majority".format(quote(os.environ["MONGO_USER"], safe=""), quote(password, safe=""), os.environ["MONGO_HOST"]))')"; \
+				probe_host="$$(MONGO_BASE_URI="$$MONGODB_ATLAS_URI" python3 -c 'import os; from urllib.parse import urlsplit; host = urlsplit(os.environ["MONGO_BASE_URI"]).hostname; import sys; sys.exit("cluster host missing") if not host else None; print(host)' 2>/dev/null || true)"; \
+				if [ -n "$$probe_host" ]; then \
+					derived_uri="$$(printf %s "$$probe_password" | MONGO_USER="$$probe_user" MONGO_HOST="$$probe_host" python3 -c 'import os, sys; from urllib.parse import quote; password = sys.stdin.read(); print("mongodb+srv://{}:{}@{}/?retryWrites=true&w=majority".format(quote(os.environ["MONGO_USER"], safe=""), quote(password, safe=""), os.environ["MONGO_HOST"]))' 2>/dev/null || true)"; \
+					if [ -n "$$derived_uri" ]; then export OW_TP_PREFLIGHT_MONGO_URI="$$derived_uri"; fi; \
+				fi; \
 			fi; \
 		fi; \
-		if [ -z "$${OW_TP_PREFLIGHT_DB:-}" ]; then \
+		if [ -n "$${OW_TP_PREFLIGHT_MONGO_URI:-}" ] && [ -z "$${OW_TP_PREFLIGHT_DB:-}" ]; then \
 			probe_database="$$(terraform -chdir=$$tf_dir output -raw database_name 2>/dev/null || true)"; \
 			if [ -n "$$probe_database" ]; then export OW_TP_PREFLIGHT_DB="$$probe_database"; fi; \
 		fi; \
