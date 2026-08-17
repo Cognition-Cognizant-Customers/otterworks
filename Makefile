@@ -2,6 +2,10 @@
 
 SHELL := /bin/bash
 
+define validate_ns
+$(if $(filter ok,$(shell echo '$(NS)' | grep -qE '^[A-Za-z0-9_]+$$' && echo ok)),,$(error NS must contain only letters, digits, and underscores))
+endef
+
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
@@ -17,6 +21,75 @@ tp-preflight-databricks: ## Check Databricks capability paths and emit a manifes
 	scripts/tp-preflight-databricks.sh
 
 tp-preflight-atlas: ## Check MongoDB Atlas capability paths and emit a manifest
+ifneq ($(strip $(NS)),)
+	$(call validate_ns)
+endif
+	@set -euo pipefail; \
+	tf_dir="infrastructure/terraform/tp-mongodb"; \
+	previous_workspace="$$(terraform -chdir=$$tf_dir workspace show 2>/dev/null || true)"; \
+	restore_workspace() { \
+		current_workspace="$$(terraform -chdir=$$tf_dir workspace show 2>/dev/null || true)"; \
+		if [ -n "$$previous_workspace" ] && [ "$$current_workspace" != "$$previous_workspace" ]; then \
+			terraform -chdir=$$tf_dir workspace select "$$previous_workspace" >/dev/null 2>&1 || true; \
+		fi; \
+	}; \
+	trap restore_workspace EXIT; \
+	if [ -n "$(NS)" ] && { [ -z "$${OW_TP_PREFLIGHT_MONGO_URI:-}" ] || [ -z "$${OW_TP_PREFLIGHT_DB:-}" ]; }; then \
+		if ! terraform -chdir=$$tf_dir workspace select "$(NS)" >/dev/null 2>&1; then \
+			echo "tp-preflight-atlas: failed to select Terraform workspace '$(NS)'" >&2; \
+			exit 2; \
+		fi; \
+		if [ -z "$${OW_TP_PREFLIGHT_MONGO_URI:-}" ]; then \
+			if ! probe_user="$$(terraform -chdir=$$tf_dir output -raw database_username 2>/dev/null)"; then \
+				echo "tp-preflight-atlas: failed to read Terraform output database_username for NS=$(NS)" >&2; \
+				exit 2; \
+			fi; \
+			if [ -z "$$probe_user" ]; then \
+				echo "tp-preflight-atlas: Terraform output database_username is empty for NS=$(NS)" >&2; \
+				exit 2; \
+			fi; \
+			if ! probe_password="$$(terraform -chdir=$$tf_dir output -raw database_password 2>/dev/null)"; then \
+				echo "tp-preflight-atlas: failed to read Terraform output database_password for NS=$(NS)" >&2; \
+				exit 2; \
+			fi; \
+			if [ -z "$$probe_password" ]; then \
+				echo "tp-preflight-atlas: Terraform output database_password is empty for NS=$(NS)" >&2; \
+				exit 2; \
+			fi; \
+			if [ -z "$${MONGODB_ATLAS_URI:-}" ]; then \
+				echo "tp-preflight-atlas: MONGODB_ATLAS_URI is required to derive the namespace probe URI for NS=$(NS)" >&2; \
+				exit 2; \
+			fi; \
+			if ! probe_host="$$(MONGO_BASE_URI="$$MONGODB_ATLAS_URI" python3 -c 'import os; from urllib.parse import urlsplit; host = urlsplit(os.environ["MONGO_BASE_URI"]).hostname; import sys; sys.exit("cluster host missing") if not host else None; print(host)' 2>/dev/null)"; then \
+				echo "tp-preflight-atlas: failed to parse a host from MONGODB_ATLAS_URI for NS=$(NS)" >&2; \
+				exit 2; \
+			fi; \
+			if [ -z "$$probe_host" ]; then \
+				echo "tp-preflight-atlas: parsed host is empty in MONGODB_ATLAS_URI for NS=$(NS)" >&2; \
+				exit 2; \
+			fi; \
+			if ! derived_uri="$$(printf %s "$$probe_password" | MONGO_USER="$$probe_user" MONGO_HOST="$$probe_host" python3 -c 'import os, sys; from urllib.parse import quote; password = sys.stdin.read(); print("mongodb+srv://{}:{}@{}/?retryWrites=true&w=majority".format(quote(os.environ["MONGO_USER"], safe=""), quote(password, safe=""), os.environ["MONGO_HOST"]))' 2>/dev/null)"; then \
+				echo "tp-preflight-atlas: failed to build the namespace probe URI for NS=$(NS)" >&2; \
+				exit 2; \
+			fi; \
+			if [ -z "$$derived_uri" ]; then \
+				echo "tp-preflight-atlas: namespace probe URI build returned empty for NS=$(NS)" >&2; \
+				exit 2; \
+			fi; \
+			export OW_TP_PREFLIGHT_MONGO_URI="$$derived_uri"; \
+		fi; \
+		if [ -z "$${OW_TP_PREFLIGHT_DB:-}" ]; then \
+			if ! probe_database="$$(terraform -chdir=$$tf_dir output -raw database_name 2>/dev/null)"; then \
+				echo "tp-preflight-atlas: failed to read Terraform output database_name for NS=$(NS)" >&2; \
+				exit 2; \
+			fi; \
+			if [ -z "$$probe_database" ]; then \
+				echo "tp-preflight-atlas: Terraform output database_name is empty for NS=$(NS)" >&2; \
+				exit 2; \
+			fi; \
+			export OW_TP_PREFLIGHT_DB="$$probe_database"; \
+		fi; \
+	fi; \
 	scripts/tp-preflight-atlas.sh
 
 tp-preflight-aws: ## Check AWS capability paths and leftovers
@@ -346,11 +419,6 @@ lint: ## Lint all services
 	@echo "=== Admin Dashboard ===" && cd frontend/admin-dashboard && npm run lint
 
 # --- Synthetic Test Data ---
-
-# Guard: NS must be alphanumeric/underscore only (prevents SQL injection)
-define validate_ns
-$(if $(filter ok,$(shell echo '$(NS)' | grep -qE '^[A-Za-z0-9_]+$$' && echo ok)),,$(error NS must contain only letters, digits, and underscores))
-endef
 
 testdata-validate: ## Validate generated test data (NS=<namespace>, CRITERIA=<file>)
 ifndef NS

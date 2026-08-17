@@ -64,6 +64,21 @@ headers = {"Accept": "application/vnd.atlas.2024-08-05+json", "Content-Type": "a
 m = Manifest("atlas")
 install_excepthook(m, "atlas")
 run_marker = f"otterworks-preflight-{uuid.uuid4().hex}"
+probe_mongo_uri = (
+    os.environ.get("OW_TP_PREFLIGHT_MONGO_URI")
+    or os.environ.get("MONGODB_ATLAS_URI")
+)
+probe_database = os.environ.get("OW_TP_PREFLIGHT_DB") or "ow_tp_preflight"
+
+
+def probe_scope_detail(detail):
+    username = "unknown"
+    if probe_mongo_uri:
+        try:
+            username = urllib.parse.unquote(urllib.parse.urlsplit(probe_mongo_uri).username or "unknown")
+        except ValueError:
+            pass
+    return f"{detail}; probe user {username} on {probe_database}"
 
 
 def check(pid, description, method, url, **kwargs):
@@ -158,6 +173,27 @@ pending_validator_collections = {}
 pending_cleanup_candidates = {}
 
 
+def add_validator_capabilities(ddl_result, ddl_detail, collmod_result=None, collmod_detail=None):
+    m.add("validator-ddl", "Create and exercise a MongoDB $jsonSchema validator",
+          "MongoDB wire protocol", ddl_result, probe_scope_detail(ddl_detail))
+    m.add("validator-collmod", "Update and exercise an existing collection validator with collMod",
+          "MongoDB wire protocol", collmod_result or ddl_result,
+          probe_scope_detail(collmod_detail or ddl_detail))
+
+
+def validator_error_detail(exc):
+    detail = exception_detail(exc)
+    try:
+        from pymongo.errors import OperationFailure
+    except ImportError:
+        return detail
+    if isinstance(exc, OperationFailure):
+        lowered = detail.lower()
+        if "not authorized" in lowered or "not allowed to do action" in lowered:
+            return f"{detail}; probing credential lacks dbAdmin on {probe_database}"
+    return detail
+
+
 def cleanup_collection(name, database):
     try:
         database.drop_collection(name)
@@ -172,10 +208,10 @@ def cleanup_collection(name, database):
 
 def cleanup_detail(name, result, state):
     if result == "present":
-        return f"{name} remains in ow_tp_preflight after cleanup attempt; manual cleanup required"
+        return f"{name} remains in {probe_database} after cleanup attempt; manual cleanup required"
     if state == "ambiguous":
-        return f"{name} may remain in ow_tp_preflight; verify; manual cleanup required if present"
-    return f"{name} cleanup could not be confirmed; manual cleanup required"
+        return f"{name} may remain in {probe_database}; verify; manual cleanup required if present"
+    return f"{name} cleanup in {probe_database} could not be confirmed; manual cleanup required"
 
 
 def emit_cleanup_failures(names):
@@ -245,7 +281,7 @@ def reconcile_validator_collections():
         except Exception as exc:
             m.add("validator-ddl-cleanup", "Drop the validator DDL probe collection",
                   "MongoDB wire protocol", "denied",
-                  f"{name} may remain in ow_tp_preflight; manual cleanup required: {exception_detail(exc)}")
+                  f"{name} may remain in {probe_database}; manual cleanup required: {exception_detail(exc)}")
         finally:
             pending_validator_collections.pop(name, None)
             try:
@@ -262,8 +298,8 @@ def db_user_write():
         client = None
         name = f"ow_tp_preflight_{uuid.uuid4().hex}"
         try:
-            client = MongoClient(os.environ["MONGODB_ATLAS_URI"], serverSelectionTimeoutMS=10000)
-            database = client["ow_tp_preflight"]
+            client = MongoClient(probe_mongo_uri, serverSelectionTimeoutMS=10000)
+            database = client[probe_database]
             pending_collections[name] = (client, database, "ambiguous")
             try:
                 database[name].insert_one({"_id": "probe"})
@@ -277,7 +313,8 @@ def db_user_write():
             pending_collections.pop(name, None)
             resolve_cleanup_candidates(pending_cleanup_candidates, database)
             m.add("db-user-write", "Insert and delete a temporary document with the DB user",
-                  "MongoDB wire protocol", "verified", "temporary collection cleaned")
+                  "MongoDB wire protocol", "verified",
+                  probe_scope_detail("temporary collection cleaned"))
             if pending_cleanup_candidates:
                 emit_cleanup_failures(pending_cleanup_candidates)
             try:
@@ -298,23 +335,28 @@ def db_user_write():
             if attempt < 2:
                 time.sleep(5)
     m.add("db-user-write", "Insert and delete a temporary document with the DB user",
-          "MongoDB wire protocol", "denied", exception_detail(last_error))
+          "MongoDB wire protocol", "denied",
+          probe_scope_detail(exception_detail(last_error)))
     emit_cleanup_failures(pending_cleanup_candidates)
 
 
 def validator_ddl():
-    if not os.environ.get("MONGODB_ATLAS_URI"):
-        m.add("validator-ddl", "Create and exercise a MongoDB $jsonSchema validator",
-              "MongoDB wire protocol", "denied", "MONGODB_ATLAS_URI is not set")
+    if not probe_mongo_uri:
+        add_validator_capabilities("skipped", "MONGODB_ATLAS_URI is not set")
         return
     client = None
     name = f"ow_tp_preflight_validator_{uuid.uuid4().hex}"
+    ddl_result = "denied"
+    ddl_detail = "validator probe did not complete"
+    collmod_result = "denied"
+    collmod_detail = "collMod was not attempted"
+    collmod_attempted = False
     try:
         from pymongo import MongoClient
         from pymongo.errors import WriteError
 
-        client = MongoClient(os.environ["MONGODB_ATLAS_URI"], serverSelectionTimeoutMS=10000)
-        database = client["ow_tp_preflight"]
+        client = MongoClient(probe_mongo_uri, serverSelectionTimeoutMS=10000)
+        database = client[probe_database]
         pending_validator_collections[name] = (client, database)
         database.create_collection(
             name,
@@ -336,21 +378,50 @@ def validator_ddl():
             raise RuntimeError("the validator accepted a violating document")
         database[name].insert_one({"_id": "valid", "kind": "conforming"})
         database[name].delete_one({"_id": "valid"})
+        ddl_result = "verified"
+        ddl_detail = "$jsonSchema validator rejected a violating insert and accepted a conforming insert"
+        collmod_attempted = True
+        database.command({
+            "collMod": name,
+            "validator": {
+                "$jsonSchema": {
+                    "bsonType": "object",
+                    "required": ["phase"],
+                    "properties": {"phase": {"bsonType": "string"}},
+                }
+            },
+            "validationLevel": "strict",
+            "validationAction": "error",
+        })
+        try:
+            database[name].insert_one({"_id": "collmod-invalid", "kind": "conforming"})
+        except WriteError:
+            pass
+        else:
+            raise RuntimeError("collMod validator accepted a document missing phase")
+        collmod_result = "verified"
+        collmod_detail = "collMod changed the existing validator and rejected a document missing phase"
         database.drop_collection(name)
         pending_validator_collections.pop(name, None)
+        ddl_detail += "; collection cleaned"
+        collmod_detail += "; collection cleaned"
         client.close()
-        m.add("validator-ddl", "Create and exercise a MongoDB $jsonSchema validator",
-              "MongoDB wire protocol", "verified",
-              "$jsonSchema validator rejected a violating insert and accepted a conforming insert; collection cleaned")
     except Exception as exc:
-        m.add("validator-ddl", "Create and exercise a MongoDB $jsonSchema validator",
-              "MongoDB wire protocol", "denied", exception_detail(exc))
+        error_detail = validator_error_detail(exc)
+        if ddl_result != "verified":
+            ddl_detail = error_detail
+        if collmod_result != "verified" and collmod_attempted:
+            collmod_detail = error_detail
+        elif collmod_result != "verified":
+            collmod_detail = f"collMod was not attempted: {error_detail}"
         reconcile_validator_collections()
         if client is not None:
             try:
                 client.close()
             except Exception:
                 pass
+    finally:
+        add_validator_capabilities(ddl_result, ddl_detail, collmod_result, collmod_detail)
 
 
 def alert_configs_snapshot(record=False):
@@ -521,7 +592,7 @@ def entry_matches(entry, target):
 
 ip = None
 ip_lookup_error = None
-if os.environ.get("MONGODB_ATLAS_URI"):
+if probe_mongo_uri:
     try:
         response = get("https://api.ipify.org", timeout=10)
         response.raise_for_status()
@@ -538,16 +609,16 @@ if entry_records is None:
           "Atlas accessList POST", "denied", "access-list snapshot failed; no mutation attempted")
     m.add("vm-ip-listed", "The VM public IP is present or can be self-healed in the Atlas access list",
           "Atlas accessList GET", "denied", "access-list snapshot failed; no mutation attempted")
-    if os.environ.get("MONGODB_ATLAS_URI"):
+    if probe_mongo_uri:
         m.add("db-user-write", "Insert and delete a temporary document with the DB user",
-              "MongoDB wire protocol", "denied", "access-list snapshot failed; no mutation attempted")
-        m.add("validator-ddl", "Create and exercise a MongoDB $jsonSchema validator",
-              "MongoDB wire protocol", "denied", "access-list snapshot failed; no mutation attempted")
+              "MongoDB wire protocol", "denied",
+              probe_scope_detail("access-list snapshot failed; no mutation attempted"))
+        add_validator_capabilities("denied", "access-list snapshot failed; no mutation attempted")
     else:
         m.add("db-user-write", "Insert and delete a temporary document with the DB user",
-              "MongoDB wire protocol", "skipped", "MONGODB_ATLAS_URI is not set")
-        m.add("validator-ddl", "Create and exercise a MongoDB $jsonSchema validator",
-              "MongoDB wire protocol", "skipped", "MONGODB_ATLAS_URI is not set")
+              "MongoDB wire protocol", "skipped",
+              probe_scope_detail("MONGODB_ATLAS_URI is not set"))
+        add_validator_capabilities("skipped", "MONGODB_ATLAS_URI is not set")
     raise SystemExit(m.write("atlas"))
 listed = [api_entry_ip(entry) for entry in entry_records if api_entry_ip(entry)]
 cleanup_registry = {}
@@ -595,23 +666,26 @@ try:
                         json=[{"ipAddress": probe_ip, "comment": run_marker}])
         if created is None or not created.ok:
             reconcile_ambiguous(created_entry)
-    if not os.environ.get("MONGODB_ATLAS_URI"):
+    if not probe_mongo_uri:
         m.add("vm-ip-listed", "The VM public IP is present or can be self-healed in the Atlas access list",
               "Atlas accessList GET", "skipped", "MONGODB_ATLAS_URI is not set")
         m.add("db-user-write", "Insert and delete a temporary document with the DB user",
-              "MongoDB wire protocol", "skipped", "MONGODB_ATLAS_URI is not set")
-        m.add("validator-ddl", "Create and exercise a MongoDB $jsonSchema validator",
-              "MongoDB wire protocol", "skipped", "MONGODB_ATLAS_URI is not set")
+              "MongoDB wire protocol", "skipped",
+              probe_scope_detail("MONGODB_ATLAS_URI is not set"))
+        add_validator_capabilities("skipped", "MONGODB_ATLAS_URI is not set")
     elif ip is None:
         m.add("vm-ip-listed", "The VM public IP is present or can be self-healed in the Atlas access list",
               "Atlas accessList GET", "denied",
               f"could not determine the VM public address: {ip_lookup_error or 'unknown lookup failure'}")
         m.add("db-user-write", "Insert and delete a temporary document with the DB user",
               "MongoDB wire protocol", "denied",
-              f"could not determine the VM public address: {ip_lookup_error or 'unknown lookup failure'}")
-        m.add("validator-ddl", "Create and exercise a MongoDB $jsonSchema validator",
-              "MongoDB wire protocol", "denied",
-              f"could not determine the VM public address: {ip_lookup_error or 'unknown lookup failure'}")
+              probe_scope_detail(
+                  f"could not determine the VM public address: {ip_lookup_error or 'unknown lookup failure'}"
+              ))
+        add_validator_capabilities(
+            "denied",
+            f"could not determine the VM public address: {ip_lookup_error or 'unknown lookup failure'}",
+        )
     elif covers(ip, listed):
         m.add("vm-ip-listed", "The VM public IP is present in the Atlas access list",
               "Atlas accessList GET", "verified", f"VM IP {ip}; covered by {len(listed)} access-list entr{'y' if len(listed) == 1 else 'ies'}")
@@ -636,16 +710,18 @@ try:
                       "Atlas accessList POST/DELETE", "denied", f"VM IP {ip}; access-list entries checked={len(listed)}")
                 m.add("db-user-write", "Insert and delete a temporary document with the DB user",
                       "MongoDB wire protocol",
-                      "denied" if os.environ.get("MONGODB_ATLAS_URI") else "skipped",
-                      "VM IP could not be temporarily allow-listed"
-                      if os.environ.get("MONGODB_ATLAS_URI")
-                      else "MONGODB_ATLAS_URI is not set")
-                m.add("validator-ddl", "Create and exercise a MongoDB $jsonSchema validator",
-                      "MongoDB wire protocol",
-                      "denied" if os.environ.get("MONGODB_ATLAS_URI") else "skipped",
-                      "VM IP could not be temporarily allow-listed"
-                      if os.environ.get("MONGODB_ATLAS_URI")
-                      else "MONGODB_ATLAS_URI is not set")
+                      "denied" if probe_mongo_uri else "skipped",
+                      probe_scope_detail(
+                          "VM IP could not be temporarily allow-listed"
+                          if probe_mongo_uri
+                          else "MONGODB_ATLAS_URI is not set"
+                      ))
+                add_validator_capabilities(
+                    "denied" if probe_mongo_uri else "skipped",
+                    "VM IP could not be temporarily allow-listed"
+                    if probe_mongo_uri
+                    else "MONGODB_ATLAS_URI is not set",
+                )
         finally:
             cleanup_entries()
     alert_webhook_config()
