@@ -587,6 +587,14 @@ def anomaly_count(mf: dict, kind: str, target: str) -> int | None:
     return None
 
 
+def validate_output_path(out: str | None, rerun: bool) -> None:
+    if not rerun and out and out.endswith(".recon.json"):
+        raise ValueError(
+            "--out must not end with .recon.json without --rerun-migration; "
+            "use a partial artifact path or pass --rerun-migration"
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--ns", default="demo")
@@ -598,6 +606,10 @@ def main() -> int:
     )
     parser.add_argument("--out", help="write the recon report to this path")
     args = parser.parse_args()
+    try:
+        validate_output_path(args.out, args.rerun_migration)
+    except ValueError as exc:
+        parser.error(str(exc))
     validate_namespace(args.ns)
 
     mf = manifest(args.ns)
@@ -659,7 +671,7 @@ def main() -> int:
         + [f"orphaned_snapshot={sid}" for sid in facts["orphaned_snapshots"]]
     )
     report = {
-        "kind": "recon-report",
+        "kind": "recon-report" if args.rerun_migration else "recon-report-partial",
         "unit": UNIT,
         "namespace": args.ns,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -680,6 +692,12 @@ def main() -> int:
         "unverified_paths": UNVERIFIED_FIXTURE if args.run_mode == "fixture" else UNVERIFIED_LIVE,
         "recompute_command": RECOMPUTE_COMMAND.format(ns=args.ns),
     }
+    if not args.rerun_migration:
+        report["schema_note"] = (
+            "This partial artifact is intentionally not schema-conforming because "
+            "the schema mandates a performed rerun; --rerun-migration produces a "
+            "conforming report."
+        )
     report["idempotency_rerun"] = idempotency
 
     failures = [c["id"] for c in checks if c["result"] == "fail"]
