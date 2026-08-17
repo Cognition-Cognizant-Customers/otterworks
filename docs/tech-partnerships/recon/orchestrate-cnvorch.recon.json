@@ -1,0 +1,245 @@
+{
+  "kind": "recon-report",
+  "unit": "dbx-orchestrate",
+  "namespace": "cnvorch",
+  "generated_at": "2026-08-17T06:18:23Z",
+  "run_mode": "live",
+  "source_artifacts": [
+    "etl/legacy-extra/crontab",
+    "etl/legacy-extra/run_all.sh"
+  ],
+  "target_objects": [
+    "ow_tp_custbill_chain_cnvorch",
+    "ow_tp.ops.chain_runs_cnvorch",
+    "ow_tp.bronze.chain_landed_cnvorch",
+    "ow_tp.silver.chain_records_cnvorch",
+    "ow_tp.gold.chain_finance_cnvorch"
+  ],
+  "golden_baseline": {
+    "provenance": "deterministic legacy run in this namespace: make legacy-etl-gen-data NS=cnvorch then TP_FAKETIME='2026-01-15 00:00:00' scripts/tp-run-deterministic.sh make legacy-etl-run JOB=run_all NS=cnvorch",
+    "root": "/tmp/otterworks-legacy-cnvorch",
+    "report_path": "/tmp/otterworks-legacy-cnvorch/reports/finance_billing_20260115.csv",
+    "report_csv": "Currency,RecordType,RecordCount,TotalAmount\nEUR,INVOICE,35,140667.85\nEUR,CREDIT,12,81064.38\nGBP,INVOICE,24,158882.51\nUSD,INVOICE,24,136691.49\nUSD,CREDIT,5,5160.05\n",
+    "landed_files": {
+      "CUSTBILL_CNVORCH_001.dat": 3430,
+      "CUSTBILL_CNVORCH_002.dat": 3430
+    },
+    "silver_rows": 100
+  },
+  "checks": [
+    {
+      "id": "orch-dag-dependencies",
+      "expected": {
+        "validate_params": [],
+        "ingest": [
+          "validate_params"
+        ],
+        "parse": [
+          "ingest"
+        ],
+        "finance": [
+          "parse"
+        ],
+        "chain_complete": [
+          "finance"
+        ],
+        "chain_failed": [
+          "finance",
+          "ingest",
+          "parse",
+          "validate_params"
+        ]
+      },
+      "actual": {
+        "validate_params": [],
+        "ingest": [
+          "validate_params"
+        ],
+        "parse": [
+          "ingest"
+        ],
+        "finance": [
+          "parse"
+        ],
+        "chain_complete": [
+          "finance"
+        ],
+        "chain_failed": [
+          "finance",
+          "ingest",
+          "parse",
+          "validate_params"
+        ]
+      },
+      "source_of_truth": "https://dbc-8bc9474f-40ae.cloud.databricks.com/api/2.1/jobs/get job settings (live)",
+      "result": "pass"
+    },
+    {
+      "id": "orch-max-active-runs",
+      "expected": {
+        "max_concurrent_runs": 1,
+        "queue_enabled": true,
+        "second_trigger_queued": true
+      },
+      "actual": {
+        "max_concurrent_runs": 1,
+        "queue_enabled": true,
+        "second_trigger_queued": true
+      },
+      "source_of_truth": "live job settings + observed life-cycle states of two back-to-back triggers",
+      "result": "pass"
+    },
+    {
+      "id": "orch-failure-propagation",
+      "expected": {
+        "run_result_state": "FAILED",
+        "parse": "FAILED",
+        "finance_ran": false,
+        "chain_ledger": [
+          [
+            "chain",
+            "failed"
+          ]
+        ]
+      },
+      "actual": {
+        "run_result_state": "FAILED",
+        "parse": "FAILED",
+        "finance_ran": false,
+        "chain_ledger": [
+          [
+            "chain",
+            "failed"
+          ]
+        ]
+      },
+      "source_of_truth": "live run state of the planted trailer-corruption run + run ledger table",
+      "result": "pass"
+    },
+    {
+      "id": "orch-retries-and-alerting",
+      "expected": {
+        "stage_task_retries": {
+          "ingest": 2,
+          "parse": 2,
+          "finance": 2
+        },
+        "failure_notification": true,
+        "failure_recorded_in_ledger": true,
+        "retries_observed_on_failed_task": 2
+      },
+      "actual": {
+        "stage_task_retries": {
+          "ingest": 2,
+          "parse": 2,
+          "finance": 2
+        },
+        "failure_notification": true,
+        "failure_recorded_in_ledger": true,
+        "retries_observed_on_failed_task": 2
+      },
+      "source_of_truth": "live job settings + run ledger table + attempt numbers of the failed run",
+      "result": "pass"
+    },
+    {
+      "id": "orch-end-to-end-parity",
+      "expected": {
+        "landed_files": {
+          "CUSTBILL_CNVORCH_001.dat": 3430,
+          "CUSTBILL_CNVORCH_002.dat": 3430
+        },
+        "silver_rows": 100,
+        "finance_export_md5": "8625188c2930d9643b9bdf9249a93e8b"
+      },
+      "actual": {
+        "landed_files": {
+          "CUSTBILL_CNVORCH_001.dat": 3430,
+          "CUSTBILL_CNVORCH_002.dat": 3430
+        },
+        "silver_rows": 100,
+        "finance_export_md5": "8625188c2930d9643b9bdf9249a93e8b"
+      },
+      "source_of_truth": "golden legacy run under /tmp/otterworks-legacy-cnvorch vs live ow_tp.bronze.chain_landed_cnvorch/ow_tp.silver.chain_records_cnvorch/ow_tp.gold.chain_finance_cnvorch",
+      "result": "pass"
+    },
+    {
+      "id": "orch-idempotency",
+      "expected": {
+        "result_state": "SUCCESS",
+        "silver_rows_unchanged": true,
+        "gold_export_unchanged": true
+      },
+      "actual": {
+        "result_state": "SUCCESS",
+        "silver_rows_unchanged": true,
+        "gold_export_unchanged": true
+      },
+      "source_of_truth": "second Run Now over the same input, counts and export md5 read back from the target",
+      "result": "pass"
+    },
+    {
+      "id": "orch-empty-input-noop",
+      "expected": {
+        "result_state": "SUCCESS",
+        "silver_rows_unchanged": true,
+        "gold_export_unchanged": true
+      },
+      "actual": {
+        "result_state": "SUCCESS",
+        "silver_rows_unchanged": true,
+        "gold_export_unchanged": true
+      },
+      "source_of_truth": "Run Now over an emptied drop directory, counts and export md5 read back from the target",
+      "result": "pass"
+    },
+    {
+      "id": "orch-mandatory-params",
+      "expected": {
+        "result_state": "FAILED",
+        "validate_params": "FAILED",
+        "ingest_ran": false
+      },
+      "actual": {
+        "result_state": "FAILED",
+        "validate_params": "FAILED",
+        "ingest_ran": false
+      },
+      "source_of_truth": "live run triggered with a blank ns run parameter",
+      "result": "pass"
+    },
+    {
+      "id": "orch-schedule-paused",
+      "expected": "PAUSED",
+      "actual": "PAUSED",
+      "source_of_truth": "live job settings",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "{\"run_id\": 63585438277124, \"url\": \"https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/runs/63585438277124\", \"result_state\": \"SUCCESS\", \"life_cycle_state\": \"TERMINATED\", \"tasks\": {\"validate_params\": \"SUCCESS\", \"ingest\": \"SUCCESS\", \"parse\": \"SUCCESS\", \"finance\": \"SUCCESS\", \"chain_complete\": \"SUCCESS\", \"chain_failed\": \"EXCLUDED\"}, \"silver_rows_before\": 100, \"silver_rows_after\": 100, \"gold_md5_before\": \"8625188c2930d9643b9bdf9249a93e8b\", \"gold_md5_after\": \"8625188c2930d9643b9bdf9249a93e8b\"}"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      "stage_overlap_race",
+      "silent_stage_failure"
+    ],
+    "actual_set": [
+      "stage_overlap_race",
+      "silent_stage_failure"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "email delivery of the on_failure notification: the recipient is a reserved example.com address, so only its presence in live job settings is verified, never that a message arrived",
+    "non-numeric amount handling in a CUSTBILL body record: contract coverage_gap owned by the parse unit, not exercised here",
+    "non-UTF-8 bytes in a drop file: the chain stores raw_line untouched and never normalises, but no invalid-byte drop was landed to prove byte transparency",
+    "the PAUSED schedule firing: verified only as pause_status=PAUSED in job settings, never by letting the 02:10 trigger run",
+    "infrastructure/terraform-databricks/jobs_orchestrate.tf: contributed as code and matched by hand against the live job settings; the unit may not run terraform plan/apply, so it is unapplied and un-planned here",
+    "a stage timing out rather than failing: timeout_seconds=1800 is configured but no run was driven past it"
+  ],
+  "recon_result": "green"
+}

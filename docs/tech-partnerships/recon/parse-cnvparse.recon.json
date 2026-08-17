@@ -1,0 +1,491 @@
+{
+  "kind": "recon-report",
+  "unit": "dbx-parse",
+  "namespace": "cnvparse",
+  "generated_at": "2026-08-17T07:11:24Z",
+  "run_mode": "live",
+  "source_artifact": "etl/legacy-extra/jobs/parse_custbill_fixedwidth.sh",
+  "contract": "docs/tech-partnerships/contracts/parse_custbill_fixedwidth.json",
+  "baseline_provenance": {
+    "method": "make legacy-etl-gen-data NS=cnvparse then TP_FAKETIME='2026-01-15 00:00:00' scripts/tp-run-deterministic.sh make legacy-etl-run JOB=run_all NS=cnvparse",
+    "golden_output": "/tmp/otterworks-legacy-cnvparse/parsed/*.psv",
+    "golden_rows": 100,
+    "golden_totals_cents": {
+      "EUR,CREDIT": [
+        4,
+        2421997
+      ],
+      "EUR,INVOICE": [
+        27,
+        11109095
+      ],
+      "GBP,CREDIT": [
+        11,
+        6723692
+      ],
+      "GBP,INVOICE": [
+        28,
+        12792529
+      ],
+      "USD,CREDIT": [
+        6,
+        2194611
+      ],
+      "USD,INVOICE": [
+        24,
+        14272968
+      ]
+    }
+  },
+  "target": {
+    "silver": "ow_tp.silver.custbill_records_cnvparse",
+    "quarantine": "ow_tp.silver.custbill_quarantine_cnvparse",
+    "job": "ow_tp_parse_cnvparse",
+    "landing": "/Volumes/ow_tp/bronze/landing/cnvparse/parse/incoming",
+    "notebook": "/Shared/ow_tp/parse_custbill_cnvparse"
+  },
+  "checks": [
+    {
+      "id": "parse-row-parity",
+      "expected": {
+        "rows": 100,
+        "files": [
+          "CUSTBILL_CNVPARSE_001.dat",
+          "CUSTBILL_CNVPARSE_002.dat"
+        ]
+      },
+      "actual": {
+        "rows": 100,
+        "files": [
+          "CUSTBILL_CNVPARSE_001.dat",
+          "CUSTBILL_CNVPARSE_002.dat"
+        ]
+      },
+      "source_of_truth": "legacy /tmp/otterworks-legacy-cnvparse/parsed/*.psv vs SELECT from ow_tp.silver.custbill_records_cnvparse",
+      "result": "pass"
+    },
+    {
+      "id": "parse-row-parity-fields",
+      "expected": {
+        "rows_only_in_legacy": 0,
+        "rows_only_in_target": 0
+      },
+      "actual": {
+        "rows_only_in_legacy": 0,
+        "rows_only_in_target": 0
+      },
+      "source_of_truth": "six-field row-by-row set comparison, legacy .psv vs silver",
+      "result": "pass"
+    },
+    {
+      "id": "parse-amount-exactness",
+      "expected": {
+        "totals_cents": {
+          "EUR,CREDIT": [
+            4,
+            2421997
+          ],
+          "EUR,INVOICE": [
+            27,
+            11109095
+          ],
+          "GBP,CREDIT": [
+            11,
+            6723692
+          ],
+          "GBP,INVOICE": [
+            28,
+            12792529
+          ],
+          "USD,CREDIT": [
+            6,
+            2194611
+          ],
+          "USD,INVOICE": [
+            24,
+            14272968
+          ]
+        },
+        "amount_column_type": "bigint"
+      },
+      "actual": {
+        "totals_cents": {
+          "EUR,CREDIT": [
+            4,
+            2421997
+          ],
+          "EUR,INVOICE": [
+            27,
+            11109095
+          ],
+          "GBP,CREDIT": [
+            11,
+            6723692
+          ],
+          "GBP,INVOICE": [
+            28,
+            12792529
+          ],
+          "USD,CREDIT": [
+            6,
+            2194611
+          ],
+          "USD,INVOICE": [
+            24,
+            14272968
+          ]
+        },
+        "amount_column_type": "bigint"
+      },
+      "source_of_truth": "legacy .psv amounts as integer cents vs ow_tp.silver.custbill_records_cnvparse.amount_cents (no float in either path)",
+      "result": "pass"
+    },
+    {
+      "id": "parse-idempotency",
+      "expected": {
+        "silver_hash": "a03bf031b18c72199ffa938d74ba954c87ba730104e25e4c51350fc03d2ada26",
+        "quarantine_hash": "e13ab4fd547294cd7a4c4bcbc477caeeddc932d4b0d8c85e7e6e2bb9bac7c3f6",
+        "silver_rows": 198,
+        "quarantine_rows": 52
+      },
+      "actual": {
+        "silver_hash": "a03bf031b18c72199ffa938d74ba954c87ba730104e25e4c51350fc03d2ada26",
+        "quarantine_hash": "e13ab4fd547294cd7a4c4bcbc477caeeddc932d4b0d8c85e7e6e2bb9bac7c3f6",
+        "silver_rows": 198,
+        "quarantine_rows": 52
+      },
+      "source_of_truth": "job rerun over the same landed bytes; both sides recomputed from the target",
+      "result": "pass"
+    },
+    {
+      "id": "parse-live-corruption",
+      "expected": {
+        "legacy_accepted_rows": 50,
+        "legacy_row_for_corrupted_customer": "present with amount 0.00",
+        "target_silver_rows": 49,
+        "target_quarantine": [
+          {
+            "reason_code": "non_numeric_amount",
+            "source_line": 2
+          }
+        ]
+      },
+      "actual": {
+        "legacy_accepted_rows": 50,
+        "legacy_row_for_corrupted_customer": "present with amount 0.00",
+        "target_silver_rows": 49,
+        "target_quarantine": [
+          {
+            "reason_code": "non_numeric_amount",
+            "source_line": 2
+          }
+        ]
+      },
+      "source_of_truth": "untouched legacy parser over the same corrupted drop vs silver/quarantine in the target",
+      "result": "pass"
+    },
+    {
+      "id": "parse-date-typing",
+      "expected": {
+        "bill_date_column_type": "date",
+        "silver_rows": 49,
+        "quarantine_reasons": [
+          "invalid_calendar_date"
+        ]
+      },
+      "actual": {
+        "bill_date_column_type": "date",
+        "silver_rows": 49,
+        "quarantine_reasons": [
+          "invalid_calendar_date"
+        ]
+      },
+      "source_of_truth": "ow_tp.silver.custbill_records_cnvparse column type from DESCRIBE TABLE plus the 20230231 drop",
+      "result": "pass"
+    },
+    {
+      "id": "parse-trailer-reconciliation",
+      "expected": {
+        "silver_rows": 0,
+        "reasons": [
+          "file_failed_trailer_mismatch",
+          "trailer_count_mismatch"
+        ],
+        "mismatch_detail": "trailer=50 records=49",
+        "quarantine_rows": 50
+      },
+      "actual": {
+        "silver_rows": 0,
+        "reasons": [
+          "file_failed_trailer_mismatch",
+          "trailer_count_mismatch"
+        ],
+        "mismatch_detail": "trailer=50 records=49",
+        "quarantine_rows": 50
+      },
+      "source_of_truth": "trailer-vs-record counts recomputed from ow_tp.silver.custbill_quarantine_cnvparse",
+      "result": "pass"
+    },
+    {
+      "id": "parse-quarantine-completeness",
+      "expected": {
+        "CUSTBILL_CNVPARSE_CORRUPT.dat": {
+          "body_lines": 50,
+          "accounted": 50,
+          "unattributed_rows": 0
+        },
+        "CUSTBILL_CNVPARSE_BADDATE.dat": {
+          "body_lines": 50,
+          "accounted": 50,
+          "unattributed_rows": 0
+        },
+        "CUSTBILL_CNVPARSE_TRLMISMATCH.dat": {
+          "body_lines": 49,
+          "accounted": 49,
+          "unattributed_rows": 0
+        }
+      },
+      "actual": {
+        "CUSTBILL_CNVPARSE_CORRUPT.dat": {
+          "body_lines": 50,
+          "accounted": 50,
+          "unattributed_rows": 0
+        },
+        "CUSTBILL_CNVPARSE_BADDATE.dat": {
+          "body_lines": 50,
+          "accounted": 50,
+          "unattributed_rows": 0
+        },
+        "CUSTBILL_CNVPARSE_TRLMISMATCH.dat": {
+          "body_lines": 49,
+          "accounted": 49,
+          "unattributed_rows": 0
+        }
+      },
+      "source_of_truth": "every body line of each anomaly drop appears in ow_tp.silver.custbill_records_cnvparse or ow_tp.silver.custbill_quarantine_cnvparse",
+      "result": "pass"
+    },
+    {
+      "id": "parse-empty-input",
+      "expected": {
+        "run_result": "SUCCESS",
+        "records_written": 0,
+        "silver_rows": 198,
+        "quarantine_rows": 52
+      },
+      "actual": {
+        "run_result": "SUCCESS",
+        "records_written": 0,
+        "silver_rows": 198,
+        "quarantine_rows": 52
+      },
+      "source_of_truth": "job run over an emptied landing slice; prior output recounted from the target",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "job rerun over identical landed bytes; silver hash a03bf031b18c7219 -> a03bf031b18c7219, quarantine hash e13ab4fd547294cd -> e13ab4fd547294cd"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      "non_numeric_amount",
+      "invalid_calendar_date",
+      "trailer_count_mismatch"
+    ],
+    "actual_set": [
+      "non_numeric_amount",
+      "invalid_calendar_date",
+      "trailer_count_mismatch"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "quarantine_reason_counts": {
+    "file_failed_trailer_mismatch": 49,
+    "invalid_calendar_date": 1,
+    "non_numeric_amount": 1,
+    "trailer_count_mismatch": 1
+  },
+  "evidence": {
+    "golden_run": {
+      "ns": "cnvparse",
+      "files": [
+        {
+          "file": "CUSTBILL_CNVPARSE_001.dat",
+          "body_lines": 50,
+          "trailer": 50,
+          "records": 50,
+          "rejects": 0,
+          "failed": false
+        },
+        {
+          "file": "CUSTBILL_CNVPARSE_002.dat",
+          "body_lines": 50,
+          "trailer": 50,
+          "records": 50,
+          "rejects": 0,
+          "failed": false
+        },
+        {
+          "file": "CUSTBILL_CNVPARSE_BADDATE.dat",
+          "body_lines": 50,
+          "trailer": 50,
+          "records": 49,
+          "rejects": 1,
+          "failed": false
+        },
+        {
+          "file": "CUSTBILL_CNVPARSE_CORRUPT.dat",
+          "body_lines": 50,
+          "trailer": 50,
+          "records": 49,
+          "rejects": 1,
+          "failed": false
+        },
+        {
+          "file": "CUSTBILL_CNVPARSE_TRLMISMATCH.dat",
+          "body_lines": 49,
+          "trailer": 50,
+          "records": 0,
+          "rejects": 50,
+          "failed": true
+        }
+      ],
+      "skipped_unmarked": [],
+      "records": 198,
+      "rejects": 52,
+      "failed_files": [
+        "CUSTBILL_CNVPARSE_TRLMISMATCH.dat"
+      ]
+    },
+    "idempotency_run": {
+      "ns": "cnvparse",
+      "files": [
+        {
+          "file": "CUSTBILL_CNVPARSE_001.dat",
+          "body_lines": 50,
+          "trailer": 50,
+          "records": 50,
+          "rejects": 0,
+          "failed": false
+        },
+        {
+          "file": "CUSTBILL_CNVPARSE_002.dat",
+          "body_lines": 50,
+          "trailer": 50,
+          "records": 50,
+          "rejects": 0,
+          "failed": false
+        },
+        {
+          "file": "CUSTBILL_CNVPARSE_BADDATE.dat",
+          "body_lines": 50,
+          "trailer": 50,
+          "records": 49,
+          "rejects": 1,
+          "failed": false
+        },
+        {
+          "file": "CUSTBILL_CNVPARSE_CORRUPT.dat",
+          "body_lines": 50,
+          "trailer": 50,
+          "records": 49,
+          "rejects": 1,
+          "failed": false
+        },
+        {
+          "file": "CUSTBILL_CNVPARSE_TRLMISMATCH.dat",
+          "body_lines": 49,
+          "trailer": 50,
+          "records": 0,
+          "rejects": 50,
+          "failed": true
+        }
+      ],
+      "skipped_unmarked": [],
+      "records": 198,
+      "rejects": 52,
+      "failed_files": [
+        "CUSTBILL_CNVPARSE_TRLMISMATCH.dat"
+      ]
+    },
+    "anomaly_drops": {
+      "corrupt": "CUSTBILL_CNVPARSE_CORRUPT.dat",
+      "baddate": "CUSTBILL_CNVPARSE_BADDATE.dat",
+      "trailer": "CUSTBILL_CNVPARSE_TRLMISMATCH.dat",
+      "corrupt_cust_id": "C000250453",
+      "corrupt_line_base64": "QzAwMDI1MDQ1M0dMT0JFWCBHTUJIICAgICAgICAgICAgICAgICAgIDIwMjUxMTIwMDAwMEEwNTQwNjg4RVVSMDE="
+    },
+    "anomaly_run": {
+      "ns": "cnvparse",
+      "files": [
+        {
+          "file": "CUSTBILL_CNVPARSE_001.dat",
+          "body_lines": 50,
+          "trailer": 50,
+          "records": 50,
+          "rejects": 0,
+          "failed": false
+        },
+        {
+          "file": "CUSTBILL_CNVPARSE_002.dat",
+          "body_lines": 50,
+          "trailer": 50,
+          "records": 50,
+          "rejects": 0,
+          "failed": false
+        },
+        {
+          "file": "CUSTBILL_CNVPARSE_BADDATE.dat",
+          "body_lines": 50,
+          "trailer": 50,
+          "records": 49,
+          "rejects": 1,
+          "failed": false
+        },
+        {
+          "file": "CUSTBILL_CNVPARSE_CORRUPT.dat",
+          "body_lines": 50,
+          "trailer": 50,
+          "records": 49,
+          "rejects": 1,
+          "failed": false
+        },
+        {
+          "file": "CUSTBILL_CNVPARSE_TRLMISMATCH.dat",
+          "body_lines": 49,
+          "trailer": 50,
+          "records": 0,
+          "rejects": 50,
+          "failed": true
+        }
+      ],
+      "skipped_unmarked": [],
+      "records": 198,
+      "rejects": 52,
+      "failed_files": [
+        "CUSTBILL_CNVPARSE_TRLMISMATCH.dat"
+      ]
+    },
+    "legacy_corrupt_row": "C000250453|GLOBEX GMBH|2025-11-20|0.00|EUR|01",
+    "empty_run": {
+      "ns": "cnvparse",
+      "files": [],
+      "skipped_unmarked": [],
+      "records": 0,
+      "rejects": 0,
+      "failed_files": []
+    }
+  },
+  "unverified_paths": [
+    "encoding_invalid_byte, bad_record_length and missing_cust_id/missing_cust_name rejection paths are covered only by offline tests (tests/tp/test_custbill_layout.py); no live drop carrying those defects was landed in Databricks",
+    "legacy-side behaviour was captured live only for the corrupted-amount drop; the invalid-calendar-date and trailer-mismatch drops were not replayed through the legacy parser, so their legacy output is not part of this comparison",
+    "infrastructure/terraform-databricks/jobs_parse.tf is fmt-checked only; the shared Databricks stack is parent-owned and no terraform plan/apply was run from this unit",
+    "concurrent writers to the same landing slice and partially-written drops other than the .ok-marker case were not exercised",
+    "silver/quarantine writes now bind every value through named parameter markers, so no adversarial-content drop was needed to exercise a string-escaping path; the earlier esc() literal path silently dropped single quotes from cust_name/raw_line/detail (Spark reads '' inside a literal as adjacent strings, not an escaped quote) \u2014 the raw bytes were never affected because they are stored base64, but text columns written before this change are not byte-faithful"
+  ],
+  "recon_result": "pass"
+}
