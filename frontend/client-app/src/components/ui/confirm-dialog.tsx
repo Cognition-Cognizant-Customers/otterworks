@@ -65,7 +65,7 @@ export function ConfirmDialog({
   return (
     <dialog
       open
-      className="fixed inset-0 z-50 flex items-center justify-center bg-transparent m-0 p-0 w-full h-full max-w-none max-h-none"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-transparent !m-0 p-0 w-full h-full max-w-none max-h-none"
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
       aria-describedby="confirm-dialog-description"
