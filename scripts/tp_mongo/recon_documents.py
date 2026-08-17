@@ -1,0 +1,416 @@
+#!/usr/bin/env python3
+"""Reconcile the migrated ow_tp_<ns> document estate against the legacy baseline.
+
+Every number in the emitted report is recomputed by reading the target MongoDB
+deployment back after the write; nothing is carried over from the migration's own
+counters. The expected sides come from the immutable seed manifest and from the
+legacy Postgres estate itself.
+
+Usage:
+    MONGO_URI=... uv run --no-project --with pymongo==4.10.1 \
+        --with psycopg2-binary==2.9.10 python3 scripts/tp_mongo/recon_documents.py \
+        --ns demo --run-mode fixture --out docs/tech-partnerships/recon/mongo_documents.recon.json
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from common import (
+    DOCUMENTS,
+    QUARANTINE,
+    ROOT,
+    SNAPSHOTS,
+    VERSION_ARRAY_BOUND,
+    legacy_common,
+    manifest,
+    mongo_client,
+    mongo_uri,
+    pg_connect,
+    redacted_uri,
+    source_schema,
+    target_db_name,
+)
+
+UNIT = "mongo_documents"
+
+UNVERIFIED_FIXTURE = [
+    "Writes against the shared MongoDB Atlas cluster: this run targeted the local mongo:7 fixture only (make tp-mongo-up), so Atlas wire-protocol writes, Atlas-side $jsonSchema validator DDL and Atlas index builds are unverified here. The parent session's single uncontended run against Atlas is the only live proof.",
+    "Atlas-specific operational behaviour: M0 free-tier storage headroom for this collection set, Atlas index build time, and read/write performance under Atlas latency.",
+    "Atlas alert configuration: the parent's capability preflight reports alert-webhook-config DENIED (HTTP 401 USER_UNAUTHORIZED); nothing in this unit depends on it and it was not exercised.",
+    "Atlas access-list and credential handling: this unit never touched the Atlas project access list or Atlas credentials.",
+]
+
+UNVERIFIED_LIVE = [
+    "Atlas alert configuration: alert-webhook-config is DENIED (HTTP 401 USER_UNAUTHORIZED) per the capability preflight; nothing in this unit depends on it.",
+]
+
+# Line formats of the baseline manifest checksums; recomputed here from the
+# target documents so a drifted field can never pass unnoticed.
+#   documents:          <doc id>|<declared version>|<word count>
+#   document_versions:  <doc id>|<version number>
+#   document_snapshots: <snapshot id>|<document id>
+
+
+def source_expectations(ns: str) -> dict:
+    """Anomaly sets re-derived from the legacy Postgres estate (source of truth)."""
+    schema = source_schema(ns)
+    conn = pg_connect(ns)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT d.id::text, d.version,
+                       COALESCE(ARRAY_AGG(v.version_number ORDER BY v.version_number)
+                                FILTER (WHERE v.version_number IS NOT NULL), '{{}}')
+                  FROM {schema}.documents d
+                  LEFT JOIN {schema}.document_versions v ON v.document_id = d.id
+                 GROUP BY d.id, d.version
+                """
+            )
+            gaps = {}
+            for doc_id, declared, present in cur.fetchall():
+                missing = missing_versions(declared, list(present))
+                if missing:
+                    gaps[doc_id] = missing
+            cur.execute(
+                f"""
+                SELECT s.id::text FROM {schema}.document_snapshots s
+                 WHERE NOT EXISTS (
+                     SELECT 1 FROM {schema}.documents d WHERE d.id = s.document_id)
+                 ORDER BY 1
+                """
+            )
+            orphans = [row[0] for row in cur.fetchall()]
+    finally:
+        conn.close()
+    return {"version_gaps": gaps, "orphaned_snapshots": orphans}
+
+
+def missing_versions(declared: int, present: list[int]) -> list[int]:
+    """Version numbers absent from a document's sequence.
+
+    The expected sequence runs from 1 to the larger of the declared version and
+    the highest version actually present, so both a gap in the middle and a
+    truncated tail are reported rather than silently closed.
+    """
+    upper = max([declared] + present) if present else declared
+    return sorted(set(range(1, upper + 1)) - set(present))
+
+
+def anomaly_key(doc_id: str, missing: list[int]) -> str:
+    return f"{doc_id}:missing={','.join(str(v) for v in missing)}"
+
+
+def target_facts(ns: str) -> dict:
+    """Recompute every target-side number by reading MongoDB back."""
+    lc = legacy_common()
+    client = mongo_client()
+    try:
+        db = client[target_db_name(ns)]
+        doc_ck, ver_ck, snap_ck = lc.Checksum(), lc.Checksum(), lc.Checksum()
+        documents = 0
+        embedded_versions = 0
+        gaps: dict[str, list[int]] = {}
+        embedded_snapshot_fields = 0
+        over_bound = 0
+        doc_ids: set[str] = set()
+
+        for doc in db[DOCUMENTS].find(
+            {},
+            projection={
+                "declared_version": 1,
+                "word_count": 1,
+                "versions.version_number": 1,
+                "snapshots": 1,
+            },
+        ):
+            documents += 1
+            doc_ids.add(doc["_id"])
+            doc_ck.add(f"{doc['_id']}|{doc['declared_version']}|{doc['word_count']}")
+            numbers = [v["version_number"] for v in doc.get("versions", [])]
+            embedded_versions += len(numbers)
+            if len(numbers) > VERSION_ARRAY_BOUND:
+                over_bound += 1
+            for number in numbers:
+                ver_ck.add(f"{doc['_id']}|{number}")
+            missing = missing_versions(doc["declared_version"], numbers)
+            if missing:
+                gaps[doc["_id"]] = missing
+            if "snapshots" in doc:
+                embedded_snapshot_fields += 1
+
+        snapshots = 0
+        orphans: list[str] = []
+        attached_to_missing_parent: list[str] = []
+        for snap in db[SNAPSHOTS].find({}, projection={"document_id": 1, "parent_missing": 1}):
+            snapshots += 1
+            snap_ck.add(f"{snap['_id']}|{snap['document_id']}")
+            if snap.get("parent_missing"):
+                orphans.append(snap["_id"])
+            elif snap["document_id"] not in doc_ids:
+                attached_to_missing_parent.append(snap["_id"])
+
+        quarantined = db[QUARANTINE].count_documents({})
+        validator_probe = probe_validator(db)
+        return {
+            "documents": documents,
+            "embedded_versions": embedded_versions,
+            "snapshots": snapshots,
+            "quarantined": quarantined,
+            "documents_checksum": doc_ck.hexdigest(),
+            "versions_checksum": ver_ck.hexdigest(),
+            "snapshots_checksum": snap_ck.hexdigest(),
+            "version_gaps": gaps,
+            "orphaned_snapshots": sorted(orphans),
+            "snapshots_with_unresolvable_parent_not_flagged": sorted(attached_to_missing_parent),
+            "documents_with_embedded_snapshots": embedded_snapshot_fields,
+            "documents_over_version_bound": over_bound,
+            "validators": validator_probe,
+        }
+    finally:
+        client.close()
+
+
+def probe_validator(db) -> dict:
+    """Prove each collection's $jsonSchema validator rejects a bad document.
+
+    A rejected insert persists nothing, so the probe cannot pollute the target;
+    the document counts are re-read afterwards to prove that.
+    """
+    from pymongo.errors import WriteError
+
+    result = {}
+    probes = {
+        DOCUMENTS: {"_id": "ow_tp_validator_probe", "declared_version": "not-an-int"},
+        SNAPSHOTS: {"_id": "ow_tp_validator_probe", "document_id": 42},
+    }
+    for name, bad in probes.items():
+        before = db[name].count_documents({})
+        info = next(iter(db.list_collections(filter={"name": name})), {})
+        has_validator = "validator" in info.get("options", {})
+        try:
+            db[name].insert_one(bad)
+            rejected = False
+            db[name].delete_one({"_id": bad["_id"]})
+        except WriteError:
+            rejected = True
+        after = db[name].count_documents({})
+        result[name] = {
+            "validator_present": has_validator,
+            "violating_insert_rejected": rejected,
+            "count_unchanged": before == after,
+        }
+    return result
+
+
+def fingerprint(facts: dict) -> dict:
+    return {
+        "documents": facts["documents"],
+        "embedded_versions": facts["embedded_versions"],
+        "snapshots": facts["snapshots"],
+        "quarantined": facts["quarantined"],
+        "documents_checksum": facts["documents_checksum"],
+        "versions_checksum": facts["versions_checksum"],
+        "snapshots_checksum": facts["snapshots_checksum"],
+        "version_gaps": {k: v for k, v in sorted(facts["version_gaps"].items())},
+        "orphaned_snapshots": facts["orphaned_snapshots"],
+    }
+
+
+def rerun_migration(ns: str) -> subprocess.CompletedProcess:
+    cmd = [
+        "uv", "run", "--no-project",
+        "--with", "pymongo==4.10.1",
+        "--with", "psycopg2-binary==2.9.10",
+        "python3", "scripts/tp_mongo/migrate_documents.py", "--ns", ns,
+    ]
+    return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, check=False)
+
+
+def build_checks(ns: str, mf: dict, expected: dict, facts: dict) -> list[dict]:
+    schema = source_schema(ns)
+    base = mf["targets"]
+    docs_want = base[f"postgres.{schema}.documents"]
+    vers_want = base[f"postgres.{schema}.document_versions"]
+    snaps_want = base[f"postgres.{schema}.document_snapshots"]
+    manifest_src = f"testdata/legacy/manifests/{ns}.json"
+    pg_src = f"postgres {schema} (legacy source estate)"
+    target_src = f"mongodb {target_db_name(ns)} (recomputed after write)"
+
+    def check(cid, expected_value, actual_value, source):
+        return {
+            "id": cid,
+            "expected": expected_value,
+            "actual": actual_value,
+            "source_of_truth": source,
+            "result": "pass" if expected_value == actual_value else "fail",
+        }
+
+    expected_gap_keys = sorted(anomaly_key(d, m) for d, m in expected["version_gaps"].items())
+    actual_gap_keys = sorted(anomaly_key(d, m) for d, m in facts["version_gaps"].items())
+
+    checks = [
+        check("documents.count", docs_want["rows"], facts["documents"], f"{manifest_src} vs {target_src}"),
+        check("documents.version_count", vers_want["rows"], facts["embedded_versions"],
+              f"{manifest_src} vs {target_src}"),
+        check("documents.checksums",
+              {"documents": docs_want["checksum"], "versions": vers_want["checksum"]},
+              {"documents": facts["documents_checksum"], "versions": facts["versions_checksum"]},
+              f"{manifest_src} vs {target_src}"),
+        check("documents.snapshot_count", snaps_want["rows"], facts["snapshots"],
+              f"{manifest_src} vs {target_src}"),
+        check("documents.snapshot_checksum", snaps_want["checksum"], facts["snapshots_checksum"],
+              f"{manifest_src} vs {target_src}"),
+        check("documents.snapshots_not_embedded", 0, facts["documents_with_embedded_snapshots"],
+              target_src),
+        check("documents.version_gaps_reported", expected_gap_keys, actual_gap_keys,
+              f"{pg_src} vs {target_src}"),
+        check("documents.version_gaps_count",
+              anomaly_count(mf, "version_gaps", f"postgres.{schema}.document_versions"),
+              len(facts["version_gaps"]), f"{manifest_src} vs {target_src}"),
+        check("documents.orphaned_snapshots_reported", expected["orphaned_snapshots"],
+              facts["orphaned_snapshots"], f"{pg_src} vs {target_src}"),
+        check("documents.orphaned_snapshots_count",
+              anomaly_count(mf, "orphaned_snapshots", f"postgres.{schema}.document_snapshots"),
+              len(facts["orphaned_snapshots"]), f"{manifest_src} vs {target_src}"),
+        check("documents.unflagged_missing_parents", [],
+              facts["snapshots_with_unresolvable_parent_not_flagged"], target_src),
+        check("documents.quarantine_empty", 0, facts["quarantined"], target_src),
+        check("documents.no_truncated_version_arrays", 0, facts["documents_over_version_bound"],
+              target_src),
+        check("documents.validators_reject_invalid",
+              {name: {"validator_present": True, "violating_insert_rejected": True,
+                      "count_unchanged": True} for name in facts["validators"]},
+              facts["validators"], target_src),
+        check("documents.baseline_matches_contract",
+              {"documents": "e70001cf6110014dab6e1d80adb40285",
+               "versions": "13bc033b2780a0569d7f2217e85d7303"},
+              {"documents": docs_want["checksum"], "versions": vers_want["checksum"]},
+              f"docs/tech-partnerships/contracts/{UNIT}.json vs {manifest_src}"),
+    ]
+    return checks
+
+
+def anomaly_count(mf: dict, kind: str, target: str) -> int | None:
+    for anomaly in mf.get("planted_anomalies", []):
+        if anomaly.get("kind") == kind and anomaly.get("target") == target:
+            return int(anomaly["count"])
+    return None
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ns", default="demo")
+    parser.add_argument("--run-mode", choices=["fixture", "live"], default="fixture")
+    parser.add_argument("--out", help="write the recon report to this path")
+    parser.add_argument(
+        "--skip-idempotency-rerun",
+        action="store_true",
+        help="do not re-run the migration (the report then cannot claim idempotency)",
+    )
+    args = parser.parse_args()
+
+    mf = manifest(args.ns)
+    expected = source_expectations(args.ns)
+    facts = fingerprint_before = target_facts(args.ns)
+
+    if args.skip_idempotency_rerun:
+        idempotency = None
+    else:
+        before = fingerprint(fingerprint_before)
+        proc = rerun_migration(args.ns)
+        if proc.returncode != 0:
+            idempotency = {
+                "performed": True,
+                "result": "fail",
+                "evidence": f"rerun exited {proc.returncode}: {proc.stderr.strip()[-500:]}",
+            }
+            facts = target_facts(args.ns)
+        else:
+            facts = target_facts(args.ns)
+            after = fingerprint(facts)
+            idempotency = {
+                "performed": True,
+                "result": "pass" if before == after else "fail",
+                "evidence": (
+                    "migration re-run end to end; target re-read before and after: "
+                    f"documents={after['documents']} embedded_versions={after['embedded_versions']} "
+                    f"snapshots={after['snapshots']} documents_checksum={after['documents_checksum']} "
+                    f"versions_checksum={after['versions_checksum']} "
+                    f"snapshots_checksum={after['snapshots_checksum']} "
+                    f"anomaly sets unchanged={before['version_gaps'] == after['version_gaps'] and before['orphaned_snapshots'] == after['orphaned_snapshots']}"
+                ),
+            }
+
+    checks = build_checks(args.ns, mf, expected, facts)
+    if idempotency is not None:
+        checks.append(
+            {
+                "id": "documents.idempotent",
+                "expected": "pass",
+                "actual": idempotency["result"],
+                "source_of_truth": (
+                    f"mongodb {target_db_name(args.ns)} re-read before and after a real migration re-run"
+                ),
+                "result": "pass" if idempotency["result"] == "pass" else "fail",
+            }
+        )
+    expected_set = sorted(
+        [anomaly_key(d, m) for d, m in expected["version_gaps"].items()]
+        + [f"orphaned_snapshot={sid}" for sid in expected["orphaned_snapshots"]]
+    )
+    actual_set = sorted(
+        [anomaly_key(d, m) for d, m in facts["version_gaps"].items()]
+        + [f"orphaned_snapshot={sid}" for sid in facts["orphaned_snapshots"]]
+    )
+    report = {
+        "kind": "recon-report",
+        "unit": UNIT,
+        "namespace": args.ns,
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "run_mode": args.run_mode,
+        "target": {
+            "database": target_db_name(args.ns),
+            "uri": redacted_uri(mongo_uri()),
+            "collections": [DOCUMENTS, SNAPSHOTS, QUARANTINE],
+        },
+        "checks": checks,
+        "values_recomputed_from_target": True,
+        "planted_anomaly_detections": {
+            "expected_set": expected_set,
+            "actual_set": actual_set,
+            "missing": sorted(set(expected_set) - set(actual_set)),
+            "unexpected": sorted(set(actual_set) - set(expected_set)),
+        },
+        "unverified_paths": UNVERIFIED_FIXTURE if args.run_mode == "fixture" else UNVERIFIED_LIVE,
+    }
+    if idempotency is not None:
+        report["idempotency_rerun"] = idempotency
+
+    failures = [c["id"] for c in checks if c["result"] != "pass"]
+    report["recon_result"] = "pass" if not failures and not report["planted_anomaly_detections"]["missing"] and not report["planted_anomaly_detections"]["unexpected"] and (idempotency or {}).get("result") == "pass" else "fail"
+
+    text = json.dumps(report, indent=2, sort_keys=False) + "\n"
+    if args.out:
+        Path(args.out).write_text(text)
+        print(f"[recon] wrote {args.out}")
+    else:
+        print(text)
+    for c in checks:
+        print(f"[recon] {c['result']:>4}  {c['id']}")
+    if idempotency:
+        print(f"[recon] {idempotency['result']:>4}  documents.idempotent")
+    print(f"[recon] result: {report['recon_result']}")
+    return 0 if report["recon_result"] == "pass" else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

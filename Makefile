@@ -131,6 +131,12 @@ tp-mongo-down: ## Stop the local MongoDB fixture and keep its data volume
 tp-mongo-reset: ## Stop the local MongoDB fixture and remove its data volume
 	$(TP_MONGO_COMPOSE) down -v
 
+tp-mongo-migrate: ## Migrate the legacy document estate into MongoDB (NS=<ns>)
+	uv run --no-project --with pymongo==4.10.1 --with psycopg2-binary==2.9.10 python3 scripts/tp_mongo/migrate_documents.py --ns $${NS:-demo}
+
+tp-mongo-recon: ## Recon the migrated document estate (NS=<ns>, RUN_MODE=fixture|live, FILE=<out>)
+	uv run --no-project --with pymongo==4.10.1 --with psycopg2-binary==2.9.10 python3 scripts/tp_mongo/recon_documents.py --ns $${NS:-demo} --run-mode $${RUN_MODE:-fixture} $(if $(FILE),--out $(FILE),)
+
 PROCS_COMPOSE = docker compose -f docker-compose.procs.yml -p otterworks-procs-$(NS)
 PROCS_UV = uv run --with psycopg[binary]==3.2.9 --with pyyaml==6.0.2
 PROCS_PORT_OFFSET = $(shell if command -v python3 >/dev/null 2>&1 && test -n "$(NS)"; then python3 -c "import zlib; print(zlib.crc32('$(NS)'.encode()) % 1000)"; fi)
