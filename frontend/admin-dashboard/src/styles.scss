@@ -111,12 +111,12 @@ app-sidebar .mat-mdc-list-item:hover .mat-icon {
 app-sidebar .active-link,
 app-sidebar .active-link .mdc-list-item__primary-text,
 app-sidebar .active-link .mat-mdc-list-item-title {
-  color: #d99a3d !important;
-  background: rgba(217, 154, 61, 0.18) !important;
+  color: #e8b866 !important;
+  background: #404b59 !important;
 }
 
 app-sidebar .active-link .mat-icon {
-  color: #d99a3d !important;
+  color: #e8b866 !important;
 }
 
 /* Ripple / focus state should also be light */
