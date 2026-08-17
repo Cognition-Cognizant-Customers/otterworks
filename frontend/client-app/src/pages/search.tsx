@@ -39,12 +39,15 @@ function sanitizeSnippet(html: string): string {
   return tokens.join("");
 }
 
+const HTML_ENTITIES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+};
+
 function escapeHtml(text: string): string {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+  return text.replaceAll(/[&<>"]/g, (char) => HTML_ENTITIES[char]);
 }
 import type { SearchResult } from "@/types";
 
