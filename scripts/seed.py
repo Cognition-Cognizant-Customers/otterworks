@@ -14,6 +14,7 @@ Usage:
 
 Environment overrides (all optional — defaults match docker-compose):
     DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+    BCRYPT_ROUNDS (minimum 12)
 """
 
 import os
@@ -49,8 +50,10 @@ def hours_ago(n: int) -> datetime:
 def uid() -> str:
     return str(uuid.uuid4())
 
+BCRYPT_ROUNDS = max(12, int(os.getenv("BCRYPT_ROUNDS", "12")))
+
 def hash_password(plain: str) -> str:
-    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt(rounds=10)).decode()
+    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt(rounds=BCRYPT_ROUNDS)).decode()
 
 def log(msg: str) -> None:
     print(f"  {msg}")
