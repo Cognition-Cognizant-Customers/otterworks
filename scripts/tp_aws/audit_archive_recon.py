@@ -908,6 +908,7 @@ def run(args) -> dict:
     actual_set = sorted(name for name, detected in detections.items() if detected)
 
     if not args.keep:
+        cleanup_objects = target.archive_objects()
         target.delete_records(
             [
                 record
@@ -920,7 +921,13 @@ def run(args) -> dict:
         target.delete_objects(
             sorted(
                 key
-                for key in (set(final_objects) | set(new_keys)) - pre_existing_objects
+                for key in (
+                    set(final_objects)
+                    | set(recount)
+                    | set(new_keys)
+                    | set(cleanup_objects)
+                )
+                - pre_existing_objects
                 if event_id_of(key)
                 in corpus_event_ids
                 | {record["event_id"] for record in ttl_probe}
