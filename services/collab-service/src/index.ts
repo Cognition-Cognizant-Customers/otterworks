@@ -1,5 +1,5 @@
 import express from 'express';
-import { createServer } from 'http';
+import { createServer } from 'node:http';
 import { Server as SocketIOServer } from 'socket.io';
 import { WebSocketServer } from 'ws';
 import jwt from 'jsonwebtoken';
