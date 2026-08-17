@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "custbill_history_backfill",
   "namespace": "demo",
-  "generated_at": "2026-08-17T02:59:35Z",
+  "generated_at": "2026-08-17T03:44:16Z",
   "run_mode": "live",
   "checks": [
     {
@@ -258,6 +258,48 @@
       "result": "pass"
     },
     {
+      "id": "annual_total/2025/EUR/01",
+      "expected": "123|59317751",
+      "actual": "123|59317751",
+      "source_of_truth": "gen_history_data.pl expectations manifest (legacy fixed-width drops)",
+      "result": "pass"
+    },
+    {
+      "id": "annual_total/2025/EUR/02",
+      "expected": "36|19130256",
+      "actual": "36|19130256",
+      "source_of_truth": "gen_history_data.pl expectations manifest (legacy fixed-width drops)",
+      "result": "pass"
+    },
+    {
+      "id": "annual_total/2025/GBP/01",
+      "expected": "127|62389054",
+      "actual": "127|62389054",
+      "source_of_truth": "gen_history_data.pl expectations manifest (legacy fixed-width drops)",
+      "result": "pass"
+    },
+    {
+      "id": "annual_total/2025/GBP/02",
+      "expected": "23|11885067",
+      "actual": "23|11885067",
+      "source_of_truth": "gen_history_data.pl expectations manifest (legacy fixed-width drops)",
+      "result": "pass"
+    },
+    {
+      "id": "annual_total/2025/USD/01",
+      "expected": "128|63565673",
+      "actual": "128|63565673",
+      "source_of_truth": "gen_history_data.pl expectations manifest (legacy fixed-width drops)",
+      "result": "pass"
+    },
+    {
+      "id": "annual_total/2025/USD/02",
+      "expected": "39|20064602",
+      "actual": "39|20064602",
+      "source_of_truth": "gen_history_data.pl expectations manifest (legacy fixed-width drops)",
+      "result": "pass"
+    },
+    {
       "id": "file_count/2019",
       "expected": "12",
       "actual": "12",
@@ -300,9 +342,16 @@
       "result": "pass"
     },
     {
+      "id": "file_count/2025",
+      "expected": "12",
+      "actual": "12",
+      "source_of_truth": "gen_history_data.pl expectations manifest (legacy fixed-width drops)",
+      "result": "pass"
+    },
+    {
       "id": "grand_total/all_years",
-      "expected": "2856|1439098122",
-      "actual": "2856|1439098122",
+      "expected": "3332|1675450525",
+      "actual": "3332|1675450525",
       "source_of_truth": "gen_history_data.pl expectations manifest (legacy fixed-width drops)",
       "result": "pass"
     },
@@ -347,13 +396,20 @@
       "actual": "4",
       "source_of_truth": "gen_history_data.pl expectations manifest (legacy fixed-width drops)",
       "result": "pass"
+    },
+    {
+      "id": "quarantine_count/2025",
+      "expected": "4",
+      "actual": "4",
+      "source_of_truth": "gen_history_data.pl expectations manifest (legacy fixed-width drops)",
+      "result": "pass"
     }
   ],
   "values_recomputed_from_target": true,
   "idempotency_rerun": {
     "performed": true,
     "result": "pass",
-    "evidence": "silver/quarantine/gold rebuilt from bronze; all 49 checks byte-identical"
+    "evidence": "silver/quarantine/gold rebuilt from bronze; all 57 checks byte-identical"
   },
   "planted_anomaly_detections": {
     "expected_set": [
@@ -506,6 +562,31 @@
         "CUSTBILL_DEMO_202412.dat",
         "trailer_count_mismatch",
         ""
+      ],
+      [
+        "CUSTBILL_DEMO_202503.dat",
+        "invalid_calendar_date",
+        "C000966087"
+      ],
+      [
+        "CUSTBILL_DEMO_202505.dat",
+        "nonnumeric_amount",
+        "C000442626"
+      ],
+      [
+        "CUSTBILL_DEMO_202509.dat",
+        "invalid_calendar_date",
+        "C000546900"
+      ],
+      [
+        "CUSTBILL_DEMO_202511.dat",
+        "nonnumeric_amount",
+        "C000450583"
+      ],
+      [
+        "CUSTBILL_DEMO_202512.dat",
+        "trailer_count_mismatch",
+        ""
       ]
     ],
     "actual_set": [
@@ -656,6 +737,31 @@
       ],
       [
         "CUSTBILL_DEMO_202412.dat",
+        "trailer_count_mismatch",
+        ""
+      ],
+      [
+        "CUSTBILL_DEMO_202503.dat",
+        "invalid_calendar_date",
+        "C000966087"
+      ],
+      [
+        "CUSTBILL_DEMO_202505.dat",
+        "nonnumeric_amount",
+        "C000442626"
+      ],
+      [
+        "CUSTBILL_DEMO_202509.dat",
+        "invalid_calendar_date",
+        "C000546900"
+      ],
+      [
+        "CUSTBILL_DEMO_202511.dat",
+        "nonnumeric_amount",
+        "C000450583"
+      ],
+      [
+        "CUSTBILL_DEMO_202512.dat",
         "trailer_count_mismatch",
         ""
       ]
