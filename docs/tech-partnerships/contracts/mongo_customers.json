@@ -1,0 +1,34 @@
+{
+  "unit": "mongo_customers",
+  "source_artifact_path": "services/legacy-billing/db/oracle/ (OW_BILLING.CUSTOMER_MASTER, OW_BILLING.ENTITY_ATTR_VALUE)",
+  "target_objects": ["ow_tp_demo.customers", "ow_tp_demo.customers_quarantine"],
+  "golden_baseline_location": "testdata/legacy/manifests/demo.json (targets.oracle.OW_BILLING.CUSTOMER_MASTER, targets.oracle.OW_BILLING.ENTITY_ATTR_VALUE)",
+  "acceptance_checks": [
+    {"id": "customers.count", "description": "ow_tp_demo.customers holds exactly 25000 documents for ns=demo, recomputed from Atlas"},
+    {"id": "customers.checksum", "description": "Order-independent md5 over the migrated customer line format equals manifest checksum 4f92feef2ad58dbab30e289957931928 for the fields carried across"},
+    {"id": "customers.attributes_folded", "description": "All 8333 ENTITY_ATTR_VALUE rows appear as typed entries inside the customers.attributes subdocument; no EAV row is dropped"},
+    {"id": "customers.csv_lists_are_arrays", "description": "RELATED_ACCT_IDS is a BSON array of strings on every document where the source value was well formed"},
+    {"id": "customers.dates_are_bson", "description": "SIGNUP_DT is a BSON date on every document where the source string parsed; unparseable values never fail open to a plausible date"},
+    {"id": "customers.quarantine_enumerated", "description": "Every quarantined record names its source primary key and the anomaly id that quarantined it"},
+    {"id": "customers.idempotent", "description": "A second migration run leaves counts, checksums and the quarantine set byte-identical"}
+  ],
+  "planted_anomalies": [
+    {"id": "dirty_dates", "description": "50 unparseable SIGNUP_DT strings (31-FEB-24, N/A, ...) must be detected and quarantined, not coerced", "status": "must-detect"},
+    {"id": "malformed_csv_lists", "description": "31 malformed RELATED_ACCT_IDS CSV lists must be detected and quarantined, not silently truncated", "status": "must-detect"}
+  ],
+  "encoding_policy": {
+    "input_encoding": "UTF-8 as read through python-oracledb from the AL32UTF8 database",
+    "byte_transparency": "Source text is carried through unchanged; no normalization, trimming, or case folding of business values",
+    "invalid_bytes": "A value that cannot be decoded is quarantined with the raw bytes hex-encoded; it is never replaced by a lossy substitute character"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "fail",
+    "details": "Malformed CSV list values are tolerated at the row level but attributed into the quarantine collection with their anomaly id. A NULL or missing source value may never fail open into a valid-looking document: absent means the field is absent, and a required field that is absent fails the record into quarantine."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "A run that reads zero source rows leaves prior Atlas output untouched and exits non-zero, because at demo scale an empty read is a source-connectivity failure rather than a legitimate state."
+  },
+  "trigger_granularity": "per-batch"
+}
