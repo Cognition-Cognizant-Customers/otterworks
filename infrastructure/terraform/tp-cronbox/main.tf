@@ -33,6 +33,11 @@ resource "aws_dynamodb_table" "audit_events" {
   hash_key     = "event_id"
   range_key    = "timestamp"
 
+  # cron-archive: TTL expiry must be observable so expiring items are archived
+  # before they are lost. Enabling the stream is an in-place table update.
+  stream_enabled   = true
+  stream_view_type = "NEW_AND_OLD_IMAGES"
+
   attribute {
     name = "event_id"
     type = "S"
