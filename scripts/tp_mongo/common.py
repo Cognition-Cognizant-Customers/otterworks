@@ -15,21 +15,14 @@ from types import ModuleType
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# Local fixture default (docker-compose.mongo-fixture.yml). Overridden by MONGO_URI.
-DEFAULT_MONGO_URI = "mongodb://localhost:27017"
-
 DOCUMENTS = "documents"
 SNAPSHOTS = "document_snapshots"
 QUARANTINE = "documents_quarantine"
 
-# Maximum number of versions embedded in a single document. A document whose
-# version count exceeds the bound is quarantined instead of being written with a
-# truncated array, so the migration can never silently drop history.
-VERSION_ARRAY_BOUND = 50
-
 
 def mongo_uri() -> str:
-    return os.environ.get("MONGO_URI") or DEFAULT_MONGO_URI
+    fixture_uri = f"mongodb://localhost:{os.environ.get('MONGO_FIXTURE_PORT', '27017')}"
+    return os.environ.get("MONGO_URI") or fixture_uri
 
 
 def redacted_uri(uri: str) -> str:

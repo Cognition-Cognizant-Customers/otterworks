@@ -29,7 +29,6 @@ from common import (
     QUARANTINE,
     ROOT,
     SNAPSHOTS,
-    VERSION_ARRAY_BOUND,
     legacy_common,
     manifest,
     mongo_client,
@@ -40,7 +39,11 @@ from common import (
     target_db_name,
     validate_namespace,
 )
-from documents_model import VersionSequenceOverBound, missing_versions_for
+from documents_model import (
+    VERSION_ARRAY_BOUND,
+    VersionSequenceOverBound,
+    missing_versions_for,
+)
 
 UNIT = "mongo_documents"
 
