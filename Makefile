@@ -177,8 +177,6 @@ MONGO_FIXTURE_PORT ?= 27017
 MONGO_UV = uv run --no-project --with pymongo==4.10.1 --with oracledb==2.5.1
 MONGO_FILES_UV = uv run --no-project --with pymongo==4.10.1 --with boto3==1.35.36
 MONGO_DOCUMENTS_UV = $(MONGO_UV) --with psycopg2-binary==2.9.10
-MONGO_DOCUMENTS_RECON_OUT = $(if $(OUT),$(OUT),$(if $(filter fixture,$(or $(RUN_MODE),fixture)),docs/tech-partnerships/recon/mongo_documents.recon.json,build/tp-recon/mongo_documents.$(NS).recon.json))
-MONGO_DOCUMENTS_RECON_RERUN = $(if $(or $(filter fixture,$(or $(RUN_MODE),fixture)),$(filter 1 true yes,$(RERUN))),--rerun-migration,)
 MONGO_ENV = MONGO_URI=$(or $(MONGO_URI),mongodb://localhost:$(MONGO_FIXTURE_PORT)) MONGO_DB=$(or $(MONGO_DB),ow_tp_$(NS)) DB_PORT=$(ORACLE_BILLING_DB_PORT)
 MONGO_DOCUMENTS_RECON_OUT = $(if $(OUT),$(OUT),$(if $(filter fixture,$(or $(RUN_MODE),fixture)),docs/tech-partnerships/recon/mongo_documents.recon.json,build/tp-recon/mongo_documents.$(NS).recon.json))
 MONGO_DOCUMENTS_RECON_RERUN = $(if $(or $(filter fixture,$(or $(RUN_MODE),fixture)),$(filter 1 true yes,$(RERUN))),--rerun-migration,)
