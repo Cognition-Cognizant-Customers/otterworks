@@ -15,4 +15,8 @@ def bucket_owner_args(config=None):
     if not owner and config is not None and config.has_option("aws", "expected_bucket_owner"):
         owner = config.get("aws", "expected_bucket_owner").strip()
 
-    return {"ExpectedBucketOwner": owner} if owner else {}
+    if not owner:
+        print("WARNING: AWS_EXPECTED_BUCKET_OWNER is not set -- S3 bucket ownership will not be verified")
+        return {}
+
+    return {"ExpectedBucketOwner": owner}
