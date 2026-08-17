@@ -55,6 +55,14 @@ def esc(value: str) -> str:
     return value.replace("'", "''")
 
 
+def as_int(value) -> int:
+    """Manifest numerics land in SQL literals unquoted, and --expectations-file
+    means the manifest is not necessarily one we generated."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise SystemExit(f"expectations manifest carried a non-integer numeric: {value!r}")
+    return value
+
+
 def manifest_path(args) -> Path:
     if args.expectations_file:
         return Path(args.expectations_file)
@@ -87,7 +95,9 @@ def cmd_land(dbx: Databricks, args) -> int:
     root = Path(args.legacy_root) / "sftp-drop/history"
     if not root.exists():
         raise SystemExit(f"no generated history at {root}; run make legacy-etl-gen-history NS={n.ns}")
-    files = sorted(p for p in root.rglob("CUSTBILL_*.dat") if p.is_file())
+    # the generator writes every namespace into the same legacy root, so scope
+    # the upload to this namespace's drops or a sibling demo's history bleeds in
+    files = sorted(p for p in root.rglob(f"CUSTBILL_{n.ns.upper()}_*.dat") if p.is_file())
     if args.period:
         files = [p for p in files if p.name.endswith(f"_{args.period}.dat")]
     if not files:
@@ -113,9 +123,10 @@ def cmd_expectations(dbx: Databricks, args) -> int:
         year = year_block["year"]
         for total in year_block["totals"]:
             rows.append(
-                f"({year}, '{esc(total['currency'])}', '{esc(total['record_type'])}', "
-                f"{total['record_count']}, {total['total_amount_cents']}, "
-                f"{year_block['quarantine_record_count']}, {files_per_year.get(year, 0)})"
+                f"({as_int(year)}, '{esc(total['currency'])}', '{esc(total['record_type'])}', "
+                f"{as_int(total['record_count'])}, {as_int(total['total_amount_cents'])}, "
+                f"{as_int(year_block['quarantine_record_count'])}, "
+                f"{as_int(files_per_year.get(year, 0))})"
             )
     if not rows:
         raise SystemExit("expectations manifest carried no per-year totals")
@@ -513,6 +524,7 @@ import urllib.request
 dbutils.widgets.text("job_id", "")
 dbutils.widgets.text("run_id", "")
 dbutils.widgets.text("namespace", "{ns}")
+dbutils.widgets.text("base_branch", "{base_branch}")
 
 WEBHOOK_URL = "{webhook}"
 SECRET_SCOPE = "{scope}"
@@ -521,6 +533,7 @@ SECRET_KEY = "{key}"
 job_id = dbutils.widgets.get("job_id")
 run_id = dbutils.widgets.get("run_id")
 namespace = dbutils.widgets.get("namespace")
+base_branch = dbutils.widgets.get("base_branch")
 workspace = spark.conf.get("spark.databricks.workspaceUrl")
 run_url = f"https://{{workspace}}/jobs/{{job_id}}/runs/{{run_id}}"
 
@@ -533,6 +546,7 @@ payload = {{
     "job_id": job_id,
     "run_id": run_id,
     "run_url": run_url,
+    "base_branch": base_branch,
     "catalog": "{catalog}",
     "detail": (
         "OtterWorks CUSTBILL history reconciliation failed on Databricks. "
@@ -561,10 +575,18 @@ def cmd_recon_job(dbx: Databricks, args) -> int:
     n = names(args)
     if not args.webhook_url.startswith("https://"):
         raise SystemExit("--webhook-url must be an https Devin automation webhook URL")
+    # these land in notebook source that runs with access to dbutils.secrets, so
+    # anything that could close a string literal is rejected
+    for label, value in (("--webhook-url", args.webhook_url),
+                         ("--secret-scope", args.secret_scope),
+                         ("--secret-key", args.secret_key),
+                         ("--base-branch", args.base_branch)):
+        if not value or not value.isprintable() or any(c in value for c in "\"'\\"):
+            raise SystemExit(f"{label} must be printable and free of quotes, backslashes and newlines")
     notebook_path = f"{NOTEBOOK_DIR}/notify_devin_{n.ns}"
     dbx.import_notebook(notebook_path, NOTIFY_NOTEBOOK.format(
         ns=n.ns, webhook=args.webhook_url, scope=args.secret_scope,
-        key=args.secret_key, catalog=n.catalog,
+        key=args.secret_key, catalog=n.catalog, base_branch=args.base_branch,
     ))
     settings = {
         "name": f"ow_tp_billing_history_recon_{n.ns}",
@@ -652,6 +674,8 @@ def cmd_drift(dbx: Databricks, args) -> int:
         print(f"drift staged: {new_year} CUSTBILL history landed and expected; "
               "target not backfilled")
     elif args.kind == "malformed":
+        if not (len(args.period) == 6 and args.period.isdigit()):
+            raise SystemExit("--kind malformed needs --period YYYYMM")
         target = f"{n.history_dir}/{args.period[:4]}/CUSTBILL_DRIFT_{args.period}.dat"
         rows = [f"HDR CUSTBILL EXTRACT NS={n.ns.upper():<10} PERIOD={args.period}"]
         for index in range(5):
@@ -661,7 +685,16 @@ def cmd_drift(dbx: Databricks, args) -> int:
             )
         rows.append(f"TRL{5:010d}")
         dbx.put_file(target, ("\n".join(rows) + "\n").encode())
-        print(f"drift staged: malformed batch landed at {target}")
+        # landing alone leaves recon green: the bad batch has to reach bronze for
+        # the file-count and annual-total checks to diverge from expectations
+        dbx.sql_ok(S.delete_bronze_period(n, args.period))
+        dbx.sql_ok(S.load_bronze(
+            n, f"{n.history_dir}/{args.period[:4]}/CUSTBILL_*_{args.period}.dat", overwrite=False))
+        dbx.sql_ok(S.build_silver(n))
+        dbx.sql_ok(S.build_quarantine(n))
+        dbx.sql_ok(S.build_gold(n))
+        print(f"drift staged: malformed batch landed at {target} and ingested for "
+              f"period {args.period}")
     return 0
 
 
@@ -696,6 +729,30 @@ def cmd_teardown(dbx: Databricks, args) -> int:
     if job:
         dbx.ok("POST", "/api/2.0/jobs/delete", {"job_id": int(job["job_id"])})
         print(f"deleted job {job['job_id']}")
+    pipeline = find_pipeline(dbx, pipeline_name(n))
+    if pipeline:
+        dbx.call("DELETE", f"/api/2.0/pipelines/{pipeline['pipeline_id']}")
+        print(f"deleted pipeline {pipeline['pipeline_id']}")
+    # the pipeline's materialized views survive the pipeline, so drop them too
+    for view in (f"{n.catalog}.silver.custbill_dlt_annual_{n.ns}",
+                 f"{n.catalog}.silver.custbill_dlt_{n.ns}"):
+        dbx.sql(f"DROP MATERIALIZED VIEW IF EXISTS {view}")
+        dbx.sql(f"DROP TABLE IF EXISTS {view}")
+        print(f"dropped {view}")
+    dashboards = dbx.ok("GET", "/api/2.0/lakeview/dashboards?page_size=100")
+    for dashboard in dashboards.get("dashboards", []):
+        if dashboard.get("display_name") == f"ow_tp_billing_history_{n.ns}":
+            dbx.call("DELETE", f"/api/2.0/lakeview/dashboards/{dashboard['dashboard_id']}")
+            print(f"trashed dashboard {dashboard['dashboard_id']}")
+    for alert in dbx.ok("GET", "/api/2.0/alerts?page_size=100").get("results", []):
+        if alert.get("display_name") == f"ow_tp_recon_failed_{n.ns}":
+            dbx.call("DELETE", f"/api/2.0/alerts/{alert['id']}")
+            print(f"deleted alert {alert['id']}")
+    for path in (f"{NOTEBOOK_DIR}/notify_devin_{n.ns}",
+                 f"{NOTEBOOK_DIR}/recon_check_{n.ns}.sql",
+                 f"{NOTEBOOK_DIR}/custbill_dlt_{n.ns}"):
+        status, _ = dbx.call("POST", "/api/2.0/workspace/delete", {"path": path})
+        print(f"workspace delete {path}: HTTP {status}")
     remaining = dbx.sql(f"SHOW TABLES IN {n.catalog}.silver LIKE '*_{n.ns}'")
     print(f"negative verification, silver tables matching *_{n.ns}: {remaining.rows}")
     return 0
