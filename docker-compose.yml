@@ -72,7 +72,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: otterworks_dev
       JWT_SECRET: ${JWT_SECRET:-otterworks-local-dev-jwt-secret-change-me-in-production}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@otterworks.dev}
-      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Admin123!}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD-Admin123!}
+      SEED_ADMIN_ROTATE_PASSWORD: ${SEED_ADMIN_ROTATE_PASSWORD:-false}
     depends_on:
       postgres:
         condition: service_healthy
