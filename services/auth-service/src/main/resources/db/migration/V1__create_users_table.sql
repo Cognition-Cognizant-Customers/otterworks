@@ -22,5 +22,5 @@ CREATE TABLE IF NOT EXISTS user_roles (
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_created_at ON users(created_at);
 
--- The admin user is seeded by V5__seed_admin_user.sql from the credentials
--- supplied at migration time (see SeedAdminConfig).
+-- The admin user is seeded at startup from SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD
+-- (see SeedAdminInitializer) so no credential is stored in this repository.
