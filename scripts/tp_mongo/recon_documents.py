@@ -372,8 +372,8 @@ def target_facts(ns: str) -> dict:
 def probe_validator(db, ns: str) -> dict:
     """Prove each collection's $jsonSchema validator rejects a bad document.
 
-    A rejected insert persists nothing, so the probe cannot pollute the target;
-    the document counts are re-read afterwards to prove that.
+    Probes are only written when a validator is present. Without one, the
+    missing validator fails the check without risking a malformed write.
     """
     from pymongo.errors import WriteError
 
@@ -395,12 +395,14 @@ def probe_validator(db, ns: str) -> dict:
         before = db[name].count_documents(scope)
         info = next(iter(db.list_collections(filter={"name": name})), {})
         has_validator = "validator" in info.get("options", {})
-        try:
-            db[name].insert_one(bad)
-            rejected = False
-            db[name].delete_one({"_id": bad["_id"], "ns": ns})
-        except WriteError:
-            rejected = True
+        rejected = False
+        if has_validator:
+            try:
+                db[name].insert_one(bad)
+            except WriteError:
+                rejected = True
+            else:
+                db[name].delete_one({"_id": bad["_id"], "ns": ns})
         after = db[name].count_documents(scope)
         result[name] = {
             "validator_present": has_validator,
