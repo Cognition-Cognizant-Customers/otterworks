@@ -287,12 +287,11 @@ def aggregation_count(collection: Any, pipeline: list[dict[str, Any]]) -> int:
 
 def validator_names(database: Any) -> list[str]:
     names: list[str] = []
-    for info in database.list_collections(
-        filter={"name": {"$in": ["invoices", "invoices_quarantine"]}}
-    ):
+    for name in ("invoices", "invoices_quarantine"):
+        info = next(database.list_collections(filter={"name": name}), {}) or {}
         validator = info.get("options", {}).get("validator", {})
         if isinstance(validator, dict) and "$jsonSchema" in validator:
-            names.append(info["name"])
+            names.append(name)
     return sorted(names)
 
 
