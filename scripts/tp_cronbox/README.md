@@ -4,6 +4,12 @@ This additive harness runs the five immutable jobs in real cron order:
 `analytics_daily`, `storage_cleanup_daily`, `audit_archive_weekly`,
 `search_reindex_weekly`, then `user_activity_daily`.
 
+`cronbox-run-all` interleaves each job with its capture, so each per-job
+manifest is the point-in-time state immediately after that job. These jobs are
+destructive: reseed before rerunning them. `cronbox-run` and `cronbox-capture`
+remain available for standalone use. After the final capture, `cronbox-run-all`
+restores the shared audit table to the golden `id` HASH shape.
+
 ```bash
 make infra-up
 make cronbox-seed NS=demo

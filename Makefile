@@ -369,8 +369,12 @@ cronbox-run: ## Run one immutable legacy Cron Box job (NS=<ns>, JOB=<name>)
 	@test -n "$(JOB)" || { echo "JOB is required"; exit 2; }
 	@NS=$${NS:-demo} scripts/tp_cronbox/run_cronbox.sh "$(JOB)"
 
-cronbox-run-all: ## Run all five jobs in real cron order after a fresh seed
-	@for job in analytics_daily storage_cleanup_daily audit_archive_weekly search_reindex_weekly user_activity_daily; do $(MAKE) cronbox-run NS=$${NS:-demo} JOB=$$job || exit $$?; done
+cronbox-run-all: ## Run and capture all five jobs in real cron order after a fresh seed
+	@for job in analytics_daily storage_cleanup_daily audit_archive_weekly search_reindex_weekly user_activity_daily; do \
+		$(MAKE) cronbox-run NS=$${NS:-demo} JOB=$$job && \
+		$(MAKE) cronbox-capture NS=$${NS:-demo} RUN_DATE=$${RUN_DATE:-2026-01-15} JOB=$$job || exit $$?; \
+	done; \
+	$(MAKE) cronbox-reset
 
 cronbox-capture: ## Capture one job's resulting state (NS=<ns>, JOB=<name>)
 	@test -n "$(JOB)" || { echo "JOB is required"; exit 2; }

@@ -54,8 +54,89 @@
       ]
     },
     "otterworks-audit-events": {
-      "count": 22,
+      "count": 103,
       "ids": [
+        "demo-audit-0000",
+        "demo-audit-0001",
+        "demo-audit-0002",
+        "demo-audit-0003",
+        "demo-audit-0004",
+        "demo-audit-0005",
+        "demo-audit-0006",
+        "demo-audit-0007",
+        "demo-audit-0008",
+        "demo-audit-0009",
+        "demo-audit-0010",
+        "demo-audit-0011",
+        "demo-audit-0012",
+        "demo-audit-0013",
+        "demo-audit-0014",
+        "demo-audit-0015",
+        "demo-audit-0016",
+        "demo-audit-0017",
+        "demo-audit-0018",
+        "demo-audit-0019",
+        "demo-audit-0020",
+        "demo-audit-0021",
+        "demo-audit-0022",
+        "demo-audit-0023",
+        "demo-audit-0024",
+        "demo-audit-0025",
+        "demo-audit-0026",
+        "demo-audit-0027",
+        "demo-audit-0028",
+        "demo-audit-0029",
+        "demo-audit-0030",
+        "demo-audit-0031",
+        "demo-audit-0032",
+        "demo-audit-0033",
+        "demo-audit-0034",
+        "demo-audit-0035",
+        "demo-audit-0036",
+        "demo-audit-0037",
+        "demo-audit-0038",
+        "demo-audit-0039",
+        "demo-audit-0040",
+        "demo-audit-0041",
+        "demo-audit-0042",
+        "demo-audit-0043",
+        "demo-audit-0044",
+        "demo-audit-0045",
+        "demo-audit-0046",
+        "demo-audit-0047",
+        "demo-audit-0048",
+        "demo-audit-0049",
+        "demo-audit-0050",
+        "demo-audit-0051",
+        "demo-audit-0052",
+        "demo-audit-0053",
+        "demo-audit-0054",
+        "demo-audit-0055",
+        "demo-audit-0056",
+        "demo-audit-0057",
+        "demo-audit-0058",
+        "demo-audit-0059",
+        "demo-audit-0060",
+        "demo-audit-0061",
+        "demo-audit-0062",
+        "demo-audit-0063",
+        "demo-audit-0064",
+        "demo-audit-0065",
+        "demo-audit-0066",
+        "demo-audit-0067",
+        "demo-audit-0068",
+        "demo-audit-0069",
+        "demo-audit-0070",
+        "demo-audit-0071",
+        "demo-audit-0072",
+        "demo-audit-0073",
+        "demo-audit-0074",
+        "demo-audit-0075",
+        "demo-audit-0076",
+        "demo-audit-0077",
+        "demo-audit-0078",
+        "demo-audit-0079",
+        "demo-boundary-0",
         "demo-boundary-1",
         "demo-boundary-2",
         "demo-new-0000",
@@ -906,10 +987,7 @@
   },
   "run_date": "2026-01-15",
   "s3": {
-    "otterworks-audit-archive": [
-      "audit-archive/year=2026/week=2026-01-15/audit_events.jsonl.gz",
-      "reports/compliance/audit-archive/2026-01-15/report.json"
-    ],
+    "otterworks-audit-archive": [],
     "otterworks-data-lake": [
       "analytics/daily/year=2025/month=12/day=17/top_users.jsonl.gz",
       "analytics/daily/year=2025/month=12/day=18/top_users.jsonl.gz",
@@ -942,22 +1020,11 @@
       "analytics/daily/year=2026/month=01/day=15/hourly_breakdown.json.gz",
       "analytics/daily/year=2026/month=01/day=15/summary.json.gz",
       "analytics/daily/year=2026/month=01/day=15/top_users.jsonl.gz",
-      "reports/analytics/daily/2026-01-15/report.json",
-      "reports/storage-cleanup/2026-01-15/report.json",
-      "reports/user-activity/2026-01-15/activity_report.json",
-      "reports/user-activity/2026-01-15/user_summaries.jsonl",
-      "reports/user-activity/latest/activity_report.json"
+      "reports/analytics/daily/2026-01-15/report.json"
     ],
-    "otterworks-file-quarantine": [
-      "quarantined/2026-01-15/files/demo/orphan-000.bin",
-      "quarantined/2026-01-15/files/demo/orphan-001.bin",
-      "quarantined/2026-01-15/files/demo/orphan-002.bin",
-      "quarantined/2026-01-15/files/demo/orphan-003.bin"
-    ]
+    "otterworks-file-quarantine": []
   },
   "sha256": {
-    "otterworks-audit-archive/audit-archive/year=2026/week=2026-01-15/audit_events.jsonl.gz": "b689b755423851d091ea16073305e70fb9d233f5c7127e5b43d4aa72dc9fc4dc",
-    "otterworks-audit-archive/reports/compliance/audit-archive/2026-01-15/report.json": "07d638877ea8dca0720a818b1069272abe6f8eeaa76c08f88e47505aa9d63559",
     "otterworks-data-lake/analytics/daily/year=2025/month=12/day=17/top_users.jsonl.gz": "e78a392082b0575495ff17dc63d8f1cc685395ee20ae88202b55faffa81a51e4",
     "otterworks-data-lake/analytics/daily/year=2025/month=12/day=18/top_users.jsonl.gz": "40be66a4f14e41df9fc2d025c95b9363c442100674be2de842f5ba36fa47cfba",
     "otterworks-data-lake/analytics/daily/year=2025/month=12/day=19/top_users.jsonl.gz": "a237c9675fe8b55048896f5fc83278f08940f881e25cd167aa02427f34beeb46",
@@ -989,31 +1056,11 @@
     "otterworks-data-lake/analytics/daily/year=2026/month=01/day=15/hourly_breakdown.json.gz": "92c13eaf634e4455a4dacdb1cc17f90ae09b9838e33a7e0e1752dde42c782cdd",
     "otterworks-data-lake/analytics/daily/year=2026/month=01/day=15/summary.json.gz": "c44a796e83a9d6dba7830399ebdc4ae57910fb19ee487d7dd8cfc8b1d616f00f",
     "otterworks-data-lake/analytics/daily/year=2026/month=01/day=15/top_users.jsonl.gz": "ae713c2d592cc6c3250d87fc00b3850de9ef78bd5425e01c2758809d31fa1317",
-    "otterworks-data-lake/reports/analytics/daily/2026-01-15/report.json": "30e8cad50d28df034cf5c5d530ca8e8be769f74194878f81259576c916bf8fbd",
-    "otterworks-data-lake/reports/storage-cleanup/2026-01-15/report.json": "38294a885f3fa71cf2d7cf7dd4abcc380b99650e0928f1ccce28a63b658cd87e",
-    "otterworks-data-lake/reports/user-activity/2026-01-15/activity_report.json": "b61c337fac2914daccf25637b5becfe192bf9a6ac1e493472df42361f68bfc87",
-    "otterworks-data-lake/reports/user-activity/2026-01-15/user_summaries.jsonl": "225ba37f57ffebe7673f0b5a9ad02fa2886163eacbdee7cfa345fd3e42dd7dc5",
-    "otterworks-data-lake/reports/user-activity/latest/activity_report.json": "b61c337fac2914daccf25637b5becfe192bf9a6ac1e493472df42361f68bfc87",
-    "otterworks-file-quarantine/quarantined/2026-01-15/files/demo/orphan-000.bin": "88f6811ab5d8fc6d3177f9b7609ae0fcebfda187e5046b62d38bb539e88b74d7",
-    "otterworks-file-quarantine/quarantined/2026-01-15/files/demo/orphan-001.bin": "88f6811ab5d8fc6d3177f9b7609ae0fcebfda187e5046b62d38bb539e88b74d7",
-    "otterworks-file-quarantine/quarantined/2026-01-15/files/demo/orphan-002.bin": "88f6811ab5d8fc6d3177f9b7609ae0fcebfda187e5046b62d38bb539e88b74d7",
-    "otterworks-file-quarantine/quarantined/2026-01-15/files/demo/orphan-003.bin": "88f6811ab5d8fc6d3177f9b7609ae0fcebfda187e5046b62d38bb539e88b74d7"
+    "otterworks-data-lake/reports/analytics/daily/2026-01-15/report.json": "30e8cad50d28df034cf5c5d530ca8e8be769f74194878f81259576c916bf8fbd"
   },
   "volatile_fields": {
-    "otterworks-audit-archive/reports/compliance/audit-archive/2026-01-15/report.json": {
-      "generated_at": "2026-01-15T00:00:00.365233+00:00"
-    },
     "otterworks-data-lake/reports/analytics/daily/2026-01-15/report.json": {
-      "generated_at": "2026-01-15T00:00:05.588634+00:00"
-    },
-    "otterworks-data-lake/reports/storage-cleanup/2026-01-15/report.json": {
-      "generated_at": "2026-01-15T00:00:00.241752+00:00"
-    },
-    "otterworks-data-lake/reports/user-activity/2026-01-15/activity_report.json": {
-      "generated_at": "2026-01-15T00:00:00.302560+00:00"
-    },
-    "otterworks-data-lake/reports/user-activity/latest/activity_report.json": {
-      "generated_at": "2026-01-15T00:00:00.302560+00:00"
+      "generated_at": "2026-01-15T00:00:05.690509+00:00"
     }
   }
 }
