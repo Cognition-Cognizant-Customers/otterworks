@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_documents",
   "namespace": "demo",
-  "generated_at": "2026-08-17T05:32:05Z",
+  "generated_at": "2026-08-17T05:42:15Z",
   "run_mode": "fixture",
   "target": {
     "database": "ow_tp_demo",

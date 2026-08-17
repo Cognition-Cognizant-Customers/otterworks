@@ -27,6 +27,7 @@ from documents_model import (
     process_document,
     process_snapshot,
     process_version,
+    quarantine_version_for_parent,
 )
 from pymongo import ASCENDING, ReplaceOne
 
@@ -122,6 +123,7 @@ def migrate(ns: str) -> dict[str, int]:
                 if document_id_from_row(row) is not None
             ]
             versions_by_document: dict[str, list[dict[str, Any] | None]] = defaultdict(list)
+            valid_version_rows_by_document: dict[str, list[tuple[Any, ...]]] = defaultdict(list)
             version_quarantine: list[dict[str, Any]] = []
             version_cursor = conn.cursor(name=f"ow_tp_versions_{documents_written}")
             version_cursor.itersize = BATCH_SIZE
@@ -138,6 +140,8 @@ def migrate(ns: str) -> dict[str, int]:
             for version_row in version_cursor:
                 document_id, version, quarantine = process_version(ns, version_row)
                 versions_by_document[document_id].append(version)
+                if version is not None:
+                    valid_version_rows_by_document[document_id].append(version_row)
                 if quarantine is not None:
                     version_quarantine.append(quarantine)
             version_cursor.close()
@@ -159,6 +163,12 @@ def migrate(ns: str) -> dict[str, int]:
                     gaps_detected += int(has_gap)
                 elif quarantine is not None:
                     document_quarantine.append(quarantine)
+                    document_quarantine.extend(
+                        quarantine_version_for_parent(ns, version_row)
+                        for version_row in valid_version_rows_by_document.get(
+                            document_id, []
+                        )
+                    )
                     if document_id != "<null>":
                         quarantined_document_ids.add(document_id)
 

@@ -4,6 +4,8 @@ from documents_model import (
     VERSION_ARRAY_BOUND,
     missing_versions_for,
     process_document,
+    process_version,
+    quarantine_version_for_parent,
     utc_datetime,
 )
 
@@ -91,6 +93,38 @@ def test_version_bound_counts_only_embedded_versions():
 
     assert quarantine is None
     assert len(document["versions"]) == VERSION_ARRAY_BOUND - 4
+
+
+def test_versions_are_quarantined_when_parent_document_is_rejected():
+    version_rows = [
+        (
+            f"version-{number}",
+            "doc-1",
+            number,
+            f"Version {number}",
+            "Body",
+            "owner-1",
+            datetime(2026, 8, 1, tzinfo=timezone.utc),
+        )
+        for number in (1, 2)
+    ]
+    parsed_versions = [process_version("demo", row) for row in version_rows]
+    document, quarantine, _ = process_document(
+        "demo",
+        document_row(title=None),
+        [version for _, version, _ in parsed_versions],
+    )
+    version_quarantine = [
+        quarantine_version_for_parent("demo", row) for row in version_rows
+    ]
+
+    assert all(version is not None and error is None for _, version, error in parsed_versions)
+    assert document is None
+    assert quarantine["reason"] == "null_required_field"
+    assert len(version_quarantine) == len(version_rows)
+    assert all(record["reason"] == "parent_quarantined" for record in version_quarantine)
+    assert version_quarantine[0]["raw"]["title"] == "Version 1"
+    assert version_quarantine[1]["raw"]["content"] == "Body"
 
 
 def test_required_null_field_is_quarantined():

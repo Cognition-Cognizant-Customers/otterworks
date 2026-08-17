@@ -340,6 +340,21 @@ def process_version(
     )
 
 
+def quarantine_version_for_parent(
+    ns: str,
+    row: tuple[Any, ...],
+) -> dict[str, Any]:
+    document_id = source_id_text(row[1])
+    return quarantine_record(
+        ns,
+        "document_versions",
+        row[0],
+        "parent_quarantined",
+        f"parent document {document_id} was quarantined and version was not embedded",
+        raw_record(VERSION_COLUMNS, row),
+    )
+
+
 def process_document(
     ns: str,
     row: tuple[Any, ...],
