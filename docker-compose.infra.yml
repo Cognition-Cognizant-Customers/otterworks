@@ -5,7 +5,7 @@ services:
     container_name: otterworks-postgres
     environment:
       POSTGRES_USER: otterworks
-      POSTGRES_PASSWORD: otterworks_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-otterworks_dev}
       POSTGRES_DB: otterworks
     ports:
     - 5432:5432
