@@ -317,7 +317,7 @@ def main() -> int:
         "unverified_paths": [
             "Atlas cluster write path, $jsonSchema validator DDL on Atlas, and Atlas index "
             "creation: this run targets the local mongo:7 fixture only "
-            "(docker-compose.tp-mongodb.yml); the parent owns the single live window.",
+            "(docker-compose.mongo-fixture.yml); the parent owns the single live window.",
             "Atlas-side authentication, TLS, and access-list behaviour are exercised only by "
             "the parent's live run.",
             "Per-object S3 existence for the 9,960 non-orphan items: the seeded estate writes "

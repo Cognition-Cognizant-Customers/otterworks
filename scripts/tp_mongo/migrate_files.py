@@ -59,12 +59,15 @@ KNOWN_ATTRS = frozenset({
 })
 # Absent or null in any of these is a hard failure into quarantine.
 REQUIRED_ATTRS = ("id", "ns", "s3_key", "size_bytes")
-# A required attribute also has a required source type: a wrongly typed value is
-# attributed to quarantine instead of crashing the run or being rejected by the
-# target validator halfway through a batch.
-REQUIRED_ATTR_TYPES: dict[str, type | tuple[type, ...]] = {
-    "id": str, "ns": str, "s3_key": str, "size_bytes": (int, Decimal),
+# Source type every attribute must carry to satisfy the target validator below. A
+# wrongly typed or out-of-range value is attributed to quarantine instead of
+# crashing the run or being rejected by the validator halfway through a batch.
+ATTR_TYPES: dict[str, type | tuple[type, ...]] = {
+    "id": str, "ns": str, "name": str, "mime_type": str, "s3_key": str,
+    "folder_id": str, "owner_id": str, "size_bytes": (int, Decimal),
+    "version": (int, Decimal), "is_trashed": bool,
 }
+ATTR_MINIMUMS = {"size_bytes": 0, "version": 1}
 CARRIED_ATTRS = ("name", "mime_type", "size_bytes", "s3_key", "folder_id",
                  "owner_id", "version", "is_trashed")
 TIMESTAMP_ATTRS = ("created_at", "updated_at")
@@ -186,24 +189,30 @@ def transform(item: dict) -> tuple[dict | None, dict | None]:
     item_id = item.get("id")
     source_key = item_id if isinstance(item_id, str) and item_id else None
 
+    def rejected(reason: str) -> tuple[None, dict]:
+        return None, {"tenant": str(item.get("ns") or ""), "reason": reason,
+                      "source_key": source_key, "raw_item": raw}
+
     for attr in REQUIRED_ATTRS:
         if attr not in item:
-            return None, {"tenant": str(item.get("ns") or ""),
-                          "reason": f"missing_required_attribute:{attr}",
-                          "source_key": source_key, "raw_item": raw}
+            return rejected(f"missing_required_attribute:{attr}")
         if item[attr] is None or item[attr] == "":
-            return None, {"tenant": str(item.get("ns") or ""),
-                          "reason": f"null_required_attribute:{attr}",
-                          "source_key": source_key, "raw_item": raw}
-        if isinstance(item[attr], bool) or not isinstance(item[attr], REQUIRED_ATTR_TYPES[attr]):
-            return None, {"tenant": str(item.get("ns") or ""),
-                          "reason": f"wrongly_typed_required_attribute:{attr}",
-                          "source_key": source_key, "raw_item": raw}
+            return rejected(f"null_required_attribute:{attr}")
 
     for attr in CARRIED_ATTRS + TIMESTAMP_ATTRS:
         if attr in item and item[attr] is None:
-            return None, {"tenant": item["ns"], "reason": f"null_attribute:{attr}",
-                          "source_key": source_key, "raw_item": raw}
+            return rejected(f"null_attribute:{attr}")
+
+    for attr, expected in ATTR_TYPES.items():
+        if attr not in item:
+            continue
+        value = item[attr]
+        # bool subclasses int, so a flag and a number are never interchangeable.
+        if isinstance(value, bool) is not (expected is bool) or not isinstance(value, expected):
+            required = "_required" if attr in REQUIRED_ATTRS else ""
+            return rejected(f"wrongly_typed{required}_attribute:{attr}")
+        if attr in ATTR_MINIMUMS and value < ATTR_MINIMUMS[attr]:
+            return rejected(f"out_of_range_attribute:{attr}")
 
     doc: dict[str, Any] = {"_id": item["id"], "tenant": item["ns"]}
     for attr in CARRIED_ATTRS:

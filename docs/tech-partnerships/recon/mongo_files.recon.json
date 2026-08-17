@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_files",
   "namespace": "demo",
-  "generated_at": "2026-08-17T04:55:54Z",
+  "generated_at": "2026-08-17T05:04:30Z",
   "run_mode": "fixture",
   "checks": [
     {
@@ -238,7 +238,7 @@
   ],
   "recon_command_for_live_recompute": "MONGO_URI=<atlas-uri> uv run scripts/tp_mongo/recon_files.py --ns demo --run-mode live",
   "unverified_paths": [
-    "Atlas cluster write path, $jsonSchema validator DDL on Atlas, and Atlas index creation: this run targets the local mongo:7 fixture only (docker-compose.tp-mongodb.yml); the parent owns the single live window.",
+    "Atlas cluster write path, $jsonSchema validator DDL on Atlas, and Atlas index creation: this run targets the local mongo:7 fixture only (docker-compose.mongo-fixture.yml); the parent owns the single live window.",
     "Atlas-side authentication, TLS, and access-list behaviour are exercised only by the parent's live run.",
     "Per-object S3 existence for the 9,960 non-orphan items: the seeded estate writes no objects to the otterworks-files bucket, so 'no backing object' is taken from the seed's planted /missing/ key segment, which is the same definition the immutable baseline validator (testdata/legacy/validate.py) uses.",
     "Binary (BSON binary) attribute conversion: the seeded ns=demo estate contains no DynamoDB binary attributes, so that branch of the type mapping is implemented and unit-tested locally but not exercised by production seed data."

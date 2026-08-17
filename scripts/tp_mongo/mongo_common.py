@@ -19,7 +19,6 @@ import boto3
 from bson.binary import Binary
 from pymongo import MongoClient
 
-DEFAULT_MONGO_URI = "mongodb://localhost:27017"
 DB_PREFIX = "ow_tp"
 DYNAMO_TABLE = "otterworks-file-metadata"
 FILES_BUCKET = "otterworks-files"
@@ -32,7 +31,9 @@ NS_PATTERN = re.compile(r"[A-Za-z0-9_]+")
 
 
 def mongo_uri() -> str:
-    return os.getenv("MONGO_URI", DEFAULT_MONGO_URI)
+    """The target, or the shared local fixture on whichever port it publishes."""
+    fixture = f"mongodb://localhost:{os.getenv('MONGO_FIXTURE_PORT', '27017')}"
+    return os.getenv("MONGO_URI") or fixture
 
 
 def validate_ns(ns: str) -> str:

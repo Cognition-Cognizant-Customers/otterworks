@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from migrate_files import quarantine_id, transform  # noqa: E402
 from mongo_common import bson_value  # noqa: E402
+from recon_files import typed_correctly  # noqa: E402
 
 ITEM = {
     "id": "0af5ccb8-7313-4567-b3d8-03c22efbc3a2",
@@ -127,6 +128,29 @@ def test_wrongly_typed_required_value_is_quarantined_not_crashed():
         assert record["reason"] == f"wrongly_typed_required_attribute:{attr}"
 
 
+def test_wrongly_typed_optional_value_is_quarantined_not_left_to_the_validator():
+    """Anything the target validator constrains is attributed before the write."""
+    for attr, bad in (("name", Decimal("7")), ("owner_id", Decimal("7")),
+                      ("version", "9"), ("is_trashed", Decimal("1"))):
+        doc, record = transform(item(**{attr: bad}))
+        assert doc is None
+        assert record["reason"] == f"wrongly_typed_attribute:{attr}"
+
+
+def test_out_of_range_value_is_quarantined_not_left_to_the_validator():
+    for attr, bad in (("size_bytes", Decimal("-1")), ("version", Decimal("0"))):
+        doc, record = transform(item(**{attr: bad}))
+        assert doc is None
+        assert record["reason"] == f"out_of_range_attribute:{attr}"
+
+
+def test_absent_optional_attributes_still_migrate():
+    doc, bad = transform(item(version=..., is_trashed=..., created_at=..., name=...))
+    assert bad is None
+    assert set(doc) == {"_id", "tenant", "mime_type", "size_bytes", "s3_key",
+                        "folder_id", "owner_id", "updated_at", "s3_object_missing"}
+
+
 def test_distinct_malformed_items_never_share_a_quarantine_id():
     """Two items rejected for the same reason with no usable key must both survive."""
     _, first = transform(item(id=..., name="a.zip"))
@@ -134,6 +158,14 @@ def test_distinct_malformed_items_never_share_a_quarantine_id():
     assert first["source_key"] is None and second["source_key"] is None
     assert quarantine_id(first) != quarantine_id(second)
     assert quarantine_id(first) == quarantine_id(transform(item(id=..., name="a.zip"))[1])
+
+
+def test_recon_type_check_accepts_a_document_that_omits_optional_attributes():
+    """A sparse item is a correct migration, not a BSON-type failure."""
+    doc, _ = transform(item(version=..., is_trashed=..., created_at=..., updated_at=...))
+    assert typed_correctly(doc)
+    assert not typed_correctly({**doc, "size_bytes": "166995131"})
+    assert not typed_correctly({**doc, "version": True})
 
 
 def test_bson_value_keeps_fractional_numbers_as_floats():
