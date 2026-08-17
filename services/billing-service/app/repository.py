@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import UUID
 
 import psycopg
+import pymongo
 from bson import Decimal128
 from pymongo import MongoClient
 
@@ -19,9 +20,12 @@ from app.domain import (
     PlanRow,
     RatedChargeRow,
     SubscriptionRow,
+    consume_credits,
     deterministic_uuid,
     invoice_ids,
     invoice_totals,
+    line_amount_for_storage,
+    ordered_lines,
     preview,
 )
 
@@ -283,13 +287,14 @@ class MongoInvoicingRepository:
             ]
         )
 
-    def rated_charge(self, tenant_id: UUID, period_start: date) -> RatedChargeRow:
+    def rated_charge(self, tenant_id: UUID, period_start: date, session=None) -> RatedChargeRow:
         row = self.database.billing_rated_charges.find_one(
             {
                 "ns": settings.mongo_ns,
                 "tenant_id": str(tenant_id),
                 "period_start": self._date(period_start),
-            }
+            },
+            session=session,
         )
         if row is None:
             raise LookupError("rated charge not found")
@@ -326,35 +331,41 @@ class MongoInvoicingRepository:
         )
         if row is None:
             return []
-        return [
-            InvoiceLine(
-                line["line_no"],
-                line["line_type"],
-                line["description"],
-                self._decimal(line["amount"]),
-                Decimal("0"),
-                Decimal("0"),
-                self._decimal(line["amount"]),
-            )
-            for line in sorted(row["lines"], key=lambda value: value["line_no"])
-        ]
+        return ordered_lines(
+            [
+                InvoiceLine(
+                    line["line_no"],
+                    line["line_type"],
+                    line["description"],
+                    self._decimal(line["amount"]),
+                    Decimal("0"),
+                    Decimal("0"),
+                    self._decimal(line["amount"]),
+                )
+                for line in row["lines"]
+            ]
+        )
 
     def issue(
         self, plan: PlanRow, tax_exempt: bool, tenant_id: UUID, period_start: date, period_end: date
     ) -> InvoiceRow:
-        rated = self.rated_charge(tenant_id, period_start)
-        notes = self.credit_notes(tenant_id, positive_only=True)
-        credit = sum((note.remaining_amount for note in notes), Decimal("0"))
-        calculated = preview(
-            tenant_id, period_start, period_end, plan, rated.overage_amount, tax_exempt, credit
-        )
-        subtotal, tax, credit_applied, total = invoice_totals(calculated)
-        if total < 0:
-            raise ValueError("invoice total cannot be negative")
         period_id, invoice_id = invoice_ids(tenant_id, period_start)
         session = self._client().start_session()
         try:
             with session, session.start_transaction():
+                rated = self.rated_charge(tenant_id, period_start, session=session)
+                notes = self.credit_notes(tenant_id, session=session, positive_only=True)
+                credit = sum((note.remaining_amount for note in notes), Decimal("0"))
+                calculated = preview(
+                    tenant_id,
+                    period_start,
+                    period_end,
+                    plan,
+                    rated.overage_amount,
+                    tax_exempt,
+                    credit,
+                )
+                subtotal, tax, credit_applied, total = invoice_totals(calculated)
                 self.database.billing_invoices.replace_one(
                     {"_id": str(invoice_id), "ns": settings.mongo_ns},
                     {
@@ -374,28 +385,21 @@ class MongoInvoicingRepository:
                                 "line_no": line.line_no,
                                 "line_type": line.line_type,
                                 "description": line.description,
-                                "amount": self._money(
-                                    -line.total if line.line_type == "credit" else line.amount
-                                ),
+                                "amount": self._money(line_amount_for_storage(line)),
                             }
-                            for line in calculated.lines
+                            for line in ordered_lines(calculated.lines)
                         ],
                         "source": {"system": "billing-service", "module": "invoicing"},
                     },
                     upsert=True,
                     session=session,
                 )
-                outstanding = credit_applied
-                for note in notes:
-                    if outstanding <= 0:
-                        break
-                    remaining = max(note.remaining_amount - outstanding, Decimal("0"))
+                for note_id, remaining in consume_credits(notes, credit_applied):
                     self.database.billing_credit_notes.update_one(
-                        {"_id": str(note.note_id), "ns": settings.mongo_ns},
+                        {"_id": str(note_id), "ns": settings.mongo_ns},
                         {"$set": {"remaining_amount": self._money(remaining)}},
                         session=session,
                     )
-                    outstanding = max(outstanding - note.remaining_amount, Decimal("0"))
         finally:
             session.end_session()
         return InvoiceRow(
@@ -410,18 +414,26 @@ class MongoInvoicingRepository:
             calculated.lines,
         )
 
-    def invoice_state(self, invoice_id: UUID) -> dict[str, str] | None:
+    def invoice_state(self, invoice_id: UUID, session=None) -> dict[str, str]:
         row = self.database.billing_invoices.find_one(
-            {"_id": str(invoice_id), "ns": settings.mongo_ns}
+            {"_id": str(invoice_id), "ns": settings.mongo_ns},
+            session=session,
         )
         if row is None:
-            return None
+            raise LookupError("invoice state not found")
         return {
             "status": row["status"],
             "subtotal": f"{self._decimal(row['subtotal']):.2f}",
             "tax": f"{self._decimal(row['tax']):.2f}",
             "total": f"{self._decimal(row['total']):.2f}",
         }
+
+    def ping(self) -> bool:
+        try:
+            self._client().admin.command("ping")
+        except pymongo.errors.PyMongoError:
+            return False
+        return True
 
     @staticmethod
     def _validators() -> dict[str, dict]:

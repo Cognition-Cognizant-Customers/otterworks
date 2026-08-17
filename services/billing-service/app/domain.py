@@ -164,7 +164,32 @@ def invoice_totals(preview_result: InvoicePreview) -> tuple[Decimal, Decimal, De
     credit = next(
         line.credit_applied for line in preview_result.lines if line.line_type == "credit"
     )
-    return money(subtotal), money(tax), credit, money(subtotal + tax - credit)
+    total = money(subtotal + tax - credit)
+    if total < 0:
+        raise ValueError("invoice total cannot be negative")
+    return money(subtotal), money(tax), credit, total
+
+
+def ordered_lines(lines: list[InvoiceLine]) -> list[InvoiceLine]:
+    return sorted(lines, key=lambda line: line.line_no)
+
+
+def line_amount_for_storage(line: InvoiceLine) -> Decimal:
+    return -line.total if line.line_type == "credit" else line.amount
+
+
+def consume_credits(
+    notes: list[CreditNoteRow], credit_applied: Decimal
+) -> list[tuple[UUID, Decimal]]:
+    outstanding = credit_applied
+    updates: list[tuple[UUID, Decimal]] = []
+    for note in sorted(notes, key=lambda item: (item.issued_on, item.note_id)):
+        if outstanding <= 0:
+            break
+        remaining = max(note.remaining_amount - outstanding, Decimal("0"))
+        updates.append((note.note_id, remaining))
+        outstanding = max(outstanding - note.remaining_amount, Decimal("0"))
+    return updates
 
 
 class PlansRepository(Protocol):

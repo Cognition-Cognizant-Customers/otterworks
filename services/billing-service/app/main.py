@@ -45,11 +45,7 @@ def health() -> dict[str, str]:
             connection.execute("SELECT 1")
     except psycopg.Error as error:
         raise HTTPException(status_code=503, detail="database unavailable") from error
-    try:
-        MongoInvoicingRepository()._client().admin.command("ping")
-        mongo_status = "reachable"
-    except Exception:
-        mongo_status = "unreachable"
+    mongo_status = "reachable" if MongoInvoicingRepository().ping() else "unreachable"
     return {"status": "healthy", "service": settings.app_name, "mongo": mongo_status}
 
 

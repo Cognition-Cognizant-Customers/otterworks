@@ -5,13 +5,18 @@ from uuid import UUID
 import pytest
 
 from app.domain import (
+    CreditNoteRow,
     PlanRow,
+    consume_credits,
     deterministic_uuid,
     format_money,
     invoice_ids,
     invoice_totals,
+    line_amount_for_storage,
+    ordered_lines,
     preview,
 )
+from app.repository import MongoInvoicingRepository
 
 TENANT = UUID("00000000-0000-0000-0000-000000000006")
 PLAN = PlanRow(
@@ -57,44 +62,105 @@ def test_preview_caps_credit_at_rounded_pre_tax_plus_tax_total() -> None:
 
 
 @pytest.mark.rule("INVOICING-005")
-def test_invoice_totals_are_based_on_persisted_line_rounding() -> None:
+def test_invoice_lines_are_ordered_and_unknown_invoice_is_empty() -> None:
     result = preview(TENANT, START, END, PLAN, Decimal("5.56"), False, Decimal("0"))
-    assert invoice_totals(result) == (
-        Decimal("54.56"),
-        Decimal("4.50"),
-        Decimal("0"),
-        Decimal("59.06"),
-    )
+    lines = ordered_lines([result.lines[1], result.lines[0]])
+    assert [(line.line_no, line.line_type, line.description, line.amount) for line in lines] == [
+        (1, "plan", "STARTER", Decimal("49.00")),
+        (2, "usage", "usage overage", Decimal("5.56")),
+    ]
+    assert ordered_lines([]) == []
+
+    class EmptyInvoices:
+        def find_one(self, *_args, **_kwargs):
+            return None
+
+    class EmptyDatabase:
+        billing_invoices = EmptyInvoices()
+
+    class EmptyClient:
+        def __getitem__(self, _name):
+            return EmptyDatabase()
+
+    assert MongoInvoicingRepository(EmptyClient()).invoice_lines(UUID(int=0)) == []
 
 
 @pytest.mark.rule("INVOICING-006")
 def test_invoice_ids_and_line_ids_are_md5_uuid_text() -> None:
     period_id, invoice_id = invoice_ids(TENANT, START)
-    assert period_id == deterministic_uuid(f"{TENANT}{START.isoformat()}")
-    assert deterministic_uuid(f"{invoice_id}1").version is None
-    assert str(invoice_id) == str(invoice_id).lower()
+    assert str(period_id) == "1b886a8c-7ca6-751b-6c6f-d9435d323eb1"
+    assert str(invoice_id) == "ec9434d5-6b88-cc45-051d-2187049adc12"
+    assert str(deterministic_uuid(f"{invoice_id}1")) == ("fdcfba40-b3a1-f198-fcd8-51e75ae397a8")
+    tenant_9 = UUID("00000000-0000-0000-0000-000000000009")
+    period_id, invoice_id = invoice_ids(tenant_9, START)
+    assert str(period_id) == "5dc02199-0345-1f48-ab13-8eeefeba5910"
+    assert str(invoice_id) == "f947416b-6478-ac32-911a-12ca7f03a6fb"
+    credit_line = preview(
+        TENANT, START, END, PLAN, Decimal("5.56"), False, Decimal("100")
+    ).lines[4]
+    assert line_amount_for_storage(credit_line) == -credit_line.total
+    assert line_amount_for_storage(credit_line) == Decimal("59.06")
 
 
 @pytest.mark.rule("INVOICING-007")
 def test_negative_total_is_preserved_for_rejection() -> None:
+    normal = preview(TENANT, START, END, PLAN, Decimal("5.56"), False, Decimal("0"))
+    assert invoice_totals(normal) == (
+        Decimal("54.56"),
+        Decimal("4.50"),
+        Decimal("0"),
+        Decimal("59.06"),
+    )
     tiny_plan = PlanRow(
         PLAN.plan_id, PLAN.code, PLAN.tier, Decimal("0.01"), 100, PLAN.overage_rate, True
     )
     result = preview(TENANT, START, END, tiny_plan, Decimal("0.06"), False, Decimal("0.08"))
-    assert invoice_totals(result)[3] < 0
+    with pytest.raises(ValueError, match="invoice total cannot be negative"):
+        invoice_totals(result)
 
 
 @pytest.mark.rule("INVOICING-008")
 def test_credit_consumption_arithmetic_uses_pre_update_remaining() -> None:
-    outstanding = Decimal("53.04")
-    first_remaining = Decimal("5.00")
-    first_after = max(first_remaining - outstanding, Decimal("0"))
-    outstanding = max(outstanding - first_remaining, Decimal("0"))
-    second_remaining = Decimal("55.00")
-    second_after = max(second_remaining - outstanding, Decimal("0"))
-    assert first_after == 0
-    assert outstanding == Decimal("48.04")
-    assert second_after == Decimal("6.96")
+    notes = [
+        CreditNoteRow(
+            UUID("70000000-0000-0000-0000-000000000006"),
+            TENANT,
+            date(2026, 1, 31),
+            Decimal("55.00"),
+            Decimal("55.00"),
+        ),
+        CreditNoteRow(
+            UUID("70000000-0000-0000-0000-000000000005"),
+            TENANT,
+            date(2026, 1, 31),
+            Decimal("5.00"),
+            Decimal("5.00"),
+        ),
+    ]
+    assert consume_credits(notes, Decimal("53.04")) == [
+        (UUID("70000000-0000-0000-0000-000000000005"), Decimal("0")),
+        (UUID("70000000-0000-0000-0000-000000000006"), Decimal("6.96")),
+    ]
+    equal_date = [
+        CreditNoteRow(
+            UUID("70000000-0000-0000-0000-000000000001"),
+            TENANT,
+            date(2026, 1, 31),
+            Decimal("30.00"),
+            Decimal("30.00"),
+        ),
+        CreditNoteRow(
+            UUID("70000000-0000-0000-0000-000000000002"),
+            TENANT,
+            date(2026, 1, 31),
+            Decimal("30.00"),
+            Decimal("30.00"),
+        ),
+    ]
+    assert consume_credits(equal_date, Decimal("53.04")) == [
+        (UUID("70000000-0000-0000-0000-000000000001"), Decimal("0")),
+        (UUID("70000000-0000-0000-0000-000000000002"), Decimal("6.96")),
+    ]
 
 
 def test_seeded_preview_values_and_negative_zero_formatting() -> None:
