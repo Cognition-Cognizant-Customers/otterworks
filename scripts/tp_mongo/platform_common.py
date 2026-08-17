@@ -53,6 +53,8 @@ def _uri_parts(uri: str) -> tuple[str, str, str, str] | None:
         return scheme, userinfo, host, suffix
     if "@" not in remainder:
         return None
+    if ":" not in authority or _has_numeric_port(authority):
+        return None
 
     # An @ beyond the authority boundary means a malformed URI with an
     # unescaped delimiter in its userinfo. Fail closed using the last @.
@@ -65,6 +67,19 @@ def _uri_parts(uri: str) -> tuple[str, str, str, str] | None:
         if position != -1:
             host_end = min(host_end, position)
     return scheme, userinfo, host_and_suffix[:host_end], host_and_suffix[host_end:]
+
+
+def _has_numeric_port(authority: str) -> bool:
+    """Recognize a credential-free host:port authority."""
+    if authority.startswith("["):
+        closing = authority.find("]")
+        return (
+            closing != -1
+            and authority[closing + 1:closing + 2] == ":"
+            and authority[closing + 2:].isdigit()
+        )
+    host, separator, port = authority.rpartition(":")
+    return bool(separator and host and port.isdigit())
 
 
 def redacted_uri(uri: str) -> str:

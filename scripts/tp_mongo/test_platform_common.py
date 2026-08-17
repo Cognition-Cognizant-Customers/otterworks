@@ -47,3 +47,9 @@ def test_redacted_uri_for_report_removes_userinfo() -> None:
     assert rendered == "mongodb+srv://cluster.example/ow_tp_redact"
     assert "alice" not in rendered
     assert "pa%40ss%2Fword" not in rendered
+
+
+def test_credential_free_at_in_query_is_unchanged() -> None:
+    uri = "mongodb://localhost:27017/db?appName=a@b"
+    assert redacted_uri(uri) == uri
+    assert redacted_uri_for_report(uri) == uri
