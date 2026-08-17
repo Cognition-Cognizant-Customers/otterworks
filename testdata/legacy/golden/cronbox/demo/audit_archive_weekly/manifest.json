@@ -162,319 +162,21 @@
   "job": "audit_archive_weekly",
   "meilisearch": {
     "documents": {
-      "ids": [
-        "doc-000",
-        "doc-001",
-        "doc-002",
-        "doc-003",
-        "doc-004",
-        "doc-005",
-        "doc-006",
-        "doc-007",
-        "doc-008",
-        "doc-009",
-        "doc-010",
-        "doc-011",
-        "doc-012",
-        "doc-013",
-        "doc-014",
-        "doc-015",
-        "doc-016",
-        "doc-017",
-        "doc-018",
-        "doc-019",
-        "doc-020",
-        "doc-021",
-        "doc-022",
-        "doc-023",
-        "doc-024",
-        "doc-025",
-        "doc-026",
-        "doc-027",
-        "doc-028",
-        "doc-029",
-        "doc-030",
-        "doc-031",
-        "doc-032",
-        "doc-033",
-        "doc-034",
-        "doc-035",
-        "doc-036",
-        "doc-037",
-        "doc-038",
-        "doc-039",
-        "doc-040",
-        "doc-041",
-        "doc-042",
-        "doc-043",
-        "doc-044",
-        "doc-045",
-        "doc-046",
-        "doc-047",
-        "doc-048",
-        "doc-049",
-        "doc-050",
-        "doc-051",
-        "doc-052",
-        "doc-053",
-        "doc-054",
-        "doc-055",
-        "doc-056",
-        "doc-057",
-        "doc-058",
-        "doc-059",
-        "doc-060",
-        "doc-061",
-        "doc-062",
-        "doc-063",
-        "doc-064",
-        "doc-065",
-        "doc-066",
-        "doc-067",
-        "doc-068",
-        "doc-069",
-        "doc-070",
-        "doc-071",
-        "doc-072",
-        "doc-073",
-        "doc-074",
-        "doc-075",
-        "doc-076",
-        "doc-077",
-        "doc-078",
-        "doc-079",
-        "doc-080",
-        "doc-081",
-        "doc-082",
-        "doc-083",
-        "doc-084",
-        "doc-085",
-        "doc-086",
-        "doc-087",
-        "doc-088",
-        "doc-089",
-        "doc-090",
-        "doc-091",
-        "doc-092",
-        "doc-093",
-        "doc-094",
-        "doc-095",
-        "doc-096",
-        "doc-097",
-        "doc-098",
-        "doc-099",
-        "doc-100",
-        "doc-101",
-        "doc-102",
-        "doc-103",
-        "doc-104",
-        "doc-105",
-        "doc-106",
-        "doc-107",
-        "doc-108",
-        "doc-109",
-        "doc-110",
-        "doc-111",
-        "doc-112",
-        "doc-113",
-        "doc-114",
-        "doc-115",
-        "doc-116",
-        "doc-117",
-        "doc-118",
-        "doc-119",
-        "doc-120",
-        "doc-121",
-        "doc-122",
-        "doc-123",
-        "doc-124"
-      ],
+      "ids": [],
       "settings": {
-        "dictionary": [],
-        "displayedAttributes": [
-          "*"
-        ],
-        "distinctAttribute": null,
-        "faceting": {
-          "maxValuesPerFacet": 100,
-          "sortFacetValuesBy": {
-            "*": "alpha"
-          }
-        },
-        "filterableAttributes": [
-          "created_at",
-          "owner_id",
-          "tags",
-          "type",
-          "updated_at"
-        ],
-        "nonSeparatorTokens": [],
-        "pagination": {
-          "maxTotalHits": 1000
-        },
-        "proximityPrecision": "byWord",
-        "rankingRules": [
-          "words",
-          "typo",
-          "proximity",
-          "attribute",
-          "sort",
-          "exactness"
-        ],
-        "searchableAttributes": [
-          "title",
-          "content",
-          "tags"
-        ],
-        "separatorTokens": [],
-        "sortableAttributes": [
-          "created_at",
-          "updated_at"
-        ],
-        "stopWords": [],
-        "synonyms": {},
-        "typoTolerance": {
-          "disableOnAttributes": [],
-          "disableOnWords": [],
-          "enabled": true,
-          "minWordSizeForTypos": {
-            "oneTypo": 5,
-            "twoTypos": 9
-          }
-        }
+        "code": "index_not_found",
+        "link": "https://docs.meilisearch.com/errors#index_not_found",
+        "message": "Index `documents` not found.",
+        "type": "invalid_request"
       }
     },
     "files": {
-      "ids": [
-        "file-000",
-        "file-001",
-        "file-002",
-        "file-003",
-        "file-004",
-        "file-005",
-        "file-006",
-        "file-007",
-        "file-008",
-        "file-009",
-        "file-010",
-        "file-011",
-        "file-012",
-        "file-013",
-        "file-014",
-        "file-015",
-        "file-016",
-        "file-017",
-        "file-018",
-        "file-019",
-        "file-020",
-        "file-021",
-        "file-022",
-        "file-023",
-        "file-024",
-        "file-025",
-        "file-026",
-        "file-027",
-        "file-028",
-        "file-029",
-        "file-030",
-        "file-031",
-        "file-032",
-        "file-033",
-        "file-034",
-        "file-035",
-        "file-036",
-        "file-037",
-        "file-038",
-        "file-039",
-        "file-040",
-        "file-041",
-        "file-042",
-        "file-043",
-        "file-044",
-        "file-045",
-        "file-046",
-        "file-047",
-        "file-048",
-        "file-049",
-        "file-050",
-        "file-051",
-        "file-052",
-        "file-053",
-        "file-054",
-        "file-055",
-        "file-056",
-        "file-057",
-        "file-058",
-        "file-059",
-        "file-060",
-        "file-061",
-        "file-062",
-        "file-063",
-        "file-064",
-        "file-065",
-        "file-066",
-        "file-067",
-        "file-068",
-        "file-069",
-        "file-070",
-        "file-071"
-      ],
+      "ids": [],
       "settings": {
-        "dictionary": [],
-        "displayedAttributes": [
-          "*"
-        ],
-        "distinctAttribute": null,
-        "faceting": {
-          "maxValuesPerFacet": 100,
-          "sortFacetValuesBy": {
-            "*": "alpha"
-          }
-        },
-        "filterableAttributes": [
-          "created_at",
-          "folder_id",
-          "mime_type",
-          "owner_id",
-          "tags",
-          "type",
-          "updated_at"
-        ],
-        "nonSeparatorTokens": [],
-        "pagination": {
-          "maxTotalHits": 1000
-        },
-        "proximityPrecision": "byWord",
-        "rankingRules": [
-          "words",
-          "typo",
-          "proximity",
-          "attribute",
-          "sort",
-          "exactness"
-        ],
-        "searchableAttributes": [
-          "name",
-          "tags",
-          "mime_type"
-        ],
-        "separatorTokens": [],
-        "sortableAttributes": [
-          "created_at",
-          "size",
-          "updated_at"
-        ],
-        "stopWords": [],
-        "synonyms": {},
-        "typoTolerance": {
-          "disableOnAttributes": [],
-          "disableOnWords": [],
-          "enabled": true,
-          "minWordSizeForTypos": {
-            "oneTypo": 5,
-            "twoTypos": 9
-          }
-        }
+        "code": "index_not_found",
+        "link": "https://docs.meilisearch.com/errors#index_not_found",
+        "message": "Index `files` not found.",
+        "type": "invalid_request"
       }
     }
   },
@@ -995,13 +697,13 @@
   },
   "volatile_fields": {
     "otterworks-audit-archive/reports/compliance/audit-archive/2026-01-15/report.json": {
-      "generated_at": "2026-01-15T00:00:00.447144+00:00"
+      "generated_at": "2026-01-15T00:00:00.419697+00:00"
     },
     "otterworks-data-lake/reports/analytics/daily/2026-01-15/report.json": {
-      "generated_at": "2026-01-15T00:00:05.690509+00:00"
+      "generated_at": "2026-01-15T00:00:05.640314+00:00"
     },
     "otterworks-data-lake/reports/storage-cleanup/2026-01-15/report.json": {
-      "generated_at": "2026-01-15T00:00:00.237049+00:00"
+      "generated_at": "2026-01-15T00:00:00.348936+00:00"
     }
   }
 }

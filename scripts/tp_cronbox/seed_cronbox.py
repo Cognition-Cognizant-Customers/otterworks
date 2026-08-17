@@ -7,6 +7,9 @@ import argparse
 import gzip
 import json
 import subprocess
+import urllib.error
+import urllib.request
+from collections import Counter
 from datetime import timedelta
 from pathlib import Path
 
@@ -62,6 +65,24 @@ def clear_bucket(s3, bucket):
             )
     except s3.exceptions.NoSuchBucket:
         s3.create_bucket(Bucket=bucket)
+
+
+def clear_meilisearch():
+    base_url = "http://localhost:7700"
+    for index_uid in ("documents", "files"):
+        request = urllib.request.Request(
+            f"{base_url}/indexes/{index_uid}",
+            method="DELETE",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=15) as response:
+                if response.status not in (200, 202, 204):
+                    raise RuntimeError(
+                        f"unexpected MeiliSearch delete status {response.status}"
+                    )
+        except urllib.error.HTTPError as exc:
+            if exc.code != 404:
+                raise
 
 
 def seed_events(ns, run_date, sqs, dynamo):
@@ -260,9 +281,27 @@ def seed_files(ns, run_date, s3, dynamo):
     metadata = dynamo.Table(FILES)
     clear_table(metadata)
     referenced = []
+    mime_types = (
+        "text/plain",
+        "application/pdf",
+        "image/png",
+        "application/json",
+    )
+    folders = ("folder-1", "folder-2", "folder-3")
+    mime_distribution = Counter()
+    folder_distribution = Counter()
+    tag_distribution = Counter()
     for i in range(72):
         key = f"files/{ns}/file-{i:03d}.bin"
         referenced.append(key)
+        mime_type = mime_types[i % len(mime_types)]
+        folder_id = folders[i % len(folders)]
+        tags = ["legacy", f"tag-{i % 5}"]
+        file_name = "Fichier Δ ☕" if i == 7 else f"File {i}"
+        mime_distribution[mime_type] += 1
+        folder_distribution[folder_id] += 1
+        for tag in tags:
+            tag_distribution[tag] += 1
         s3.put_object(
             Bucket="otterworks-file-storage", Key=key, Body=f"file-{i}-{ns}".encode()
         )
@@ -270,12 +309,12 @@ def seed_files(ns, run_date, s3, dynamo):
             Item={
                 "id": f"file-{i:03d}",
                 "s3_key": key,
-                "file_name": f"File {i}",
+                "file_name": file_name,
                 "owner_id": f"user-{i % 12:03d}",
-                "mime_type": "text/plain",
-                "folder_id": "folder-1",
+                "mime_type": mime_type,
+                "folder_id": folder_id,
                 "size_bytes": i + 10,
-                "tags": ["legacy"],
+                "tags": tags,
                 "created_at": iso(date_value(run_date) - timedelta(days=i)),
                 "updated_at": iso(date_value(run_date)),
             }
@@ -308,6 +347,10 @@ def seed_files(ns, run_date, s3, dynamo):
         "orphan_keys": orphan_keys,
         "reverse_orphans": len(reverse_ids),
         "reverse_orphan_ids": reverse_ids,
+        "mime_type_distribution": dict(sorted(mime_distribution.items())),
+        "folder_distribution": dict(sorted(folder_distribution.items())),
+        "tag_distribution": dict(sorted(tag_distribution.items())),
+        "unicode_file": {"id": "file-007", "file_name": "Fichier Δ ☕"},
     }
 
 
@@ -410,6 +453,7 @@ def main():
     parser.add_argument("--run-date", required=True)
     args = parser.parse_args()
     s3, dynamo, sqs = clients()
+    clear_meilisearch()
     for bucket in BUCKETS:
         clear_bucket(s3, bucket)
     ensure_table(

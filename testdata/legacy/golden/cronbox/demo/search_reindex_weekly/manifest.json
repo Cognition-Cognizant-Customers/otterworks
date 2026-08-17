@@ -995,13 +995,13 @@
   },
   "volatile_fields": {
     "otterworks-audit-archive/reports/compliance/audit-archive/2026-01-15/report.json": {
-      "generated_at": "2026-01-15T00:00:00.447144+00:00"
+      "generated_at": "2026-01-15T00:00:00.419697+00:00"
     },
     "otterworks-data-lake/reports/analytics/daily/2026-01-15/report.json": {
-      "generated_at": "2026-01-15T00:00:05.690509+00:00"
+      "generated_at": "2026-01-15T00:00:05.640314+00:00"
     },
     "otterworks-data-lake/reports/storage-cleanup/2026-01-15/report.json": {
-      "generated_at": "2026-01-15T00:00:00.237049+00:00"
+      "generated_at": "2026-01-15T00:00:00.348936+00:00"
     }
   }
 }

@@ -1,7 +1,7 @@
 {
   "report_type": "storage_cleanup",
   "report_date": "2026-01-15",
-  "generated_at": "2026-01-15T00:00:00.237049+00:00",
+  "generated_at": "2026-01-15T00:00:00.348936+00:00",
   "inventory": {
     "total_objects": 76,
     "total_size_bytes": 878,

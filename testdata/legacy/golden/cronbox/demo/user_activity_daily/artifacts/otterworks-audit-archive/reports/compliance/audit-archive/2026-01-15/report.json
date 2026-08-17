@@ -1,7 +1,7 @@
 {
   "report_type": "audit_archive_compliance",
   "execution_date": "2026-01-15",
-  "generated_at": "2026-01-15T00:00:00.447144+00:00",
+  "generated_at": "2026-01-15T00:00:00.419697+00:00",
   "retention_policy": {
     "retention_days": 90,
     "cutoff_date": "2025-10-17T00:00:00Z"

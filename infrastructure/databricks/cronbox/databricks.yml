@@ -1,0 +1,10 @@
+bundle:
+  name: ow_tp_cronbox
+
+include:
+  - resources/*.yml
+
+variables:
+  sql_warehouse_id:
+    description: Existing serverless SQL warehouse used by the Cron Box jobs
+    default: 565cd2fd713738c4

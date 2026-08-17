@@ -430,6 +430,17 @@
       "sqs_valid_events": 240
     },
     "files": {
+      "folder_distribution": {
+        "folder-1": 24,
+        "folder-2": 24,
+        "folder-3": 24
+      },
+      "mime_type_distribution": {
+        "application/json": 18,
+        "application/pdf": 18,
+        "image/png": 18,
+        "text/plain": 18
+      },
       "orphan_keys": [
         "files/demo/orphan-000.bin",
         "files/demo/orphan-001.bin",
@@ -441,7 +452,19 @@
       "reverse_orphan_ids": [
         "reverse-orphan"
       ],
-      "reverse_orphans": 1
+      "reverse_orphans": 1,
+      "tag_distribution": {
+        "legacy": 72,
+        "tag-0": 15,
+        "tag-1": 15,
+        "tag-2": 14,
+        "tag-3": 14,
+        "tag-4": 14
+      },
+      "unicode_file": {
+        "file_name": "Fichier Δ ☕",
+        "id": "file-007"
+      }
     },
     "history": {
       "expected_history_days": 29,

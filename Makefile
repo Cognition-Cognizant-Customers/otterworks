@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-etl-gen-history legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean dbx-showcase dbx-showcase-help cronbox-up cronbox-seed cronbox-run cronbox-run-all cronbox-capture cronbox-reset cronbox-down
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-etl-gen-history legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean dbx-showcase dbx-showcase-help cronbox-up cronbox-seed cronbox-run cronbox-run-all cronbox-capture cronbox-reset cronbox-down tp-skeleton-validate tp-databricks-skeleton-validate tp-terraform-skeleton-validate tp-atlas-skeleton-validate tp-databricks-apply tp-terraform-apply tp-atlas-apply
 
 SHELL := /bin/bash
 
@@ -30,6 +30,33 @@ tp-validate-contracts: ## Validate JSON contracts (intentionally fails until pro
 
 tp-validate-recon: ## Validate recon reports (FILE=<path>; no reports is valid, other JSON is informational)
 	uv run --no-project --with jsonschema==4.25.1 --with rfc3339-validator==0.1.4 python3 scripts/tp_validate.py recon $(FILE)
+
+tp-skeleton-validate: ## Validate the Databricks, AWS Terraform, and Atlas skeletons offline
+	$(MAKE) tp-databricks-skeleton-validate
+	$(MAKE) tp-terraform-skeleton-validate
+	$(MAKE) tp-atlas-skeleton-validate
+
+tp-databricks-skeleton-validate: ## Validate the Cron Box Databricks bundle without deploying
+	@command -v databricks >/dev/null 2>&1 || { echo "databricks CLI is required"; exit 127; }
+	@cd infrastructure/databricks/cronbox && databricks bundle validate
+
+tp-terraform-skeleton-validate: ## Validate the Cron Box AWS Terraform root without applying
+	@cd infrastructure/terraform/tp-cronbox && terraform init -backend=false
+	@cd infrastructure/terraform/tp-cronbox && terraform validate
+	@cd infrastructure/terraform/tp-cronbox && terraform fmt -check
+	@! grep -REn 'aws_(instance|db_instance|nat_gateway|lb|vpc_endpoint|lambda_provisioned_concurrency)' infrastructure/terraform/tp-cronbox --include='*.tf'
+
+tp-atlas-skeleton-validate: ## Validate the Cron Box Atlas namespace bootstrap without writing
+	python3 scripts/tp_atlas/cronbox_namespace.py --dry-run
+
+tp-databricks-apply: ## Parent-owned Databricks bundle deployment (DO NOT RUN from child sessions)
+	@cd infrastructure/databricks/cronbox && databricks bundle deploy
+
+tp-terraform-apply: ## Parent-owned AWS Terraform apply (DO NOT RUN from child sessions)
+	@cd infrastructure/terraform/tp-cronbox && terraform apply
+
+tp-atlas-apply: ## Parent-owned Atlas namespace write (DO NOT RUN from child sessions)
+	python3 scripts/tp_atlas/cronbox_namespace.py --apply
 
 tp-fixture-land: ## Land source artifacts in the local Databricks transport fixture (NS=<ns>)
 	python3 scripts/tp_databricks/local_fixture.py land --ns $${NS:-fixture} --source $${FIXTURE_SOURCE:-etl/legacy-extra}
