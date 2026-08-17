@@ -92,6 +92,7 @@ def _multibyte_check(
 ) -> dict[str, Any]:
     query_evidence = {}
     stored_evidence = []
+    evaluated_query_ids = set()
     query_sets_pass = True
     stored_values_pass = True
     by_id = {
@@ -101,6 +102,7 @@ def _multibyte_check(
     for query in queries:
         if query["id"] not in MULTIBYTE_QUERY_IDS:
             continue
+        evaluated_query_ids.add(query["id"])
         expected_ids = set(query["expected_ids"])
         actual_ids = set(query_results.get(query["id"], []))
         missing = sorted(expected_ids - actual_ids)
@@ -127,6 +129,11 @@ def _multibyte_check(
                 }
             )
             stored_values_pass &= value_pass
+    required_query_ids = set(MULTIBYTE_QUERY_IDS)
+    query_sets_pass = evaluated_query_ids == required_query_ids and query_sets_pass
+    stored_values_pass = (
+        evaluated_query_ids == required_query_ids and stored_values_pass
+    )
     return {
         "id": "SRC-04/multibyte-query",
         "expected": {
@@ -135,6 +142,7 @@ def _multibyte_check(
             "stored_values_contain_non_ascii": True,
         },
         "actual": {
+            "evaluated_query_ids": sorted(evaluated_query_ids),
             "queries": query_evidence,
             "stored_values": stored_evidence,
         },

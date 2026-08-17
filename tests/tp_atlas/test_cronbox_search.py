@@ -253,3 +253,46 @@ def test_multibyte_check_fails_for_ascii_folded_stored_value() -> None:
     )
     assert check["id"] == "SRC-04/multibyte-query"
     assert check["result"] == "fail"
+
+
+def test_multibyte_check_fails_when_a_required_query_is_missing() -> None:
+    check = recon._multibyte_check(
+        [
+            {
+                "id": "DOC-UNICODE-TITLE",
+                "collection": "documents",
+                "expected_ids": ["doc-004"],
+            }
+        ],
+        {"DOC-UNICODE-TITLE": ["doc-004"]},
+        {"documents": [{"id": "doc-004", "title": "Δocument ☕"}]},
+    )
+    assert check["result"] == "fail"
+    assert check["actual"]["evaluated_query_ids"] == ["DOC-UNICODE-TITLE"]
+
+
+def test_multibyte_check_fails_when_an_expected_record_is_missing() -> None:
+    check = recon._multibyte_check(
+        [
+            {
+                "id": "DOC-UNICODE-TITLE",
+                "collection": "documents",
+                "expected_ids": ["doc-004"],
+            },
+            {
+                "id": "FILE-UNICODE-NAME",
+                "collection": "files",
+                "expected_ids": ["file-007"],
+            },
+        ],
+        {
+            "DOC-UNICODE-TITLE": ["doc-004"],
+            "FILE-UNICODE-NAME": ["file-007"],
+        },
+        {
+            "documents": [],
+            "files": [{"id": "file-007", "name": "Fichier Δ ☕"}],
+        },
+    )
+    assert check["result"] == "fail"
+    assert check["actual"]["stored_values"][0]["contains_non_ascii"] is False
