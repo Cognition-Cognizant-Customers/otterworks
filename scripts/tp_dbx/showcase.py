@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
 import sys
 import time
 import uuid
@@ -638,10 +640,17 @@ def cmd_drift(dbx: Databricks, args) -> int:
     n = names(args)
     data = load_manifest(args)
     if args.kind == "stale":
+        new_year = int(data["end_year"]) + 1
+        subprocess.run(
+            ["perl", str(REPO / "etl/legacy-extra/tools/gen_history_data.pl"),
+             n.ns, str(data["start_year"]), str(new_year), str(data["rows_per_month"])],
+            cwd=REPO, check=True,
+            env=dict(os.environ, OTTERWORKS_LEGACY_ROOT=args.legacy_root),
+        )
         cmd_land(dbx, args)
         cmd_expectations(dbx, args)
-        print("drift staged: new CUSTBILL history landed and expected; target not backfilled")
-        print(f"  expected years now {data['start_year']}-{data['end_year']}")
+        print(f"drift staged: {new_year} CUSTBILL history landed and expected; "
+              "target not backfilled")
     elif args.kind == "malformed":
         target = f"{n.history_dir}/{args.period[:4]}/CUSTBILL_DRIFT_{args.period}.dat"
         rows = [f"HDR CUSTBILL EXTRACT NS={n.ns.upper():<10} PERIOD={args.period}"]

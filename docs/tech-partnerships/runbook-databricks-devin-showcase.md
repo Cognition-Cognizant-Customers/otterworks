@@ -122,9 +122,9 @@ make dbx-showcase CMD=run-job NS=demo
 
 Expected: `recon_check: SUCCESS`, `notify_devin: EXCLUDED`.
 
-Now break it the way reality breaks it — new history arrives and the target
-hasn't absorbed it (use `--kind malformed --period YYYYMM` for a bad batch
-instead):
+Now break it the way reality breaks it — a new billing year arrives, is landed
+and expected, and the target hasn't absorbed it (use `--kind malformed --period
+YYYYMM` for a bad batch instead):
 
 ```bash
 make dbx-showcase CMD=drift NS=demo ARGS="--kind stale"
