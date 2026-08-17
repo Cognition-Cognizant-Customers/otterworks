@@ -109,14 +109,14 @@ def read_day_user_totals(s3_client, bucket, key, user_totals):
     try:
         response = s3_client.get_object(Bucket=bucket, Key=key)
         decompressed = gzip.decompress(response["Body"].read()).decode("utf-8")
+
+        for line in decompressed.strip().split("\n"):
+            if line:
+                accumulate_user_day(user_totals, json.loads(line))
     except Exception:
         # S3 key might not exist for every day -- silently skip
         # TODO ETL-098: Log missing days for debugging
         return
-
-    for line in decompressed.strip().split("\n"):
-        if line:
-            accumulate_user_day(user_totals, json.loads(line))
 
 
 def aggregate_user_activity(s3_client, bucket, ds, lookback_days):
