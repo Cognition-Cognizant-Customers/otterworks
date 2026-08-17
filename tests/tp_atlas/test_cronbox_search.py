@@ -20,6 +20,7 @@ from cronbox_search_ingest import (  # noqa: E402
     transform_file,
     upsert,
 )
+import cronbox_search_recon as recon  # noqa: E402
 from cronbox_search_recon import evaluate_search  # noqa: E402
 
 
@@ -182,3 +183,73 @@ def test_fixture_evaluator_rejects_unsupported_compound_clause() -> None:
 def test_fixture_evaluator_rejects_empty_compound() -> None:
     with pytest.raises(SystemExit, match="empty compound"):
         evaluate_search({"compound": {}}, [{"id": "doc-1"}])
+
+
+def test_fixture_report_labels_multibyte_and_attribution_checks(monkeypatch) -> None:
+    queries = [
+        {
+            "id": "DOC-UNICODE-TITLE",
+            "collection": "documents",
+            "atlas_pipeline": [
+                {"$search": {"text": {"query": "Δocument", "path": "title"}}}
+            ],
+            "expected_ids": ["doc-004"],
+        },
+        {
+            "id": "FILE-UNICODE-NAME",
+            "collection": "files",
+            "atlas_pipeline": [
+                {"$search": {"text": {"query": "Fichier", "path": "name"}}}
+            ],
+            "expected_ids": ["file-007"],
+        },
+    ]
+    source = {
+        "documents": [{"id": "doc-004", "title": "Δocument ☕"}],
+        "files": [{"id": "file-007", "name": "Fichier Δ ☕"}],
+    }
+
+    def fetch(_base_url, path, _key):
+        return iter(source["documents" if "documents" in path else "files"])
+
+    monkeypatch.setattr(recon, "golden_queries", lambda: queries)
+    monkeypatch.setattr(
+        recon,
+        "baseline_ids",
+        lambda: {"documents": ["doc-004"], "files": ["file-007"]},
+    )
+    monkeypatch.setattr("cronbox_search_ingest.fetch_corpus", fetch)
+
+    report = recon.recon_fixture("demo", "http://source")
+    check_ids = {check["id"] for check in report["checks"]}
+    assert "SRC-04/multibyte-query" in check_ids
+    assert "POLICY/malformed-record-attribution" in check_ids
+    assert "SRC-04/attribution" not in check_ids
+
+
+def test_multibyte_check_fails_for_ascii_folded_stored_value() -> None:
+    queries = [
+        {
+            "id": "DOC-UNICODE-TITLE",
+            "collection": "documents",
+            "expected_ids": ["doc-004"],
+        },
+        {
+            "id": "FILE-UNICODE-NAME",
+            "collection": "files",
+            "expected_ids": ["file-007"],
+        },
+    ]
+    check = recon._multibyte_check(
+        queries,
+        {
+            "DOC-UNICODE-TITLE": ["doc-004"],
+            "FILE-UNICODE-NAME": ["file-007"],
+        },
+        {
+            "documents": [{"id": "doc-004", "title": "Document coffee"}],
+            "files": [{"id": "file-007", "name": "Fichier Δ ☕"}],
+        },
+    )
+    assert check["id"] == "SRC-04/multibyte-query"
+    assert check["result"] == "fail"

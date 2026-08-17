@@ -52,6 +52,7 @@ UNIT = "cron-search"
 PROBE_PREFIX = "ow-tp-cron-search-recon-"
 SEARCH_VISIBILITY_TIMEOUT_S = 180
 TOKEN_PATTERN = re.compile(r"\w+", re.UNICODE)
+MULTIBYTE_QUERY_IDS = ("DOC-UNICODE-TITLE", "FILE-UNICODE-NAME")
 
 
 def _digest(ids: Iterable[str]) -> str:
@@ -73,6 +74,74 @@ def _set_check(
         },
         "source_of_truth": source,
         "result": "pass" if expected_set == actual_set else "fail",
+    }
+
+
+def _contains_non_ascii(value: Any) -> bool:
+    if isinstance(value, str):
+        return any(ord(character) > 127 for character in value)
+    if isinstance(value, (list, tuple)):
+        return any(_contains_non_ascii(item) for item in value)
+    return False
+
+
+def _multibyte_check(
+    queries: Sequence[Mapping[str, Any]],
+    query_results: Mapping[str, Sequence[str]],
+    records: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> dict[str, Any]:
+    query_evidence = {}
+    stored_evidence = []
+    query_sets_pass = True
+    stored_values_pass = True
+    by_id = {
+        collection: {str(record.get("id")): record for record in items}
+        for collection, items in records.items()
+    }
+    for query in queries:
+        if query["id"] not in MULTIBYTE_QUERY_IDS:
+            continue
+        expected_ids = set(query["expected_ids"])
+        actual_ids = set(query_results.get(query["id"], []))
+        missing = sorted(expected_ids - actual_ids)
+        unexpected = sorted(actual_ids - expected_ids)
+        query_evidence[query["id"]] = {
+            "expected_ids": sorted(expected_ids),
+            "actual_ids": sorted(actual_ids),
+            "missing": missing,
+            "unexpected": unexpected,
+        }
+        query_sets_pass &= not missing and not unexpected
+        field = "title" if query["collection"] == DOCUMENTS else "name"
+        for record_id in sorted(expected_ids):
+            record = by_id.get(query["collection"], {}).get(record_id)
+            value = record.get(field) if record else None
+            value_pass = _contains_non_ascii(value)
+            stored_evidence.append(
+                {
+                    "query_id": query["id"],
+                    "record_id": record_id,
+                    "field": field,
+                    "value": value,
+                    "contains_non_ascii": value_pass,
+                }
+            )
+            stored_values_pass &= value_pass
+    return {
+        "id": "SRC-04/multibyte-query",
+        "expected": {
+            "query_ids": list(MULTIBYTE_QUERY_IDS),
+            "id_sets_match": True,
+            "stored_values_contain_non_ascii": True,
+        },
+        "actual": {
+            "queries": query_evidence,
+            "stored_values": stored_evidence,
+        },
+        "source_of_truth": (
+            "committed multi-byte golden queries and stored values in the target records"
+        ),
+        "result": "pass" if query_sets_pass and stored_values_pass else "fail",
     }
 
 
@@ -400,6 +469,18 @@ def recon_live(namespace: str) -> dict[str, Any]:
                 check["result"] = "fail"
                 check["actual"]["outside_corpus"] = outside
             checks.append(check)
+        multibyte_records = {}
+        for query in queries:
+            if query["id"] not in MULTIBYTE_QUERY_IDS:
+                continue
+            field = "title" if query["collection"] == DOCUMENTS else "name"
+            ids = query["expected_ids"]
+            multibyte_records[query["collection"]] = list(
+                db[query["collection"]].find(
+                    {"id": {"$in": ids}}, {"_id": 0, "id": 1, field: 1}
+                )
+            )
+        checks.append(_multibyte_check(queries, first, multibyte_records))
 
         try:
             deployed = []
@@ -517,12 +598,13 @@ def recon_fixture(namespace: str, source_url: str) -> dict[str, Any]:
                 "golden query set evaluated by the fixture $search evaluator",
             )
         )
+    checks.append(_multibyte_check(queries, first, corpus))
     checks.extend(
         role_checks(load_definitions(), "committed index definitions (offline)")
     )
     checks.append(
         {
-            "id": "SRC-04/attribution",
+            "id": "POLICY/malformed-record-attribution",
             "expected": {"records_indexed_under_blank_id": 0},
             "actual": {
                 "records_indexed_under_blank_id": 0,

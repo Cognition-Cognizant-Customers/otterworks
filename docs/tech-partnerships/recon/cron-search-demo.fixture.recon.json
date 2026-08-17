@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "cron-search",
   "namespace": "demo",
-  "generated_at": "2026-08-17T05:40:30Z",
+  "generated_at": "2026-08-17T05:51:58Z",
   "run_mode": "fixture",
   "checks": [
     {
@@ -171,6 +171,59 @@
       "result": "pass"
     },
     {
+      "id": "SRC-04/multibyte-query",
+      "expected": {
+        "query_ids": [
+          "DOC-UNICODE-TITLE",
+          "FILE-UNICODE-NAME"
+        ],
+        "id_sets_match": true,
+        "stored_values_contain_non_ascii": true
+      },
+      "actual": {
+        "queries": {
+          "DOC-UNICODE-TITLE": {
+            "expected_ids": [
+              "doc-004"
+            ],
+            "actual_ids": [
+              "doc-004"
+            ],
+            "missing": [],
+            "unexpected": []
+          },
+          "FILE-UNICODE-NAME": {
+            "expected_ids": [
+              "file-007"
+            ],
+            "actual_ids": [
+              "file-007"
+            ],
+            "missing": [],
+            "unexpected": []
+          }
+        },
+        "stored_values": [
+          {
+            "query_id": "DOC-UNICODE-TITLE",
+            "record_id": "doc-004",
+            "field": "title",
+            "value": "\u0394ocument \u2615",
+            "contains_non_ascii": true
+          },
+          {
+            "query_id": "FILE-UNICODE-NAME",
+            "record_id": "file-007",
+            "field": "name",
+            "value": "Fichier \u0394 \u2615",
+            "contains_non_ascii": true
+          }
+        ]
+      },
+      "source_of_truth": "committed multi-byte golden queries and stored values in the target records",
+      "result": "pass"
+    },
+    {
       "id": "SRC-03/documents",
       "expected": {
         "searchable": [
@@ -259,7 +312,7 @@
       "result": "pass"
     },
     {
-      "id": "SRC-04/attribution",
+      "id": "POLICY/malformed-record-attribution",
       "expected": {
         "records_indexed_under_blank_id": 0
       },
