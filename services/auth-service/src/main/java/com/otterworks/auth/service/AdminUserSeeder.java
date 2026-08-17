@@ -64,6 +64,9 @@ public class AdminUserSeeder implements ApplicationRunner {
   }
 
   private void seed(String hash) {
+    // The stored password is only overwritten when the account has no usable one (fresh install, or
+    // revoked by V5) unless a reset is explicitly requested, so a password rotated through
+    // /change-password survives restarts.
     jdbcTemplate.update(
         """
         INSERT INTO users (id, email, password_hash, display_name, email_verified,
@@ -71,7 +74,11 @@ public class AdminUserSeeder implements ApplicationRunner {
         VALUES (?, ?, ?, ?, true, NOW(), NOW())
         ON CONFLICT (id) DO UPDATE
         SET email = EXCLUDED.email,
-            password_hash = EXCLUDED.password_hash,
+            password_hash = CASE
+              WHEN ? OR users.password_hash = 'REVOKED' OR users.password_hash IS NULL
+                THEN EXCLUDED.password_hash
+              ELSE users.password_hash
+            END,
             display_name = EXCLUDED.display_name,
             email_verified = true,
             updated_at = NOW()
@@ -81,7 +88,8 @@ public class AdminUserSeeder implements ApplicationRunner {
         hash,
         StringUtils.hasText(properties.getDisplayName())
             ? properties.getDisplayName()
-            : "Admin User");
+            : "Admin User",
+        properties.isForcePasswordReset());
 
     for (String role : new String[] {"ADMIN", "USER"}) {
       jdbcTemplate.update(

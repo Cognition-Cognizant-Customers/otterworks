@@ -20,4 +20,7 @@ public class AdminSeedProperties {
 
   /** Pre-computed BCrypt hash, used in preference to {@link #password} when both are set. */
   private String passwordHash;
+
+  /** Overwrite an existing admin password on boot instead of leaving a rotated one in place. */
+  private boolean forcePasswordReset = false;
 }

@@ -33,8 +33,10 @@ credential as local dev so deployed environments keep a usable admin login; expo
 `make up` keeps working and `admin@otterworks.dev` / `Admin123!` still logs into
 <http://localhost:3000/login>. Override it by copying `.env.example` to `.env`.
 
-The seeder is idempotent: it upserts the account on every boot, so changing the configured password
-and restarting auth-service is enough to rotate it.
+The seeder is idempotent: it upserts the account on every boot, but it only writes the password when
+the account is created or its stored hash is missing/`REVOKED`, so a password changed through
+`/change-password` survives restarts. Set `AUTH_ADMIN_SEED_FORCE_PASSWORD_RESET=true` for one boot to
+reset the account to the configured password.
 
 ## Existing databases
 
