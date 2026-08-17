@@ -110,13 +110,13 @@ ActiveRecord::Schema[7.1].define(version: 2024_01_01_000008) do
   end
 
   create_table "system_configs", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.string "key", null: false
+    t.string "config_key", null: false
     t.text "value", null: false
     t.string "value_type", default: "string", null: false
     t.string "description"
     t.boolean "is_secret", default: false, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["key"], name: "index_system_configs_on_key", unique: true
+    t.index ["config_key"], name: "index_system_configs_on_config_key", unique: true
   end
 end

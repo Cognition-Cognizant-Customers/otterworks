@@ -6,7 +6,7 @@ module Api
 
         # GET /api/v1/admin/config
         def index
-          configs = SystemConfig.public_configs.order(key: :asc)
+          configs = SystemConfig.public_configs.order(config_key: :asc)
 
           render json: {
             configs: ActiveModelSerializers::SerializableResource.new(configs)

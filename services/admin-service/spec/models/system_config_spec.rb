@@ -4,14 +4,14 @@ RSpec.describe SystemConfig do
   describe 'validations' do
     subject { build(:system_config) }
 
-    it { is_expected.to validate_presence_of(:key) }
-    it { is_expected.to validate_uniqueness_of(:key) }
+    it { is_expected.to validate_presence_of(:config_key) }
+    it { is_expected.to validate_uniqueness_of(:config_key) }
     it { is_expected.to validate_presence_of(:value) }
     it { is_expected.to validate_presence_of(:value_type) }
     it { is_expected.to validate_inclusion_of(:value_type).in_array(described_class::VALUE_TYPES) }
 
-    it 'requires snake_case key' do
-      config = build(:system_config, key: 'Invalid Key')
+    it 'requires snake_case config_key' do
+      config = build(:system_config, config_key: 'Invalid Key')
       expect(config).not_to be_valid
     end
   end
