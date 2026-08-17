@@ -41,3 +41,14 @@ output "orphan_quarantine_dlq_arn" {
 output "quarantine_lifecycle_bucket" {
   value = aws_s3_bucket.file_quarantine.bucket
 }
+output "audit_archive_function" {
+  value = aws_lambda_function.audit_archive.function_name
+}
+
+output "audit_archive_prefix" {
+  value = var.audit_archive_prefix
+}
+
+output "audit_archive_dlq_url" {
+  value = aws_sqs_queue.audit_archive_dlq.url
+}
