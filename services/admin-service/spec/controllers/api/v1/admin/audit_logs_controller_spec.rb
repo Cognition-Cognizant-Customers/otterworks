@@ -14,10 +14,11 @@ RSpec.describe Api::V1::Admin::AuditLogsController do
     end
 
     it 'filters by action type' do
-      create(:audit_log, action: 'feature_flag.created')
-      get :index, params: { action_type: 'feature_flag.created' }
+      action = 'feature_flag.created'
+      create(:audit_log, action: action)
+      get :index, params: { action_type: action }
       body = JSON.parse(response.body)
-      expect(body['audit_logs'].all? { |l| l['action'] == 'feature_flag.created' }).to be true
+      expect(body['audit_logs'].all? { |l| l['action'] == action }).to be true
     end
 
     it 'filters by resource type' do

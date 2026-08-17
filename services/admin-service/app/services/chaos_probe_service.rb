@@ -10,10 +10,12 @@ class ChaosProbeService
   PROBE_INTERVAL = 5 # seconds between probe requests
   PROBE_BATCH    = 3 # requests per interval (enough for rate() to register)
 
+  USER_ID_HEADER = 'X-User-ID'.freeze
+
   SERVICE_PROBES = {
     'search-service' => {
       url: 'http://search-service:8087/api/v1/search/suggest?q=test',
-      headers: { 'X-User-ID' => 'chaos-probe' },
+      headers: { USER_ID_HEADER => 'chaos-probe' },
     },
     # file-service upload expects multipart/form-data with a "file" field.
     # Sending JSON results in a 400 before the chaos flag is ever checked.
@@ -21,7 +23,7 @@ class ChaosProbeService
     'file-service' => {
       url: 'http://file-service:8082/api/v1/files/upload',
       method: :multipart,
-      headers: { 'X-User-ID' => '00000000-0000-0000-0000-000000000001' },
+      headers: { USER_ID_HEADER => '00000000-0000-0000-0000-000000000001' },
     },
     # notification-service chaos works by switching to a strict JSON parser
     # that rejects messages with integer (Unix epoch) timestamps.  Hitting
@@ -37,7 +39,7 @@ class ChaosProbeService
     # up in Prometheus histograms and trigger the P95 latency alert.
     'document-service' => {
       url: 'http://document-service:8083/api/v1/documents/',
-      headers: { 'X-User-ID' => '00000000-0000-0000-0000-000000000001' },
+      headers: { USER_ID_HEADER => '00000000-0000-0000-0000-000000000001' },
       read_timeout: 8,
     },
   }.freeze
