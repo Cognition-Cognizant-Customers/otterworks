@@ -48,6 +48,10 @@ interface RawFileListResponse {
   pageSize: number;
 }
 
+function mapSharePermission(permission: string): SharedUser["permission"] {
+  return permission === "editor" ? "edit" : "view";
+}
+
 // Normalize a single file from the file-service format to the frontend FileItem shape
 function mapRawFile(raw: RawFileItem): FileItem {
   return {
@@ -67,7 +71,7 @@ function mapRawFile(raw: RawFileItem): FileItem {
         userId: s.sharedWith,
         name: "",
         email: "",
-        permission: s.permission === "viewer" ? "view" as const : s.permission === "editor" ? "edit" as const : "view" as const,
+        permission: mapSharePermission(s.permission),
       }));
       const seen = new Set<string>();
       return mapped.filter((s) => {

@@ -147,15 +147,17 @@ function SearchContent() {
       )}
 
       {/* Results */}
-      {submittedQuery && isLoading ? (
-        <PageLoader />
-      ) : submittedQuery && results.length === 0 ? (
+      {submittedQuery && isLoading && <PageLoader />}
+
+      {submittedQuery && !isLoading && results.length === 0 && (
         <EmptyState
           icon={Search}
           title="No results found"
           description={`No results for "${submittedQuery}". Try different keywords.`}
         />
-      ) : submittedQuery ? (
+      )}
+
+      {submittedQuery && !isLoading && results.length > 0 && (
         <div className="space-y-1">
           <p className="text-sm text-gray-500 mb-4">
             {data?.total || results.length} result{results.length !== 1 ? "s" : ""} for &ldquo;{submittedQuery}&rdquo;
@@ -164,7 +166,9 @@ function SearchContent() {
             <SearchResultRow key={result.id} result={result} />
           ))}
         </div>
-      ) : (
+      )}
+
+      {!submittedQuery && (
         <EmptyState
           icon={Search}
           title="Search OtterWorks"
@@ -175,27 +179,36 @@ function SearchContent() {
   );
 }
 
+function resultPresentation(result: SearchResult): {
+  href: string;
+  Icon: typeof File;
+  iconColor: string;
+} {
+  if (result.type === "document") {
+    return {
+      href: `/documents/${result.id}`,
+      Icon: FileText,
+      iconColor: "text-blue-600 bg-blue-50",
+    };
+  }
+
+  if (result.type === "folder") {
+    return {
+      href: `/files?folder=${result.id}`,
+      Icon: FolderOpen,
+      iconColor: "text-amber-600 bg-amber-50",
+    };
+  }
+
+  return {
+    href: `/files/${result.id}`,
+    Icon: File,
+    iconColor: "text-otter-600 bg-otter-50",
+  };
+}
+
 function SearchResultRow({ result }: Readonly<{ result: SearchResult }>) {
-  const href =
-    result.type === "document"
-      ? `/documents/${result.id}`
-      : result.type === "folder"
-      ? `/files?folder=${result.id}`
-      : `/files/${result.id}`;
-
-  const Icon =
-    result.type === "document"
-      ? FileText
-      : result.type === "folder"
-      ? FolderOpen
-      : File;
-
-  const iconColor =
-    result.type === "document"
-      ? "text-blue-600 bg-blue-50"
-      : result.type === "folder"
-      ? "text-amber-600 bg-amber-50"
-      : "text-otter-600 bg-otter-50";
+  const { href, Icon, iconColor } = resultPresentation(result);
 
   return (
     <Link

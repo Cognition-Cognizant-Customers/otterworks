@@ -112,15 +112,17 @@ function StarredContent() {
         </div>
       </div>
 
-      {isLoading ? (
-        <PageLoader />
-      ) : isEmpty ? (
+      {isLoading && <PageLoader />}
+
+      {!isLoading && isEmpty && (
         <EmptyState
           icon={Star}
           title="No starred items"
           description="Star files and documents for quick access. They will appear here."
         />
-      ) : (
+      )}
+
+      {!isLoading && !isEmpty && (
         <div className="space-y-8">
           {files.length > 0 && (
             <section>

@@ -117,15 +117,17 @@ function TrashContent() {
       )}
 
       {/* Trash items */}
-      {isLoading ? (
-        <PageLoader />
-      ) : items.length === 0 ? (
+      {isLoading && <PageLoader />}
+
+      {!isLoading && items.length === 0 && (
         <EmptyState
           icon={Trash2}
           title="Trash is empty"
           description="Deleted files and documents will appear here"
         />
-      ) : (
+      )}
+
+      {!isLoading && items.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
           {items.map((item) => (
             <TrashRow

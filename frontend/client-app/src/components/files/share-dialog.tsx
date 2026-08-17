@@ -211,7 +211,7 @@ export function ShareDialog({
                   )}
 
                   {/* Shared users */}
-                  {sharedWith.length > 0 ? (
+                  {sharedWith.length > 0 &&
                     sharedWith
                       .filter((user) => user.userId !== ownerId)
                       .map((user) => {
@@ -280,12 +280,13 @@ export function ShareDialog({
                             </div>
                           </div>
                         );
-                      })
-                  ) : !ownerId ? (
+                      })}
+
+                  {sharedWith.length === 0 && !ownerId && (
                     <p className="text-sm text-gray-500 text-center py-4">
                       No one else has access yet
                     </p>
-                  ) : null}
+                  )}
 
                   {ownerId && sharedWith.filter((u) => u.userId !== ownerId).length === 0 && (
                     <p className="text-sm text-gray-500 text-center py-3">

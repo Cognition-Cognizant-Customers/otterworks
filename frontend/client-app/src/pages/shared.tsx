@@ -58,15 +58,17 @@ function SharedContent() {
         </div>
       </div>
 
-      {isLoading ? (
-        <PageLoader />
-      ) : files.length === 0 ? (
+      {isLoading && <PageLoader />}
+
+      {!isLoading && files.length === 0 && (
         <EmptyState
           icon={Share2}
           title="Nothing shared with you yet"
           description="Files and documents shared with you will appear here"
         />
-      ) : (
+      )}
+
+      {!isLoading && files.length > 0 && (
         <div
           className={cn(
             viewMode === "grid"
