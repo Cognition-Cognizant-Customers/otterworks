@@ -30,11 +30,11 @@ import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tp_dbx.client import Databricks, DbxError, require_ns
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
 UNIT = "cron-analytics"
 JOB_NAME = "ow_tp_cron_analytics_daily"
 CONTRACT = REPO_ROOT / "docs/tech-partnerships/contracts/cron-analytics.json"
