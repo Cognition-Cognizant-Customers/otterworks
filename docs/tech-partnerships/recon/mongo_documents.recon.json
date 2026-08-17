@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_documents",
   "namespace": "demo",
-  "generated_at": "2026-08-17T05:09:46Z",
+  "generated_at": "2026-08-17T05:16:41Z",
   "run_mode": "fixture",
   "target": {
     "database": "ow_tp_demo",
@@ -118,6 +118,13 @@
       "expected": 10,
       "actual": 10,
       "source_of_truth": "testdata/legacy/manifests/demo.json vs mongodb ow_tp_demo (recomputed after write)",
+      "result": "pass"
+    },
+    {
+      "id": "documents.version_sequence_annotations",
+      "expected": [],
+      "actual": [],
+      "source_of_truth": "mongodb ow_tp_demo (recomputed after write) persisted version_sequence vs recomputed embedded versions",
       "result": "pass"
     },
     {

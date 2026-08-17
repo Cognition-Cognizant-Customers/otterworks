@@ -50,6 +50,10 @@ def test_version_gap_detection_covers_truncated_tail():
     assert missing_versions_for(5, [1, 2, 3]) == [4, 5]
 
 
+def test_version_gap_detection_extends_beyond_declared_version():
+    assert missing_versions_for(3, [1, 2, 5]) == [3, 4]
+
+
 def test_version_bound_exceeded_quarantines_without_truncated_document():
     versions = [
         {

@@ -40,6 +40,7 @@ from common import (
     target_db_name,
     validate_namespace,
 )
+from documents_model import missing_versions_for
 
 UNIT = "mongo_documents"
 
@@ -142,7 +143,7 @@ def source_expectations(ns: str) -> dict:
             )
             gaps = {}
             for doc_id, declared, present in cur.fetchall():
-                missing = missing_versions(declared, list(present))
+                missing = missing_versions_for(declared, list(present))
                 if missing:
                     gaps[doc_id] = missing
             cur.execute(
@@ -211,17 +212,6 @@ def source_expectations(ns: str) -> dict:
     }
 
 
-def missing_versions(declared: int, present: list[int]) -> list[int]:
-    """Version numbers absent from a document's sequence.
-
-    The expected sequence runs from 1 to the larger of the declared version and
-    the highest version actually present, so both a gap in the middle and a
-    truncated tail are reported rather than silently closed.
-    """
-    upper = max([declared] + present) if present else declared
-    return sorted(set(range(1, upper + 1)) - set(present))
-
-
 def anomaly_key(doc_id: str, missing: list[int]) -> str:
     return f"{doc_id}:missing={','.join(str(v) for v in missing)}"
 
@@ -240,8 +230,9 @@ def target_facts(ns: str) -> dict:
         embedded_snapshot_fields = 0
         over_bound = 0
         doc_ids: set[str] = set()
+        version_sequence_mismatches: list[dict] = []
 
-        for doc in db[DOCUMENTS].find({}):
+        for doc in db[DOCUMENTS].find({"ns": ns}):
             documents += 1
             doc_parity.add(
                 document_parity_line(
@@ -267,16 +258,32 @@ def target_facts(ns: str) -> dict:
                 over_bound += 1
             for number in numbers:
                 ver_ck.add(f"{doc['_id']}|{number}")
-            missing = missing_versions(doc["declared_version"], numbers)
+            missing = missing_versions_for(doc["declared_version"], numbers)
             if missing:
                 gaps[doc["_id"]] = missing
+            sequence = doc.get("version_sequence", {})
+            stored_missing = sequence.get("missing", [])
+            stored_present = sequence.get("present")
+            if (
+                set(stored_missing) != set(missing)
+                or stored_present != len(numbers)
+            ):
+                version_sequence_mismatches.append(
+                    {
+                        "_id": doc["_id"],
+                        "expected_missing": missing,
+                        "actual_missing": sorted(stored_missing),
+                        "expected_present": len(numbers),
+                        "actual_present": stored_present,
+                    }
+                )
             if "snapshots" in doc:
                 embedded_snapshot_fields += 1
 
         snapshots = 0
         orphans: list[str] = []
         attached_to_missing_parent: list[str] = []
-        for snap in db[SNAPSHOTS].find({}):
+        for snap in db[SNAPSHOTS].find({"ns": ns}):
             snapshots += 1
             snap_ck.add(f"{snap['_id']}|{snap['document_id']}")
             snap_parity.add(
@@ -290,8 +297,8 @@ def target_facts(ns: str) -> dict:
             elif snap["document_id"] not in doc_ids:
                 attached_to_missing_parent.append(snap["_id"])
 
-        quarantined = db[QUARANTINE].count_documents({})
-        validator_probe = probe_validator(db)
+        quarantined = db[QUARANTINE].count_documents({"ns": ns})
+        validator_probe = probe_validator(db, ns)
         return {
             "documents": documents,
             "embedded_versions": embedded_versions,
@@ -301,6 +308,9 @@ def target_facts(ns: str) -> dict:
             "versions_checksum": ver_ck.hexdigest(),
             "snapshots_checksum": snap_ck.hexdigest(),
             "version_gaps": gaps,
+            "version_sequence_mismatches": sorted(
+                version_sequence_mismatches, key=lambda mismatch: mismatch["_id"]
+            ),
             "orphaned_snapshots": sorted(orphans),
             "snapshots_with_unresolvable_parent_not_flagged": sorted(attached_to_missing_parent),
             "documents_with_embedded_snapshots": embedded_snapshot_fields,
@@ -314,7 +324,7 @@ def target_facts(ns: str) -> dict:
         client.close()
 
 
-def probe_validator(db) -> dict:
+def probe_validator(db, ns: str) -> dict:
     """Prove each collection's $jsonSchema validator rejects a bad document.
 
     A rejected insert persists nothing, so the probe cannot pollute the target;
@@ -324,20 +334,29 @@ def probe_validator(db) -> dict:
 
     result = {}
     probes = {
-        DOCUMENTS: {"_id": "ow_tp_validator_probe", "declared_version": "not-an-int"},
-        SNAPSHOTS: {"_id": "ow_tp_validator_probe", "document_id": 42},
+        DOCUMENTS: {
+            "_id": "ow_tp_validator_probe",
+            "ns": ns,
+            "declared_version": "not-an-int",
+        },
+        SNAPSHOTS: {
+            "_id": "ow_tp_validator_probe",
+            "ns": ns,
+            "document_id": 42,
+        },
     }
     for name, bad in probes.items():
-        before = db[name].count_documents({})
+        scope = {"ns": ns}
+        before = db[name].count_documents(scope)
         info = next(iter(db.list_collections(filter={"name": name})), {})
         has_validator = "validator" in info.get("options", {})
         try:
             db[name].insert_one(bad)
             rejected = False
-            db[name].delete_one({"_id": bad["_id"]})
+            db[name].delete_one({"_id": bad["_id"], "ns": ns})
         except WriteError:
             rejected = True
-        after = db[name].count_documents({})
+        after = db[name].count_documents(scope)
         result[name] = {
             "validator_present": has_validator,
             "violating_insert_rejected": rejected,
@@ -356,6 +375,7 @@ def fingerprint(facts: dict) -> dict:
         "versions_checksum": facts["versions_checksum"],
         "snapshots_checksum": facts["snapshots_checksum"],
         "version_gaps": {k: v for k, v in sorted(facts["version_gaps"].items())},
+        "version_sequence_mismatches": facts["version_sequence_mismatches"],
         "orphaned_snapshots": facts["orphaned_snapshots"],
         "documents_parity": facts["documents_parity"],
         "versions_parity": facts["versions_parity"],
@@ -461,6 +481,8 @@ def build_checks(ns: str, mf: dict, expected: dict, facts: dict) -> list[dict]:
         check("documents.version_gaps_count",
               anomaly_count(mf, "version_gaps", f"postgres.{schema}.document_versions"),
               len(facts["version_gaps"]), f"{manifest_src} vs {target_src}"),
+        check("documents.version_sequence_annotations", [], facts["version_sequence_mismatches"],
+              f"{target_src} persisted version_sequence vs recomputed embedded versions"),
         check("documents.orphaned_snapshots_reported", expected["orphaned_snapshots"],
               facts["orphaned_snapshots"], f"{pg_src} vs {target_src}"),
         check("documents.orphaned_snapshots_count",

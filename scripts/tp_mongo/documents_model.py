@@ -244,7 +244,8 @@ VALIDATORS = {
 
 def missing_versions_for(declared: int, present: list[int]) -> list[int]:
     present_set = set(present)
-    return [number for number in range(1, declared + 1) if number not in present_set]
+    upper = max([declared] + present) if present else declared
+    return [number for number in range(1, upper + 1) if number not in present_set]
 
 
 def document_id_from_row(row: tuple[Any, ...]) -> str | None:
