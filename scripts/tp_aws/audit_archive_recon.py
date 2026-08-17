@@ -499,7 +499,6 @@ def run(args) -> dict:
     corpus_event_ids = {record["event_id"] for record in corpus}
     baseline_ids = corpus_event_ids - {UNEXPIRABLE_PROBE}
     pre_existing_objects = set(target.archive_objects())
-    pre_existing_ids = set(target.scan_ids())
 
     checks: list[dict] = []
     unverified = [
@@ -910,11 +909,7 @@ def run(args) -> dict:
     if not args.keep:
         cleanup_objects = target.archive_objects()
         target.delete_records(
-            [
-                record
-                for record in corpus + ttl_probe
-                if record["event_id"] not in pre_existing_ids
-            ]
+            corpus + ttl_probe
         )
         # Anything this run's events produced, including objects the second sweep
         # would have written; never an object belonging to a real audit event.
