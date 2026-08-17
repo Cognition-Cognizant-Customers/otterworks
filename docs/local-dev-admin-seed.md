@@ -45,6 +45,6 @@ seeder then sets the configured password on the next boot. The revocation matche
 MD5 digest, so an admin password that was already rotated is left alone.
 
 Because `V1` itself changed, a database migrated by the previous `V1` records the old checksum.
-`FlywayConfig` validates before migrating and runs `flyway repair` only when the sole validation
-error is a checksum mismatch on `V1`, so that upgrade heals itself once and any other drift — an
-edited or missing migration — still fails startup.
+`FlywayConfig` runs `flyway repair` only when the schema history records exactly that checksum, so
+the upgrade heals itself once and any other drift — including a later edit to `V1` — still fails
+startup.
