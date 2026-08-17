@@ -40,7 +40,9 @@ remaining stream-batching grace period to allow a healthy archive to arrive,
 then remains skipped if it does not. If all probes were absent for more than
 that grace period by the nominal deadline but an archive object is still
 missing, the check fails. The `--skip-ttl-probe` flag records an explicit
-omission.
+omission. Cleanup derives each probe's archive key directly from the seeded
+record, deletes those keys unconditionally, and performs a short post-delete
+listing to catch a stream write racing cleanup.
 
 The committed `*.fixture.recon.json` is the child's LocalStack run of the same
 script (`--mode fixture`, isolated `-fixture` table/bucket).

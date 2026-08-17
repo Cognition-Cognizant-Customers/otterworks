@@ -154,6 +154,17 @@ def epoch(stamp: str) -> int:
     return int(datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp())
 
 
+def archive_key(record: dict, prefix: str) -> str:
+    stamp = str(record["timestamp"]).replace("-", "").replace(":", "")
+    expiry = record.get("expires_at")
+    partition = (
+        "unknown"
+        if expiry is None
+        else datetime.fromtimestamp(int(expiry), tz=timezone.utc).strftime("%Y-%m-%d")
+    )
+    return f"{prefix}/dt={partition}/{record['event_id']}__{stamp}.jsonl.gz"
+
+
 def live_reference_time(now: datetime | None = None) -> datetime:
     """Return the wall-clock TTL horizon used by both live sweep invokes."""
     current = now or datetime.now(timezone.utc)
@@ -498,6 +509,25 @@ def wait_for_ttl_probe(
             sleeper(min(interval_seconds, grace_remaining))
         else:
             sleeper(min(interval_seconds, remaining))
+
+
+def delete_probe_objects(
+    target: Target,
+    probe_keys: set[str],
+    attempts: int = 2,
+    interval_seconds: int = 1,
+) -> None:
+    """Delete deterministic probe keys, then catch a write racing cleanup."""
+    for attempt in range(attempts):
+        if attempt:
+            pending = probe_keys & set(target.archive_objects())
+        else:
+            pending = set(probe_keys)
+        if not pending:
+            return
+        target.delete_objects(sorted(pending))
+        if attempt + 1 < attempts:
+            time.sleep(interval_seconds)
 
 
 def run(args) -> dict:
@@ -939,6 +969,9 @@ def run(args) -> dict:
 
     if not args.keep:
         cleanup_objects = target.archive_objects()
+        probe_keys = {
+            archive_key(record, args.prefix) for record in ttl_probe
+        }
         target.delete_records(
             corpus + ttl_probe
         )
@@ -959,6 +992,7 @@ def run(args) -> dict:
                 | {record["event_id"] for record in ttl_probe}
             )
         )
+        delete_probe_objects(target, probe_keys)
         unverified.append(
             "The seeded corpus and the archive objects it produced were removed after the "
             "run; the report is the retained evidence."

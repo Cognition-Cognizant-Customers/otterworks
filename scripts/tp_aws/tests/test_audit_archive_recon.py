@@ -12,9 +12,15 @@ from audit_archive_recon import (  # noqa: E402
     iso,
     live_reference_time,
     seed_corpus,
+    archive_key,
+    delete_probe_objects,
     wait_for_ttl_probe,
 )
 import audit_archive_recon as recon  # noqa: E402
+
+LAMBDA = Path(__file__).resolve().parents[3] / "infrastructure/terraform/tp-cronbox/lambda/audit_archive"
+sys.path.insert(0, str(LAMBDA))
+import handler as archive_handler  # noqa: E402
 
 
 def test_live_ttl_anchoring_preserves_split_and_boundaries() -> None:
@@ -111,3 +117,38 @@ def test_ttl_probe_does_not_fail_before_stream_grace_expires(monkeypatch) -> Non
         grace_seconds=120,
     )
     assert result["result"] == "skipped"
+
+
+def test_probe_archive_key_matches_handler_for_ttl_and_ttl_less_records() -> None:
+    prefix = "audit-archive/expired"
+    records = [
+        {
+            "event_id": "demo-probe-ascii",
+            "timestamp": "2026-08-17T12:34:56Z",
+            "expires_at": 1786962896,
+        },
+        {
+            "event_id": "demo-probe-unexpirable",
+            "timestamp": "2026-08-17T12:34:56Z",
+        },
+    ]
+    for record in records:
+        assert archive_key(record, prefix) == archive_handler.archive_key(record)
+
+
+class StubCleanupTarget:
+    def __init__(self) -> None:
+        self.deleted: list[str] = []
+
+    def archive_objects(self) -> list[str]:
+        return []
+
+    def delete_objects(self, keys: list[str]) -> None:
+        self.deleted.extend(keys)
+
+
+def test_probe_cleanup_deletes_derived_keys_even_when_listing_misses_them() -> None:
+    target = StubCleanupTarget()
+    key = "audit-archive/expired/dt=unknown/demo-probe__stamp.jsonl.gz"
+    delete_probe_objects(target, {key})
+    assert target.deleted == [key]

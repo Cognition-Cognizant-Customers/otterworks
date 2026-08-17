@@ -78,4 +78,6 @@ skipped if it does not. If every probe was absent from DynamoDB for more than
 that grace period by the nominal deadline and an archive object is still
 missing, the check fails. `--skip-ttl-probe` records an explicit omission.
 Unless `--keep` is supplied, the run removes its corpus, probes, and archive
-objects without touching pre-existing objects or records.
+objects without touching pre-existing objects or records. Probe archive keys
+are derived directly from the seeded records and deleted unconditionally, with
+a short post-delete listing to catch a stream write racing cleanup.
