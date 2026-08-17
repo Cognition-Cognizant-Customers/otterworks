@@ -58,8 +58,8 @@ def esc(value: str) -> str:
 
 
 def find_alert(dbx: Databricks, name: str) -> dict | None:
-    # the alerts API returns the page under `alerts`; older docs say `results`
-    for alert in dbx.list_all("/api/2.0/alerts", "alerts"):
+    # the alerts API returns the page under `alerts`; its docs and SDK say `results`
+    for alert in dbx.list_all("/api/2.0/alerts", "alerts", "results"):
         if alert.get("display_name") == name and alert.get("lifecycle_state") == "ACTIVE":
             return alert
     return None
