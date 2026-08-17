@@ -22,6 +22,7 @@ public class DynamoPreferenceStore implements PreferenceStore {
     public Optional<UserPreference> find(String userId) {
         var response = client.getItem(GetItemRequest.builder()
                 .tableName(tableName)
+                .consistentRead(true)
                 .key(Map.of("userId", AttributeValue.fromS(userId)))
                 .build());
         if (!response.hasItem() || response.item().isEmpty()) {
