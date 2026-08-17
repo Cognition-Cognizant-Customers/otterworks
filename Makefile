@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean tp-atlas-teardown tp-mongo-fixture-up tp-mongo-fixture-down tp-mongo-customers tp-mongo-customers-recon tp-mongo-test tp-mongo-migrate-files tp-mongo-recon-files tp-mongo-migrate-invoices tp-mongo-recon-invoices
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean tp-atlas-teardown tp-mongo-fixture-up tp-mongo-fixture-down tp-mongo-customers tp-mongo-customers-recon tp-mongo-test tp-mongo-migrate-files tp-mongo-recon-files tp-mongo-invoices tp-mongo-invoices-recon
 
 SHELL := /bin/bash
 
@@ -150,14 +150,14 @@ ifndef NS
 	$(error NS is required, e.g. make tp-mongo-invoices NS=demo)
 endif
 	$(call validate_ns)
-	$(MONGO_ENV) $(MONGO_UV) python3 scripts/tp_mongo/migrate_invoices.py --ns $(NS)
+	$(MONGO_ENV) $(MONGO_UV) --with boto3==1.35.36 python3 scripts/tp_mongo/migrate_invoices.py --ns $(NS)
 
 tp-mongo-invoices-recon: ## Recon invoices by reading the target back (NS=<namespace>, RUN_MODE=fixture|live)
 ifndef NS
 	$(error NS is required, e.g. make tp-mongo-invoices-recon NS=demo)
 endif
 	$(call validate_ns)
-	$(MONGO_ENV) $(MONGO_UV) python3 scripts/tp_mongo/recon_invoices.py --ns $(NS) \
+	$(MONGO_ENV) $(MONGO_UV) --with boto3==1.35.36 python3 scripts/tp_mongo/recon_invoices.py --ns $(NS) \
 		--run-mode $(or $(RUN_MODE),fixture) \
 		--out $(or $(REPORT),docs/tech-partnerships/recon/mongo_invoices.recon.json)
 

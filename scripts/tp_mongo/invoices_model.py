@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import decimal
 import json
-import os
 import re
 from collections.abc import Iterable
 from datetime import datetime, timezone
@@ -13,6 +12,7 @@ from typing import Any
 
 import oracledb
 from bson import Decimal128
+from mongo_common import database_name, mongo_uri
 from pymongo import MongoClient, ReplaceOne
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -247,9 +247,8 @@ def parse_legacy_date(
 
 
 def mongo_database(args: Any) -> tuple[MongoClient, Any]:
-    uri = os.environ.get("MONGO_URI", "mongodb://127.0.0.1:27017")
-    name = (args.mongo_db or f"ow_tp_{args.ns}").lower()
-    client = MongoClient(uri)
+    name = args.mongo_db or database_name(args.ns)
+    client = MongoClient(mongo_uri())
     return client, client[name]
 
 

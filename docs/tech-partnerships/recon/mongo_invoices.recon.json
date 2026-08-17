@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_invoices",
   "namespace": "demo",
-  "generated_at": "2026-08-17T05:34:53.178645Z",
+  "generated_at": "2026-08-17T05:44:25.570896Z",
   "run_mode": "fixture",
   "checks": [
     {
