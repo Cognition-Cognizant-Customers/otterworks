@@ -18,7 +18,14 @@
             "polyfills": ["zone.js"],
             "tsConfig": "tsconfig.json",
             "assets": ["src/favicon.ico", "src/favicon.svg", "src/assets"],
-            "styles": ["src/styles.scss"],
+            "styles": [
+              "@fontsource/roboto/latin-300.css",
+              "@fontsource/roboto/latin-400.css",
+              "@fontsource/roboto/latin-500.css",
+              "@fontsource/roboto/latin-700.css",
+              "material-icons/iconfont/filled.css",
+              "src/styles.scss"
+            ],
             "scripts": []
           },
           "configurations": {
@@ -44,7 +51,14 @@
             "tsConfig": "tsconfig.spec.json",
             "karmaConfig": "karma.conf.js",
             "assets": ["src/favicon.ico", "src/favicon.svg", "src/assets"],
-            "styles": ["src/styles.scss"],
+            "styles": [
+              "@fontsource/roboto/latin-300.css",
+              "@fontsource/roboto/latin-400.css",
+              "@fontsource/roboto/latin-500.css",
+              "@fontsource/roboto/latin-700.css",
+              "material-icons/iconfont/filled.css",
+              "src/styles.scss"
+            ],
             "scripts": []
           }
         },
