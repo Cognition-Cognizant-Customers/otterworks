@@ -1,0 +1,310 @@
+{
+  "kind": "recon-report",
+  "unit": "cron-search",
+  "namespace": "demo",
+  "generated_at": "2026-08-17T05:40:30Z",
+  "run_mode": "fixture",
+  "checks": [
+    {
+      "id": "SRC-01/documents",
+      "expected": {
+        "count": 125,
+        "ids_sha256": "905caa66dc65c3899acbe28dd768dca6cebc04de090b66ffa6d593fb3e4b39be"
+      },
+      "actual": {
+        "count": 125,
+        "ids_sha256": "905caa66dc65c3899acbe28dd768dca6cebc04de090b66ffa6d593fb3e4b39be",
+        "missing": [],
+        "unexpected": []
+      },
+      "source_of_truth": "legacy MeiliSearch baseline manifest, documents ids",
+      "result": "pass"
+    },
+    {
+      "id": "SRC-01/files",
+      "expected": {
+        "count": 72,
+        "ids_sha256": "1d2f65db0a60a1ac2bffa58c1846ab2802c361d32fa6edcf9dd1e683516d30d8"
+      },
+      "actual": {
+        "count": 72,
+        "ids_sha256": "1d2f65db0a60a1ac2bffa58c1846ab2802c361d32fa6edcf9dd1e683516d30d8",
+        "missing": [],
+        "unexpected": []
+      },
+      "source_of_truth": "legacy MeiliSearch baseline manifest, files ids",
+      "result": "pass"
+    },
+    {
+      "id": "SRC-02/DOC-UNICODE-TITLE",
+      "expected": {
+        "count": 1,
+        "ids_sha256": "e6721f7cf32c765a7c529b8b4f5752ac2f1f3cf8c33314150010d9b8437802d0"
+      },
+      "actual": {
+        "count": 1,
+        "ids_sha256": "e6721f7cf32c765a7c529b8b4f5752ac2f1f3cf8c33314150010d9b8437802d0",
+        "missing": [],
+        "unexpected": []
+      },
+      "source_of_truth": "golden query set evaluated by the fixture $search evaluator",
+      "result": "pass"
+    },
+    {
+      "id": "SRC-02/DOC-TERM-ALL",
+      "expected": {
+        "count": 125,
+        "ids_sha256": "905caa66dc65c3899acbe28dd768dca6cebc04de090b66ffa6d593fb3e4b39be"
+      },
+      "actual": {
+        "count": 125,
+        "ids_sha256": "905caa66dc65c3899acbe28dd768dca6cebc04de090b66ffa6d593fb3e4b39be",
+        "missing": [],
+        "unexpected": []
+      },
+      "source_of_truth": "golden query set evaluated by the fixture $search evaluator",
+      "result": "pass"
+    },
+    {
+      "id": "SRC-02/DOC-FILTER-OWNER",
+      "expected": {
+        "count": 11,
+        "ids_sha256": "114a5c3d8bf7b0f63ca3f0b23cc3d24743e97edc07d9dbc08fce112f903dad37"
+      },
+      "actual": {
+        "count": 11,
+        "ids_sha256": "114a5c3d8bf7b0f63ca3f0b23cc3d24743e97edc07d9dbc08fce112f903dad37",
+        "missing": [],
+        "unexpected": []
+      },
+      "source_of_truth": "golden query set evaluated by the fixture $search evaluator",
+      "result": "pass"
+    },
+    {
+      "id": "SRC-02/DOC-FILTER-TAG",
+      "expected": {
+        "count": 25,
+        "ids_sha256": "733d5e434586e1188c7e8e94c97e049a511ebe0ed873685656a036e8ad2e4e46"
+      },
+      "actual": {
+        "count": 25,
+        "ids_sha256": "733d5e434586e1188c7e8e94c97e049a511ebe0ed873685656a036e8ad2e4e46",
+        "missing": [],
+        "unexpected": []
+      },
+      "source_of_truth": "golden query set evaluated by the fixture $search evaluator",
+      "result": "pass"
+    },
+    {
+      "id": "SRC-02/FILE-UNICODE-NAME",
+      "expected": {
+        "count": 1,
+        "ids_sha256": "c959936d6809a5594fe50cca5643f1f8da41fb2fd2e2eabe07bc649f581339e9"
+      },
+      "actual": {
+        "count": 1,
+        "ids_sha256": "c959936d6809a5594fe50cca5643f1f8da41fb2fd2e2eabe07bc649f581339e9",
+        "missing": [],
+        "unexpected": []
+      },
+      "source_of_truth": "golden query set evaluated by the fixture $search evaluator",
+      "result": "pass"
+    },
+    {
+      "id": "SRC-02/FILE-FILTER-MIME",
+      "expected": {
+        "count": 18,
+        "ids_sha256": "6e56bd2f68a74929c7faae98171c21896d0e3421c322e6579ed103e3ca93a625"
+      },
+      "actual": {
+        "count": 18,
+        "ids_sha256": "6e56bd2f68a74929c7faae98171c21896d0e3421c322e6579ed103e3ca93a625",
+        "missing": [],
+        "unexpected": []
+      },
+      "source_of_truth": "golden query set evaluated by the fixture $search evaluator",
+      "result": "pass"
+    },
+    {
+      "id": "SRC-02/FILE-FILTER-FOLDER",
+      "expected": {
+        "count": 24,
+        "ids_sha256": "382a7151d96dfd2f6d17d032b16ae1e540785ff0a9c0d47d2b8bdb78b425713d"
+      },
+      "actual": {
+        "count": 24,
+        "ids_sha256": "382a7151d96dfd2f6d17d032b16ae1e540785ff0a9c0d47d2b8bdb78b425713d",
+        "missing": [],
+        "unexpected": []
+      },
+      "source_of_truth": "golden query set evaluated by the fixture $search evaluator",
+      "result": "pass"
+    },
+    {
+      "id": "SRC-02/FILE-FILTER-OWNER",
+      "expected": {
+        "count": 6,
+        "ids_sha256": "f3115e4e1a3006346fe3c72caa6ff404f082a0a4cc638e4d0d562a887e5c89ec"
+      },
+      "actual": {
+        "count": 6,
+        "ids_sha256": "f3115e4e1a3006346fe3c72caa6ff404f082a0a4cc638e4d0d562a887e5c89ec",
+        "missing": [],
+        "unexpected": []
+      },
+      "source_of_truth": "golden query set evaluated by the fixture $search evaluator",
+      "result": "pass"
+    },
+    {
+      "id": "SRC-02/FILE-FILTER-TAG",
+      "expected": {
+        "count": 15,
+        "ids_sha256": "b106b676c02a25b943c425e8bd66020a5aa07bfc007693b75cf822de2bcd294a"
+      },
+      "actual": {
+        "count": 15,
+        "ids_sha256": "b106b676c02a25b943c425e8bd66020a5aa07bfc007693b75cf822de2bcd294a",
+        "missing": [],
+        "unexpected": []
+      },
+      "source_of_truth": "golden query set evaluated by the fixture $search evaluator",
+      "result": "pass"
+    },
+    {
+      "id": "SRC-03/documents",
+      "expected": {
+        "searchable": [
+          "content",
+          "tags",
+          "title"
+        ],
+        "filterable": [
+          "created_at",
+          "owner_id",
+          "tags",
+          "type",
+          "updated_at"
+        ],
+        "sortable": [
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "actual": {
+        "searchable": [
+          "content",
+          "tags",
+          "title"
+        ],
+        "filterable": [
+          "created_at",
+          "owner_id",
+          "tags",
+          "type",
+          "updated_at"
+        ],
+        "sortable": [
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "source_of_truth": "committed index definitions (offline)",
+      "result": "pass"
+    },
+    {
+      "id": "SRC-03/files",
+      "expected": {
+        "searchable": [
+          "mime_type",
+          "name",
+          "tags"
+        ],
+        "filterable": [
+          "created_at",
+          "folder_id",
+          "mime_type",
+          "owner_id",
+          "tags",
+          "type",
+          "updated_at"
+        ],
+        "sortable": [
+          "created_at",
+          "size",
+          "updated_at"
+        ]
+      },
+      "actual": {
+        "searchable": [
+          "mime_type",
+          "name",
+          "tags"
+        ],
+        "filterable": [
+          "created_at",
+          "folder_id",
+          "mime_type",
+          "owner_id",
+          "tags",
+          "type",
+          "updated_at"
+        ],
+        "sortable": [
+          "created_at",
+          "size",
+          "updated_at"
+        ]
+      },
+      "source_of_truth": "committed index definitions (offline)",
+      "result": "pass"
+    },
+    {
+      "id": "SRC-04/attribution",
+      "expected": {
+        "records_indexed_under_blank_id": 0
+      },
+      "actual": {
+        "records_indexed_under_blank_id": 0,
+        "attributed": []
+      },
+      "source_of_truth": "ingest transform over the fixture corpus",
+      "result": "pass"
+    },
+    {
+      "id": "SRC-07/unit-has-no-reindex-path",
+      "expected": {
+        "meilisearch_dependencies": 0,
+        "schedule_declarations": 0
+      },
+      "actual": {
+        "offenders": []
+      },
+      "source_of_truth": "static scan of this unit's committed files",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": false,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "golden query set re-evaluated over the fixture corpus; id sets compared"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      "reverse_orphan_excluded_from_corpus",
+      "unicode_document_title"
+    ],
+    "actual_set": [
+      "reverse_orphan_excluded_from_corpus",
+      "unicode_document_title"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "$search execution, index field-role read-back, and continuous index maintenance (SRC-02/SRC-03/SRC-05 on the real engine): fixture mode evaluates query semantics locally and only the parent's live run proves them on Atlas",
+    "MeiliSearch relevance ordering and scores (contract coverage gap: meili_ranking_rules_not_portable)",
+    "MeiliSearch typo tolerance parity (contract coverage gap: typo_tolerance_semantics)",
+    "Crontab and legacy script deletion (SRC-07): landed by the parent's decommission PR"
+  ]
+}
