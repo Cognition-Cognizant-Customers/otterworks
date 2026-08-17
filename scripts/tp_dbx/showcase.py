@@ -498,7 +498,8 @@ def cmd_dashboard(dbx: Databricks, args) -> int:
         "serialized_dashboard": json.dumps(spec),
     }
     if existing:
-        body["etag"] = existing.get("etag", "")
+        current = dbx.ok("GET", f"/api/2.0/lakeview/dashboards/{existing['dashboard_id']}", None)
+        body["etag"] = current.get("etag", "")
         result = dbx.ok("PATCH", f"/api/2.0/lakeview/dashboards/{existing['dashboard_id']}", body)
     else:
         result = dbx.ok("POST", "/api/2.0/lakeview/dashboards", body)
