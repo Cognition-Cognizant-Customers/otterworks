@@ -105,3 +105,6 @@ __pycache__/
 .terraform.lock.hcl
 *.tfstate
 *.tfstate.backup
+
+# Generated local-development admin token (see frontend/admin-dashboard/scripts/generate-dev-auth.mjs)
+frontend/admin-dashboard/src/assets/dev-auth.json
