@@ -7,7 +7,7 @@ import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
 import { useAuthStore } from "@/stores/auth-store";
-import { generateColor } from "@/lib/utils";
+import { cn, generateColor } from "@/lib/utils";
 import {
   Bold,
   Italic,
@@ -24,7 +24,6 @@ import {
   WifiOff,
   RefreshCw,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 interface CollaborativeEditorProps {
   documentId: string;

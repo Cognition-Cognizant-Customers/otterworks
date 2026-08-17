@@ -17,10 +17,9 @@ import {
   LogOut,
   type LucideIcon,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getInitials } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui-store";
 import { useAuthStore } from "@/stores/auth-store";
-import { getInitials } from "@/lib/utils";
 import { Logo } from "@/components/ui/logo";
 
 interface NavItem {
