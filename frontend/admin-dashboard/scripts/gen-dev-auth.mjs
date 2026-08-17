@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 
 const SECRET = process.env.JWT_SECRET || 'otterworks-local-dev-jwt-secret-change-me-in-production';
 const USER_ID = 'a0000000-0000-0000-0000-000000000001';
-const TTL_SECONDS = 12 * 60 * 60;
+// Long-lived: the file is minted at build time and then served by the image for its lifetime.
+const TTL_SECONDS = 10 * 365 * 24 * 60 * 60;
 
 const base64Url = input => Buffer.from(input).toString('base64url');
 
