@@ -64,7 +64,7 @@ apiClient.interceptors.response.use(
       const url = error.config?.url || "";
       if (!url.includes("/auth/")) {
         if (isVerifyingToken) {
-          return Promise.reject(error);
+          throw error;
         }
         isVerifyingToken = true;
         try {
@@ -85,6 +85,6 @@ apiClient.interceptors.response.use(
         }
       }
     }
-    return Promise.reject(error);
+    throw error;
   }
 );
