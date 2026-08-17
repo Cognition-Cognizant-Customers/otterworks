@@ -70,7 +70,12 @@ frozen-date corpus. The compared identities, payloads, and expected sets remain
 from the immutable golden baseline. After the two reconciliation sweeps, live
 mode seeds two clearly marked TTL-removal probes (ASCII and multibyte payloads)
 and waits up to ten minutes for both DynamoDB TTL removals to appear in S3 and
-disappear from DynamoDB. A timeout is reported as skipped rather than failed;
-`--skip-ttl-probe` records an explicit omission. Unless `--keep` is supplied,
-the run removes its corpus, probes, and archive objects without touching
-pre-existing objects or records.
+disappear from DynamoDB. A timeout is skipped when a probe remains in DynamoDB,
+or when full absence was first observed less than 120 seconds before the
+nominal deadline; that case continues polling through the remaining
+stream-batching grace period to allow a healthy archive to arrive, then remains
+skipped if it does not. If every probe was absent from DynamoDB for more than
+that grace period by the nominal deadline and an archive object is still
+missing, the check fails. `--skip-ttl-probe` records an explicit omission.
+Unless `--keep` is supplied, the run removes its corpus, probes, and archive
+objects without touching pre-existing objects or records.

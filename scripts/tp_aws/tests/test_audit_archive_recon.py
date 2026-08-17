@@ -14,6 +14,7 @@ from audit_archive_recon import (  # noqa: E402
     seed_corpus,
     wait_for_ttl_probe,
 )
+import audit_archive_recon as recon  # noqa: E402
 
 
 def test_live_ttl_anchoring_preserves_split_and_boundaries() -> None:
@@ -90,8 +91,23 @@ def test_ttl_probe_fails_when_all_removed_probes_are_not_archived() -> None:
             [],
         ),
         records,
-        timeout_seconds=0,
+        timeout_seconds=11,
+        grace_seconds=10,
     )
     assert result["result"] == "fail"
     assert result["archived_objects"] == ["demo-probe-unicode"]
     assert result["absent_from_table"] == ["demo-probe-ascii", "demo-probe-unicode"]
+
+
+def test_ttl_probe_does_not_fail_before_stream_grace_expires(monkeypatch) -> None:
+    records = probe_records()
+    now = [0.0]
+    monkeypatch.setattr(recon.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(recon.time, "sleep", lambda seconds: now.__setitem__(0, now[0] + seconds))
+    result = wait_for_ttl_probe(
+        StubProbeTarget(["demo-probe-unicode"], []),
+        records,
+        timeout_seconds=0,
+        grace_seconds=120,
+    )
+    assert result["result"] == "skipped"

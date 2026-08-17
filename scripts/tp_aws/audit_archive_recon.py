@@ -37,6 +37,7 @@ GOLDEN = ROOT / "testdata/legacy/golden/cronbox"
 LEGACY_TABLE = "otterworks-audit-events"
 RETENTION_DAYS = 90
 UNEXPIRABLE_PROBE = "recon-unexpirable-0"
+TTL_PROBE_GRACE_SECONDS = 120
 BOUNDARY_ARCHIVED = "boundary-0"
 BOUNDARY_RETAINED = ("boundary-1", "boundary-2")
 TTL_PROBE_IDS = ("recon-ttl-probe-ascii", "recon-ttl-probe-unicode")
@@ -444,34 +445,59 @@ def wait_for_ttl_probe(
     records: list[dict],
     timeout_seconds: int = 600,
     interval_seconds: int = 15,
+    grace_seconds: int = TTL_PROBE_GRACE_SECONDS,
+    clock=None,
+    sleeper=None,
 ) -> dict:
     """Wait for both TTL removals to reach S3 and disappear from DynamoDB."""
+    clock = clock or time.monotonic
+    sleeper = sleeper or time.sleep
     expected_ids = {record["event_id"] for record in records}
-    deadline = time.monotonic() + timeout_seconds
+    deadline = clock() + timeout_seconds
+    first_absent_at = None
     while True:
+        absent_ids = expected_ids - set(target.scan_ids())
         keys = target.archive_objects()
         archived_ids = {
             event_id_of(key) for key in keys if event_id_of(key) in expected_ids
         }
-        absent_ids = expected_ids - set(target.scan_ids())
         if archived_ids == expected_ids and absent_ids == expected_ids:
             return {
                 "result": "pass",
                 "archived_objects": sorted(archived_ids),
                 "absent_from_table": sorted(absent_ids),
             }
-        remaining = deadline - time.monotonic()
+        now = clock()
+        if absent_ids == expected_ids and first_absent_at is None:
+            first_absent_at = now
+        remaining = deadline - now
         if remaining <= 0:
-            return {
-                "result": (
-                    "fail"
-                    if absent_ids == expected_ids and archived_ids != expected_ids
-                    else "skipped"
-                ),
-                "archived_objects": sorted(archived_ids),
-                "absent_from_table": sorted(absent_ids),
-            }
-        time.sleep(min(interval_seconds, remaining))
+            if (
+                first_absent_at is not None
+                and deadline - first_absent_at > grace_seconds
+                and archived_ids != expected_ids
+            ):
+                return {
+                    "result": "fail",
+                    "archived_objects": sorted(archived_ids),
+                    "absent_from_table": sorted(absent_ids),
+                }
+            if first_absent_at is None:
+                return {
+                    "result": "skipped",
+                    "archived_objects": sorted(archived_ids),
+                    "absent_from_table": sorted(absent_ids),
+                }
+            grace_remaining = grace_seconds - (now - first_absent_at)
+            if grace_remaining <= 0:
+                return {
+                    "result": "skipped",
+                    "archived_objects": sorted(archived_ids),
+                    "absent_from_table": sorted(absent_ids),
+                }
+            sleeper(min(interval_seconds, grace_remaining))
+        else:
+            sleeper(min(interval_seconds, remaining))
 
 
 def run(args) -> dict:
