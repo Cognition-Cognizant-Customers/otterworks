@@ -30,6 +30,7 @@ import os
 import subprocess
 import sys
 import time
+import urllib.parse
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -66,9 +67,14 @@ def find_alert(dbx: Databricks, name: str) -> dict | None:
 
 
 def find_dashboard(dbx: Databricks, name: str) -> dict | None:
+    """The list response keeps reporting a trashed dashboard as ACTIVE for a
+    while, so confirm the state on the dashboard itself before claiming it."""
     for dashboard in dbx.list_all("/api/2.0/lakeview/dashboards", "dashboards"):
-        if dashboard.get("display_name") == name and dashboard.get("lifecycle_state") == "ACTIVE":
-            return dashboard
+        if dashboard.get("display_name") != name or dashboard.get("lifecycle_state") != "ACTIVE":
+            continue
+        status, detail = dbx.call("GET", f"/api/2.0/lakeview/dashboards/{dashboard['dashboard_id']}")
+        if status == 200 and detail.get("lifecycle_state") == "ACTIVE":
+            return detail
     return None
 
 
@@ -199,6 +205,30 @@ def _checks(dbx: Databricks, n: S.Names) -> list[dict]:
     return dbx.sql_ok(S.recon_checks(n)).dicts()
 
 
+def notifier_runs(dbx: Databricks, n: S.Names) -> list[str]:
+    """Run urls where this namespace's notifier task actually executed, so the
+    report can state what happened here instead of assuming the red path was
+    always rehearsed somewhere else."""
+    job = dbx.find_job(f"ow_tp_billing_history_recon_{n.ns}")
+    if not job:
+        return []
+    fired = []
+    query = f"/api/2.1/jobs/runs/list?job_id={job['job_id']}&expand_tasks=true&limit=25"
+    for _ in range(20):
+        payload = dbx.ok("GET", query)
+        for run in payload.get("runs", []):
+            for task in run.get("tasks", []):
+                if (task.get("task_key") == "notify_devin"
+                        and task.get("state", {}).get("result_state") == "SUCCESS"):
+                    fired.append(dbx.run_url(int(run["run_id"])))
+        token = payload.get("next_page_token", "")
+        if not token:
+            break
+        query = (f"/api/2.1/jobs/runs/list?job_id={job['job_id']}&expand_tasks=true"
+                 f"&limit=25&page_token={urllib.parse.quote(token)}")
+    return fired
+
+
 def cmd_recon(dbx: Databricks, args) -> int:
     n = names(args)
     data = load_manifest(args)
@@ -231,6 +261,18 @@ def cmd_recon(dbx: Databricks, args) -> int:
     expected_keys = {tuple(a) for a in expected_anomalies}
     actual_keys = {tuple(a) for a in actual_anomalies}
 
+    unverified = ["legacy sendmail delivery of the finance report (no SMTP in the demo estate)"]
+    fired = notifier_runs(dbx, n)
+    if not fired:
+        unverified.append(
+            f"recon-failure webhook POST from the ns={n.ns} notifier task: no run of this "
+            "namespace's recon job has taken the red path, so its notifier notebook has "
+            "never fired here (the red path is rehearsed in a throwaway namespace so this "
+            "namespace stays green)"
+        )
+    else:
+        print(f"notifier fired in ns={n.ns}: {', '.join(fired[:3])}")
+
     report = {
         "kind": "recon-report",
         "unit": "custbill_history_backfill",
@@ -255,9 +297,7 @@ def cmd_recon(dbx: Databricks, args) -> int:
             "missing": sorted(list(k) for k in expected_keys - actual_keys),
             "unexpected": sorted(list(k) for k in actual_keys - expected_keys),
         },
-        "unverified_paths": [
-            "legacy sendmail delivery of the finance report (no SMTP in the demo estate)",
-        ],
+        "unverified_paths": unverified,
     }
     failed = [c for c in report["checks"] if c["result"] == "fail"]
     rows = ",".join(
@@ -302,23 +342,46 @@ def cmd_timetravel(dbx: Databricks, args) -> int:
     return 0
 
 
+def describe_lineage_entity(entry: dict) -> str:
+    """Lineage edges are not all tables — a notebook, job or query shows up too,
+    and printing those as None reads like a broken chain."""
+    table = entry.get("tableInfo")
+    if table:
+        parts = [table.get("catalog_name"), table.get("schema_name"), table.get("name")]
+        return ".".join(p for p in parts if p) or "table:<unnamed>"
+    file_info = entry.get("fileInfo")
+    if file_info:
+        return file_info.get("path", "path:<unnamed>")
+    for key, label in (("notebookInfos", "notebook"), ("jobInfos", "job"),
+                       ("queryInfos", "query"), ("dashboardInfos", "dashboard"),
+                       ("pipelineInfos", "pipeline"), ("modelInfos", "model")):
+        if entry.get(key):
+            return f"{label}:{len(entry[key])}"
+    return "unknown:" + ",".join(sorted(entry)) if entry else "unknown"
+
+
 def cmd_lineage(dbx: Databricks, args) -> int:
     n = names(args)
+    edges: dict[str, list[str]] = {}
     for table in (n.bronze, n.silver, n.gold):
         status, payload = dbx.call(
             "GET", "/api/2.0/lineage-tracking/table-lineage?table_name=" + table + "&include_entity_lineage=true"
         )
-        upstreams = [
-            u.get("tableInfo", {}).get("name") or u.get("fileInfo", {}).get("path")
-            for u in payload.get("upstreams", [])
-        ]
-        downstreams = [
-            d.get("tableInfo", {}).get("name") or d.get("fileInfo", {}).get("path")
-            for d in payload.get("downstreams", [])
-        ]
+        upstreams = [describe_lineage_entity(u) for u in payload.get("upstreams", [])]
+        downstreams = [describe_lineage_entity(d) for d in payload.get("downstreams", [])]
+        edges[table] = upstreams
         print(f"{table}: HTTP {status} upstreams={upstreams or '[]'} downstreams={downstreams or '[]'}")
     print(f"lineage UI: {dbx.host}/explore/data/{n.catalog}/silver/custbill_history_{n.ns}?activeTab=lineage")
-    return 0
+    # the claim is a resolved chain, so assert the three hops rather than leaving
+    # a reader to eyeball the dumps
+    hops = [
+        ("volume -> bronze", any(u.startswith(n.history_dir) for u in edges[n.bronze])),
+        ("bronze -> silver", any(u.endswith(n.bronze.rsplit(".", 1)[-1]) for u in edges[n.silver])),
+        ("silver -> gold", any(u.endswith(n.silver.rsplit(".", 1)[-1]) for u in edges[n.gold])),
+    ]
+    for label, present in hops:
+        print(f"  hop {label}: {'resolved' if present else 'MISSING'}")
+    return 0 if all(present for _, present in hops) else 1
 
 
 def pipeline_name(n: S.Names) -> str:
@@ -361,6 +424,31 @@ def cmd_pipeline(dbx: Databricks, args) -> int:
     return 0
 
 
+def expectation_metrics(dbx: Databricks, pipeline_id: str, update_id: str) -> dict[tuple[str, str], dict]:
+    """Databricks' own data-quality accounting for the update, read from the
+    pipeline event log: proof the rules are declared expectations and not SQL
+    asserts we wrote ourselves."""
+    metrics: dict[tuple[str, str], dict] = {}
+    query = "max_results=250"
+    for _ in range(20):
+        payload = dbx.ok("GET", f"/api/2.0/pipelines/{pipeline_id}/events?{query}")
+        for event in payload.get("events", []):
+            if event.get("origin", {}).get("update_id") != update_id:
+                continue
+            quality = (event.get("details", {}).get("flow_progress", {})
+                       .get("data_quality", {}))
+            for expectation in quality.get("expectations", []):
+                key = (expectation.get("dataset", ""), expectation.get("name", ""))
+                entry = metrics.setdefault(key, {"passed_records": 0, "failed_records": 0})
+                entry["passed_records"] += int(expectation.get("passed_records", 0) or 0)
+                entry["failed_records"] += int(expectation.get("failed_records", 0) or 0)
+        token = payload.get("next_page_token", "")
+        if not token:
+            break
+        query = "max_results=250&page_token=" + urllib.parse.quote(token)
+    return metrics
+
+
 def cmd_run_pipeline(dbx: Databricks, args) -> int:
     n = names(args)
     found = find_pipeline(dbx, pipeline_name(n))
@@ -380,13 +468,27 @@ def cmd_run_pipeline(dbx: Databricks, args) -> int:
     print(f"state: {state}")
     if state != "COMPLETED":
         return 1
-    for table in (f"custbill_dlt_{n.ns}", f"custbill_dlt_annual_{n.ns}"):
+    for table in (f"custbill_dlt_{n.ns}", f"custbill_dlt_quarantine_{n.ns}",
+                  f"custbill_dlt_files_{n.ns}", f"custbill_dlt_annual_{n.ns}"):
         rows = dbx.sql_ok(f"SELECT count(*) AS rows FROM {n.catalog}.silver.{table}").rows[0][0]
         print(f"  {n.catalog}.silver.{table}: {rows} rows")
+    metrics = expectation_metrics(dbx, pipeline_id, update_id)
+    if metrics:
+        print("  declared expectation metrics (from the pipeline event log):")
+        for (dataset, name), entry in sorted(metrics.items()):
+            print(f"    {dataset}.{name}: passed={entry['passed_records']} "
+                  f"failed={entry['failed_records']}")
+    else:
+        print("  declared expectation metrics: none reported by the event log")
     drift = dbx.sql_ok(S.dlt_parity(n))
     print("  parity with harness gold: "
           + ("matches" if not drift.rows else f"DIFFERS on {len(drift.rows)} groups: {drift.rows[:3]}"))
-    return 0 if not drift.rows else 1
+    quality = dbx.sql_ok(S.dlt_quality_parity(n))
+    print("  parity with harness quarantine: "
+          + ("matches" if not quality.rows else f"DIFFERS: {quality.dicts()}"))
+    if not metrics:
+        return 1
+    return 0 if not (drift.rows or quality.rows) else 1
 
 
 def cmd_dashboard(dbx: Databricks, args) -> int:
@@ -396,6 +498,14 @@ def cmd_dashboard(dbx: Databricks, args) -> int:
         ("annual", (f"SELECT source_year, currency, record_type, record_count, "
                     f"total_amount_cents / 100.0 AS total_amount FROM {n.gold} ORDER BY source_year")),
         ("quality", f"SELECT reason, count(*) AS records FROM {n.quarantine} GROUP BY reason ORDER BY records DESC"),
+        ("expected_vs_actual", (
+            f"SELECT e.source_year, e.quarantine_record_count AS expected_quarantined, "
+            f"coalesce(q.records, 0) AS actual_quarantined "
+            f"FROM (SELECT source_year, max(quarantine_record_count) AS quarantine_record_count "
+            f"      FROM {n.expectations} GROUP BY source_year) e "
+            f"LEFT JOIN (SELECT source_year, count(*) AS records FROM {n.quarantine} "
+            f"           WHERE reason <> 'trailer_count_mismatch' GROUP BY source_year) q "
+            f"  ON e.source_year = q.source_year ORDER BY e.source_year")),
         ("recon", (f"SELECT result, count(*) AS checks FROM {n.recon_runs} "
                    f"WHERE run_id = (SELECT run_id FROM {n.recon_runs} ORDER BY checked_at DESC LIMIT 1) "
                    f"GROUP BY result")),
@@ -418,6 +528,7 @@ def cmd_dashboard(dbx: Databricks, args) -> int:
                                     "datasetName": "annual",
                                     "fields": [
                                         {"name": "source_year", "expression": "`source_year`"},
+                                        {"name": "currency", "expression": "`currency`"},
                                         {"name": "sum(total_amount)", "expression": "SUM(`total_amount`)"},
                                     ],
                                     "disaggregated": False,
@@ -429,8 +540,9 @@ def cmd_dashboard(dbx: Databricks, args) -> int:
                                 "encodings": {
                                     "x": {"fieldName": "source_year", "scale": {"type": "categorical"}, "displayName": "Year"},
                                     "y": {"fieldName": "sum(total_amount)", "scale": {"type": "quantitative"}, "displayName": "Billed amount"},
+                                    "color": {"fieldName": "currency", "scale": {"type": "categorical"}, "displayName": "Currency"},
                                 },
-                                "frame": {"title": "Billed amount by year (migrated history)", "showTitle": True},
+                                "frame": {"title": "Billed amount by year and currency (migrated history)", "showTitle": True},
                             },
                         },
                         "position": {"x": 0, "y": 0, "width": 6, "height": 6},
@@ -485,7 +597,35 @@ def cmd_dashboard(dbx: Databricks, args) -> int:
                                 "frame": {"title": "Latest reconciliation against the legacy baseline", "showTitle": True},
                             },
                         },
-                        "position": {"x": 0, "y": 6, "width": 12, "height": 5},
+                        "position": {"x": 0, "y": 6, "width": 6, "height": 5},
+                    },
+                    {
+                        "widget": {
+                            "name": "expected_vs_actual_table",
+                            "queries": [{
+                                "name": "expected_vs_actual_q",
+                                "query": {
+                                    "datasetName": "expected_vs_actual",
+                                    "fields": [
+                                        {"name": "source_year", "expression": "`source_year`"},
+                                        {"name": "expected_quarantined", "expression": "`expected_quarantined`"},
+                                        {"name": "actual_quarantined", "expression": "`actual_quarantined`"},
+                                    ],
+                                    "disaggregated": True,
+                                },
+                            }],
+                            "spec": {
+                                "version": 3,
+                                "widgetType": "table",
+                                "encodings": {"columns": [
+                                    {"fieldName": "source_year", "displayName": "Year"},
+                                    {"fieldName": "expected_quarantined", "displayName": "Expected (legacy baseline)"},
+                                    {"fieldName": "actual_quarantined", "displayName": "Actual (migrated)"},
+                                ]},
+                                "frame": {"title": "Data quality: expected vs actual quarantined records", "showTitle": True},
+                            },
+                        },
+                        "position": {"x": 6, "y": 6, "width": 6, "height": 5},
                     },
                 ],
             }
@@ -498,14 +638,27 @@ def cmd_dashboard(dbx: Databricks, args) -> int:
         "serialized_dashboard": json.dumps(spec),
     }
     if existing:
-        body["etag"] = existing.get("etag", "")
-        result = dbx.ok("PATCH", f"/api/2.0/lakeview/dashboards/{existing['dashboard_id']}", body)
-    else:
+        if existing.get("parent_path") != NOTEBOOK_DIR:
+            # a dashboard created from a personal home folder cannot be moved by the
+            # API and does not belong in the shared demo; trash it and recreate
+            dbx.ok("DELETE", f"/api/2.0/lakeview/dashboards/{existing['dashboard_id']}")
+            print(f"trashed dashboard {existing['dashboard_id']} outside {NOTEBOOK_DIR}")
+            existing = None
+        else:
+            # PATCH rejects an empty etag, and the list response omits it
+            body["etag"] = existing["etag"]
+            result = dbx.ok("PATCH", f"/api/2.0/lakeview/dashboards/{existing['dashboard_id']}", body)
+    if not existing:
+        # keep it beside the demo's notebooks instead of the caller's home folder
+        body["parent_path"] = NOTEBOOK_DIR
+        dbx.ok("POST", "/api/2.0/workspace/mkdirs", {"path": NOTEBOOK_DIR})
         result = dbx.ok("POST", "/api/2.0/lakeview/dashboards", body)
     dashboard_id = result["dashboard_id"]
-    dbx.call("POST", f"/api/2.0/lakeview/dashboards/{dashboard_id}/published",
-             {"embed_credentials": True, "warehouse_id": dbx.warehouse_id})
+    # a silent publish failure leaves a URL that 404s for the audience
+    dbx.ok("POST", f"/api/2.0/lakeview/dashboards/{dashboard_id}/published",
+           {"embed_credentials": True, "warehouse_id": dbx.warehouse_id})
     print(f"dashboard: {dbx.host}/dashboardsv3/{dashboard_id}/published")
+    print(f"  workspace folder: {result.get('parent_path', NOTEBOOK_DIR)}")
     return 0
 
 
@@ -558,6 +711,19 @@ base_branch = dbutils.widgets.get("base_branch")
 workspace = spark.conf.get("spark.databricks.workspaceUrl")
 run_url = f"https://{{workspace}}/jobs/{{job_id}}/runs/{{run_id}}"
 
+# recompute the checks so the payload names the failing ones with expected vs
+# actual: the spawned session should not have to reverse-engineer the failure
+# from a task log it cannot read. It must never cost us the notification though:
+# recon_check also fails when the SQL itself cannot run (dropped table,
+# permissions, compute), and that is precisely when someone has to be told
+CHECKS_SQL = """{checks_sql}"""
+checks_error = ""
+try:
+    failing = [row.asDict() for row in spark.sql(CHECKS_SQL).where("result = 'fail'").collect()]
+except Exception as exc:  # noqa: BLE001
+    failing, checks_error = [], f"{{type(exc).__name__}}: {{exc}}"[:2000]
+    print("could not recompute the checks:", checks_error)
+
 payload = {{
     "source": "databricks-recon-job",
     "event": "reconciliation_failed",
@@ -569,11 +735,17 @@ payload = {{
     "run_url": run_url,
     "base_branch": base_branch,
     "catalog": "{catalog}",
+    "failing_checks": failing[:50],
+    "failing_check_count": len(failing),
+    "checks_error": checks_error,
+    "recon_report": "docs/tech-partnerships/recon/custbill_history_backfill-{ns}.recon.json",
+    "recon_command": "make dbx-showcase CMD=recon NS={ns}",
     "detail": (
         "OtterWorks CUSTBILL history reconciliation failed on Databricks. "
         "The recon task raise_error message names the failing checks; each check "
         "compares the migrated gold aggregates against the legacy-derived "
-        "expectations table."
+        "expectations table. An empty failing_checks list with checks_error set "
+        "means the recon SQL itself could not run — diagnose that first."
     ),
 }}
 
@@ -608,6 +780,7 @@ def cmd_recon_job(dbx: Databricks, args) -> int:
     dbx.import_notebook(notebook_path, NOTIFY_NOTEBOOK.format(
         ns=n.ns, webhook=args.webhook_url, scope=args.secret_scope,
         key=args.secret_key, catalog=n.catalog, base_branch=args.base_branch,
+        checks_sql=S.recon_checks(n).strip(),
     ))
     settings = {
         "name": f"ow_tp_billing_history_recon_{n.ns}",
@@ -777,6 +950,8 @@ def cmd_teardown(dbx: Databricks, args) -> int:
         print(f"deleted pipeline {pipeline['pipeline_id']}")
     # the pipeline's materialized views survive the pipeline, so drop them too
     for view in (f"{n.catalog}.silver.custbill_dlt_annual_{n.ns}",
+                 f"{n.catalog}.silver.custbill_dlt_quarantine_{n.ns}",
+                 f"{n.catalog}.silver.custbill_dlt_files_{n.ns}",
                  f"{n.catalog}.silver.custbill_dlt_{n.ns}"):
         dbx.sql(f"DROP MATERIALIZED VIEW IF EXISTS {view}")
         dbx.sql(f"DROP TABLE IF EXISTS {view}")

@@ -113,8 +113,16 @@ harness-built gold table exactly:
 make dbx-showcase CMD=run-pipeline NS=demo    # optional live run; ~5 min, own serverless compute
 ```
 
-Expected tail: `custbill_dlt_demo: 2856 rows`, `custbill_dlt_annual_demo: 36
-rows`, `parity with harness gold: matches`.
+Expected tail: `custbill_dlt_demo: 2856 rows`, `custbill_dlt_quarantine_demo: 24
+rows`, `custbill_dlt_files_demo: 72 rows`, `custbill_dlt_annual_demo: 36 rows`, the
+per-expectation pass/fail counts Databricks itself recorded in the pipeline event
+log, then `parity with harness gold: matches` and `parity with harness
+quarantine: matches`.
+
+The expectation metrics are the tile to point at: `numeric_amount` and
+`valid_calendar_date` each dropped 12 rows and
+`trailer_count_matches_body` flagged 6 files — the same 30 defects the harness
+quarantines, but counted by the platform rather than by our code.
 
 ## Beat 4 — Databricks catches it, Devin fixes it (0:08–0:12)
 
@@ -138,9 +146,10 @@ make dbx-showcase CMD=run-job NS=demo
 Expected: `recon_check: FAILED` with a `raise_error` message naming the failing
 check ids, and `notify_devin: SUCCESS`; the run's overall state is
 `SUCCESS_WITH_FAILURES`, because the notifier task itself succeeded. The notifier is a dependent task with
-`run_if: AT_LEAST_ONE_FAILED`; it POSTs job id, run id, run URL, namespace and
-base branch to the Devin automation webhook, with the shared secret read from
-the `ow_tp` Databricks secret scope.
+`run_if: AT_LEAST_ONE_FAILED`; it POSTs job id, run id, run URL, namespace, base
+branch, the recon report path and the failing check ids with expected vs actual
+to the Devin automation webhook, with the shared secret read from the `ow_tp`
+Databricks secret scope.
 
 That webhook starts *OtterWorks billing-history recon failure —
 auto-remediate (Databricks)*, which re-runs recon, diagnoses from the failing
@@ -148,6 +157,24 @@ check ids, remediates the smallest correct thing, re-runs the anomaly and
 idempotency checks, re-triggers the Databricks job to green, and opens one audit
 PR. Show the session transcript and the PR side by side: Databricks caught it,
 Devin fixed it, the PR proves it.
+
+## Verified live run (NS=demo)
+
+Every line below came from a live call against the demo workspace; the numbers
+are the deterministic ones above.
+
+| Capability | Evidence |
+|---|---|
+| Declarative pipeline (serverless, development, TRIGGERED) | `ow_tp_custbill_history_dlt_demo`, update `COMPLETED`, six declared expectations reported from the event log, gold **and** quarantine parity with the harness |
+| UC lineage | `hop volume -> bronze`, `hop bronze -> silver`, `hop silver -> gold` all `resolved` from the lineage API (`/api/2.0/lineage-tracking/table-lineage`) |
+| Delta time travel | 15 versions on `ow_tp.gold.custbill_annual_demo`, as-of totals identical across the last two versions (2,856 rows / 1,439,098,122 cents); no `RESTORE` run |
+| AI/BI dashboard | published under `/Shared/ow_tp`: annual billed amount by year and currency, quarantine reasons, expected-vs-actual quality, latest recon state |
+| Green recon job | `recon_check: SUCCESS`, `notify_devin: EXCLUDED` |
+| Red recon job (rehearsal namespace only) | `recon_check: FAILED` with `[USER_RAISED_EXCEPTION] RECONCILIATION FAILED (2 checks): quarantine_count/2024 expected=4 actual=9; file_count/2024 expected=12 actual=13`, `notify_devin: SUCCESS` |
+| Failure-to-Devin loop | the notifier's POST created a remediation session that opened with the failing check ids, run URL, namespace and base branch from the payload |
+
+The red path is always rehearsed in a throwaway namespace, never in `demo`:
+`demo` has to stay green and browsable for the live take.
 
 ## Cost controls
 
