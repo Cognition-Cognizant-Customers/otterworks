@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "cron-search",
   "namespace": "demo",
-  "generated_at": "2026-08-17T06:00:53Z",
+  "generated_at": "2026-08-17T06:08:02Z",
   "run_mode": "fixture",
   "checks": [
     {
@@ -213,14 +213,24 @@
             "record_id": "doc-004",
             "field": "title",
             "value": "\u0394ocument \u2615",
-            "contains_non_ascii": true
+            "required_characters": [
+              "\u0394"
+            ],
+            "missing_characters": [],
+            "expected_literal": null,
+            "literal_matches": false,
+            "failure_reasons": []
           },
           {
             "query_id": "FILE-UNICODE-NAME",
             "record_id": "file-007",
             "field": "name",
             "value": "Fichier \u0394 \u2615",
-            "contains_non_ascii": true
+            "required_characters": [],
+            "missing_characters": [],
+            "expected_literal": "Fichier \u0394 \u2615",
+            "literal_matches": true,
+            "failure_reasons": []
           }
         ]
       },

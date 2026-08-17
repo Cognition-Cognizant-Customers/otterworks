@@ -47,6 +47,7 @@ BASELINE = (
     REPO_ROOT
     / "testdata/legacy/golden/cronbox/demo/search_reindex_weekly/manifest.json"
 )
+SEED_MANIFEST_ROOT = REPO_ROOT / "testdata/legacy/golden/cronbox"
 CONTRACT = REPO_ROOT / "docs/tech-partnerships/contracts/cron-search.json"
 UNIT = "cron-search"
 PROBE_PREFIX = "ow-tp-cron-search-recon-"
@@ -77,12 +78,20 @@ def _set_check(
     }
 
 
-def _contains_non_ascii(value: Any) -> bool:
-    if isinstance(value, str):
-        return any(ord(character) > 127 for character in value)
-    if isinstance(value, (list, tuple)):
-        return any(_contains_non_ascii(item) for item in value)
-    return False
+def _seed_literals(namespace: str) -> dict[tuple[str, str], str]:
+    path = SEED_MANIFEST_ROOT / namespace / "seed-manifest.json"
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    unicode_file = manifest.get("stores", {}).get(FILES, {}).get("unicode_file")
+    if not isinstance(unicode_file, Mapping):
+        return {}
+    record_id = unicode_file.get("id")
+    file_name = unicode_file.get("file_name")
+    if not isinstance(record_id, str) or not isinstance(file_name, str):
+        return {}
+    return {(FILES, record_id): file_name}
 
 
 def _multibyte_check(
@@ -90,6 +99,7 @@ def _multibyte_check(
     query_results: Mapping[str, Sequence[str]],
     records: Mapping[str, Sequence[Mapping[str, Any]]],
     source_of_truth: str,
+    committed_literals: Mapping[tuple[str, str], str],
 ) -> dict[str, Any]:
     query_evidence = {}
     stored_evidence = []
@@ -116,17 +126,41 @@ def _multibyte_check(
         }
         query_sets_pass &= not missing and not unexpected
         field = "title" if query["collection"] == DOCUMENTS else "name"
+        query_text = query.get("meilisearch_query", {}).get("q", "")
+        required_characters = sorted(
+            {character for character in query_text if ord(character) > 127}
+        )
         for record_id in sorted(expected_ids):
             record = by_id.get(query["collection"], {}).get(record_id)
             value = record.get(field) if record else None
-            value_pass = _contains_non_ascii(value)
+            missing_characters = [
+                character
+                for character in required_characters
+                if not isinstance(value, str) or character not in value
+            ]
+            expected_literal = committed_literals.get((query["collection"], record_id))
+            literal_matches = expected_literal is not None and value == expected_literal
+            failure_reasons = []
+            if not required_characters and expected_literal is None:
+                failure_reasons.append(
+                    "no_non_ascii_query_characters_or_committed_literal_available"
+                )
+            if missing_characters:
+                failure_reasons.append("required_query_characters_missing")
+            if expected_literal is not None and not literal_matches:
+                failure_reasons.append("committed_literal_mismatch")
+            value_pass = not failure_reasons
             stored_evidence.append(
                 {
                     "query_id": query["id"],
                     "record_id": record_id,
                     "field": field,
                     "value": value,
-                    "contains_non_ascii": value_pass,
+                    "required_characters": required_characters,
+                    "missing_characters": missing_characters,
+                    "expected_literal": expected_literal,
+                    "literal_matches": literal_matches,
+                    "failure_reasons": failure_reasons,
                 }
             )
             stored_values_pass &= value_pass
@@ -493,6 +527,7 @@ def recon_live(namespace: str) -> dict[str, Any]:
                 first,
                 multibyte_records,
                 "committed multi-byte golden queries and values read back from deployed Atlas collections",
+                _seed_literals(namespace),
             )
         )
 
@@ -618,6 +653,7 @@ def recon_fixture(namespace: str, source_url: str) -> dict[str, Any]:
             first,
             corpus,
             "committed multi-byte golden queries and locally transformed fixture corpus",
+            _seed_literals(namespace),
         )
     )
     checks.extend(

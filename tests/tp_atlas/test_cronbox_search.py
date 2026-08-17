@@ -190,6 +190,7 @@ def test_fixture_report_labels_multibyte_and_attribution_checks(monkeypatch) -> 
         {
             "id": "DOC-UNICODE-TITLE",
             "collection": "documents",
+            "meilisearch_query": {"q": "Δocument"},
             "atlas_pipeline": [
                 {"$search": {"text": {"query": "Δocument", "path": "title"}}}
             ],
@@ -198,6 +199,7 @@ def test_fixture_report_labels_multibyte_and_attribution_checks(monkeypatch) -> 
         {
             "id": "FILE-UNICODE-NAME",
             "collection": "files",
+            "meilisearch_query": {"q": "Fichier"},
             "atlas_pipeline": [
                 {"$search": {"text": {"query": "Fichier", "path": "name"}}}
             ],
@@ -241,6 +243,7 @@ def test_multibyte_check_fails_for_ascii_folded_stored_value() -> None:
         {
             "id": "DOC-UNICODE-TITLE",
             "collection": "documents",
+            "meilisearch_query": {"q": "Δocument"},
             "expected_ids": ["doc-004"],
         },
         {
@@ -260,6 +263,7 @@ def test_multibyte_check_fails_for_ascii_folded_stored_value() -> None:
             "files": [{"id": "file-007", "name": "Fichier Δ ☕"}],
         },
         "committed multi-byte golden queries and locally transformed fixture corpus",
+        {("files", "file-007"): "Fichier Δ ☕"},
     )
     assert check["id"] == "SRC-04/multibyte-query"
     assert check["result"] == "fail"
@@ -271,12 +275,14 @@ def test_multibyte_check_fails_when_a_required_query_is_missing() -> None:
             {
                 "id": "DOC-UNICODE-TITLE",
                 "collection": "documents",
+                "meilisearch_query": {"q": "Δocument"},
                 "expected_ids": ["doc-004"],
             }
         ],
         {"DOC-UNICODE-TITLE": ["doc-004"]},
         {"documents": [{"id": "doc-004", "title": "Δocument ☕"}]},
         "committed multi-byte golden queries and locally transformed fixture corpus",
+        {},
     )
     assert check["result"] == "fail"
     assert check["actual"]["evaluated_query_ids"] == ["DOC-UNICODE-TITLE"]
@@ -288,11 +294,13 @@ def test_multibyte_check_fails_when_an_expected_record_is_missing() -> None:
             {
                 "id": "DOC-UNICODE-TITLE",
                 "collection": "documents",
+                "meilisearch_query": {"q": "Δocument"},
                 "expected_ids": ["doc-004"],
             },
             {
                 "id": "FILE-UNICODE-NAME",
                 "collection": "files",
+                "meilisearch_query": {"q": "Fichier"},
                 "expected_ids": ["file-007"],
             },
         ],
@@ -305,6 +313,106 @@ def test_multibyte_check_fails_when_an_expected_record_is_missing() -> None:
             "files": [{"id": "file-007", "name": "Fichier Δ ☕"}],
         },
         "committed multi-byte golden queries and locally transformed fixture corpus",
+        {("files", "file-007"): "Fichier Δ ☕"},
     )
     assert check["result"] == "fail"
-    assert check["actual"]["stored_values"][0]["contains_non_ascii"] is False
+    assert check["actual"]["stored_values"][0]["missing_characters"] == ["Δ"]
+    assert (
+        "required_query_characters_missing"
+        in check["actual"]["stored_values"][0]["failure_reasons"]
+    )
+
+
+def test_multibyte_check_fails_for_partially_folded_document_title() -> None:
+    queries = [
+        {
+            "id": "DOC-UNICODE-TITLE",
+            "collection": "documents",
+            "meilisearch_query": {"q": "Δocument"},
+            "expected_ids": ["doc-004"],
+        },
+        {
+            "id": "FILE-UNICODE-NAME",
+            "collection": "files",
+            "meilisearch_query": {"q": "Fichier"},
+            "expected_ids": ["file-007"],
+        },
+    ]
+    check = recon._multibyte_check(
+        queries,
+        {
+            "DOC-UNICODE-TITLE": ["doc-004"],
+            "FILE-UNICODE-NAME": ["file-007"],
+        },
+        {
+            "documents": [{"id": "doc-004", "title": "Document ☕"}],
+            "files": [{"id": "file-007", "name": "Fichier Δ ☕"}],
+        },
+        "fixture values",
+        {("files", "file-007"): "Fichier Δ ☕"},
+    )
+    assert check["result"] == "fail"
+    assert check["actual"]["stored_values"][0]["missing_characters"] == ["Δ"]
+
+
+def test_multibyte_check_fails_for_partially_folded_file_name() -> None:
+    queries = [
+        {
+            "id": "DOC-UNICODE-TITLE",
+            "collection": "documents",
+            "meilisearch_query": {"q": "Δocument"},
+            "expected_ids": ["doc-004"],
+        },
+        {
+            "id": "FILE-UNICODE-NAME",
+            "collection": "files",
+            "meilisearch_query": {"q": "Fichier"},
+            "expected_ids": ["file-007"],
+        },
+    ]
+    check = recon._multibyte_check(
+        queries,
+        {
+            "DOC-UNICODE-TITLE": ["doc-004"],
+            "FILE-UNICODE-NAME": ["file-007"],
+        },
+        {
+            "documents": [{"id": "doc-004", "title": "Δocument ☕"}],
+            "files": [{"id": "file-007", "name": "Fichier D ☕"}],
+        },
+        "fixture values",
+        {("files", "file-007"): "Fichier Δ ☕"},
+    )
+    assert check["result"] == "fail"
+    assert check["actual"]["stored_values"][1]["literal_matches"] is False
+
+
+def test_multibyte_check_passes_for_exact_seeded_values() -> None:
+    queries = [
+        {
+            "id": "DOC-UNICODE-TITLE",
+            "collection": "documents",
+            "meilisearch_query": {"q": "Δocument"},
+            "expected_ids": ["doc-004"],
+        },
+        {
+            "id": "FILE-UNICODE-NAME",
+            "collection": "files",
+            "meilisearch_query": {"q": "Fichier"},
+            "expected_ids": ["file-007"],
+        },
+    ]
+    check = recon._multibyte_check(
+        queries,
+        {
+            "DOC-UNICODE-TITLE": ["doc-004"],
+            "FILE-UNICODE-NAME": ["file-007"],
+        },
+        {
+            "documents": [{"id": "doc-004", "title": "Δocument ☕"}],
+            "files": [{"id": "file-007", "name": "Fichier Δ ☕"}],
+        },
+        "fixture values",
+        {("files", "file-007"): "Fichier Δ ☕"},
+    )
+    assert check["result"] == "pass"
