@@ -5,9 +5,8 @@
 # batch-deletes from DynamoDB, generates compliance report
 #
 # Owner: Jake (data-team@otterworks.dev) -- Jake left mid-2020
-# TODO ETL-134: Add incremental archival instead of full scan (deferred Q2 2020)
-# TODO ETL-167: Handle DynamoDB throughput throttling properly (2020-04-10)
-# TODO ETL-199: This script has no tests whatsoever (never prioritized)
+# Known limitations (full-scan archival, DynamoDB throttling, test coverage) and
+# the Airflow migration plan are tracked in etl/ETL_UPGRADE_GUIDE.md.
 
 import configparser
 import gzip
@@ -150,7 +149,7 @@ def main():
                         batch_writer.delete_item(Key=k)
                 deleted_count += len(batch)
             except:
-                # TODO ETL-167: Handle throttling / partial failures
+                # throttling / partial batch failures are not retried here
                 pass
             batch = []
 

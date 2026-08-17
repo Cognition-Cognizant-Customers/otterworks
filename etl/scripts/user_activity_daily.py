@@ -5,9 +5,9 @@
 # activity reports, stores to S3 for admin-service consumption
 #
 # Owner: Jake (data-team@otterworks.dev) -- Jake left mid-2020
-# TODO ETL-098: Optimize S3 reads with range requests (2019-12-01)
-# TODO ETL-160: Cache PostgreSQL connection across runs (deferred Q2 2020)
-# TODO ETL-210: Add email notification for report generation (never done)
+# Known limitations (unranged S3 reads, no connection reuse, no report
+# notifications) and the Airflow migration plan are tracked in
+# etl/ETL_UPGRADE_GUIDE.md.
 
 import configparser
 import gzip
@@ -171,9 +171,10 @@ def main():
                     user_totals[uid]["actions_by_type"][action_type] = prev + count
 
         except:
-            # S3 key might not exist for every day -- silently skip
-            # TODO ETL-098: Log missing days for debugging
-            pass
+            # S3 key might not exist for every day -- skip, but leave a trace
+            print("[%s] WARNING: no activity data for s3://%s/%s, skipping" % (
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"), data_lake_bucket, key
+            ))
 
     user_list = sorted(user_totals.values(), key=lambda x: x["total_actions"], reverse=True)
     print("[%s] Aggregated activity for %d users over %d days" % (

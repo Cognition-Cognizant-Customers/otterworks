@@ -21,6 +21,32 @@ The OtterWorks ETL pipeline consists of five Python scripts executed via system 
 | **Manual cron management** | Schedule changes require SSH access to the production server |
 | **No idempotency** | Re-running a script may duplicate data or fail on conflicts |
 
+### Known Limitations Backlog
+
+The legacy scripts used to carry these items as inline `TODO` comments; they are tracked
+here instead so the backlog lives in one place and maps onto the migration axes below.
+
+| Ticket | Script | Limitation | Migration axis |
+|--------|--------|------------|----------------|
+| ETL-078 | `analytics_daily.py` | Monolithic `main()`, no module boundaries | 1, 8 |
+| ETL-089 | `analytics_daily.py` | SQS queue URL was hardcoded | **Done** — now `[sqs] analytics_queue_url` in `config.ini`; moves to an Airflow Variable in axis 2 |
+| ETL-103 | `analytics_daily.py` | No dead-letter queue for failed/malformed SQS messages | 9 |
+| ETL-142 | `analytics_daily.py` | Credentials in `config.ini` rather than a secrets manager | 2 |
+| ETL-155 | `analytics_daily.py` | Pandas in-memory aggregation does not scale | 5 |
+| ETL-201 | `analytics_daily.py` | No unit tests | 8 |
+| ETL-134 | `audit_archive_weekly.py` | Full DynamoDB scan instead of incremental archival | 1 |
+| ETL-167 | `audit_archive_weekly.py` | DynamoDB throttling / partial batch failures not retried | 7 |
+| ETL-199 | `audit_archive_weekly.py` | No tests | 8 |
+| ETL-112 | `search_reindex_weekly.py` | No retry logic for transient API failures | 7 |
+| ETL-145 | `search_reindex_weekly.py` | No HTTP connection pooling | 3 |
+| ETL-188 | `search_reindex_weekly.py` | No request timeouts | 7 |
+| ETL-091 | `storage_cleanup_daily.py` | Manual cleanup instead of S3 lifecycle rules | 1 |
+| ETL-156 | `storage_cleanup_daily.py` | Serial S3 listing for large buckets | 1 |
+| ETL-203 | `storage_cleanup_daily.py` | No dry-run mode | 8 |
+| ETL-098 | `user_activity_daily.py` | Unranged S3 reads; missing days were skipped silently | Partially done — missing days are now logged; range requests remain (axis 3) |
+| ETL-160 | `user_activity_daily.py` | PostgreSQL connection not reused across runs | 4 |
+| ETL-210 | `user_activity_daily.py` | No email notification on report generation | 9 |
+
 ### Script Inventory
 
 | Script | Schedule | Description |
