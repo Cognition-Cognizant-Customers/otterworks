@@ -314,7 +314,11 @@ build_helm_args() {
       EXTRA_ARGS+=(--set-string "config.SPRING_FLYWAY_URL=jdbc:postgresql://${DB_ENDPOINT_HOST}:${DB_SESSION_PORT}/${T_DB_NAME}")
       EXTRA_ARGS+=(--set-string "config.SPRING_FLYWAY_USER=${DB_USER}")
       add_secret SPRING_FLYWAY_PASSWORD "${DB_PASSWORD}"
-      add_secret SPRING_DATASOURCE_PASSWORD "${DB_PASSWORD}" ;;
+      add_secret SPRING_DATASOURCE_PASSWORD "${DB_PASSWORD}"
+      # Seed admin user is only created when a password is supplied out-of-band.
+      if [ -n "${SEED_ADMIN_PASSWORD:-}" ]; then
+        add_secret SEED_ADMIN_PASSWORD "${SEED_ADMIN_PASSWORD}"
+      fi ;;
     file-service)
       EXTRA_ARGS+=(--set-string "config.AWS_REGION=${AWS_REGION}")
       EXTRA_ARGS+=(--set-string "config.S3_BUCKET=${S3_FILE_BUCKET}")

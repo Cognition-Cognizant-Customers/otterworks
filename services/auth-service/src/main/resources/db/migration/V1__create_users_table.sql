@@ -22,18 +22,21 @@ CREATE TABLE IF NOT EXISTS user_roles (
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_created_at ON users(created_at);
 
--- Seed admin user (password: Admin123!)
+-- Seed admin user. The password hash is supplied at migration time from the
+-- SEED_ADMIN_PASSWORD environment variable (see SeedAdminConfig); when that
+-- variable is unset no admin user is seeded.
 INSERT INTO users (id, email, password_hash, display_name, email_verified, created_at, updated_at)
-VALUES (
-    'a0000000-0000-0000-0000-000000000001',
-    'admin@otterworks.dev',
-    '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', -- nosemgrep: generic.secrets.security.detected-bcrypt-hash.detected-bcrypt-hash
+SELECT
+    'a0000000-0000-0000-0000-000000000001'::uuid,
+    '${seed_admin_email}',
+    '${seed_admin_password_hash}',
     'Admin User',
     true,
     NOW(),
     NOW()
-);
+WHERE '${seed_admin_password_hash}' <> '';
 
-INSERT INTO user_roles (user_id, role) VALUES
-('a0000000-0000-0000-0000-000000000001', 'ADMIN'),
-('a0000000-0000-0000-0000-000000000001', 'USER');
+INSERT INTO user_roles (user_id, role)
+SELECT 'a0000000-0000-0000-0000-000000000001'::uuid, role
+FROM (VALUES ('ADMIN'), ('USER')) AS seeded_roles(role)
+WHERE '${seed_admin_password_hash}' <> '';
