@@ -1,0 +1,104 @@
+{
+  "unit": "cron-analytics",
+  "disposition": "rewrite",
+  "platform": "databricks",
+  "source_artifact_path": "etl/scripts/analytics_daily.py",
+  "source_loc": 452,
+  "legacy_schedule": "0 2 * * *",
+  "legacy_inputs": [
+    "SQS queue otterworks-analytics (hardcoded URL https://sqs.us-east-1.amazonaws.com/123456789012/otterworks-analytics)",
+    "DynamoDB otterworks-analytics-events, scanned with begins_with(event_date, <ds>)"
+  ],
+  "target_objects": [
+    "ow_tp.bronze.cronbox_events_raw",
+    "ow_tp.bronze.cronbox_events_rejected",
+    "ow_tp.silver.cronbox_events",
+    "ow_tp.gold.analytics_daily_summary",
+    "ow_tp.gold.analytics_daily_top_users",
+    "ow_tp.gold.analytics_hourly_breakdown",
+    "/Volumes/ow_tp/bronze/landing/cronbox/analytics/",
+    "Databricks job ow_tp_cron_analytics_daily (schedule created PAUSED)"
+  ],
+  "golden_baseline_location": "testdata/legacy/golden/cronbox/demo/analytics_daily/",
+  "acceptance_checks": [
+    {
+      "id": "ANL-01",
+      "description": "Total events processed for ds=2026-01-15 equals 272 (240 from the SQS queue, 32 from DynamoDB), recomputed by querying the deployed silver table, not read from a log line."
+    },
+    {
+      "id": "ANL-02",
+      "description": "Daily aggregates recomputed from ow_tp.gold.analytics_daily_summary equal the baseline manifest values exactly: active_users=12, active_documents=25, active_files=9, total_events=272, plus every per-action count and bytes_uploaded."
+    },
+    {
+      "id": "ANL-03",
+      "description": "The user-resolution precedence of the legacy resolver is preserved: first non-empty of ownerId, editedBy, authorId, deletedBy, userId wins; events with none of those fields resolve to the literal 'unknown'. Per-user aggregates must match the baseline top_users artifact as a set of (user_id, counts) tuples."
+    },
+    {
+      "id": "ANL-04",
+      "description": "DynamoDB date filtering keeps the same boundary semantics as begins_with(event_date, '2026-01-15'): the 16 seeded adjacent-day events (2026-01-14 and 2026-01-16) are excluded from ds=2026-01-15."
+    },
+    {
+      "id": "ANL-05",
+      "description": "The three gold artifacts the downstream cron-activity unit consumes (daily summary row, top_users, hourly breakdown) exist for ds=2026-01-15 with the same logical content as the baseline gzip artifacts; comparison is over decoded content, not gzip bytes."
+    },
+    {
+      "id": "ANL-06",
+      "description": "Rerunning the job for the same ds is idempotent: the gold row count for ds=2026-01-15 stays at one row per date (legacy did ON CONFLICT (report_date) DO UPDATE) and all recomputed values are unchanged."
+    },
+    {
+      "id": "ANL-07",
+      "description": "The legacy report's volatile generated_at field is excluded from comparison; every other field of reports/analytics/daily/2026-01-15/report.json is reproduced."
+    }
+  ],
+  "encoding_policy": {
+    "input_encoding": "UTF-8",
+    "byte_transparency": "Event payload text is carried through verbatim; multi-byte content (e.g. the seeded 'Réunion café ☕' titles and 'Δelta' names) must survive ingestion, aggregation and artifact emission without escaping, transliteration, or replacement characters.",
+    "invalid_bytes": "A message body that is not decodable UTF-8 is treated as a malformed record (see malformed_record_policy), never silently coerced with replacement characters."
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "tolerate-and-attribute",
+    "details": "Legacy silently swallowed unparseable SQS bodies in a bare except and left them in the queue's delete batch path unaccounted for. The migrated unit must tolerate them but attribute them: all 8 seeded malformed bodies land in ow_tp.bronze.cronbox_events_rejected with a reason, and the rejected count is asserted as 8. Events carrying none of the five user-id fields keep the legacy attribution to the literal 'unknown' (22 seeded events) rather than being dropped.",
+    "expected_malformed_count": 8,
+    "expected_unknown_user_events": 22
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "Legacy printed a warning and exited 0 without writing any S3 artifact or Postgres row when zero events were found. The migrated job must likewise leave prior outputs untouched and write nothing for the date — it must not write an all-zero gold row, which would corrupt the cron-activity 30-day lookback."
+  },
+  "trigger_granularity": "per-batch",
+  "planted_anomalies": [
+    {
+      "id": "malformed_sqs_bodies",
+      "description": "8 non-JSON SQS message bodies in the run-date queue.",
+      "status": "must-detect"
+    },
+    {
+      "id": "unknown_user_events",
+      "description": "22 events carrying none of ownerId/editedBy/authorId/deletedBy/userId, which must aggregate under the literal user id 'unknown'.",
+      "status": "must-detect"
+    },
+    {
+      "id": "dynamodb_adjacent_day_events",
+      "description": "16 DynamoDB events dated 2026-01-14 and 2026-01-16 that must be excluded from the 2026-01-15 batch.",
+      "status": "must-detect"
+    },
+    {
+      "id": "unicode_payloads",
+      "description": "Multi-byte titles and names ('Réunion café ☕', 'Δelta') that must survive byte-transparently into the gold artifacts.",
+      "status": "must-detect"
+    },
+    {
+      "id": "postgres_updated_at_wall_clock",
+      "description": "The legacy upsert stamps analytics_daily_summary.updated_at with database NOW(), so it is not reproducible and is excluded from value comparison.",
+      "status": "coverage_gap",
+      "reason": "The value is produced by the database clock inside immutable legacy SQL; it carries no business meaning and cannot be reconciled deterministically. Business columns are compared in full."
+    },
+    {
+      "id": "report_generated_at_wall_clock",
+      "description": "reports/analytics/daily/<ds>/report.json carries a generated_at from datetime.now(), which leaks fractional seconds even under the frozen libfaketime clock.",
+      "status": "coverage_gap",
+      "reason": "Declared volatile in the baseline capture; the canonical checksum is computed with the field removed and the observed value is recorded as non-comparable evidence."
+    }
+  ]
+}

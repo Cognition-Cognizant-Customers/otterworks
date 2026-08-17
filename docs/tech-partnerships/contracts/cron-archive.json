@@ -1,0 +1,93 @@
+{
+  "unit": "cron-archive",
+  "disposition": "replace-with-config",
+  "platform": "aws",
+  "source_artifact_path": "etl/scripts/audit_archive_weekly.py",
+  "source_loc": 224,
+  "legacy_schedule": "0 3 * * 0",
+  "legacy_inputs": [
+    "DynamoDB otterworks-audit-events, full scan filtered on #ts < cutoff where cutoff = run_date - 90 days",
+    "S3 otterworks-audit-archive for the JSONL.gz archive and the compliance report"
+  ],
+  "target_objects": [
+    "DynamoDB TTL specification on table ow-tp-audit-events (attribute expires_at, 90-day horizon)",
+    "DynamoDB streams-to-S3 archival path for expiring items (ow-tp-audit-archive)",
+    "S3 lifecycle configuration on bucket ow-tp-audit-archive (transition to GLACIER, no expiry)",
+    "IAM role ow-tp-audit-archive-role",
+    "CloudWatch metric/alarm ow-tp-audit-archive-* for archive throughput"
+  ],
+  "golden_baseline_location": "testdata/legacy/golden/cronbox/demo/audit_archive_weekly/",
+  "acceptance_checks": [
+    {
+      "id": "ARC-01",
+      "description": "The 90-day retention horizon is read back from the deployed AWS configuration through the AWS APIs (DescribeTimeToLive for the table, GetBucketLifecycleConfiguration for the archive bucket) and never from Terraform state or plan output."
+    },
+    {
+      "id": "ARC-02",
+      "description": "The archived record set matches the baseline as a set of event_ids: 81 of the 103 seeded audit records archived, 22 retained. Set comparison, not counts alone; missing and unexpected ids are both reported."
+    },
+    {
+      "id": "ARC-03",
+      "description": "The cutoff remains exclusive, matching the legacy string comparison timestamp < cutoff: of the three boundary probes at cutoff-1s / cutoff / cutoff+1s, only demo-boundary-0 (cutoff-1s) is archived; the other two survive."
+    },
+    {
+      "id": "ARC-04",
+      "description": "Archived objects land under the Glacier storage class per the bucket lifecycle configuration, verified by reading the object storage class / lifecycle transition back from S3 rather than asserting the Terraform resource exists."
+    },
+    {
+      "id": "ARC-05",
+      "description": "The archived payload preserves every attribute of each source record, including raw_payload, verified by comparing decoded archive content against the baseline archive artifact as a set of records keyed by event_id."
+    },
+    {
+      "id": "ARC-06",
+      "description": "The configuration is convergent, not incremental: re-evaluating it produces no additional archived records and no duplicate objects for records already expired."
+    },
+    {
+      "id": "ARC-07",
+      "description": "No schedule, cron rule, or hourly-cost resource is introduced; the replacement is TTL plus lifecycle configuration only, all resources prefixed ow-tp- and tagged Project=otterworks-tp."
+    }
+  ],
+  "encoding_policy": {
+    "input_encoding": "UTF-8",
+    "byte_transparency": "Audit record attribute values, including the embedded raw_payload JSON string, are archived verbatim with no re-serialization that would reorder keys or escape non-ASCII characters.",
+    "invalid_bytes": "An attribute value that is not valid UTF-8 is archived as-is (binary-safe) rather than being coerced; it must not fail the expiry path."
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "tolerate-and-attribute",
+    "details": "A record missing the TTL attribute must never be silently expired: it is retained and attributed as unexpirable so it is visible rather than lost. Records with unexpected extra attributes are archived in full. The legacy job's blanket batch-delete-on-success behavior must not be reproduced as delete-before-archive-durable."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "Legacy exited 0 without writing an archive object or a compliance report when nothing was older than the cutoff. The configuration-based replacement is inherently a no-op when nothing has expired: it must not create an empty archive object or an empty report for the period."
+  },
+  "trigger_granularity": "per-file",
+  "planted_anomalies": [
+    {
+      "id": "audit_cutoff_minus_one_second",
+      "description": "demo-boundary-0 sits one second before the cutoff and must be archived.",
+      "status": "must-detect"
+    },
+    {
+      "id": "audit_cutoff_exact",
+      "description": "demo-boundary-1 sits exactly on the cutoff and must be retained, because the legacy comparison is strictly less-than.",
+      "status": "must-detect"
+    },
+    {
+      "id": "audit_cutoff_plus_one_second",
+      "description": "demo-boundary-2 sits one second after the cutoff and must be retained.",
+      "status": "must-detect"
+    },
+    {
+      "id": "retained_recent_records",
+      "description": "20 records dated well after the cutoff must remain in the table untouched.",
+      "status": "must-detect"
+    },
+    {
+      "id": "ttl_deletion_latency",
+      "description": "DynamoDB TTL deletes expired items on a best-effort basis within roughly 48 hours rather than at a scheduled instant, so the replacement cannot be observed as a single weekly transaction.",
+      "status": "coverage_gap",
+      "reason": "This is an intended semantic change from weekly batch to continuous expiry. Live verification therefore reads the TTL specification and the expiry-driven archive path rather than waiting for AWS to physically delete items; the set comparison is performed over the items the expiry path emits."
+    }
+  ]
+}

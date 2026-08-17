@@ -1,0 +1,79 @@
+{
+  "unit": "cron-activity",
+  "disposition": "rewrite",
+  "platform": "databricks",
+  "depends_on": "cron-analytics",
+  "source_artifact_path": "etl/scripts/user_activity_daily.py",
+  "source_loc": 255,
+  "legacy_schedule": "0 5 * * *",
+  "legacy_inputs": [
+    "PostgreSQL analytics_daily_summary (30-day window ending on the run date)",
+    "S3 otterworks-data-lake analytics/daily/year=/month=/day=/top_users.jsonl.gz for the same 30 days"
+  ],
+  "target_objects": [
+    "ow_tp.gold.user_activity_daily",
+    "ow_tp.gold.user_activity_user_summaries",
+    "/Volumes/ow_tp/bronze/landing/cronbox/user-activity/",
+    "Databricks job ow_tp_cron_user_activity_daily (schedule created PAUSED)"
+  ],
+  "golden_baseline_location": "testdata/legacy/golden/cronbox/demo/user_activity_daily/",
+  "acceptance_checks": [
+    {
+      "id": "ACT-01",
+      "description": "The 30-day window ending 2026-01-15 is read from the gold tables cron-analytics produced (never from PostgreSQL or the legacy S3 prefix), and the recomputed window covers 30 daily summary records."
+    },
+    {
+      "id": "ACT-02",
+      "description": "Per-user aggregation recomputed from ow_tp.gold.user_activity_user_summaries equals the baseline exactly: 13 users, with per-user total actions, per-action-type counts, and active-day counts compared as a set of tuples."
+    },
+    {
+      "id": "ACT-03",
+      "description": "The missing history partition for 2026-01-02 is tolerated exactly as legacy tolerated it (the day contributes nothing, the job still succeeds) and is reported as a named coverage gap in the run's output rather than silently skipped."
+    },
+    {
+      "id": "ACT-04",
+      "description": "Both the dated report and the latest-pointer equivalent are produced, and the latest pointer resolves to the same content as the dated output for 2026-01-15."
+    },
+    {
+      "id": "ACT-05",
+      "description": "Rerunning the job leaves user counts and per-user values unchanged (idempotent overwrite of the date's outputs, no duplicate per-user rows)."
+    },
+    {
+      "id": "ACT-06",
+      "description": "Every field of activity_report.json and user_summaries.jsonl other than the declared volatile generated_at is reproduced, including the per-user ordering key used by the legacy report."
+    }
+  ],
+  "encoding_policy": {
+    "input_encoding": "UTF-8",
+    "byte_transparency": "User identifiers and any text carried from the analytics artifacts pass through unchanged; JSONL output is UTF-8 without escaping of non-ASCII code points.",
+    "invalid_bytes": "A history object that cannot be decoded as UTF-8 JSONL is treated as a malformed record for that day and attributed, not silently skipped."
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "tolerate-and-attribute",
+    "details": "Legacy skipped blank JSONL lines and would have crashed on a malformed one; the migrated unit tolerates unparseable lines and attributes them with the source object key and line number, and a day whose object is absent contributes zero without failing the run. A user id absent from a history record is attributed to 'unknown' rather than dropped, matching the upstream analytics convention."
+  },
+  "empty_input_semantics": {
+    "action": "write-empty-result",
+    "details": "Legacy wrote its report and latest pointer even when the window produced no user rows (an empty summaries file, not an absent one). The migrated unit must write an empty result for the date rather than no-op, so the latest pointer never serves a stale window. A failure reading the summary source is fatal (legacy exited 1) and must not be degraded into an empty result."
+  },
+  "trigger_granularity": "per-batch",
+  "planted_anomalies": [
+    {
+      "id": "missing_history_day",
+      "description": "The top_users.jsonl.gz partition for 2026-01-02 is absent from the 30-day window (29 of 30 objects present).",
+      "status": "must-detect"
+    },
+    {
+      "id": "window_boundary_inclusive",
+      "description": "The 30-day lookback includes the run date itself, so it consumes the artifacts cron-analytics wrote in the same cron cycle.",
+      "status": "must-detect"
+    },
+    {
+      "id": "report_generated_at_wall_clock",
+      "description": "activity_report.json and its latest pointer carry a generated_at from datetime.now() with non-reproducible fractional seconds.",
+      "status": "coverage_gap",
+      "reason": "Declared volatile in the baseline capture; canonical checksums exclude the field and the observed values are recorded as non-comparable evidence."
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "unit": "cron-search",
+  "disposition": "delete",
+  "platform": "atlas",
+  "scope_decision": "Option A - documents/files metadata extended into MongoDB Atlas with Atlas Search indexes; the weekly reindex job is deleted outright rather than rewritten.",
+  "source_artifact_path": "etl/scripts/search_reindex_weekly.py",
+  "source_loc": 319,
+  "legacy_schedule": "0 4 * * 0",
+  "legacy_inputs": [
+    "document-service HTTP API (paginated documents)",
+    "file-service HTTP API (paginated file metadata)",
+    "MeiliSearch documents and files indexes, deleted and recreated on every run"
+  ],
+  "target_objects": [
+    "MongoDB collection ow_tp_demo.documents",
+    "MongoDB collection ow_tp_demo.files",
+    "Atlas Search index ow_tp_demo.documents.default",
+    "Atlas Search index ow_tp_demo.files.default",
+    "Golden query set docs/tech-partnerships/recon/cron-search-golden-queries.json"
+  ],
+  "golden_baseline_location": "testdata/legacy/golden/cronbox/demo/search_reindex_weekly/",
+  "acceptance_checks": [
+    {
+      "id": "SRC-01",
+      "description": "Document-ID sets are compared, not counts: the Atlas documents collection covers exactly the 125 baseline document ids and the files collection exactly the 72 baseline file ids (the reverse-orphan metadata row is excluded from the file corpus, as it was by the legacy corpus API)."
+    },
+    {
+      "id": "SRC-02",
+      "description": "Every golden query is executed against Atlas using the $search aggregation stage (never a regex or $text fallback) and the returned document-ID set equals the baseline MeiliSearch result set for the same query."
+    },
+    {
+      "id": "SRC-03",
+      "description": "Field roles from the legacy MeiliSearch settings are preserved in the Atlas Search index definitions: documents searchable on title/content/tags, filterable on type/owner_id/tags/created_at/updated_at, sortable on updated_at/created_at; files searchable on name/tags/mime_type, filterable on type/owner_id/mime_type/folder_id/tags/created_at/updated_at, sortable on updated_at/created_at/size. Index definitions are read back from the Atlas API."
+    },
+    {
+      "id": "SRC-04",
+      "description": "A multi-byte query term matches its seeded document ('Δocument ☕' in the documents corpus), proving byte-transparent indexing and analysis rather than ASCII folding that loses the term."
+    },
+    {
+      "id": "SRC-05",
+      "description": "Index maintenance is continuous: after inserting one document into the collection it becomes searchable without any reindex job, rebuild step, or index deletion — the weekly delete-and-recreate cycle is gone."
+    },
+    {
+      "id": "SRC-06",
+      "description": "Rerunning the golden query set returns identical document-ID sets (idempotency of the query surface), and no query returns a document outside the corpus."
+    },
+    {
+      "id": "SRC-07",
+      "description": "The legacy job is deleted, not ported: no reindex schedule, no MeiliSearch dependency, and no crontab entry remains after the decommission PR."
+    }
+  ],
+  "encoding_policy": {
+    "input_encoding": "UTF-8",
+    "byte_transparency": "Titles, names, content and tags are stored in the collections exactly as served by the source of truth, including multi-byte characters; the search analyzer may normalize for matching but must never alter the stored document values.",
+    "invalid_bytes": "A source field that is not valid UTF-8 is stored as binary and excluded from the analyzed fields rather than lossily coerced."
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "tolerate-and-attribute",
+    "details": "Legacy defaulted every absent field to an empty string and would index a document with an empty id. The migrated corpus must instead attribute records with a missing or empty id: they are excluded from the searchable corpus and reported with their source position, never indexed under a blank key. Documents carrying extra unmodeled fields are stored and indexed on the mapped fields only."
+  },
+  "empty_input_semantics": {
+    "action": "delete-prior-output",
+    "details": "Legacy deleted each index and recreated it before ingesting, so an empty corpus left an empty index and destroyed the previous week's searchable state. The Atlas replacement inherits the source-of-truth lifecycle instead: an empty corpus means an empty collection, and no path may delete a populated index in order to rebuild it. This behavioral difference is deliberate and is recorded as the reason the unit is deleted rather than rewritten."
+  },
+  "trigger_granularity": "per-file",
+  "planted_anomalies": [
+    {
+      "id": "unicode_document_title",
+      "description": "Document doc-004 carries the title 'Δocument ☕' and must remain findable by that term.",
+      "status": "must-detect"
+    },
+    {
+      "id": "reverse_orphan_excluded_from_corpus",
+      "description": "The reverse-orphan file metadata row is absent from the file corpus (72 files, not 73).",
+      "status": "must-detect"
+    },
+    {
+      "id": "meili_ranking_rules_not_portable",
+      "description": "The legacy rankingRules ordering (words, typo, proximity, attribute, sort, exactness) has no one-to-one Atlas Search equivalent.",
+      "status": "coverage_gap",
+      "reason": "Relevance ordering is engine-specific and cannot be reconciled across engines. Acceptance therefore compares returned document-ID sets rather than result ordering or scores, and the golden query set is chosen so every query has an unambiguous expected set."
+    },
+    {
+      "id": "typo_tolerance_semantics",
+      "description": "MeiliSearch typo tolerance is on by default; Atlas Search fuzziness must be configured explicitly per query.",
+      "status": "coverage_gap",
+      "reason": "The golden query set uses exact and phrase terms only, so no acceptance check depends on typo-tolerance parity between the two engines."
+    }
+  ]
+}

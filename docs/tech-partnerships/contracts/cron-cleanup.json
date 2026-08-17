@@ -1,0 +1,100 @@
+{
+  "unit": "cron-cleanup",
+  "disposition": "replace-with-config",
+  "platform": "aws",
+  "source_artifact_path": "etl/scripts/storage_cleanup_daily.py",
+  "source_loc": 217,
+  "legacy_schedule": "30 2 * * *",
+  "legacy_inputs": [
+    "S3 otterworks-file-storage, full listing of the files/ prefix",
+    "DynamoDB otterworks-file-metadata, full scan collecting referenced s3_key values"
+  ],
+  "target_objects": [
+    "Lambda function ow-tp-orphan-quarantine (on-demand, no provisioned concurrency)",
+    "EventBridge rule ow-tp-orphan-detect (event-driven, no schedule expression)",
+    "SQS queue ow-tp-orphan-quarantine-dlq",
+    "S3 event notification configuration on ow-tp-file-storage",
+    "S3 lifecycle configuration on ow-tp-file-quarantine (quarantine expiry)",
+    "DynamoDB table ow-tp-orphan-audit (PAY_PER_REQUEST)",
+    "IAM role ow-tp-orphan-quarantine-role"
+  ],
+  "golden_baseline_location": "testdata/legacy/golden/cronbox/demo/storage_cleanup_daily/",
+  "acceptance_checks": [
+    {
+      "id": "CLN-01",
+      "description": "The orphan set is compared against the baseline as a set of S3 keys, not a count: exactly the 4 seeded orphan objects (files/demo/orphan-000.bin .. orphan-003.bin) are quarantined."
+    },
+    {
+      "id": "CLN-02",
+      "description": "The reverse orphan (metadata row reverse-orphan pointing at files/demo/missing-reverse.bin with no object present) is NOT quarantined and NOT deleted from metadata; asymmetry direction is preserved."
+    },
+    {
+      "id": "CLN-03",
+      "description": "All 72 referenced objects survive: the post-run object listing of the storage bucket equals the baseline surviving-key set."
+    },
+    {
+      "id": "CLN-04",
+      "description": "Quarantine is copy-then-delete with the same destination layout semantics as the baseline (dated quarantine prefix preserving the source key path), verified by listing the quarantine bucket through the S3 API."
+    },
+    {
+      "id": "CLN-05",
+      "description": "The event-driven path is exercised live: creating an unreferenced object under the storage bucket's files/ prefix results in that object being quarantined without any scheduled invocation, and the quarantine decision is recorded in ow-tp-orphan-audit."
+    },
+    {
+      "id": "CLN-06",
+      "description": "Lifecycle and notification configuration are read back from the AWS APIs (GetBucketNotificationConfiguration, GetBucketLifecycleConfiguration, EventBridge DescribeRule) rather than from Terraform state, and the EventBridge rule carries no schedule expression."
+    },
+    {
+      "id": "CLN-07",
+      "description": "Replaying the same event is idempotent: an object already quarantined produces no duplicate quarantine object, no second audit row, and no error."
+    },
+    {
+      "id": "CLN-08",
+      "description": "All resources are prefixed ow-tp-, tagged Project=otterworks-tp, and serverless/on-demand only; a tag/prefix scan after teardown returns nothing."
+    }
+  ],
+  "encoding_policy": {
+    "input_encoding": "UTF-8",
+    "byte_transparency": "Object bodies are moved byte-for-byte; keys containing multi-byte or URL-escaped characters are resolved to the same object the legacy lister saw, with no re-encoding of the key on the copy destination.",
+    "invalid_bytes": "Object content is treated as opaque bytes and never decoded; only keys and metadata are interpreted."
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "tolerate-and-attribute",
+    "details": "A metadata item with a missing or empty s3_key must not cause its object to be treated as orphaned by omission: such items are attributed as unresolvable references and reported, and no deletion is performed on their behalf. Extra unmodeled attributes on a metadata item are ignored, never a reason to skip the row."
+  },
+  "empty_input_semantics": {
+    "action": "write-empty-result",
+    "details": "Legacy explicitly still generated its savings report when zero orphans were found ('Still generate report even with 0 orphans'). The replacement must therefore keep an observable zero-orphan outcome for the period (an audit/metric record showing zero) rather than emitting nothing at all."
+  },
+  "trigger_granularity": "per-file",
+  "planted_anomalies": [
+    {
+      "id": "s3_orphan_objects",
+      "description": "4 objects under files/demo/ with no metadata row: orphan-000.bin, orphan-001.bin, orphan-002.bin, orphan-003.bin.",
+      "status": "must-detect"
+    },
+    {
+      "id": "reverse_metadata_orphan",
+      "description": "Metadata row reverse-orphan referencing a nonexistent object; must be left alone in both stores.",
+      "status": "must-detect"
+    },
+    {
+      "id": "referenced_objects_untouched",
+      "description": "72 referenced objects that must survive the run unchanged.",
+      "status": "must-detect"
+    },
+    {
+      "id": "cost_savings_estimate",
+      "description": "The legacy report's dollar savings estimate is derived from a hardcoded per-GB rate.",
+      "status": "coverage_gap",
+      "reason": "It is a presentation-only figure computed from the freed bytes, carries no operational meaning, and is not reproduced by configuration-based quarantine; freed bytes themselves are compared instead."
+    },
+    {
+      "id": "event_delivery_eventual_consistency",
+      "description": "S3-event-driven quarantine happens within seconds of object creation rather than at a fixed daily instant, so no single batch boundary exists.",
+      "status": "coverage_gap",
+      "reason": "Intended semantic change from daily sweep to per-object event. Live verification exercises the event path directly and compares the resulting orphan set, so the absence of a batch boundary does not weaken the reconciliation."
+    }
+  ]
+}
