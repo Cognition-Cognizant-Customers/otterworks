@@ -27,7 +27,7 @@ EKS_CLUSTER="${EKS_CLUSTER:-otterworks-dev}"
 KARPENTER_NAMESPACE="${KARPENTER_NAMESPACE:-kube-system}"
 # Pinned rather than floating: an unattended jump to a new minor version of the
 # component that creates and deletes nodes is not something a workshop cluster
-# should do on its own. Karpenter >= 1.6 is required for Kubernetes 1.34.
+# should do on its own. Karpenter >= 1.13 is required for Kubernetes 1.36.
 KARPENTER_VERSION="${KARPENTER_VERSION:-1.13.0}"
 # One replica, matching the single-node system pool. The chart defaults to two
 # with required anti-affinity on hostname, so on a one-node pool the second is

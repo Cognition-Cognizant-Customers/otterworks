@@ -192,13 +192,28 @@ it back; `/api/v1/files`, `/api/v1/files/shared` return `200`.
 
 **Evidence.** Two Terraform root modules with **remote S3 state**
 (`s3://otterworks-terraform-state`, keys `platform/` and `otterworks/`):
-- `platform/terraform` — VPC, EKS (`otterworks-dev`, v1.32), managed node group, core addons
+- `platform/terraform` — VPC, EKS (`otterworks-dev`, v1.36), managed node group, core addons
   (vpc-cni/kube-proxy/coredns/ebs-csi), OIDC provider, 13 ECR repos. Modularized under
   `modules/{vpc,eks,ecr}` with `environments/dev.tfvars`.
 - `infrastructure/terraform` — RDS Postgres, ElastiCache Redis, DynamoDB, S3, SNS/SQS, Cognito,
   MeiliSearch-on-ECS, CloudWatch log groups, and **IRSA roles per service**
   (`modules/irsa`, least-privilege policies in `main.tf`). Reads platform outputs via
   `terraform_remote_state`.
+
+**Kubernetes version upgrades.** `cluster_version` in `environments/dev.tfvars` is the target, but
+EKS moves one minor version per update, so a cluster more than one behind needs an apply per minor
+before the tfvars value takes:
+
+```sh
+cd platform/terraform
+terraform apply -var-file=environments/dev.tfvars -var cluster_version=1.35   # intermediate hop
+terraform apply -var-file=environments/dev.tfvars                             # lands on the target
+```
+
+Each hop replaces the system node group's node, so ingress is down for the few minutes the
+replacement takes — the pool is deliberately a single node. Tenant capacity is Karpenter's and comes
+back on its own. Afterwards, re-run `demo-platform/scripts/install-karpenter.sh` if the pinned
+Karpenter version is below the floor for the new Kubernetes minor (>= 1.13 for 1.36).
 
 **Bug found & fixed during this deploy.** `platform/terraform/modules/eks/main.tf` attached
 `arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicyV2`, which is **not a real AWS managed

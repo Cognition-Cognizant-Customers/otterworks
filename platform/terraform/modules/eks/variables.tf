@@ -16,7 +16,7 @@ variable "cluster_name" {
 variable "cluster_version" {
   description = "Kubernetes version"
   type        = string
-  default     = "1.32"
+  default     = "1.36"
 }
 
 variable "public_subnet_ids" {
@@ -65,9 +65,15 @@ variable "node_max_size" {
 }
 
 variable "ebs_csi_driver_version" {
-  description = "Version of the EBS CSI driver addon"
+  description = "Override for the EBS CSI driver addon version; null tracks the latest build for the cluster's Kubernetes version"
   type        = string
-  default     = "v1.37.0-eksbuild.1"
+  default     = null
+}
+
+variable "node_ami_type" {
+  description = "AMI family for the managed node group (AL2 is unavailable from Kubernetes 1.34 on)"
+  type        = string
+  default     = "AL2023_x86_64_STANDARD"
 }
 
 variable "enable_karpenter" {

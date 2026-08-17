@@ -133,6 +133,11 @@ resource "aws_eks_node_group" "default" {
   instance_types = var.node_instance_types
   capacity_type  = var.node_capacity_type
 
+  # Explicit rather than left to the EKS default: AWS stopped publishing an
+  # Amazon Linux 2 AMI at 1.34, and 1.35 kubelet refuses to start on cgroup v1,
+  # which AL2 is. AL2023 is the only family this node group can run on.
+  ami_type = var.node_ami_type
+
   scaling_config {
     desired_size = var.node_desired_size
     min_size     = var.node_min_size
@@ -196,10 +201,19 @@ resource "aws_iam_role_policy_attachment" "ebs_csi_driver" {
 
 # --- EBS CSI Driver EKS Addon ---
 
+# Resolved from the cluster's Kubernetes version rather than hardcoded, so the
+# addon follows a control-plane upgrade instead of pinning it to a build that
+# predates it. Set var.ebs_csi_driver_version to override for a specific build.
+data "aws_eks_addon_version" "ebs_csi_driver" {
+  addon_name         = "aws-ebs-csi-driver"
+  kubernetes_version = aws_eks_cluster.main.version
+  most_recent        = true
+}
+
 resource "aws_eks_addon" "ebs_csi_driver" {
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "aws-ebs-csi-driver"
-  addon_version               = var.ebs_csi_driver_version
+  addon_version               = coalesce(var.ebs_csi_driver_version, data.aws_eks_addon_version.ebs_csi_driver.version)
   service_account_role_arn    = aws_iam_role.ebs_csi_driver.arn
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"

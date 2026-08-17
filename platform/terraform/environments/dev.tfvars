@@ -4,9 +4,12 @@ cluster_name = "otterworks-dev"
 
 # MUST stay within EKS standard support. Extended support costs $0.60/hr against
 # a standard rate of $0.10/hr -- a $360/month penalty that buys nothing, which
-# is exactly what running 1.32 past its window was costing. 1.34 holds standard
-# support until 2026-12-02; schedule the next bump before then.
-cluster_version = "1.34"
+# is exactly what running 1.32 past its window was costing. 1.36 holds standard
+# support until 2027-08-02; schedule the next bump before then.
+#
+# EKS upgrades one minor version per apply, so moving from 1.34 lands here in two
+# applies (1.35, then 1.36) -- see docs/SDLC-COVERAGE.md.
+cluster_version = "1.36"
 
 vpc_cidr           = "10.0.0.0/16"
 az_count           = 2

@@ -219,12 +219,12 @@ data "aws_iam_policy_document" "karpenter_controller" {
       "ec2:CreateFleet",
     ]
     resources = [
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}::image/*",
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}::snapshot/*",
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:security-group/*",
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:subnet/*",
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:capacity-reservation/*",
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:placement-group/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}::image/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}::snapshot/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:security-group/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:subnet/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:capacity-reservation/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:placement-group/*",
     ]
   }
 
@@ -235,7 +235,7 @@ data "aws_iam_policy_document" "karpenter_controller" {
       "ec2:RunInstances",
       "ec2:CreateFleet",
     ]
-    resources = ["arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:launch-template/*"]
+    resources = ["arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:launch-template/*"]
 
     condition {
       test     = "StringEquals"
@@ -259,12 +259,12 @@ data "aws_iam_policy_document" "karpenter_controller" {
       "ec2:CreateLaunchTemplate",
     ]
     resources = [
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:fleet/*",
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:instance/*",
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:volume/*",
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:network-interface/*",
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:launch-template/*",
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:spot-instances-request/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:fleet/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:instance/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:volume/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:network-interface/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:launch-template/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:spot-instances-request/*",
     ]
 
     condition {
@@ -291,12 +291,12 @@ data "aws_iam_policy_document" "karpenter_controller" {
     effect  = "Allow"
     actions = ["ec2:CreateTags"]
     resources = [
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:fleet/*",
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:instance/*",
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:volume/*",
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:network-interface/*",
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:launch-template/*",
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:spot-instances-request/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:fleet/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:instance/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:volume/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:network-interface/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:launch-template/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:spot-instances-request/*",
     ]
 
     condition {
@@ -329,7 +329,7 @@ data "aws_iam_policy_document" "karpenter_controller" {
     sid       = "AllowScopedResourceTagging"
     effect    = "Allow"
     actions   = ["ec2:CreateTags"]
-    resources = ["arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:instance/*"]
+    resources = ["arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:instance/*"]
 
     condition {
       test     = "StringEquals"
@@ -368,8 +368,8 @@ data "aws_iam_policy_document" "karpenter_controller" {
       "ec2:DeleteLaunchTemplate",
     ]
     resources = [
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:instance/*",
-      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}:*:launch-template/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:instance/*",
+      "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:*:launch-template/*",
     ]
 
     condition {
@@ -407,7 +407,7 @@ data "aws_iam_policy_document" "karpenter_controller" {
     condition {
       test     = "StringEquals"
       variable = "aws:RequestedRegion"
-      values   = [data.aws_region.current.name]
+      values   = [data.aws_region.current.region]
     }
   }
 
@@ -416,7 +416,7 @@ data "aws_iam_policy_document" "karpenter_controller" {
     sid       = "AllowSSMReadActions"
     effect    = "Allow"
     actions   = ["ssm:GetParameter"]
-    resources = ["arn:${data.aws_partition.current.partition}:ssm:${data.aws_region.current.name}::parameter/aws/service/*"]
+    resources = ["arn:${data.aws_partition.current.partition}:ssm:${data.aws_region.current.region}::parameter/aws/service/*"]
   }
 
   # Instance type costs, which is how Karpenter picks the cheapest shape that
@@ -458,7 +458,7 @@ data "aws_iam_policy_document" "karpenter_controller" {
     sid       = "AllowAPIServerEndpointDiscovery"
     effect    = "Allow"
     actions   = ["eks:DescribeCluster"]
-    resources = ["arn:${data.aws_partition.current.partition}:eks:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:cluster/${var.cluster_name}"]
+    resources = ["arn:${data.aws_partition.current.partition}:eks:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:cluster/${var.cluster_name}"]
   }
 
   # The instance profile is created by Terraform above, so the controller only
