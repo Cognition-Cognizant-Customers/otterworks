@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean tp-atlas-teardown tp-mongo-fixture-up tp-mongo-fixture-down tp-mongo-customers tp-mongo-customers-recon tp-mongo-test tp-mongo-migrate-files tp-mongo-recon-files
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean tp-atlas-teardown tp-mongo-fixture-up tp-mongo-fixture-down tp-mongo-customers tp-mongo-customers-recon tp-mongo-test tp-mongo-migrate-files tp-mongo-recon-files tp-mongo-migrate-invoices tp-mongo-recon-invoices
 
 SHELL := /bin/bash
 
@@ -37,6 +37,20 @@ tp-validate-contracts: ## Validate JSON contracts (intentionally fails until pro
 
 tp-validate-recon: ## Validate recon reports (FILE=<path>; no reports is valid, other JSON is informational)
 	uv run --no-project --with jsonschema==4.25.1 --with rfc3339-validator==0.1.4 python3 scripts/tp_validate.py recon $(FILE)
+
+tp-mongo-migrate-invoices: ## Migrate Oracle invoices into MongoDB (NS=<namespace>)
+ifndef NS
+	$(error NS is required, e.g. make tp-mongo-migrate-invoices NS=demo)
+endif
+	$(call validate_ns)
+	uv run --no-project --with pymongo==4.10.1 --with oracledb==2.5.1 scripts/tp_mongo/migrate_invoices.py --ns $(NS)
+
+tp-mongo-recon-invoices: ## Reconcile the MongoDB invoice migration (NS=<namespace>, RUN_MODE=fixture|live, REPORT=<path>)
+ifndef NS
+	$(error NS is required, e.g. make tp-mongo-recon-invoices NS=demo)
+endif
+	$(call validate_ns)
+	uv run --no-project --with pymongo==4.10.1 --with oracledb==2.5.1 scripts/tp_mongo/recon_invoices.py --ns $(NS) --run-mode $(or $(RUN_MODE),fixture) --out $(or $(REPORT),docs/tech-partnerships/recon/mongo_invoices.recon.json)
 
 tp-fixture-land: ## Land source artifacts in the local Databricks transport fixture (NS=<ns>)
 	python3 scripts/tp_databricks/local_fixture.py land --ns $${NS:-fixture} --source $${FIXTURE_SOURCE:-etl/legacy-extra}

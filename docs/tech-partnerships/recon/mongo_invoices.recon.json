@@ -1,0 +1,143 @@
+{
+  "kind": "recon-report",
+  "unit": "mongo_invoices",
+  "namespace": "demo",
+  "generated_at": "2026-08-17T04:52:50.532029Z",
+  "run_mode": "fixture",
+  "checks": [
+    {
+      "id": "invoices.count",
+      "expected": 18750,
+      "actual": 18750,
+      "source_of_truth": "baseline manifest targets.oracle.OW_BILLING.INVOICE_HEADER.rows; target count_documents({ns})",
+      "result": "pass"
+    },
+    {
+      "id": "invoices.embedded_line_count",
+      "expected": 149963,
+      "actual": 149963,
+      "source_of_truth": "baseline manifest INVOICE_LINE.rows minus planted anomaly count; target aggregation over lines",
+      "result": "pass"
+    },
+    {
+      "id": "invoices.checksum",
+      "expected": "88a66751f0b08b476b492105a2efc537",
+      "actual": "88a66751f0b08b476b492105a2efc537",
+      "source_of_truth": "manifest digest spans all 150000 source rows, including quarantined orphans; target read-back",
+      "result": "pass"
+    },
+    {
+      "id": "invoices.checksum_non_orphan_lines",
+      "expected": "e81010466568b9ac79e5e29f9087d842",
+      "actual": "e81010466568b9ac79e5e29f9087d842",
+      "source_of_truth": "target read-back over embedded non-orphan lines only; narrower contract wording",
+      "result": "pass"
+    },
+    {
+      "id": "invoices.line_totals_preserved",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "target aggregation comparing total_amt with Decimal128 sum of embedded line amounts; Python read-back mismatch count=0",
+      "result": "pass"
+    },
+    {
+      "id": "invoices.money_is_decimal128",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "target $type aggregation over invoice and embedded-line money fields",
+      "result": "pass"
+    },
+    {
+      "id": "invoices.orphans_quarantined",
+      "expected": 37,
+      "actual": 37,
+      "source_of_truth": "baseline manifest planted anomaly orphaned_rows.count; target count_documents",
+      "result": "pass"
+    },
+    {
+      "id": "invoices.orphan_line_id_set_equality",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "Oracle LEFT JOIN recomputation of orphan line_id set versus target quarantine",
+      "result": "pass"
+    },
+    {
+      "id": "invoices.orphans_not_embedded",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "target read-back intersection of Oracle orphan IDs and embedded line IDs",
+      "result": "pass"
+    },
+    {
+      "id": "invoices.no_synthesized_headers",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "Oracle batch header ID set versus target invoice IDs",
+      "result": "pass"
+    },
+    {
+      "id": "invoices.zero_line_invoices",
+      "expected": 5,
+      "actual": 5,
+      "source_of_truth": "Oracle batch headers with no matching lines versus target line_count",
+      "result": "pass"
+    },
+    {
+      "id": "invoices.null_posted_lines",
+      "expected": 29937,
+      "actual": 29937,
+      "source_of_truth": "Oracle non-orphan POSTED_YN IS NULL count versus target embedded posted:null count",
+      "result": "pass"
+    },
+    {
+      "id": "invoices.legacy_total_mismatch_lines",
+      "expected": 18750,
+      "actual": 18750,
+      "source_of_truth": "Oracle header TOTAL_AMT versus grouped source-line sum; target data_quality/flag count",
+      "result": "pass"
+    },
+    {
+      "id": "invoices.validators_present",
+      "expected": [
+        "invoices",
+        "invoices_quarantine"
+      ],
+      "actual": [
+        "invoices",
+        "invoices_quarantine"
+      ],
+      "source_of_truth": "target listCollections options.$jsonSchema",
+      "result": "pass"
+    },
+    {
+      "id": "invoices.validator_rejects_bad_document",
+      "expected": "rejected",
+      "actual": "rejected_code_121",
+      "source_of_truth": "target negative insert probe; MongoDB document validation error code 121 and probe absence",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "fingerprint_a={'invoice_doc_count': 18750, 'total_embedded_line_count': 149963, 'all_lines_checksum': '88a66751f0b08b476b492105a2efc537', 'quarantine_count': 37, 'sorted_quarantine_id_hash': '53d9562b0327c3abbe767bed019dede1'}; fingerprint_b={'invoice_doc_count': 18750, 'total_embedded_line_count': 149963, 'all_lines_checksum': '88a66751f0b08b476b492105a2efc537', 'quarantine_count': 37, 'sorted_quarantine_id_hash': '53d9562b0327c3abbe767bed019dede1'}"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      "orphaned_rows"
+    ],
+    "actual_set": [
+      "orphaned_rows"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "Live-Atlas write path and its validator DDL are unverified; only the parent's uncontended Atlas run proves them.",
+    "Date-parse-failure branch is unverified because the demo baseline has zero malformed invoice_dt strings, so unparseable_invoice_dt and unparseable_due_dt never fired.",
+    "null_amount, unparseable_amount, and null_invoice_id quarantine branches are unverified because the baseline has zero such rows.",
+    "invalid_encoding quarantine branch is unverified because the baseline has zero non-decodable values.",
+    "Malformed GL_ACCT_CSV tolerate-and-attribute path is unverified because baseline CSVs are all well-formed."
+  ]
+}
