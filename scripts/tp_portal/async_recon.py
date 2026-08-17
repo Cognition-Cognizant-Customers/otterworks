@@ -13,6 +13,7 @@ import boto3
 
 
 IDEMPOTENCY_NAMESPACE = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+FEEDBACK_COUNTER_PK = "0"
 
 
 def idempotency_key(feedback_id: int) -> str:
@@ -31,7 +32,14 @@ def queue_depth(sqs: Any, name: str) -> int:
     return int(attrs.get("ApproximateNumberOfMessages", "0"))
 
 
-def scan_ids(dynamodb: Any, table_name: str, key: str) -> set[str]:
+def scan_ids(
+    dynamodb: Any,
+    table_name: str,
+    key: str,
+    *,
+    exclude_values: set[str] | None = None,
+) -> set[str]:
+    exclude_values = exclude_values or set()
     values: set[str] = set()
     kwargs = {
         "TableName": table_name,
@@ -42,10 +50,21 @@ def scan_ids(dynamodb: Any, table_name: str, key: str) -> set[str]:
         page = dynamodb.scan(**kwargs)
         for item in page.get("Items", []):
             value = item[key]
-            values.add(value.get("S", value.get("N")))
+            value = value.get("S", value.get("N"))
+            if value not in exclude_values:
+                values.add(value)
         if "LastEvaluatedKey" not in page:
             return values
         kwargs["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+
+
+def scan_feedback_ids(dynamodb: Any, table_name: str) -> set[str]:
+    return scan_ids(
+        dynamodb,
+        table_name,
+        "pk",
+        exclude_values={FEEDBACK_COUNTER_PK},
+    )
 
 
 def _errors(cloudwatch: Any, function_name: str, now: dt.datetime) -> float:
@@ -97,12 +116,12 @@ def report(
     dynamodb = dynamodb or boto3.client("dynamodb", region_name=region)
     cloudwatch = cloudwatch or boto3.client("cloudwatch", region_name=region)
 
-    feedback_ids = scan_ids(dynamodb, f"{prefix}-feedback", "pk")
+    feedback_ids = scan_feedback_ids(dynamodb, f"{prefix}-feedback")
     moderation_ids = scan_ids(dynamodb, f"{prefix}-moderation", "idempotencyKey")
     expected_ids = {idempotency_key(int(value)) for value in feedback_ids}
     main_depth = queue_depth(sqs, f"{prefix}-feedback-events")
     dlq_depth = queue_depth(sqs, f"{prefix}-feedback-events-dlq")
-    rerun_feedback_ids = scan_ids(dynamodb, f"{prefix}-feedback", "pk")
+    rerun_feedback_ids = scan_feedback_ids(dynamodb, f"{prefix}-feedback")
     rerun_moderation_ids = scan_ids(dynamodb, f"{prefix}-moderation", "idempotencyKey")
     rerun_expected_ids = {idempotency_key(int(value)) for value in rerun_feedback_ids}
     rerun_main_depth = queue_depth(sqs, f"{prefix}-feedback-events")
