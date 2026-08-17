@@ -108,20 +108,29 @@ def evaluate_search(
             record["id"]
             for record in records
             if wanted
-            and wanted.issubset(
+            and wanted.intersection(
                 {t for path in paths for t in _tokens(record.get(path))}
             )
         ]
     if "compound" in stage:
-        clauses = stage["compound"].get("filter", []) + stage["compound"].get(
-            "must", []
-        )
+        compound = stage["compound"]
+        if "should" in compound or "mustNot" in compound:
+            raise SystemExit(
+                "fixture evaluator does not support compound.should or compound.mustNot"
+            )
+        clauses = compound.get("filter", []) + compound.get("must", [])
+        for clause in clauses:
+            if "equals" not in clause:
+                raise SystemExit(
+                    f"fixture evaluator does not support compound clause: {sorted(clause)}"
+                )
+        if not clauses:
+            raise SystemExit("fixture evaluator cannot reproduce an empty compound")
         matched = []
         for record in records:
             if all(
                 _equals(record, clause["equals"]["path"], clause["equals"]["value"])
                 for clause in clauses
-                if "equals" in clause
             ):
                 matched.append(record["id"])
         return matched
@@ -411,7 +420,7 @@ def recon_live(namespace: str) -> dict[str, Any]:
             checks.extend(
                 role_checks(deployed, "Atlas Admin API search index read-back")
             )
-        except Exception as exc:  # noqa: BLE001 - reported, never silently dropped
+        except (Exception, SystemExit) as exc:  # noqa: BLE001 - reported, never silently dropped
             unverified.append(
                 f"SRC-03 index field roles: Atlas Admin API read-back failed ({type(exc).__name__})"
             )

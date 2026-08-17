@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 from bson import Binary
 from pymongo import ReplaceOne
+import pytest
 
 SCRIPTS = Path(__file__).resolve().parents[2] / "scripts" / "tp_atlas"
 sys.path.insert(0, str(SCRIPTS))
@@ -158,3 +159,26 @@ def test_fixture_evaluator_text_and_compound_filter_equals() -> None:
         {"compound": {"filter": [{"equals": {"path": "owner_id", "value": "user-2"}}]}},
         records,
     ) == ["doc-2"]
+
+
+def test_fixture_evaluator_text_matches_any_query_term() -> None:
+    records = [
+        {"id": "doc-1", "title": "Delta report"},
+        {"id": "doc-2", "title": "Other"},
+    ]
+    assert evaluate_search(
+        {"text": {"query": "Delta missing", "path": "title"}}, records
+    ) == ["doc-1"]
+
+
+def test_fixture_evaluator_rejects_unsupported_compound_clause() -> None:
+    with pytest.raises(SystemExit, match="compound clause"):
+        evaluate_search(
+            {"compound": {"filter": [{"text": {"query": "Delta", "path": "title"}}]}},
+            [{"id": "doc-1", "title": "Delta"}],
+        )
+
+
+def test_fixture_evaluator_rejects_empty_compound() -> None:
+    with pytest.raises(SystemExit, match="empty compound"):
+        evaluate_search({"compound": {}}, [{"id": "doc-1"}])

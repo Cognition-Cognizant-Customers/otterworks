@@ -32,10 +32,10 @@ tp-validate-recon: ## Validate recon reports (FILE=<path>; no reports is valid, 
 	uv run --no-project --with jsonschema==4.25.1 --with rfc3339-validator==0.1.4 python3 scripts/tp_validate.py recon $(FILE)
 
 tp-search-recon-fixture: ## Child self-check: cron-search recon over the local fixture corpus
-	uv run --no-project --with pymongo==4.10.1 --with requests==2.32.3 python3 scripts/tp_atlas/cronbox_search_recon.py --mode fixture --source-url $${CORPUS_URL:-http://localhost:8088} --out docs/tech-partnerships/recon/cron-search-demo.fixture.recon.json
+	uv run --no-project --with pymongo==4.10.1 --with requests==2.32.3 python3 scripts/tp_atlas/cronbox_search_recon.py --mode fixture --namespace $${NS:-demo} --source-url $${CORPUS_URL:-http://localhost:8088} --out docs/tech-partnerships/recon/cron-search-$${NS:-demo}.fixture.recon.json
 
 tp-search-recon: ## Parent-owned read-only cron-search recon against deployed Atlas
-	uv run --no-project --with pymongo==4.10.1 --with requests==2.32.3 python3 scripts/tp_atlas/cronbox_search_recon.py --mode live --namespace $${NS:-demo} --out docs/tech-partnerships/recon/cron-search-demo.recon.json
+	uv run --no-project --with pymongo==4.10.1 --with requests==2.32.3 python3 scripts/tp_atlas/cronbox_search_recon.py --mode live --namespace $${NS:-demo} --out docs/tech-partnerships/recon/cron-search-$${NS:-demo}.recon.json
 
 tp-skeleton-validate: ## Validate the Databricks, AWS Terraform, and Atlas skeletons offline
 	$(MAKE) tp-databricks-skeleton-validate
