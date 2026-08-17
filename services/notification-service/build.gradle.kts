@@ -16,6 +16,10 @@ repositories {
     mavenCentral()
 }
 
+dependencyLocking {
+    lockAllConfigurations()
+}
+
 val ktorVersion = "2.3.9"
 val awsSdkVersion = "1.0.70"
 val coroutinesVersion = "1.8.0"
