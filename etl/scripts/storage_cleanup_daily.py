@@ -27,7 +27,14 @@ def main():
     aws_access_key = config.get("aws", "access_key")
     aws_secret_key = config.get("aws", "secret_key")
     aws_region = config.get("aws", "region")
-    aws_account_id = config.get("aws", "account_id")
+    # Account that must own the S3 buckets (ExpectedBucketOwner); defaults to the
+    # caller's own account when config.ini predates the setting.
+    aws_account_id = config.get("aws", "account_id", fallback="") or boto3.client(
+        "sts",
+        aws_access_key_id=aws_access_key,
+        aws_secret_access_key=aws_secret_key,
+        region_name=aws_region,
+    ).get_caller_identity()["Account"]
 
     file_storage_bucket = config.get("s3", "file_storage_bucket")
     quarantine_bucket = config.get("s3", "quarantine_bucket")
