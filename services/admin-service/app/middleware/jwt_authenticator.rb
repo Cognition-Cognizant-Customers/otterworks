@@ -1,5 +1,5 @@
 class JwtAuthenticator
-  EXCLUDED_PATHS = %w[/health /metrics /api/v1/admin/alerts/ingest /api/v1/admin/chaos].freeze
+  EXCLUDED_PATHS = %w[/ /health /metrics /api/v1/admin/alerts/ingest /api/v1/admin/chaos].freeze
 
   def initialize(app)
     @app = app
