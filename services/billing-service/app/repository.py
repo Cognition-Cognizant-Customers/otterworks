@@ -33,6 +33,7 @@ from app.domain import (
 )
 
 _INDEXED_DATABASES: set[tuple[object, str]] = set()
+_INVOICING_INDEXED_DATABASES: set[tuple[object, str]] = set()
 
 
 class PostgresPlansRepository:
@@ -342,18 +343,18 @@ class MongoInvoicingRepository:
                     validationAction="error",
                 )
         key = (self.database.client, self.database.name)
-        if key not in _INDEXED_DATABASES:
+        if key not in _INVOICING_INDEXED_DATABASES:
             self.database.billing_invoices.create_index([("tenant_id", 1)])
             self.database.billing_invoices.create_index([("period_id", 1)])
             self.database.billing_credit_notes.create_index(
                 [("tenant_id", 1), ("issued_on", 1), ("_id", 1)]
             )
-            _INDEXED_DATABASES.add(key)
+            _INVOICING_INDEXED_DATABASES.add(key)
 
     def reset(self) -> None:
         for name in self.collections:
             self.database.drop_collection(name)
-        _INDEXED_DATABASES.discard((self.database.client, self.database.name))
+        _INVOICING_INDEXED_DATABASES.discard((self.database.client, self.database.name))
         self.ensure_schema()
         seed = json.loads(
             (Path(__file__).resolve().parents[1] / "db" / "mongo_seed.json").read_text()

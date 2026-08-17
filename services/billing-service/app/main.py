@@ -47,6 +47,10 @@ async def lifespan(_app: FastAPI):
     except PyMongoError:
         logger.warning("Mongo index warm-up failed", exc_info=True)
     try:
+        MongoInvoicingRepository(mongo_database()).ensure_schema()
+    except PyMongoError:
+        logger.warning("Mongo invoicing schema warm-up failed", exc_info=True)
+    try:
         yield
     finally:
         close_mongo_client()
@@ -343,6 +347,11 @@ def issue_invoice(tenant_id: Annotated[UUID, Path()], request: InvoiceIssue) -> 
             rating_repository,
             rating,
         )
+    except DuplicateKeyError as error:
+        raise HTTPException(
+            status_code=409,
+            detail="rating period identity conflicts with an existing period",
+        ) from error
     except (LookupError, ValueError) as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     notes = mongo.credit_notes(tenant_id)
