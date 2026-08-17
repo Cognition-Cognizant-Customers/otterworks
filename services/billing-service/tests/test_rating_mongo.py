@@ -22,7 +22,11 @@ def test_finalize_twice_preserves_first_write_fields():
         uuidRepresentation="standard",
     )
     database = client[os.getenv("BILLING_SVC_MONGO_DB", "ow_tp_ratingext")]
+    if "tenant_period_start_unique" in database.rating_periods.index_information():
+        database.rating_periods.drop_index("tenant_period_start_unique")
     repository = MongoRatingRepository(database)
+    repository.list_periods(UUID("90000000-0000-0000-0000-000000000001"))
+    assert "tenant_period_start_unique" in database.rating_periods.index_information()
     tenant_id = UUID("90000000-0000-0000-0000-000000000001")
     subscription_id = UUID("90000000-0000-0000-0000-000000000002")
     subscription = SubscriptionRow(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from contextlib import asynccontextmanager, suppress
+import logging
+from contextlib import asynccontextmanager
 from datetime import date
 from typing import Annotated
 from uuid import UUID
@@ -23,12 +24,16 @@ from app.domain import (
 )
 from app.repository import MongoRatingRepository, PostgresPlansRepository
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     migrate()
-    with suppress(PyMongoError):
+    try:
         ensure_rating_indexes()
+    except PyMongoError:
+        logger.warning("Mongo index warm-up failed", exc_info=True)
     yield
 
 

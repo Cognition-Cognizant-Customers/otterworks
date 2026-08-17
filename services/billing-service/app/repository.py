@@ -122,9 +122,20 @@ class MongoRatingRepository:
     def __init__(self, database) -> None:
         self.database = database
 
+    def _ensure_indexes(self) -> None:
+        key = (id(self.database.client), self.database.name)
+        if key not in _INDEXED_DATABASES:
+            self.database.rating_periods.create_index(
+                [("tenant_id", 1), ("period_start", 1)],
+                unique=True,
+                name="tenant_period_start_unique",
+            )
+            _INDEXED_DATABASES.add(key)
+
     def list_usage(
         self, tenant_id: UUID, period_start: date, period_end: date
     ) -> list[UsageEvent]:
+        self._ensure_indexes()
         start = datetime.combine(period_start, time.min, tzinfo=UTC)
         end = datetime.combine(period_end + timedelta(days=1), time.min, tzinfo=UTC)
         rows = self.database.usage_events.find(
@@ -136,6 +147,7 @@ class MongoRatingRepository:
         ]
 
     def list_periods(self, tenant_id: UUID) -> list[RatingPeriod]:
+        self._ensure_indexes()
         rows = self.database.rating_periods.find({"tenant_id": tenant_id})
         return [self._period(row) for row in rows]
 
@@ -168,6 +180,7 @@ class MongoRatingRepository:
         period_end: date,
         result: RatingResult,
     ) -> RatingPeriod:
+        self._ensure_indexes()
         period_start_value = datetime.combine(period_start, time.min, tzinfo=UTC)
         period_end_value = datetime.combine(period_end, time.min, tzinfo=UTC)
         amount_value = (
@@ -224,8 +237,12 @@ class MongoRatingRepository:
         )
         row = self.database.rating_periods.find_one(
             {
+                "_id": period_id,
                 "tenant_id": tenant_id,
                 "period_start": period_start_value,
             }
         )
         return self._period(row)
+
+
+_INDEXED_DATABASES: set[tuple[int, str]] = set()
