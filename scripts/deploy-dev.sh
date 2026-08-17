@@ -43,6 +43,8 @@ for arg in "$@"; do
     --skip-platform)  SKIP_PLATFORM=true ;;
     --skip-terraform) SKIP_TERRAFORM=true ;;
     --skip-build)     SKIP_BUILD=true ;;
+    # err() is defined further down, so report directly to stderr here.
+    *) echo "[deploy] Unknown argument: $arg" >&2; exit 1 ;;
   esac
 done
 
@@ -320,6 +322,7 @@ build_helm_args() {
       EXTRA_ARGS+=(--set-string 'ingress.hosts[0].paths[0].path=/')
       EXTRA_ARGS+=(--set-string 'ingress.hosts[0].paths[0].pathType=Prefix')
       EXTRA_ARGS+=(--set 'ingress.tls=null') ;;
+    *) : ;; # backends: no ingress, handled below
   esac
 
   local port="${CONTAINER_PORT[$service]:-}"
@@ -335,6 +338,7 @@ build_helm_args() {
     case "$service" in
       api-gateway|auth-service|document-service|collab-service|admin-service)
         add_secret JWT_SECRET "${JWT_SECRET}" ;;
+      *) : ;; # services that do not validate JWTs
     esac
   fi
 
@@ -405,6 +409,7 @@ build_helm_args() {
       EXTRA_ARGS+=(--set-string "config.DB_HOST=${DB_ENDPOINT_HOST}" --set-string "config.DB_PORT=${DB_ENDPOINT_PORT}")
       EXTRA_ARGS+=(--set-string "config.DB_NAME=${DB_NAME}" --set-string "config.DB_USER=${DB_USER}")
       add_secret DB_PASSWORD "${DB_PASSWORD}" ;;
+    *) : ;; # frontends returned earlier; anything else needs no extra wiring
   esac
 }
 
