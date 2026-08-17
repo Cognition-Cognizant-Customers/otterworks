@@ -1,5 +1,11 @@
 import { type Page, expect } from "@playwright/test";
 
+/**
+ * Local-development e2e fixture value, not a real credential.
+ * Override with E2E_TEST_PASSWORD when running against a non-local environment.
+ */
+const DEFAULT_TEST_CREDENTIAL = process.env.E2E_TEST_PASSWORD ?? "Passw0rd!23";
+
 /** Generate a unique email for test isolation */
 export function uniqueEmail(): string {
   return `test-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@otterworks.test`;
@@ -12,7 +18,7 @@ export async function registerUser(
 ) {
   const name = opts.name ?? "Test User";
   const email = opts.email ?? uniqueEmail();
-  const password = opts.password ?? "Passw0rd!23";
+  const password = opts.password ?? DEFAULT_TEST_CREDENTIAL;
 
   await page.goto("/register");
   await page.getByLabel("Full name").fill(name);
