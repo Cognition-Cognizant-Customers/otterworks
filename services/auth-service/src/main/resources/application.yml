@@ -28,6 +28,14 @@ spring:
     baseline-on-migrate: true
     baseline-version: 0
 
+auth:
+  admin-seed:
+    enabled: ${AUTH_ADMIN_SEED_ENABLED:true}
+    email: ${AUTH_ADMIN_SEED_EMAIL:admin@otterworks.dev}
+    display-name: ${AUTH_ADMIN_SEED_DISPLAY_NAME:Admin User}
+    password: ${AUTH_ADMIN_SEED_PASSWORD:}
+    password-hash: ${AUTH_ADMIN_SEED_PASSWORD_HASH:}
+
 jwt:
   secret: ${JWT_SECRET:dev-jwt-secret-otterworks-2024-change-in-production}
   access-token-expiry: ${JWT_ACCESS_TOKEN_EXPIRY:3600}
