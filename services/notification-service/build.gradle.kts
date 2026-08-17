@@ -21,6 +21,14 @@ val awsSdkVersion = "1.0.70"
 val coroutinesVersion = "1.8.0"
 val koinVersion = "3.5.3"
 val micrometerVersion = "1.12.4"
+val serializationVersion = "1.6.3"
+val logbackVersion = "1.5.3"
+val logstashEncoderVersion = "7.4"
+val kotlinLoggingVersion = "3.0.5"
+val otelVersion = "1.36.0"
+val jedisVersion = "5.1.3"
+val kotlinVersion = "1.9.23"
+val mockkVersion = "1.13.10"
 
 dependencies {
     // Ktor Server
@@ -47,7 +55,7 @@ dependencies {
     implementation("aws.sdk.kotlin:dynamodb:$awsSdkVersion")
 
     // Serialization
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
 
     // Dependency Injection - Koin
@@ -56,24 +64,24 @@ dependencies {
     implementation("io.insert-koin:koin-logger-slf4j:$koinVersion")
 
     // Logging
-    implementation("ch.qos.logback:logback-classic:1.5.3")
-    implementation("net.logstash.logback:logstash-logback-encoder:7.4")
-    implementation("io.github.microutils:kotlin-logging-jvm:3.0.5")
+    implementation("ch.qos.logback:logback-classic:$logbackVersion")
+    implementation("net.logstash.logback:logstash-logback-encoder:$logstashEncoderVersion")
+    implementation("io.github.microutils:kotlin-logging-jvm:$kotlinLoggingVersion")
 
     // Metrics & Tracing
     implementation("io.micrometer:micrometer-registry-prometheus:$micrometerVersion")
-    implementation("io.opentelemetry:opentelemetry-api:1.36.0")
-    implementation("io.opentelemetry:opentelemetry-sdk:1.36.0")
-    implementation("io.opentelemetry:opentelemetry-exporter-otlp:1.36.0")
+    implementation("io.opentelemetry:opentelemetry-api:$otelVersion")
+    implementation("io.opentelemetry:opentelemetry-sdk:$otelVersion")
+    implementation("io.opentelemetry:opentelemetry-exporter-otlp:$otelVersion")
 
     // Redis (chaos flag checks)
-    implementation("redis.clients:jedis:5.1.3")
+    implementation("redis.clients:jedis:$jedisVersion")
 
     // Testing
     testImplementation("io.ktor:ktor-server-tests-jvm:$ktorVersion")
     testImplementation("io.ktor:ktor-server-test-host:$ktorVersion")
-    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:1.9.23")
-    testImplementation("io.mockk:mockk:1.13.10")
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlinVersion")
+    testImplementation("io.mockk:mockk:$mockkVersion")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:$coroutinesVersion")
     testImplementation("io.insert-koin:koin-test:$koinVersion")
 }
