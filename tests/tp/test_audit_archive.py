@@ -203,6 +203,26 @@ def test_non_ttl_removal_is_not_archived(stub_clients):
     assert stub_clients["s3"].objects == {}
 
 
+def test_sweep_archives_the_rest_then_fails_loudly(stub_clients, monkeypatch):
+    """A partial sweep must archive everything it can, and never look complete."""
+    stamp = CUTOFF - timedelta(days=3)
+    records = [item(f"demo-audit-001{index}", stamp, ttl_epoch(stamp)) for index in range(3)]
+    original = handler.put_archive
+
+    def flaky(s3, record):
+        if record["event_id"] == "demo-audit-0011":
+            raise handler.ClientError({"Error": {"Code": "SlowDown"}}, "PutObject")
+        return original(s3, record)
+
+    monkeypatch.setattr(handler, "put_archive", flaky)
+    stub_clients["dynamodb"].items = records
+    with pytest.raises(handler.ArchiveIncomplete) as raised:
+        handler.lambda_handler({"mode": "sweep", "reference_time": REFERENCE})
+    assert raised.value.result["failed"] == ["demo-audit-0011"]
+    assert raised.value.result["archived"] == ["demo-audit-0010", "demo-audit-0012"]
+    assert len(stub_clients["s3"].objects) == 2
+
+
 def test_stream_reports_failures_per_record(stub_clients, monkeypatch):
     """A TTL removal is the item's last copy: one failure must not drop the batch."""
     stamp = CUTOFF - timedelta(days=3)

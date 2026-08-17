@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "cron-archive",
   "namespace": "demo",
-  "generated_at": "2026-08-17T05:41:36Z",
+  "generated_at": "2026-08-17T05:53:01Z",
   "run_mode": "fixture",
   "checks": [
     {

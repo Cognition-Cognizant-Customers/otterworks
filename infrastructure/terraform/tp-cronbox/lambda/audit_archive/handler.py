@@ -44,6 +44,14 @@ def _client(service):
     return boto3.client(service, endpoint_url=ENDPOINT_URL)
 
 
+class ArchiveIncomplete(RuntimeError):
+    """A sweep archived everything it could, but not everything it had to."""
+
+    def __init__(self, result):
+        super().__init__(f"sweep could not archive: {result['failed']}")
+        self.result = result
+
+
 class ArchiveEncoder(json.JSONEncoder):
     """Archive DynamoDB values without coercing or reordering them."""
 
@@ -231,6 +239,7 @@ def handle_sweep(event):
     s3 = _client("s3")
     cutoff = reference_epoch(event)
     archived, already, retained, unexpirable, keys = [], [], [], [], {}
+    failed = []
     for item in scan_table(dynamodb):
         expiry = expiry_of(item)
         if expiry is None:
@@ -241,7 +250,12 @@ def handle_sweep(event):
         if expiry >= cutoff:
             retained.append(item["event_id"])
             continue
-        key, written = put_archive(s3, item)
+        try:
+            key, written = put_archive(s3, item)
+        except Exception as error:  # noqa: BLE001 - archive every other expiring item
+            print(f"archive failed for {item.get('event_id')}: {error}")
+            failed.append(item.get("event_id"))
+            continue
         keys[item["event_id"]] = key
         (archived if written else already).append(item["event_id"])
     result = {
@@ -254,6 +268,7 @@ def handle_sweep(event):
         "already_archived": sorted(already),
         "retained": sorted(retained),
         "unexpirable": sorted(unexpirable),
+        "failed": sorted(item for item in failed if item),
         "archive_keys": keys,
     }
     emit_metrics(
@@ -261,8 +276,13 @@ def handle_sweep(event):
             "ArchivedRecords": len(archived),
             "AlreadyArchivedRecords": len(already),
             "UnexpirableRecords": len(unexpirable),
+            "FailedArchiveRecords": len(failed),
         }
     )
+    if failed:
+        # Every archivable item was archived first; a partial sweep must still be
+        # a failed invoke so it is never mistaken for full coverage.
+        raise ArchiveIncomplete(result)
     return result
 
 
