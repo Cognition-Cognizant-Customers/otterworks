@@ -169,9 +169,9 @@ function RecentSkeleton() {
         <div key={section}>
           <div className="h-4 w-20 bg-gray-200 rounded animate-pulse mb-3" />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: 3 }).map((_, i) => (
+            {Array.from({ length: 3 }, (_, i) => `card-${i}`).map((key) => (
               <div
-                key={i}
+                key={key}
                 className="flex flex-col rounded-xl border border-gray-200 bg-white p-4"
               >
                 <div className="flex items-start justify-between mb-3">
