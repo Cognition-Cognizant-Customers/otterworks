@@ -5,6 +5,9 @@ import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import java.io.UncheckedIOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -23,7 +26,7 @@ public abstract class ApiHandler implements RequestHandler<APIGatewayV2HTTPEvent
     public APIGatewayV2HTTPResponse handleRequest(APIGatewayV2HTTPEvent event, Context context) {
         try {
             String method = event.getRequestContext().getHttp().getMethod();
-            String path = event.getRawPath();
+            String path = decodePath(event.getRawPath());
             Map<String, String> query = event.getQueryStringParameters() == null
                     ? Map.of() : event.getQueryStringParameters();
             String body = event.getBody();
@@ -43,6 +46,27 @@ public abstract class ApiHandler implements RequestHandler<APIGatewayV2HTTPEvent
         // Unexpected exceptions propagate so the invocation is recorded as a failure:
         // that is what increments the AWS/Lambda Errors metric and trips the per-context
         // CloudWatch alarm. API Gateway converts the failed invocation into a plain 500.
+    }
+
+    /**
+     * Percent-decodes each path segment (rawPath in API Gateway payload v2 is not
+     * URL-decoded), matching how Spring decodes @PathVariable values in the monolith.
+     * "+" stays literal: it is not a space in path segments.
+     */
+    static String decodePath(String rawPath) {
+        if (rawPath == null || rawPath.indexOf('%') < 0) {
+            return rawPath;
+        }
+        try {
+            String[] segments = rawPath.split("/", -1);
+            for (int i = 0; i < segments.length; i++) {
+                segments[i] = URLDecoder.decode(
+                        segments[i].replace("+", "%2B"), StandardCharsets.UTF_8);
+            }
+            return String.join("/", segments);
+        } catch (IllegalArgumentException | UncheckedIOException e) {
+            throw ApiException.badRequest("malformed path: " + rawPath);
+        }
     }
 
     /**

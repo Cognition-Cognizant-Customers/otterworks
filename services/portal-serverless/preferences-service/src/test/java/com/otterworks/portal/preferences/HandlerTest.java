@@ -73,6 +73,17 @@ class HandlerTest {
     }
 
     @Test
+    void percentEncodedUserIdIsDecodedLikeSpringPathVariable() {
+        APIGatewayV2HTTPResponse update = call("PUT", "/api/preferences/john%20doe",
+                "{\"theme\":\"dark\",\"locale\":\"en-US\",\"emailNotifications\":true}");
+        assertEquals(200, update.getStatusCode());
+        String expected =
+                "{\"userId\":\"john doe\",\"theme\":\"dark\",\"locale\":\"en-US\",\"emailNotifications\":true}";
+        assertEquals(expected, update.getBody());
+        assertEquals(expected, call("GET", "/api/preferences/john%20doe", null).getBody());
+    }
+
+    @Test
     void collectionRootIs404() {
         assertEquals(404, call("GET", "/api/preferences", null).getStatusCode());
     }
