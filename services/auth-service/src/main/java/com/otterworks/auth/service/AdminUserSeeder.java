@@ -66,7 +66,7 @@ public class AdminUserSeeder implements ApplicationRunner {
   private void seed(String hash) {
     // The stored password is only overwritten when the account has no usable one (fresh install, or
     // revoked by V5) unless a reset is explicitly requested, so a password rotated through
-    // /change-password survives restarts.
+    // /change-password survives restarts; likewise a display name edited through the profile API.
     jdbcTemplate.update(
         """
         INSERT INTO users (id, email, password_hash, display_name, email_verified,
@@ -79,7 +79,7 @@ public class AdminUserSeeder implements ApplicationRunner {
                 THEN EXCLUDED.password_hash
               ELSE users.password_hash
             END,
-            display_name = EXCLUDED.display_name,
+            display_name = COALESCE(users.display_name, EXCLUDED.display_name),
             email_verified = true,
             updated_at = NOW()
         """,
