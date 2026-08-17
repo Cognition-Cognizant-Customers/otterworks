@@ -138,17 +138,17 @@ interface NavItem {
     }
 
     :host ::ng-deep .active-link {
-      background: rgba(217, 154, 61, 0.18) !important;
-      color: #d99a3d !important;
+      background: #414b59 !important;
+      color: #f0b95f !important;
     }
 
     :host ::ng-deep .active-link .mdc-list-item__primary-text,
     :host ::ng-deep .active-link .mat-mdc-list-item-title {
-      color: #d99a3d !important;
+      color: #f0b95f !important;
     }
 
     :host ::ng-deep .active-link .mat-icon {
-      color: #d99a3d !important;
+      color: #f0b95f !important;
     }
 
     :host ::ng-deep .mat-mdc-list-item .mat-icon {
