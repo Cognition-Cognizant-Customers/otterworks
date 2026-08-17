@@ -175,6 +175,7 @@ def cmd_replay(args):
     passed = sum(1 for c in checks if c["result"] == "pass")
     rerun_passed = sum(1 for c in rerun_checks if c["result"] == "pass")
     rerun_ok = passed == len(checks) and rerun_passed == len(rerun_checks)
+    rerun_failures = [c for c in rerun_checks if c["result"] == "fail"]
 
     # Planted anomalies = the deliberately invalid requests in the spec (golden 4xx).
     anomaly_expected = [g["id"] for g in golden["steps"] if g["status"] >= 400]
@@ -201,6 +202,7 @@ def cmd_replay(args):
             "result": "pass" if rerun_ok else "fail",
             "evidence": (f"transcript replayed twice, each pass after `{args.reset_cmd}`: "
                          f"first {passed}/{len(checks)}, rerun {rerun_passed}/{len(rerun_checks)}"),
+            "rerun_failures": rerun_failures,
         },
         "planted_anomaly_detections": {
             "expected_set": anomaly_expected,
@@ -227,6 +229,8 @@ def cmd_replay(args):
           f"(rerun {rerun_passed}/{len(rerun_checks)}) -> {args.out}")
     for c in failed:
         print(f"FAIL {c['id']}: {'; '.join(c['mismatches'])}")
+    for c in rerun_failures:
+        print(f"RERUN-FAIL {c['id']}: {'; '.join(c['mismatches'])}")
     return 1 if failed or not rerun_ok else 0
 
 
