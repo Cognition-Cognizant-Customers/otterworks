@@ -52,7 +52,18 @@ def now() -> str:
 
 
 def esc(value: str) -> str:
-    return value.replace("'", "''")
+    """Databricks string literals honour backslash escapes, so a value ending in a
+    backslash would otherwise neutralise the closing quote."""
+    return value.replace("\\", "\\\\").replace("'", "''")
+
+
+def find_alert(dbx: Databricks, name: str) -> dict | None:
+    # the alerts API returns the page under `alerts`; older docs say `results`
+    listed = dbx.ok("GET", "/api/2.0/alerts?page_size=100")
+    for alert in listed.get("alerts", listed.get("results", [])):
+        if alert.get("display_name") == name and alert.get("lifecycle_state") == "ACTIVE":
+            return alert
+    return None
 
 
 def as_int(value) -> int:
@@ -503,12 +514,11 @@ def cmd_alert(dbx: Databricks, args) -> int:
         },
         "schedule": {"quartz_cron_schedule": "0 0 6 * * ?", "timezone_id": "UTC", "pause_status": "PAUSED"},
     }
-    listed = dbx.ok("GET", "/api/2.0/alerts?page_size=100")
-    for alert in listed.get("results", []):
-        if alert.get("display_name") == name and alert.get("lifecycle_state") == "ACTIVE":
-            dbx.ok("PATCH", f"/api/2.0/alerts/{alert['id']}?update_mask=query_text,evaluation,schedule,warehouse_id", {"alert": body})
-            print(f"alert refreshed (PAUSED): {dbx.host}/sql/alerts/{alert['id']}")
-            return 0
+    existing = find_alert(dbx, name)
+    if existing:
+        dbx.ok("PATCH", f"/api/2.0/alerts/{existing['id']}?update_mask=query_text,evaluation,schedule,warehouse_id", body)
+        print(f"alert refreshed (PAUSED): {dbx.host}/sql/alerts/{existing['id']}")
+        return 0
     created = dbx.ok("POST", "/api/2.0/alerts", body)
     print(f"alert created (PAUSED): {dbx.host}/sql/alerts/{created['id']}")
     return 0
@@ -711,8 +721,24 @@ def cmd_status(dbx: Databricks, args) -> int:
         f"(SELECT count(*) FROM {n.expectations}) AS expectation_rows"
     )
     print(json.dumps(result.dicts()[0] if result.ok else {"state": result.state, "error": result.error}, indent=2))
+    # the runbook's cost-control step leans on this: nothing should be armed to
+    # spin the warehouse up unattended
     job = dbx.find_job(f"ow_tp_billing_history_recon_{n.ns}")
-    print(f"recon job: {dbx.host}/jobs/{job['job_id']}" if job else "recon job: absent")
+    if job:
+        # jobs/list trims settings, so read the schedule from the job itself
+        detail = dbx.ok("GET", f"/api/2.1/jobs/get?job_id={int(job['job_id'])}")
+        schedule = detail.get("settings", {}).get("schedule")
+        state = schedule.get("pause_status", "UNKNOWN") if schedule else "NO SCHEDULE"
+        print(f"recon job: {dbx.host}/jobs/{job['job_id']} schedule={state}")
+    else:
+        print("recon job: absent")
+    alert = find_alert(dbx, f"ow_tp_recon_failed_{n.ns}")
+    if alert:
+        schedule = alert.get("schedule")
+        state = schedule.get("pause_status", "UNKNOWN") if schedule else "NO SCHEDULE"
+        print(f"recon alert: {dbx.host}/sql/alerts/{alert['id']} schedule={state}")
+    else:
+        print("recon alert: absent")
     return 0
 
 
@@ -724,7 +750,11 @@ def cmd_teardown(dbx: Databricks, args) -> int:
     for entry in dbx.list_dir(n.history_dir):
         for inner in dbx.list_dir(entry.get("path", "")):
             dbx.delete_file(inner.get("path", ""))
+        # per-year directories outlive their files unless deleted as directories
         dbx.delete_file(entry.get("path", ""))
+        dbx.delete_dir(entry.get("path", ""))
+    dbx.delete_dir(n.history_dir)
+    dbx.delete_dir(f"{n.landing}/{n.ns}")
     job = dbx.find_job(f"ow_tp_billing_history_recon_{n.ns}")
     if job:
         dbx.ok("POST", "/api/2.0/jobs/delete", {"job_id": int(job["job_id"])})
@@ -744,17 +774,35 @@ def cmd_teardown(dbx: Databricks, args) -> int:
         if dashboard.get("display_name") == f"ow_tp_billing_history_{n.ns}":
             dbx.call("DELETE", f"/api/2.0/lakeview/dashboards/{dashboard['dashboard_id']}")
             print(f"trashed dashboard {dashboard['dashboard_id']}")
-    for alert in dbx.ok("GET", "/api/2.0/alerts?page_size=100").get("results", []):
-        if alert.get("display_name") == f"ow_tp_recon_failed_{n.ns}":
-            dbx.call("DELETE", f"/api/2.0/alerts/{alert['id']}")
-            print(f"deleted alert {alert['id']}")
+    alert = find_alert(dbx, f"ow_tp_recon_failed_{n.ns}")
+    if alert:
+        dbx.call("DELETE", f"/api/2.0/alerts/{alert['id']}")
+        print(f"deleted alert {alert['id']}")
     for path in (f"{NOTEBOOK_DIR}/notify_devin_{n.ns}",
                  f"{NOTEBOOK_DIR}/recon_check_{n.ns}.sql",
                  f"{NOTEBOOK_DIR}/custbill_dlt_{n.ns}"):
         status, _ = dbx.call("POST", "/api/2.0/workspace/delete", {"path": path})
         print(f"workspace delete {path}: HTTP {status}")
+    # negative verification across every object class teardown touches, so a
+    # survivor like the alert cannot hide behind a table-only scan
     remaining = dbx.sql(f"SHOW TABLES IN {n.catalog}.silver LIKE '*_{n.ns}'")
-    print(f"negative verification, silver tables matching *_{n.ns}: {remaining.rows}")
+    leftovers = {
+        "silver_tables": remaining.rows,
+        "recon_job": dbx.find_job(f"ow_tp_billing_history_recon_{n.ns}") is not None,
+        "pipeline": find_pipeline(dbx, pipeline_name(n)) is not None,
+        "alert": find_alert(dbx, f"ow_tp_recon_failed_{n.ns}") is not None,
+        "dashboard": any(
+            d.get("display_name") == f"ow_tp_billing_history_{n.ns}"
+            and d.get("lifecycle_state") == "ACTIVE"
+            for d in dbx.ok("GET", "/api/2.0/lakeview/dashboards?page_size=100").get("dashboards", [])
+        ),
+        "landed_paths": [e.get("path") for e in dbx.list_dir(n.history_dir)],
+    }
+    print("negative verification: " + json.dumps(leftovers))
+    survivors = [k for k, v in leftovers.items() if v]
+    if survivors:
+        print(f"teardown incomplete, survivors: {survivors}")
+        return 1
     return 0
 
 

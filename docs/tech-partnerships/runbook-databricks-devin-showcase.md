@@ -36,7 +36,11 @@ for a given namespace, so on-screen output matches this document exactly.
 | Ops | `ow_tp.ops.history_expectations_demo` | 36 legacy-derived expectation rows (the recon source of truth) |
 | Ops | `ow_tp.ops.recon_runs_demo` | recon history, one row per run |
 | Pipeline | `ow_tp_custbill_history_dlt_demo` | same shape, quarantine rules as declared expectations |
-| Job | `ow_tp_custbill_history_recon_demo` | recon SQL + `AT_LEAST_ONE_FAILED` Devin notifier, **schedule PAUSED** |
+| Job | `ow_tp_billing_history_recon_demo` | recon SQL + `AT_LEAST_ONE_FAILED` Devin notifier, **schedule PAUSED** |
+
+Row counts are namespace-independent; the cent totals are not — the generator
+seeds amounts per namespace, so a rehearsal namespace legitimately reports a
+different total (e.g. `rehearse1` = 1,440,462,121) with all recon checks green.
 
 ## Pre-demo setup
 
@@ -132,7 +136,8 @@ make dbx-showcase CMD=run-job NS=demo
 ```
 
 Expected: `recon_check: FAILED` with a `raise_error` message naming the failing
-check ids, and `notify_devin: SUCCESS`. The notifier is a dependent task with
+check ids, and `notify_devin: SUCCESS`; the run's overall state is
+`SUCCESS_WITH_FAILURES`, because the notifier task itself succeeded. The notifier is a dependent task with
 `run_if: AT_LEAST_ONE_FAILED`; it POSTs job id, run id, run URL, namespace and
 base branch to the Devin automation webhook, with the shared secret read from
 the `ow_tp` Databricks secret scope.
@@ -178,4 +183,6 @@ make dbx-showcase CMD=teardown NS=<rehearsal-ns>
 ```
 
 Teardown drops only `ow_tp` objects suffixed with that namespace, then verifies
-absence. It never touches unprefixed objects or another namespace.
+absence across tables, job, pipeline, alert, dashboard and landed files, exiting
+non-zero if anything survived. It never touches unprefixed objects or another
+namespace.

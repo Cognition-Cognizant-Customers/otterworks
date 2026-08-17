@@ -155,6 +155,13 @@ class Databricks:
         status, _ = self.call("DELETE", f"/api/2.0/fs/files{quoted}")
         return status
 
+    def delete_dir(self, volume_path: str) -> int:
+        """Volume directories need the directories endpoint; the files one leaves
+        them behind empty."""
+        quoted = urllib.parse.quote(volume_path, safe="/")
+        status, _ = self.call("DELETE", f"/api/2.0/fs/directories{quoted}")
+        return status
+
     def list_dir(self, volume_path: str) -> list[dict]:
         quoted = urllib.parse.quote(volume_path, safe="/")
         status, payload = self.call("GET", f"/api/2.0/fs/directories{quoted}")
