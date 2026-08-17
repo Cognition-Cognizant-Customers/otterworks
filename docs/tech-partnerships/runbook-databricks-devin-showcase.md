@@ -28,7 +28,7 @@ for a given namespace, so on-screen output matches this document exactly.
 
 | Layer | Object | Content |
 |---|---|---|
-| Landing | `/Volumes/ow_tp/bronze/landing/demo/history` | 72 monthly CUSTBILL drops, 2019–2024, original periods and mtimes |
+| Landing | `/Volumes/ow_tp/bronze/landing/demo/history` | 72 monthly CUSTBILL drops, 2019–2024, original file names and periods (the volume stamps upload time, so drop dates come from `source_period`, not file mtimes) |
 | Bronze | `ow_tp.bronze.custbill_history_raw_demo` | 3,024 raw lines incl. headers/trailers, with source file/period/year |
 | Silver | `ow_tp.silver.custbill_history_demo` | 2,856 valid billing records |
 | Silver | `ow_tp.silver.custbill_quarantine_demo` | 30 planted anomalies (bad dates, non-numeric amounts, trailer mismatch) |

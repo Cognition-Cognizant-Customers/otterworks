@@ -754,7 +754,8 @@ def cmd_teardown(dbx: Databricks, args) -> int:
         dbx.delete_file(entry.get("path", ""))
         dbx.delete_dir(entry.get("path", ""))
     dbx.delete_dir(n.history_dir)
-    dbx.delete_dir(f"{n.landing}/{n.ns}")
+    # n.landing is already namespace-scoped; the volume root itself is shared
+    dbx.delete_dir(n.landing)
     job = dbx.find_job(f"ow_tp_billing_history_recon_{n.ns}")
     if job:
         dbx.ok("POST", "/api/2.0/jobs/delete", {"job_id": int(job["job_id"])})

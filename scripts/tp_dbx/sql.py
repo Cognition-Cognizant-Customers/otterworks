@@ -68,7 +68,7 @@ def provision(n: Names) -> list[str]:
               source_year INT COMMENT 'Calendar year of the drop, used as the load partition',
               record_kind STRING COMMENT 'HDR, TRL or BODY',
               raw_line STRING COMMENT 'Untouched fixed-width record',
-              file_modification_time TIMESTAMP,
+              file_modification_time TIMESTAMP COMMENT 'When the drop landed on the volume; the Files API stamps upload time, so this is not the mainframe drop date — that comes from source_period',
               ingested_at TIMESTAMP)
             USING DELTA PARTITIONED BY (source_year)
             COMMENT 'Bronze: byte-preserved CUSTBILL history, one row per line'""",
