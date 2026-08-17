@@ -1,10 +1,10 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { IncidentsComponent } from './incidents.component';
 import { AdminApiService } from '../../core/services/admin-api.service';
 import { Incident } from '../../core/models/incident.model';
-import { of, throwError } from 'rxjs';
+import { of } from 'rxjs';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { OverlayModule } from '@angular/cdk/overlay';
 

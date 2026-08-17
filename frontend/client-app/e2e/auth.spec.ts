@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { uniqueEmail, registerUser, loginUser, expectDashboard, clearAuth } from "./fixtures/test-helpers";
+import { uniqueEmail, registerUser, loginUser } from "./fixtures/test-helpers";
 
 test.describe("Authentication", () => {
   test.describe("Registration", () => {

@@ -13,8 +13,6 @@ import {
   Share2,
   Download,
   Pencil,
-  Check,
-  X,
   Star,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
