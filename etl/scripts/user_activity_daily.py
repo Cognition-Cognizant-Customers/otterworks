@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 import boto3
 import psycopg2
+from s3_common import bucket_owner_args
 
 
 def main():
@@ -37,6 +38,7 @@ def main():
     db_password = config.get("database", "password")
 
     data_lake_bucket = config.get("s3", "data_lake_bucket")
+    owner_args = bucket_owner_args(config)
 
     ds = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
     lookback_days = 30
@@ -144,7 +146,7 @@ def main():
         key = "analytics/daily/year=%s/month=%s/day=%s/top_users.jsonl.gz" % (year, month, day)
 
         try:
-            response = s3_client.get_object(Bucket=data_lake_bucket, Key=key)
+            response = s3_client.get_object(Bucket=data_lake_bucket, Key=key, **owner_args)
             body = response["Body"].read()
             decompressed = gzip.decompress(body).decode("utf-8")
 
@@ -217,6 +219,7 @@ def main():
         Bucket=data_lake_bucket,
         Key=report_key,
         Body=json.dumps(report, indent=2, default=str).encode("utf-8"),
+        **owner_args,
     )
 
     # Store latest pointer for admin-service
@@ -225,6 +228,7 @@ def main():
         Bucket=data_lake_bucket,
         Key=latest_key,
         Body=json.dumps(report, indent=2, default=str).encode("utf-8"),
+        **owner_args,
     )
 
     # Store per-user summaries as JSONL for individual user lookups
@@ -236,6 +240,7 @@ def main():
             Bucket=data_lake_bucket,
             Key=users_key,
             Body=("\n".join(lines) + "\n").encode("utf-8"),
+            **owner_args,
         )
 
     print("[%s] Stored activity report: %d user summaries at s3://%s/%s" % (

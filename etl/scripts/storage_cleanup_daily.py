@@ -15,6 +15,7 @@ import sys
 from datetime import datetime, timezone
 
 import boto3
+from s3_common import bucket_owner_args
 
 
 def main():
@@ -31,6 +32,7 @@ def main():
     file_storage_bucket = config.get("s3", "file_storage_bucket")
     quarantine_bucket = config.get("s3", "quarantine_bucket")
     data_lake_bucket = config.get("s3", "data_lake_bucket")
+    owner_args = bucket_owner_args(config)
 
     files_prefix = "files/"
     quarantine_prefix = "quarantined"
@@ -128,6 +130,10 @@ def main():
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"), orphaned_count
         ))
 
+    copy_args = dict(owner_args)
+    if owner_args:
+        copy_args["ExpectedSourceBucketOwner"] = owner_args["ExpectedBucketOwner"]
+
     moved_count = 0
     failed_count = 0
 
@@ -141,8 +147,9 @@ def main():
                 Key=dest_key,
                 CopySource={"Bucket": file_storage_bucket, "Key": source_key},
                 MetadataDirective="COPY",
+                **copy_args,
             )
-            s3_client.delete_object(Bucket=file_storage_bucket, Key=source_key)
+            s3_client.delete_object(Bucket=file_storage_bucket, Key=source_key, **owner_args)
             moved_count += 1
         except Exception as e:
             print("[%s] WARNING: Failed to quarantine %s: %s" % (
@@ -200,6 +207,7 @@ def main():
         Bucket=data_lake_bucket,
         Key=report_key,
         Body=json.dumps(report, indent=2).encode("utf-8"),
+        **owner_args,
     )
 
     print("[%s] Storage cleanup report: %d orphans quarantined, %.4f GB freed, ~$%.4f/month saved" % (
