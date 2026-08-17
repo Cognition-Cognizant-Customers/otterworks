@@ -155,6 +155,7 @@ def delete_entry(entry):
 
 pending_collections = {}
 pending_validator_collections = {}
+pending_cleanup_candidates = {}
 
 
 def cleanup_collection(name, database):
@@ -182,6 +183,7 @@ def emit_cleanup_failures(names):
         if result != "absent":
             m.add("db-user-write-cleanup", "Drop the temporary probe collection",
                   "MongoDB wire protocol", "denied", cleanup_detail(name, result, state))
+    names.clear()
 
 
 def reconcile_collection(name):
@@ -225,9 +227,11 @@ def classify_insert_failure(exc):
         WriteConcernError,
     )
 
+    if isinstance(exc, WriteConcernError):
+        return "ambiguous"
     if isinstance(exc, (ServerSelectionTimeoutError, OperationFailure)):
         return "not-created"
-    if isinstance(exc, (AutoReconnect, NetworkTimeout, WriteConcernError, ConnectionFailure)):
+    if isinstance(exc, (AutoReconnect, NetworkTimeout, ConnectionFailure)):
         return "ambiguous"
     return "not-created"
 
@@ -254,7 +258,6 @@ def db_user_write():
     from pymongo import MongoClient
 
     last_error = None
-    cleanup_candidates = {}
     for attempt in range(3):
         client = None
         name = f"ow_tp_preflight_{uuid.uuid4().hex}"
@@ -272,11 +275,11 @@ def db_user_write():
             database[name].delete_one({"_id": "probe"})
             database.drop_collection(name)
             pending_collections.pop(name, None)
-            resolve_cleanup_candidates(cleanup_candidates, database)
+            resolve_cleanup_candidates(pending_cleanup_candidates, database)
             m.add("db-user-write", "Insert and delete a temporary document with the DB user",
                   "MongoDB wire protocol", "verified", "temporary collection cleaned")
-            if cleanup_candidates:
-                emit_cleanup_failures(cleanup_candidates)
+            if pending_cleanup_candidates:
+                emit_cleanup_failures(pending_cleanup_candidates)
             try:
                 client.close()
             except Exception:
@@ -286,7 +289,7 @@ def db_user_write():
             last_error = exc
             result = reconcile_collection(name)
             if result is not None and result[0] != "absent":
-                cleanup_candidates[name] = result
+                pending_cleanup_candidates[name] = result
             elif client is not None and name not in pending_collections:
                 try:
                     client.close()
@@ -296,7 +299,7 @@ def db_user_write():
                 time.sleep(5)
     m.add("db-user-write", "Insert and delete a temporary document with the DB user",
           "MongoDB wire protocol", "denied", exception_detail(last_error))
-    emit_cleanup_failures(cleanup_candidates)
+    emit_cleanup_failures(pending_cleanup_candidates)
 
 
 def validator_ddl():
@@ -574,6 +577,7 @@ def cleanup_entries():
         delete_entry(entry)
         cleanup_registry.pop(key, None)
     reconcile_collections()
+    emit_cleanup_failures(pending_cleanup_candidates)
     reconcile_validator_collections()
     reconcile_alert_configs()
 
