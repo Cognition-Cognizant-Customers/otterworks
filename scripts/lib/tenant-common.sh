@@ -314,7 +314,12 @@ build_helm_args() {
       EXTRA_ARGS+=(--set-string "config.SPRING_FLYWAY_URL=jdbc:postgresql://${DB_ENDPOINT_HOST}:${DB_SESSION_PORT}/${T_DB_NAME}")
       EXTRA_ARGS+=(--set-string "config.SPRING_FLYWAY_USER=${DB_USER}")
       add_secret SPRING_FLYWAY_PASSWORD "${DB_PASSWORD}"
-      add_secret SPRING_DATASOURCE_PASSWORD "${DB_PASSWORD}" ;;
+      add_secret SPRING_DATASOURCE_PASSWORD "${DB_PASSWORD}"
+      # The admin account is seeded at boot from this secret (it is no longer in
+      # the Flyway migration); pass a stable ADMIN_SEED_PASSWORD across redeploys
+      # to keep the same login working.
+      EXTRA_ARGS+=(--set-string "config.AUTH_ADMIN_SEED_EMAIL=${ADMIN_SEED_EMAIL:-admin@otterworks.dev}")
+      add_secret AUTH_ADMIN_SEED_PASSWORD "${ADMIN_SEED_PASSWORD}" ;;
     file-service)
       EXTRA_ARGS+=(--set-string "config.AWS_REGION=${AWS_REGION}")
       EXTRA_ARGS+=(--set-string "config.S3_BUCKET=${S3_FILE_BUCKET}")

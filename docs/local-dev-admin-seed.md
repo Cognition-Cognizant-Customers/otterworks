@@ -16,8 +16,15 @@ startup from configuration instead.
 | `AUTH_ADMIN_SEED_PASSWORD_HASH`   | _(unset)_              | Pre-computed BCrypt hash; wins over the plain value. |
 
 If neither the password nor the hash is set, seeding is skipped with a warning and no admin account
-is created — that is the intended behaviour outside local dev, where the account should be
-provisioned with a secret from the deployment's secret store.
+is created. Seeding is also skipped (with a warning, not a crash) when the configured email already
+belongs to a different account.
+
+## Cluster deployments
+
+`scripts/deploy-dev.sh` and `scripts/deploy-tenant.sh` pass `AUTH_ADMIN_SEED_PASSWORD` to the
+auth-service release as a Helm secret, defaulting to a freshly generated value. Export a stable
+`ADMIN_SEED_PASSWORD` (and optionally `ADMIN_SEED_EMAIL`) across redeploys to keep the same admin
+login working, exactly as with `JWT_SECRET`.
 
 ## Local development
 
@@ -32,5 +39,10 @@ and restarting auth-service is enough to rotate it.
 
 `V5__revoke_seeded_admin_password.sql` overwrites the hash that shipped in `V1` with a value BCrypt
 can never match, so databases created before this change stop accepting the leaked credential; the
-seeder then sets the configured password on the next boot. Because `V1` itself changed, auth-service
-runs `flyway repair` before `migrate` (see `FlywayConfig`) to realign the schema history checksum.
+seeder then sets the configured password on the next boot. The revocation matches the leaked hash by
+MD5 digest, so an admin password that was already rotated is left alone.
+
+Because `V1` itself changed, a database migrated by the previous `V1` fails checksum validation on
+startup. Set `AUTH_FLYWAY_REPAIR_ON_MIGRATE=true` (already set for docker-compose) to run
+`flyway repair` before `migrate` once; it is off by default so checksum validation keeps protecting
+other environments.

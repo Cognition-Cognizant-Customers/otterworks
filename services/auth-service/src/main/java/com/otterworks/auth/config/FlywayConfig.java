@@ -1,5 +1,6 @@
 package com.otterworks.auth.config;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.flyway.FlywayMigrationStrategy;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -8,11 +9,13 @@ import org.springframework.context.annotation.Configuration;
 public class FlywayConfig {
 
   /**
-   * Repairs the schema history before migrating so that databases created before the admin seed was
-   * removed from V1 do not fail startup on the resulting checksum change.
+   * Opt-in strategy for databases created before the admin seed was removed from V1: repairing the
+   * schema history realigns the resulting checksum change instead of failing startup. Left off by
+   * default so checksum validation keeps protecting other environments.
    */
   @Bean
-  public FlywayMigrationStrategy flywayMigrationStrategy() {
+  @ConditionalOnProperty(name = "auth.flyway.repair-on-migrate", havingValue = "true")
+  public FlywayMigrationStrategy repairingFlywayMigrationStrategy() {
     return flyway -> {
       flyway.repair();
       flyway.migrate();

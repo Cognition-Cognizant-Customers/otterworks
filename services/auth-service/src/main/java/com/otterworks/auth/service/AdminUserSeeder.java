@@ -6,10 +6,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 /**
@@ -34,7 +34,6 @@ public class AdminUserSeeder implements ApplicationRunner {
   }
 
   @Override
-  @Transactional
   public void run(ApplicationArguments args) {
     if (!properties.isEnabled()) {
       return;
@@ -53,6 +52,18 @@ public class AdminUserSeeder implements ApplicationRunner {
       return;
     }
 
+    try {
+      seed(hash);
+    } catch (DataIntegrityViolationException e) {
+      log.warn(
+          "Admin seeding skipped: {} is already used by another account", properties.getEmail());
+      return;
+    }
+
+    log.info("Seeded admin user {}", properties.getEmail());
+  }
+
+  private void seed(String hash) {
     jdbcTemplate.update(
         """
         INSERT INTO users (id, email, password_hash, display_name, email_verified,
@@ -78,8 +89,6 @@ public class AdminUserSeeder implements ApplicationRunner {
           ADMIN_ID,
           role);
     }
-
-    log.info("Seeded admin user {}", properties.getEmail());
   }
 
   private String resolveHash() {
