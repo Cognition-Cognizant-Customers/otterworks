@@ -49,7 +49,7 @@ UNIT = "mongo_documents"
 RECOMPUTE_COMMAND = (
     "MONGO_URI='<target uri>' MONGO_DB='<target db>' "
     "make tp-mongo-documents-recon NS={ns} RUN_MODE=live "
-    "# read-only; add --rerun-migration to the recon script to repeat the migration write"
+    "# read-only; a complete report requires --rerun-migration, which repeats the migration write"
 )
 
 UNVERIFIED_FIXTURE = [
@@ -623,10 +623,10 @@ def main() -> int:
     else:
         idempotency = {
             "performed": False,
-            "result": "skipped",
+            "result": "fail",
             "evidence": (
-                "migration rerun not performed; pass --rerun-migration to repeat "
-                "the migration write"
+                "migration rerun not performed; --rerun-migration is required "
+                "for a complete idempotency report and repeats the migration write"
             ),
         }
 
@@ -634,19 +634,13 @@ def main() -> int:
     checks.append(
         {
             "id": "documents.idempotent",
-            "expected": "rerun requested",
+            "expected": "pass",
             "actual": idempotency["result"],
             "source_of_truth": (
-                "migration rerun is opt-in; pass --rerun-migration to compare "
-                f"mongodb {target_db_name(args.ns)} before and after a write"
+                "migration rerun is opt-in; --rerun-migration is required to "
+                f"compare mongodb {target_db_name(args.ns)} before and after a write"
             ),
-            "result": (
-                "pass"
-                if idempotency["result"] == "pass"
-                else "skipped"
-                if idempotency["result"] == "skipped"
-                else "fail"
-            ),
+            "result": "pass" if idempotency["result"] == "pass" else "fail",
         }
     )
     expected_set = sorted(

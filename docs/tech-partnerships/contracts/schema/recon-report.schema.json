@@ -9,7 +9,7 @@
     "run_mode": {"enum": ["fixture", "live"]},
     "checks": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["id", "expected", "actual", "source_of_truth"], "properties": {"id": {"type": "string"}, "expected": {}, "actual": {}, "source_of_truth": {"type": "string"}, "result": {"enum": ["pass", "fail", "skipped"]}}}},
     "values_recomputed_from_target": {"type": "boolean"},
-    "idempotency_rerun": {"type": "object", "required": ["performed", "result"], "properties": {"performed": {"type": "boolean"}, "result": {"enum": ["pass", "fail", "skipped"]}, "evidence": {"type": "string"}}},
+    "idempotency_rerun": {"type": "object", "required": ["performed", "result"], "properties": {"performed": {"const": true}, "result": {"enum": ["pass", "fail"]}, "evidence": {"type": "string"}}},
     "planted_anomaly_detections": {"type": "object", "required": ["expected_set", "actual_set", "missing", "unexpected"], "properties": {"expected_set": {"type": "array"}, "actual_set": {"type": "array"}, "missing": {"type": "array"}, "unexpected": {"type": "array"}}},
     "unverified_paths": {"type": "array", "items": {"type": "string"}}
   }
