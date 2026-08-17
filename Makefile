@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-etl-gen-history legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean dbx-showcase dbx-showcase-help
 
 SHELL := /bin/bash
 
@@ -39,6 +39,15 @@ tp-fixture-verify: ## Verify local fixture bytes and checksums (NS=<ns>)
 
 tp-fixture-clean: ## Remove local Databricks transport fixture (NS=<ns>)
 	python3 scripts/tp_databricks/local_fixture.py clean --ns $${NS:-fixture}
+
+# Live Databricks billing-history showcase (needs DATABRICKS_DEMO_HOST/TOKEN).
+# Serverless SQL only; every schedule it creates stays PAUSED.
+dbx-showcase: ## Run a showcase step (CMD=<provision|land|expectations|backfill|recon|timetravel|lineage|dashboard|alert|pipeline|run-pipeline|recon-job|run-job|drift|status|teardown> NS=<ns>)
+	@test -n "$(CMD)" || { echo "usage: make dbx-showcase CMD=<step> [NS=<ns>] [ARGS=...]"; exit 2; }
+	python3 scripts/tp_dbx/showcase.py --ns $${NS:-demo} $(CMD) $(ARGS)
+
+dbx-showcase-help: ## List the Databricks billing-history showcase steps
+	python3 scripts/tp_dbx/showcase.py --help
 
 PROCS_COMPOSE = docker compose -f docker-compose.procs.yml -p otterworks-procs-$(NS)
 PROCS_UV = uv run --with psycopg[binary]==3.2.9 --with pyyaml==6.0.2
@@ -467,6 +476,7 @@ legacy-etl-list: ## List the legacy polyglot batch jobs (etl/legacy-extra/)
 	@echo "  finance_excel_report      perl  CSV-renamed-to-.xls finance report + stub sendmail"
 	@echo "  run_all                   bash  full chain, sleep-based 'dependency management'"
 	@echo "Sample input: make legacy-etl-gen-data [NS=dev]"
+	@echo "Multi-year history: make legacy-etl-gen-history [NS=dev] [START_YEAR=2019] [END_YEAR=2024]"
 
 # Deterministic-run wrapper: pins TZ/LC_ALL (and, with TP_FAKETIME set, the
 # clock) so golden recordings and byte-identical parity claims are stable
@@ -475,6 +485,9 @@ TP_DET := scripts/tp-run-deterministic.sh
 
 legacy-etl-gen-data: ## Generate deterministic CUSTBILL sample input (NS=<ns>)
 	$(TP_DET) perl etl/legacy-extra/tools/gen_sample_data.pl $${NS:-dev}
+
+legacy-etl-gen-history: ## Generate multi-year dated CUSTBILL history (NS=<ns> START_YEAR= END_YEAR= ROWS_PER_MONTH=)
+	$(TP_DET) perl etl/legacy-extra/tools/gen_history_data.pl $${NS:-dev} $${START_YEAR:-2019} $${END_YEAR:-2024} $${ROWS_PER_MONTH:-40}
 
 legacy-etl-run: ## Run one legacy batch job (JOB=<name>, see legacy-etl-list)
 	@test -n "$(JOB)" || { echo "usage: make legacy-etl-run JOB=<name>"; exit 1; }
