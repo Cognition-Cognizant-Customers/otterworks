@@ -107,6 +107,21 @@ class HandlerTest {
     }
 
     @Test
+    void publishedOnlyAcceptsSpringBooleanTokens() {
+        call("POST", "/api/announcements", "{\"title\":\"pub\",\"body\":\"x\",\"published\":true}");
+        call("POST", "/api/announcements", "{\"title\":\"draft\",\"body\":\"x\",\"published\":false}");
+        String yes = call("GET", "/api/announcements?publishedOnly=yes", null).getBody();
+        assertTrue(yes.contains("\"pub\"") && !yes.contains("\"draft\""), yes);
+        String zero = call("GET", "/api/announcements?publishedOnly=0", null).getBody();
+        assertTrue(zero.contains("\"draft\""), zero);
+    }
+
+    @Test
+    void publishedOnlyUnrecognizedValueIs400() {
+        assertEquals(400, call("GET", "/api/announcements?publishedOnly=ture", null).getStatusCode());
+    }
+
+    @Test
     void publishFlipsDraftToPublished() {
         call("POST", "/api/announcements", "{\"title\":\"d\",\"body\":\"x\",\"published\":false}");
         APIGatewayV2HTTPResponse response = call("POST", "/api/announcements/1/publish", null);

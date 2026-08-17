@@ -34,7 +34,8 @@ public class Handler extends ApiHandler {
         String rest = subPath(path);
         if (rest == null) {
             if ("GET".equals(method)) {
-                boolean publishedOnly = Boolean.parseBoolean(query.getOrDefault("publishedOnly", "true"));
+                boolean publishedOnly = parseBooleanParam(
+                        query.getOrDefault("publishedOnly", "true"), "publishedOnly");
                 return new Result(200, publishedOnly ? service.listPublished() : service.listAll());
             }
             if ("POST".equals(method)) {

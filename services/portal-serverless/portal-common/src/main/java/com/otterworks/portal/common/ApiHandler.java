@@ -93,6 +93,22 @@ public abstract class ApiHandler implements RequestHandler<APIGatewayV2HTTPEvent
         }
     }
 
+    /**
+     * Parses a boolean query parameter with the same token set as Spring's
+     * StringToBooleanConverter (the monolith's binding): true/on/yes/1 and
+     * false/off/no/0, case-insensitive; anything else is a 400.
+     */
+    protected static boolean parseBooleanParam(String raw, String what) {
+        switch (raw.trim().toLowerCase()) {
+            case "true": case "on": case "yes": case "1":
+                return true;
+            case "false": case "off": case "no": case "0":
+                return false;
+            default:
+                throw ApiException.badRequest("invalid " + what + ": " + raw);
+        }
+    }
+
     protected static long parseLong(String raw, String what) {
         try {
             return Long.parseLong(raw);
