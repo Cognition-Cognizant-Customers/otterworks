@@ -9,8 +9,8 @@ export interface PresenceInfo {
 }
 
 export class PresenceHandler {
-  private awareness: AwarenessService;
-  private logger: Logger;
+  private readonly awareness: AwarenessService;
+  private readonly logger: Logger;
 
   constructor(awareness: AwarenessService, logger: Logger) {
     this.awareness = awareness;

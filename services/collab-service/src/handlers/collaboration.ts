@@ -31,10 +31,10 @@ export interface CollaborationDeps {
 }
 
 export class CollaborationManager {
-  private documents: Map<string, Y.Doc> = new Map();
-  private documentInitPromises: Map<string, Promise<Y.Doc>> = new Map();
-  private cleaningUp: Set<string> = new Set();
-  private deps: CollaborationDeps;
+  private readonly documents: Map<string, Y.Doc> = new Map();
+  private readonly documentInitPromises: Map<string, Promise<Y.Doc>> = new Map();
+  private readonly cleaningUp: Set<string> = new Set();
+  private readonly deps: CollaborationDeps;
   private persistTimer: NodeJS.Timeout | null = null;
   private snapshotTimer: NodeJS.Timeout | null = null;
 

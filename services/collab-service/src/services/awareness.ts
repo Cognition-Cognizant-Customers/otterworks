@@ -45,11 +45,11 @@ const USER_COLORS = [
 ];
 
 export class AwarenessService {
-  private states: Map<string, AwarenessState> = new Map();
-  private socketToDocument: Map<string, { documentId: string; userId: string }> =
+  private readonly states: Map<string, AwarenessState> = new Map();
+  private readonly socketToDocument: Map<string, { documentId: string; userId: string }> =
     new Map();
   private colorIndex = 0;
-  private logger: Logger;
+  private readonly logger: Logger;
 
   constructor(logger: Logger) {
     this.logger = logger;

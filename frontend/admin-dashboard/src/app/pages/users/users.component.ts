@@ -191,10 +191,10 @@ export class UsersComponent implements OnInit {
   }
 
   constructor(
-    private api: AdminApiService,
-    private router: Router,
-    private snackBar: MatSnackBar,
-    private dialog: MatDialog,
+    private readonly api: AdminApiService,
+    private readonly router: Router,
+    private readonly snackBar: MatSnackBar,
+    private readonly dialog: MatDialog,
   ) {}
 
   ngOnInit(): void {

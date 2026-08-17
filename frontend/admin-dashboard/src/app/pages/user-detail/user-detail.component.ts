@@ -219,11 +219,11 @@ export class UserDetailComponent implements OnInit {
   activityColumns = ['timestamp', 'action', 'resource', 'ipAddress'];
 
   constructor(
-    private route: ActivatedRoute,
-    private router: Router,
-    private api: AdminApiService,
-    private snackBar: MatSnackBar,
-    private dialog: MatDialog,
+    private readonly route: ActivatedRoute,
+    private readonly router: Router,
+    private readonly api: AdminApiService,
+    private readonly snackBar: MatSnackBar,
+    private readonly dialog: MatDialog,
   ) {}
 
   ngOnInit(): void {

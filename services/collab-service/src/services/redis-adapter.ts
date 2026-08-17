@@ -10,9 +10,9 @@ export interface RedisConfig {
 }
 
 export class RedisAdapter {
-  private client: Redis;
-  private subscriber: Redis;
-  private logger: Logger | null;
+  private readonly client: Redis;
+  private readonly subscriber: Redis;
+  private readonly logger: Logger | null;
   private readonly keyPrefix: string;
 
   constructor(config: RedisConfig, logger?: Logger) {

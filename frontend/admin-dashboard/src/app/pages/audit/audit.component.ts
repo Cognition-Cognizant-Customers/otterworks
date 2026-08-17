@@ -182,7 +182,7 @@ export class AuditComponent implements OnInit {
     this.dataSource.sort = sort;
   }
 
-  constructor(private api: AdminApiService) {}
+  constructor(private readonly api: AdminApiService) {}
 
   ngOnInit(): void {
     this.api.getAuditEvents().subscribe(events => {
