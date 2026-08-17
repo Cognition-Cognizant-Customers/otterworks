@@ -431,21 +431,20 @@ def recon_live(namespace: str) -> dict[str, Any]:
                         f"{database}.{definition['collectionName']} "
                         "was not returned by list_search_indexes"
                     )
-                for item in (current,):
-                    deployed.append(
-                        {
-                            "collectionName": item.get(
-                                "collectionName", definition["collectionName"]
-                            ),
-                            "database": item.get("database", database),
-                            "name": item.get("name"),
-                            "status": item.get("status"),
-                            "queryable": item.get("queryable"),
-                            "definition": item.get("latestDefinition")
-                            or item.get("definition")
-                            or {},
-                        }
-                    )
+                deployed.append(
+                    {
+                        "collectionName": current.get(
+                            "collectionName", definition["collectionName"]
+                        ),
+                        "database": current.get("database", database),
+                        "name": current.get("name"),
+                        "status": current.get("status"),
+                        "queryable": current.get("queryable"),
+                        "definition": current.get("latestDefinition")
+                        or current.get("definition")
+                        or {},
+                    }
+                )
             checks.extend(
                 role_checks(
                     deployed, "Atlas Search data-plane list_search_indexes read-back"
