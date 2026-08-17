@@ -40,6 +40,7 @@ def main():
     aws_access_key = config.get("aws", "access_key")
     aws_secret_key = config.get("aws", "secret_key")
     aws_region = config.get("aws", "region")
+    aws_account_id = config.get("aws", "account_id")
 
     archive_bucket = config.get("s3", "archive_bucket")
 
@@ -122,6 +123,7 @@ def main():
         Key=archive_key,
         Body=buf.getvalue(),
         StorageClass="GLACIER",
+        ExpectedBucketOwner=aws_account_id,
     )
 
     print("[%s] Archived to s3://%s/%s (GLACIER)" % (
@@ -204,6 +206,7 @@ def main():
         Bucket=archive_bucket,
         Key=report_key,
         Body=json.dumps(report, indent=2).encode("utf-8"),
+        ExpectedBucketOwner=aws_account_id,
     )
 
     print("[%s] Compliance report: %d archived, %d deleted, stored at s3://%s/%s" % (

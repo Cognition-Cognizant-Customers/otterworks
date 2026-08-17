@@ -27,6 +27,7 @@ def main():
     aws_access_key = config.get("aws", "access_key")
     aws_secret_key = config.get("aws", "secret_key")
     aws_region = config.get("aws", "region")
+    aws_account_id = config.get("aws", "account_id")
 
     file_storage_bucket = config.get("s3", "file_storage_bucket")
     quarantine_bucket = config.get("s3", "quarantine_bucket")
@@ -141,8 +142,14 @@ def main():
                 Key=dest_key,
                 CopySource={"Bucket": file_storage_bucket, "Key": source_key},
                 MetadataDirective="COPY",
+                ExpectedBucketOwner=aws_account_id,
+                ExpectedSourceBucketOwner=aws_account_id,
             )
-            s3_client.delete_object(Bucket=file_storage_bucket, Key=source_key)
+            s3_client.delete_object(
+                Bucket=file_storage_bucket,
+                Key=source_key,
+                ExpectedBucketOwner=aws_account_id,
+            )
             moved_count += 1
         except Exception as e:
             print("[%s] WARNING: Failed to quarantine %s: %s" % (
@@ -200,6 +207,7 @@ def main():
         Bucket=data_lake_bucket,
         Key=report_key,
         Body=json.dumps(report, indent=2).encode("utf-8"),
+        ExpectedBucketOwner=aws_account_id,
     )
 
     print("[%s] Storage cleanup report: %d orphans quarantined, %.4f GB freed, ~$%.4f/month saved" % (

@@ -32,6 +32,7 @@ def main():
     aws_access_key = config.get("aws", "access_key")
     aws_secret_key = config.get("aws", "secret_key")
     aws_region = config.get("aws", "region")
+    aws_account_id = config.get("aws", "account_id")
 
     db_host = config.get("database", "host")
     db_port = config.getint("database", "port")
@@ -310,6 +311,7 @@ def main():
         Bucket=data_lake_bucket,
         Key=summary_key,
         Body=summary_bytes,
+        ExpectedBucketOwner=aws_account_id,
     )
     print("[%s] Uploaded summary to s3://%s/%s" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), data_lake_bucket, summary_key))
 
@@ -320,6 +322,7 @@ def main():
         Bucket=data_lake_bucket,
         Key=hourly_key,
         Body=hourly_bytes,
+        ExpectedBucketOwner=aws_account_id,
     )
 
     # Write top users as JSONL
@@ -333,6 +336,7 @@ def main():
         Bucket=data_lake_bucket,
         Key=users_key,
         Body=buf.getvalue(),
+        ExpectedBucketOwner=aws_account_id,
     )
 
     print("[%s] Loaded analytics data to s3://%s/%s" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), data_lake_bucket, partition_key))
@@ -434,6 +438,7 @@ def main():
         Bucket=data_lake_bucket,
         Key=report_key,
         Body=json.dumps(report, indent=2).encode("utf-8"),
+        ExpectedBucketOwner=aws_account_id,
     )
 
     print("[%s] Generated daily analytics report: %d events, %d active users" % (
