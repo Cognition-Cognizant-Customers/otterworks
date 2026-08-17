@@ -1,5 +1,6 @@
 """Comment API endpoints."""
 
+from typing import Annotated
 from uuid import UUID
 
 import structlog
@@ -22,7 +23,7 @@ router = APIRouter()
 async def add_comment(
     document_id: UUID,
     body: CommentCreate,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Add a comment to a document."""
     service = DocumentService(db)
@@ -36,7 +37,7 @@ async def add_comment(
 @router.get("/{document_id}/comments", response_model=list[CommentResponse])
 async def list_comments(
     document_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """List comments for a document."""
     service = DocumentService(db)
@@ -50,7 +51,7 @@ async def list_comments(
 async def delete_comment(
     document_id: UUID,
     comment_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Delete a comment."""
     service = DocumentService(db)

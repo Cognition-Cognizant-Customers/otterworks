@@ -3,6 +3,7 @@
 import asyncio
 import os
 import random
+from typing import Annotated
 from uuid import UUID
 
 import jwt
@@ -123,7 +124,7 @@ async def _do_create_document(
 async def create_document(
     body: DocumentCreate,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Create a new document."""
     await _maybe_inject_latency()
@@ -139,7 +140,7 @@ async def create_document(
 async def create_document_no_slash(
     body: DocumentCreate,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Create a new document (no trailing slash)."""
     await _maybe_inject_latency()
@@ -148,10 +149,10 @@ async def create_document_no_slash(
 
 @router.get("/search", response_model=DocumentListResponse)
 async def search_documents(
-    q: str = Query(..., min_length=1),
-    page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    q: Annotated[str, Query(min_length=1)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    size: Annotated[int, Query(ge=1, le=100)] = 20,
 ):
     """Search documents by title or content."""
     await _maybe_inject_latency()
@@ -190,11 +191,11 @@ async def _do_list_documents(
 @router.get("/", response_model=DocumentListResponse)
 async def list_documents(
     request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
     owner_id: UUID | None = None,
     folder_id: UUID | None = None,
-    page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    page: Annotated[int, Query(ge=1)] = 1,
+    size: Annotated[int, Query(ge=1, le=100)] = 20,
 ):
     """List documents with optional filtering and pagination."""
     effective_owner = owner_id or _extract_user_id(request)
@@ -208,11 +209,11 @@ async def list_documents(
 )
 async def list_documents_no_slash(
     request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
     owner_id: UUID | None = None,
     folder_id: UUID | None = None,
-    page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    page: Annotated[int, Query(ge=1)] = 1,
+    size: Annotated[int, Query(ge=1, le=100)] = 20,
 ):
     """List documents (no trailing slash)."""
     effective_owner = owner_id or _extract_user_id(request)
@@ -223,7 +224,7 @@ async def list_documents_no_slash(
 async def get_document(
     document_id: UUID,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Get a document by ID."""
     await _maybe_inject_latency()
@@ -241,7 +242,7 @@ async def update_document(
     document_id: UUID,
     body: DocumentUpdate,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Full replace of a document."""
     await _maybe_inject_latency()
@@ -261,7 +262,7 @@ async def patch_document(
     document_id: UUID,
     body: DocumentPatch,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Partial update of a document."""
     await _maybe_inject_latency()
@@ -280,7 +281,7 @@ async def patch_document(
 async def delete_document(
     document_id: UUID,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Delete a document (soft delete)."""
     await _maybe_inject_latency()
@@ -298,7 +299,7 @@ async def delete_document(
 async def list_versions(
     document_id: UUID,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """List document versions."""
     user_id = _require_user_id(request)
@@ -319,7 +320,7 @@ async def restore_version(
     document_id: UUID,
     version_id: UUID,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Restore a document to a previous version."""
     user_id = _require_user_id(request)
@@ -345,8 +346,8 @@ async def restore_version(
 async def export_document(
     document_id: UUID,
     request: Request,
-    format: str = Query("markdown", pattern="^(pdf|html|markdown)$"),  # noqa: A002
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
+    format: Annotated[str, Query(pattern="^(pdf|html|markdown)$")] = "markdown",  # noqa: A002
 ):
     """Export a document in the requested format."""
     user_id = _require_user_id(request)
@@ -368,7 +369,7 @@ async def export_document(
 async def create_from_template(
     template_id: UUID,
     body: DocumentFromTemplate,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Create a document from a template."""
     service = DocumentService(db)
