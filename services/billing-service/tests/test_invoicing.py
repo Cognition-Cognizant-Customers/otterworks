@@ -6,6 +6,7 @@ import pytest
 
 from app.domain import (
     CreditNoteRow,
+    InvoicingRefusal,
     PlanRow,
     Rating,
     SubscriptionRow,
@@ -224,7 +225,7 @@ def test_negative_total_is_preserved_for_rejection() -> None:
         PLAN.plan_id, PLAN.code, PLAN.tier, Decimal("0.01"), 100, PLAN.overage_rate, True
     )
     result = preview(TENANT, START, END, tiny_plan, Decimal("0.06"), False, Decimal("0.08"))
-    with pytest.raises(ValueError, match="invoice total cannot be negative"):
+    with pytest.raises(InvoicingRefusal, match="invoice total cannot be negative"):
         invoice_totals(result)
 
 

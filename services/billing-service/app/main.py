@@ -24,6 +24,7 @@ from app.db import (
     reset,
 )
 from app.domain import (
+    InvoicingRefusal,
     calculate_rating,
     catalog,
     change_plan,
@@ -274,7 +275,7 @@ def invoice_preview(
             )
         rating, _ = _rating(tenant_id, period_start, period_end)
         if rating.overage_amount is None:
-            raise LookupError("subscription not found")
+            raise InvoicingRefusal("subscription not found")
         mongo = MongoInvoicingRepository(mongo_database())
         credit = sum(
             (note.remaining_amount for note in mongo.credit_notes(tenant_id, positive_only=True)),
@@ -283,7 +284,7 @@ def invoice_preview(
         result = preview(
             tenant_id, period_start, period_end, plan, rating.overage_amount, tax_exempt, credit
         )
-    except LookupError as error:
+    except InvoicingRefusal as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     return {
         "tenant_id": str(tenant_id),
@@ -335,7 +336,7 @@ def issue_invoice(tenant_id: Annotated[UUID, Path()], request: InvoiceIssue) -> 
             )
         rating, _ = _rating(tenant_id, request.period_start, request.period_end)
         if rating.overage_amount is None:
-            raise LookupError("subscription not found")
+            raise InvoicingRefusal("subscription not found")
         mongo = MongoInvoicingRepository(mongo_database())
         rating_repository = MongoRatingRepository(mongo_database())
         invoice = mongo.issue(
@@ -352,7 +353,7 @@ def issue_invoice(tenant_id: Annotated[UUID, Path()], request: InvoiceIssue) -> 
             status_code=409,
             detail="rating period identity conflicts with an existing period",
         ) from error
-    except (LookupError, ValueError) as error:
+    except InvoicingRefusal as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     notes = mongo.credit_notes(tenant_id)
     return {

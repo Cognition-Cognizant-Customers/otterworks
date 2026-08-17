@@ -16,6 +16,7 @@ from app.domain import (
     EntitlementRow,
     InvoiceLine,
     InvoiceRow,
+    InvoicingRefusal,
     PlanRow,
     Rating,
     RatingPeriod,
@@ -128,7 +129,7 @@ class PostgresPlansRepository:
             (tenant_id, period_end, period_start),
         ).fetchone()
         if row is None:
-            raise LookupError("subscription not found")
+            raise InvoicingRefusal("subscription not found")
         return (
             PlanRow(
                 plan_id=row["id"],

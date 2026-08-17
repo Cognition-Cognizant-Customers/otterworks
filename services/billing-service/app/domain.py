@@ -11,6 +11,10 @@ from uuid import UUID, uuid5
 PLAN_CHANGE_NAMESPACE = UUID("d8e9df63-6e46-4d6a-b9c2-2ef6e99cb5ee")
 
 
+class InvoicingRefusal(Exception):  # noqa: N818
+    pass
+
+
 @dataclass(frozen=True)
 class PlanRow:
     plan_id: UUID
@@ -380,7 +384,7 @@ def invoice_totals(preview_result: InvoicePreview) -> tuple[Decimal, Decimal, De
     )
     total = money(subtotal + tax - credit)
     if total < 0:
-        raise ValueError("invoice total cannot be negative")
+        raise InvoicingRefusal("invoice total cannot be negative")
     return money(subtotal), money(tax), credit, total
 
 
