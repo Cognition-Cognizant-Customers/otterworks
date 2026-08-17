@@ -1,0 +1,6089 @@
+{
+  "kind": "recon-report",
+  "unit": "cron-activity",
+  "namespace": "demo",
+  "generated_at": "2026-08-17T06:44:42.079548Z",
+  "run_mode": "fixture",
+  "checks": [
+    {
+      "id": "LAND-01/summary_records",
+      "expected": 29,
+      "actual": 29,
+      "source_of_truth": "legacy activity_report.json daily_summaries",
+      "result": "pass"
+    },
+    {
+      "id": "LAND-02/summary_values",
+      "expected": [
+        {
+          "report_date": "2025-12-17",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 26,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 31200
+        },
+        {
+          "report_date": "2025-12-18",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 27,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 32400
+        },
+        {
+          "report_date": "2025-12-19",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 28,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 33600
+        },
+        {
+          "report_date": "2025-12-20",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 29,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 34800
+        },
+        {
+          "report_date": "2025-12-21",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 30,
+          "documents_created": 6,
+          "documents_edited": 7,
+          "comments_added": 5,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 36000
+        },
+        {
+          "report_date": "2025-12-22",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 20,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 2,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 24000
+        },
+        {
+          "report_date": "2025-12-23",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 21,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 25200
+        },
+        {
+          "report_date": "2025-12-24",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 22,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 26400
+        },
+        {
+          "report_date": "2025-12-25",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 23,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 27600
+        },
+        {
+          "report_date": "2025-12-26",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 24,
+          "documents_created": 4,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 28800
+        },
+        {
+          "report_date": "2025-12-27",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 25,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 30000
+        },
+        {
+          "report_date": "2025-12-28",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 26,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 31200
+        },
+        {
+          "report_date": "2025-12-29",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 27,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 32400
+        },
+        {
+          "report_date": "2025-12-30",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 28,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 33600
+        },
+        {
+          "report_date": "2025-12-31",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 29,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 34800
+        },
+        {
+          "report_date": "2026-01-01",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 21,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 25200
+        },
+        {
+          "report_date": "2026-01-02",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 22,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 26400
+        },
+        {
+          "report_date": "2026-01-03",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 23,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 27600
+        },
+        {
+          "report_date": "2026-01-04",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 24,
+          "documents_created": 4,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 28800
+        },
+        {
+          "report_date": "2026-01-05",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 25,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 30000
+        },
+        {
+          "report_date": "2026-01-06",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 26,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 31200
+        },
+        {
+          "report_date": "2026-01-07",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 27,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 32400
+        },
+        {
+          "report_date": "2026-01-08",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 28,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 33600
+        },
+        {
+          "report_date": "2026-01-09",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 29,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 34800
+        },
+        {
+          "report_date": "2026-01-10",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 30,
+          "documents_created": 6,
+          "documents_edited": 7,
+          "comments_added": 5,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 36000
+        },
+        {
+          "report_date": "2026-01-11",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 20,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 2,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 24000
+        },
+        {
+          "report_date": "2026-01-12",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 21,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 25200
+        },
+        {
+          "report_date": "2026-01-13",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 22,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 26400
+        },
+        {
+          "report_date": "2026-01-14",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 23,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 27600
+        }
+      ],
+      "actual": [
+        {
+          "report_date": "2025-12-17",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 26,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 31200
+        },
+        {
+          "report_date": "2025-12-18",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 27,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 32400
+        },
+        {
+          "report_date": "2025-12-19",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 28,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 33600
+        },
+        {
+          "report_date": "2025-12-20",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 29,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 34800
+        },
+        {
+          "report_date": "2025-12-21",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 30,
+          "documents_created": 6,
+          "documents_edited": 7,
+          "comments_added": 5,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 36000
+        },
+        {
+          "report_date": "2025-12-22",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 20,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 2,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 24000
+        },
+        {
+          "report_date": "2025-12-23",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 21,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 25200
+        },
+        {
+          "report_date": "2025-12-24",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 22,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 26400
+        },
+        {
+          "report_date": "2025-12-25",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 23,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 27600
+        },
+        {
+          "report_date": "2025-12-26",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 24,
+          "documents_created": 4,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 28800
+        },
+        {
+          "report_date": "2025-12-27",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 25,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 30000
+        },
+        {
+          "report_date": "2025-12-28",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 26,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 31200
+        },
+        {
+          "report_date": "2025-12-29",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 27,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 32400
+        },
+        {
+          "report_date": "2025-12-30",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 28,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 33600
+        },
+        {
+          "report_date": "2025-12-31",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 29,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 34800
+        },
+        {
+          "report_date": "2026-01-01",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 21,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 25200
+        },
+        {
+          "report_date": "2026-01-02",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 22,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 26400
+        },
+        {
+          "report_date": "2026-01-03",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 23,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 27600
+        },
+        {
+          "report_date": "2026-01-04",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 24,
+          "documents_created": 4,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 28800
+        },
+        {
+          "report_date": "2026-01-05",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 25,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 30000
+        },
+        {
+          "report_date": "2026-01-06",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 26,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 2,
+          "bytes_uploaded": 31200
+        },
+        {
+          "report_date": "2026-01-07",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 27,
+          "documents_created": 5,
+          "documents_edited": 6,
+          "comments_added": 4,
+          "files_uploaded": 3,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 32400
+        },
+        {
+          "report_date": "2026-01-08",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 28,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 33600
+        },
+        {
+          "report_date": "2026-01-09",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 29,
+          "documents_created": 5,
+          "documents_edited": 7,
+          "comments_added": 4,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 34800
+        },
+        {
+          "report_date": "2026-01-10",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 30,
+          "documents_created": 6,
+          "documents_edited": 7,
+          "comments_added": 5,
+          "files_uploaded": 4,
+          "files_shared": 3,
+          "files_deleted": 3,
+          "bytes_uploaded": 36000
+        },
+        {
+          "report_date": "2026-01-11",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 20,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 2,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 24000
+        },
+        {
+          "report_date": "2026-01-12",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 21,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 25200
+        },
+        {
+          "report_date": "2026-01-13",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 22,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 26400
+        },
+        {
+          "report_date": "2026-01-14",
+          "active_users": 12,
+          "active_documents": 25,
+          "active_files": 18,
+          "total_events": 23,
+          "documents_created": 4,
+          "documents_edited": 5,
+          "comments_added": 3,
+          "files_uploaded": 3,
+          "files_shared": 2,
+          "files_deleted": 2,
+          "bytes_uploaded": 27600
+        }
+      ],
+      "source_of_truth": "legacy activity_report.json daily_summaries",
+      "result": "pass"
+    },
+    {
+      "id": "LAND-03/top_user_records",
+      "expected": 168,
+      "actual": 168,
+      "source_of_truth": "baseline history gzip objects",
+      "result": "pass"
+    },
+    {
+      "id": "LAND-04/top_user_values",
+      "expected": [
+        [
+          "2025-12-17",
+          "user-000",
+          31,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-17",
+          "user-001",
+          32,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-17",
+          "user-002",
+          33,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-17",
+          "user-003",
+          34,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-17",
+          "user-004",
+          35,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-17",
+          "user-005",
+          36,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-18",
+          "user-000",
+          30,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-18",
+          "user-001",
+          31,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-18",
+          "user-002",
+          32,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-18",
+          "user-003",
+          33,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-18",
+          "user-004",
+          34,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-18",
+          "user-005",
+          35,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-19",
+          "user-000",
+          29,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-19",
+          "user-001",
+          30,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-19",
+          "user-002",
+          31,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-19",
+          "user-003",
+          32,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-19",
+          "user-004",
+          33,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-19",
+          "user-005",
+          34,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-20",
+          "user-000",
+          28,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-20",
+          "user-001",
+          29,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-20",
+          "user-002",
+          30,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-20",
+          "user-003",
+          31,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-20",
+          "user-004",
+          32,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-20",
+          "user-005",
+          33,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-21",
+          "user-000",
+          27,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-21",
+          "user-001",
+          28,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-21",
+          "user-002",
+          29,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-21",
+          "user-003",
+          30,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-21",
+          "user-004",
+          31,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-21",
+          "user-005",
+          32,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-22",
+          "user-000",
+          26,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-22",
+          "user-001",
+          27,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-22",
+          "user-002",
+          28,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-22",
+          "user-003",
+          29,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-22",
+          "user-004",
+          30,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-22",
+          "user-005",
+          31,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-23",
+          "user-000",
+          25,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-23",
+          "user-001",
+          26,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-23",
+          "user-002",
+          27,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-23",
+          "user-003",
+          28,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-23",
+          "user-004",
+          29,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-23",
+          "user-005",
+          30,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-24",
+          "user-000",
+          24,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-24",
+          "user-001",
+          25,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-24",
+          "user-002",
+          26,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-24",
+          "user-003",
+          27,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-24",
+          "user-004",
+          28,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-24",
+          "user-005",
+          29,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-25",
+          "user-000",
+          23,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-25",
+          "user-001",
+          24,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-25",
+          "user-002",
+          25,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-25",
+          "user-003",
+          26,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-25",
+          "user-004",
+          27,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-25",
+          "user-005",
+          28,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-26",
+          "user-000",
+          22,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-26",
+          "user-001",
+          23,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-26",
+          "user-002",
+          24,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-26",
+          "user-003",
+          25,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-26",
+          "user-004",
+          26,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-26",
+          "user-005",
+          27,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-27",
+          "user-000",
+          21,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-27",
+          "user-001",
+          22,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-27",
+          "user-002",
+          23,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-27",
+          "user-003",
+          24,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-27",
+          "user-004",
+          25,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-27",
+          "user-005",
+          26,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-28",
+          "user-000",
+          20,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-28",
+          "user-001",
+          21,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-28",
+          "user-002",
+          22,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-28",
+          "user-003",
+          23,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-28",
+          "user-004",
+          24,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-28",
+          "user-005",
+          25,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-29",
+          "user-000",
+          19,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-29",
+          "user-001",
+          20,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-29",
+          "user-002",
+          21,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-29",
+          "user-003",
+          22,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-29",
+          "user-004",
+          23,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-29",
+          "user-005",
+          24,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-30",
+          "user-000",
+          18,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-30",
+          "user-001",
+          19,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-30",
+          "user-002",
+          20,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-30",
+          "user-003",
+          21,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-30",
+          "user-004",
+          22,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-30",
+          "user-005",
+          23,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-31",
+          "user-000",
+          17,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-31",
+          "user-001",
+          18,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-31",
+          "user-002",
+          19,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-31",
+          "user-003",
+          20,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-31",
+          "user-004",
+          21,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-31",
+          "user-005",
+          22,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-01",
+          "user-000",
+          16,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-01",
+          "user-001",
+          17,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-01",
+          "user-002",
+          18,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-01",
+          "user-003",
+          19,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-01",
+          "user-004",
+          20,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-01",
+          "user-005",
+          21,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-03",
+          "user-000",
+          14,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-03",
+          "user-001",
+          15,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-03",
+          "user-002",
+          16,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-03",
+          "user-003",
+          17,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-03",
+          "user-004",
+          18,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-03",
+          "user-005",
+          19,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-04",
+          "user-000",
+          13,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-04",
+          "user-001",
+          14,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-04",
+          "user-002",
+          15,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-04",
+          "user-003",
+          16,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-04",
+          "user-004",
+          17,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-04",
+          "user-005",
+          18,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-05",
+          "user-000",
+          12,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-05",
+          "user-001",
+          13,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-05",
+          "user-002",
+          14,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-05",
+          "user-003",
+          15,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-05",
+          "user-004",
+          16,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-05",
+          "user-005",
+          17,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-06",
+          "user-000",
+          11,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-06",
+          "user-001",
+          12,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-06",
+          "user-002",
+          13,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-06",
+          "user-003",
+          14,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-06",
+          "user-004",
+          15,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-06",
+          "user-005",
+          16,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-07",
+          "user-000",
+          10,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-07",
+          "user-001",
+          11,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-07",
+          "user-002",
+          12,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-07",
+          "user-003",
+          13,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-07",
+          "user-004",
+          14,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-07",
+          "user-005",
+          15,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-08",
+          "user-000",
+          9,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-08",
+          "user-001",
+          10,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-08",
+          "user-002",
+          11,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-08",
+          "user-003",
+          12,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-08",
+          "user-004",
+          13,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-08",
+          "user-005",
+          14,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-09",
+          "user-000",
+          8,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-09",
+          "user-001",
+          9,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-09",
+          "user-002",
+          10,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-09",
+          "user-003",
+          11,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-09",
+          "user-004",
+          12,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-09",
+          "user-005",
+          13,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-10",
+          "user-000",
+          7,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-10",
+          "user-001",
+          8,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-10",
+          "user-002",
+          9,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-10",
+          "user-003",
+          10,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-10",
+          "user-004",
+          11,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-10",
+          "user-005",
+          12,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-11",
+          "user-000",
+          6,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-11",
+          "user-001",
+          7,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-11",
+          "user-002",
+          8,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-11",
+          "user-003",
+          9,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-11",
+          "user-004",
+          10,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-11",
+          "user-005",
+          11,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-12",
+          "user-000",
+          5,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-12",
+          "user-001",
+          6,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-12",
+          "user-002",
+          7,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-12",
+          "user-003",
+          8,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-12",
+          "user-004",
+          9,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-12",
+          "user-005",
+          10,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-13",
+          "user-000",
+          4,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-13",
+          "user-001",
+          5,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-13",
+          "user-002",
+          6,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-13",
+          "user-003",
+          7,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-13",
+          "user-004",
+          8,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-13",
+          "user-005",
+          9,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-14",
+          "user-000",
+          3,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-14",
+          "user-001",
+          4,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-14",
+          "user-002",
+          5,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-14",
+          "user-003",
+          6,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-14",
+          "user-004",
+          7,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-14",
+          "user-005",
+          8,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ]
+      ],
+      "actual": [
+        [
+          "2026-01-14",
+          "user-000",
+          3,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-14",
+          "user-001",
+          4,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-14",
+          "user-002",
+          5,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-14",
+          "user-003",
+          6,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-14",
+          "user-004",
+          7,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-14",
+          "user-005",
+          8,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-13",
+          "user-000",
+          4,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-13",
+          "user-001",
+          5,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-13",
+          "user-002",
+          6,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-13",
+          "user-003",
+          7,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-13",
+          "user-004",
+          8,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-13",
+          "user-005",
+          9,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-12",
+          "user-000",
+          5,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-12",
+          "user-001",
+          6,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-12",
+          "user-002",
+          7,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-12",
+          "user-003",
+          8,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-12",
+          "user-004",
+          9,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-12",
+          "user-005",
+          10,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-11",
+          "user-000",
+          6,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-11",
+          "user-001",
+          7,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-11",
+          "user-002",
+          8,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-11",
+          "user-003",
+          9,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-11",
+          "user-004",
+          10,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-11",
+          "user-005",
+          11,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-10",
+          "user-000",
+          7,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-10",
+          "user-001",
+          8,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-10",
+          "user-002",
+          9,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-10",
+          "user-003",
+          10,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-10",
+          "user-004",
+          11,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-10",
+          "user-005",
+          12,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-09",
+          "user-000",
+          8,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-09",
+          "user-001",
+          9,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-09",
+          "user-002",
+          10,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-09",
+          "user-003",
+          11,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-09",
+          "user-004",
+          12,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-09",
+          "user-005",
+          13,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-08",
+          "user-000",
+          9,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-08",
+          "user-001",
+          10,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-08",
+          "user-002",
+          11,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-08",
+          "user-003",
+          12,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-08",
+          "user-004",
+          13,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-08",
+          "user-005",
+          14,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-07",
+          "user-000",
+          10,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-07",
+          "user-001",
+          11,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-07",
+          "user-002",
+          12,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-07",
+          "user-003",
+          13,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-07",
+          "user-004",
+          14,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-07",
+          "user-005",
+          15,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-06",
+          "user-000",
+          11,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-06",
+          "user-001",
+          12,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-06",
+          "user-002",
+          13,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-06",
+          "user-003",
+          14,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-06",
+          "user-004",
+          15,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-06",
+          "user-005",
+          16,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-05",
+          "user-000",
+          12,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-05",
+          "user-001",
+          13,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-05",
+          "user-002",
+          14,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-05",
+          "user-003",
+          15,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-05",
+          "user-004",
+          16,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-05",
+          "user-005",
+          17,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-04",
+          "user-000",
+          13,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-04",
+          "user-001",
+          14,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-04",
+          "user-002",
+          15,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-04",
+          "user-003",
+          16,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-04",
+          "user-004",
+          17,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-04",
+          "user-005",
+          18,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-03",
+          "user-000",
+          14,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-03",
+          "user-001",
+          15,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-03",
+          "user-002",
+          16,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-03",
+          "user-003",
+          17,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-03",
+          "user-004",
+          18,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-03",
+          "user-005",
+          19,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-01",
+          "user-000",
+          16,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-01",
+          "user-001",
+          17,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-01",
+          "user-002",
+          18,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-01",
+          "user-003",
+          19,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-01",
+          "user-004",
+          20,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2026-01-01",
+          "user-005",
+          21,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-31",
+          "user-000",
+          17,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-31",
+          "user-001",
+          18,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-31",
+          "user-002",
+          19,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-31",
+          "user-003",
+          20,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-31",
+          "user-004",
+          21,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-31",
+          "user-005",
+          22,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-30",
+          "user-000",
+          18,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-30",
+          "user-001",
+          19,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-30",
+          "user-002",
+          20,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-30",
+          "user-003",
+          21,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-30",
+          "user-004",
+          22,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-30",
+          "user-005",
+          23,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-29",
+          "user-000",
+          19,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-29",
+          "user-001",
+          20,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-29",
+          "user-002",
+          21,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-29",
+          "user-003",
+          22,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-29",
+          "user-004",
+          23,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-29",
+          "user-005",
+          24,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-28",
+          "user-000",
+          20,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-28",
+          "user-001",
+          21,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-28",
+          "user-002",
+          22,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-28",
+          "user-003",
+          23,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-28",
+          "user-004",
+          24,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-28",
+          "user-005",
+          25,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-27",
+          "user-000",
+          21,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-27",
+          "user-001",
+          22,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-27",
+          "user-002",
+          23,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-27",
+          "user-003",
+          24,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-27",
+          "user-004",
+          25,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-27",
+          "user-005",
+          26,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-26",
+          "user-000",
+          22,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-26",
+          "user-001",
+          23,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-26",
+          "user-002",
+          24,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-26",
+          "user-003",
+          25,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-26",
+          "user-004",
+          26,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-26",
+          "user-005",
+          27,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-25",
+          "user-000",
+          23,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-25",
+          "user-001",
+          24,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-25",
+          "user-002",
+          25,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-25",
+          "user-003",
+          26,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-25",
+          "user-004",
+          27,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-25",
+          "user-005",
+          28,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-24",
+          "user-000",
+          24,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-24",
+          "user-001",
+          25,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-24",
+          "user-002",
+          26,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-24",
+          "user-003",
+          27,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-24",
+          "user-004",
+          28,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-24",
+          "user-005",
+          29,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-23",
+          "user-000",
+          25,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-23",
+          "user-001",
+          26,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-23",
+          "user-002",
+          27,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-23",
+          "user-003",
+          28,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-23",
+          "user-004",
+          29,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-23",
+          "user-005",
+          30,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-22",
+          "user-000",
+          26,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-22",
+          "user-001",
+          27,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-22",
+          "user-002",
+          28,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-22",
+          "user-003",
+          29,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-22",
+          "user-004",
+          30,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-22",
+          "user-005",
+          31,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-21",
+          "user-000",
+          27,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-21",
+          "user-001",
+          28,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-21",
+          "user-002",
+          29,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-21",
+          "user-003",
+          30,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-21",
+          "user-004",
+          31,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-21",
+          "user-005",
+          32,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-20",
+          "user-000",
+          28,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-20",
+          "user-001",
+          29,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-20",
+          "user-002",
+          30,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-20",
+          "user-003",
+          31,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-20",
+          "user-004",
+          32,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-20",
+          "user-005",
+          33,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-19",
+          "user-000",
+          29,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-19",
+          "user-001",
+          30,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-19",
+          "user-002",
+          31,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-19",
+          "user-003",
+          32,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-19",
+          "user-004",
+          33,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-19",
+          "user-005",
+          34,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-18",
+          "user-000",
+          30,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-18",
+          "user-001",
+          31,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-18",
+          "user-002",
+          32,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-18",
+          "user-003",
+          33,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-18",
+          "user-004",
+          34,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-18",
+          "user-005",
+          35,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-17",
+          "user-000",
+          31,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-17",
+          "user-001",
+          32,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-17",
+          "user-002",
+          33,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-17",
+          "user-003",
+          34,
+          [
+            [
+              "document_edited",
+              1
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-17",
+          "user-004",
+          35,
+          [
+            [
+              "document_edited",
+              2
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ],
+        [
+          "2025-12-17",
+          "user-005",
+          36,
+          [
+            [
+              "document_edited",
+              3
+            ],
+            [
+              "file_uploaded",
+              1
+            ]
+          ]
+        ]
+      ],
+      "source_of_truth": "baseline history gzip objects",
+      "result": "pass"
+    },
+    {
+      "id": "LAND-05/no_run_date_records",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "extractor < ds guard",
+      "result": "pass"
+    },
+    {
+      "id": "LAND-06/missing_day_not_fabricated",
+      "expected": [
+        "2026-01-02"
+      ],
+      "actual": [
+        "2026-01-02"
+      ],
+      "source_of_truth": "extractor manifest",
+      "result": "pass"
+    },
+    {
+      "id": "LAND-07/utf8_preserved",
+      "expected": false,
+      "actual": false,
+      "source_of_truth": "contract encoding_policy",
+      "result": "pass"
+    },
+    {
+      "id": "LAND-08/malformed_attribution",
+      "expected": true,
+      "actual": false,
+      "source_of_truth": "synthetic malformed and invalid UTF-8 fixture not landed",
+      "result": "skipped"
+    },
+    {
+      "id": "ACT-01/summary_window_values",
+      "expected": "target assertion",
+      "actual": "fixture mode",
+      "source_of_truth": "deployed Databricks target",
+      "result": "skipped"
+    },
+    {
+      "id": "ACT-02/user_aggregates",
+      "expected": "target assertion",
+      "actual": "fixture mode",
+      "source_of_truth": "deployed Databricks target",
+      "result": "skipped"
+    },
+    {
+      "id": "ACT-03/history_days_present",
+      "expected": "target assertion",
+      "actual": "fixture mode",
+      "source_of_truth": "deployed Databricks target",
+      "result": "skipped"
+    },
+    {
+      "id": "ACT-03/missing_history_days",
+      "expected": "target assertion",
+      "actual": "fixture mode",
+      "source_of_truth": "deployed Databricks target",
+      "result": "skipped"
+    },
+    {
+      "id": "ACT-03/gap_day_contributes_nothing",
+      "expected": "target assertion",
+      "actual": "fixture mode",
+      "source_of_truth": "deployed Databricks target",
+      "result": "skipped"
+    },
+    {
+      "id": "ACT-03/job_run_succeeded",
+      "expected": "target assertion",
+      "actual": "fixture mode",
+      "source_of_truth": "deployed Databricks target",
+      "result": "skipped"
+    },
+    {
+      "id": "ACT-03/analytics_rundate_row_intact",
+      "expected": "target assertion",
+      "actual": "fixture mode",
+      "source_of_truth": "deployed Databricks target",
+      "result": "skipped"
+    },
+    {
+      "id": "ACT-04/latest_matches_dated_report",
+      "expected": "target assertion",
+      "actual": "fixture mode",
+      "source_of_truth": "deployed Databricks target",
+      "result": "skipped"
+    },
+    {
+      "id": "ACT-05/no_duplicate_users_after_rerun",
+      "expected": "target assertion",
+      "actual": "fixture mode",
+      "source_of_truth": "deployed Databricks target",
+      "result": "skipped"
+    },
+    {
+      "id": "ACT-05/report_row_singleton_after_rerun",
+      "expected": "target assertion",
+      "actual": "fixture mode",
+      "source_of_truth": "deployed Databricks target",
+      "result": "skipped"
+    },
+    {
+      "id": "ACT-05/values_stable_across_rerun",
+      "expected": "target assertion",
+      "actual": "fixture mode",
+      "source_of_truth": "deployed Databricks target",
+      "result": "skipped"
+    },
+    {
+      "id": "ACT-06/report_trends",
+      "expected": "target assertion",
+      "actual": "fixture mode",
+      "source_of_truth": "deployed Databricks target",
+      "result": "skipped"
+    },
+    {
+      "id": "ACT-06/report_daily_summaries",
+      "expected": "target assertion",
+      "actual": "fixture mode",
+      "source_of_truth": "deployed Databricks target",
+      "result": "skipped"
+    },
+    {
+      "id": "ACT-06/report_user_summaries",
+      "expected": "target assertion",
+      "actual": "fixture mode",
+      "source_of_truth": "deployed Databricks target",
+      "result": "skipped"
+    },
+    {
+      "id": "ACT-06/report_top_users",
+      "expected": "target assertion",
+      "actual": "fixture mode",
+      "source_of_truth": "deployed Databricks target",
+      "result": "skipped"
+    },
+    {
+      "id": "ACT-06/user_order",
+      "expected": "target assertion",
+      "actual": "fixture mode",
+      "source_of_truth": "deployed Databricks target",
+      "result": "skipped"
+    },
+    {
+      "id": "ACT-06/user_summaries_jsonl_equivalent",
+      "expected": "target assertion",
+      "actual": "fixture mode",
+      "source_of_truth": "deployed Databricks target",
+      "result": "skipped"
+    },
+    {
+      "id": "ACT-06/report_scalar_fields",
+      "expected": "target assertion",
+      "actual": "fixture mode",
+      "source_of_truth": "deployed Databricks target",
+      "result": "skipped"
+    }
+  ],
+  "values_recomputed_from_target": false,
+  "idempotency_rerun": {
+    "performed": true,
+    "method": "fixture-reextract",
+    "result": "pass",
+    "evidence": "fixture extraction rerun is byte-identical"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      [
+        "missing_history_day",
+        "2026-01-02"
+      ],
+      [
+        "window_boundary_inclusive",
+        "2026-01-15"
+      ]
+    ],
+    "actual_set": [
+      [
+        "missing_history_day",
+        "2026-01-02"
+      ],
+      [
+        "window_boundary_inclusive",
+        "2026-01-15"
+      ]
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "LAND-08 requires a synthetic malformed/invalid-UTF-8 landed object; unit tests exercise attribution.",
+    "All ACT-01..ACT-06 target assertions require the deployed target and parent live window.",
+    "TARGET job shape, PAUSED schedule, serverless compute, landing volume, gold MERGE behavior, and latest view.",
+    "generated_at wall-clock parity is intentionally unverified; map key order is not bitwise comparable.",
+    "The baseline artifact tree has no stdout.log at its root."
+  ]
+}

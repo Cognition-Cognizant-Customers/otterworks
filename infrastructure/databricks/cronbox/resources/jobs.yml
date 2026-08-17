@@ -119,9 +119,88 @@ resources:
         quartz_cron_expression: 0 0 5 * * ?
         timezone_id: UTC
         pause_status: PAUSED
+      parameters:
+        - name: ns
+          default: demo
+        - name: ds
+          default: "{{job.trigger.time.iso_date}}"
       tasks:
-        - task_key: user_activity_placeholder
+        - task_key: act_00_ddl_gold
           sql_task:
-            file:
-              path: ../src/user_activity_placeholder.sql
+            file: {path: ../src/activity/30_ddl_gold_daily.sql}
             warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: act_01_ddl_gold_user_summaries
+          depends_on: [{task_key: act_00_ddl_gold}]
+          sql_task:
+            file: {path: ../src/activity/31_ddl_gold_user_summaries.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: act_02_ddl_gold_coverage
+          depends_on: [{task_key: act_01_ddl_gold_user_summaries}]
+          sql_task:
+            file: {path: ../src/activity/32_ddl_gold_window_coverage.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: act_03_ddl_latest_view
+          depends_on: [{task_key: act_02_ddl_gold_coverage}]
+          sql_task:
+            file: {path: ../src/activity/33_ddl_gold_latest_view.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+        - task_key: act_10_window_coverage
+          depends_on: [{task_key: act_03_ddl_latest_view}]
+          sql_task:
+            file: {path: ../src/activity/40_window_coverage.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: act_20_user_summaries_prune
+          depends_on: [{task_key: act_10_window_coverage}]
+          sql_task:
+            file: {path: ../src/activity/50_user_summaries_prune.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: act_21_user_summaries_publish
+          depends_on: [{task_key: act_20_user_summaries_prune}]
+          sql_task:
+            file: {path: ../src/activity/51_user_summaries_publish.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: act_30_report
+          depends_on: [{task_key: act_21_user_summaries_publish}]
+          sql_task:
+            file: {path: ../src/activity/60_gold_report.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+
+    ow_tp_cron_activity_history_backfill:
+      name: ow_tp_cron_activity_history_backfill
+      max_concurrent_runs: 1
+      parameters:
+        - name: ns
+          default: demo
+        - name: ds
+          default: "2026-01-15"
+      tasks:
+        - task_key: activity_00_ddl_bronze_history
+          sql_task:
+            file: {path: ../src/activity/00_ddl_bronze_history.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: activity_10_bronze_ingest_history
+          depends_on: [{task_key: activity_00_ddl_bronze_history}]
+          sql_task:
+            file: {path: ../src/activity/10_bronze_ingest_history.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: activity_20_gold_merge_summary_history
+          depends_on: [{task_key: activity_10_bronze_ingest_history}]
+          sql_task:
+            file: {path: ../src/activity/20_gold_merge_summary_history.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
+        - task_key: activity_21_gold_merge_top_users_history
+          depends_on: [{task_key: activity_20_gold_merge_summary_history}]
+          sql_task:
+            file: {path: ../src/activity/21_gold_merge_top_users_history.sql}
+            warehouse_id: ${var.sql_warehouse_id}
+            parameters: {ns: "{{job.parameters.ns}}", ds: "{{job.parameters.ds}}"}
