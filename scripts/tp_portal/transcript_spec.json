@@ -1,0 +1,33 @@
+{
+  "description": "Golden HTTP transcript spec for the legacy-portal decomposition. Executed in order against a FRESH store (empty database / empty tables). Parity contract: status codes must match exactly; JSON bodies are compared as parsed values (not bytes) after normalization; fields listed in normalize_timestamp_fields are validated as ISO-8601 instants and replaced with '<instant>'; steps with assert_status_only=true compare only the status code (framework-level validation error bodies are out of contract).",
+  "steps": [
+    {"id": "health", "method": "GET", "path": "/health"},
+    {"id": "ann-list-empty", "method": "GET", "path": "/api/announcements"},
+    {"id": "ann-create-published", "method": "POST", "path": "/api/announcements",
+     "body": {"title": "Welcome to OtterWorks", "body": "The portal is live.", "published": true}},
+    {"id": "ann-create-draft", "method": "POST", "path": "/api/announcements",
+     "body": {"title": "Scheduled maintenance", "body": "Maintenance window Saturday 02:00 UTC.", "published": false}},
+    {"id": "ann-list-published-only", "method": "GET", "path": "/api/announcements"},
+    {"id": "ann-list-all", "method": "GET", "path": "/api/announcements?publishedOnly=false"},
+    {"id": "ann-get-draft", "method": "GET", "path": "/api/announcements/2"},
+    {"id": "ann-publish-draft", "method": "POST", "path": "/api/announcements/2/publish"},
+    {"id": "ann-list-after-publish", "method": "GET", "path": "/api/announcements"},
+    {"id": "ann-get-missing", "method": "GET", "path": "/api/announcements/999"},
+    {"id": "pref-get-default", "method": "GET", "path": "/api/preferences/alice"},
+    {"id": "pref-update", "method": "PUT", "path": "/api/preferences/alice",
+     "body": {"theme": "dark", "locale": "fr-FR", "emailNotifications": false}},
+    {"id": "pref-get-updated", "method": "GET", "path": "/api/preferences/alice"},
+    {"id": "fb-average-empty", "method": "GET", "path": "/api/feedback/average-rating"},
+    {"id": "fb-submit-alice-1", "method": "POST", "path": "/api/feedback",
+     "body": {"userId": "alice", "rating": 5, "message": "Love the new portal."}},
+    {"id": "fb-submit-bob", "method": "POST", "path": "/api/feedback",
+     "body": {"userId": "bob", "rating": 3, "message": "It works."}},
+    {"id": "fb-submit-alice-2", "method": "POST", "path": "/api/feedback", "pre_sleep_ms": 50,
+     "body": {"userId": "alice", "rating": 4, "message": "Even better after the update."}},
+    {"id": "fb-list-alice", "method": "GET", "path": "/api/feedback?userId=alice"},
+    {"id": "fb-average", "method": "GET", "path": "/api/feedback/average-rating"},
+    {"id": "fb-submit-invalid-rating", "method": "POST", "path": "/api/feedback", "assert_status_only": true,
+     "body": {"userId": "alice", "rating": 6, "message": "Too enthusiastic."}}
+  ],
+  "normalize_timestamp_fields": ["createdAt"]
+}
