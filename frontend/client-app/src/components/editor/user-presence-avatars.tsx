@@ -1,6 +1,5 @@
 import type { Collaborator } from "@/types";
-import { getInitials, generateColor } from "@/lib/utils";
-import { cn } from "@/lib/utils";
+import { cn, getInitials, generateColor } from "@/lib/utils";
 
 interface UserPresenceAvatarsProps {
   collaborators: Collaborator[];
