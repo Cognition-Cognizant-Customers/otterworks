@@ -226,6 +226,13 @@
     }).catch(function (e) { setPanel("preferences", false, e.message); });
   }
   $("pref-load").onclick = loadPrefs;
+  // Health-only probe for the periodic poll: updates the panel's up/down state
+  // without overwriting form fields the user may be editing.
+  function checkPrefsHealth() {
+    api("GET", "/api/preferences/" + encodeURIComponent($("pref-user").value))
+      .then(function () { setPanel("preferences", true); })
+      .catch(function (e) { setPanel("preferences", false, e.message); });
+  }
   $("pref-save").onclick = function () {
     api("PUT", "/api/preferences/" + encodeURIComponent($("pref-user").value), {
       theme: $("pref-theme").value,
@@ -294,7 +301,7 @@
   };
 
   refreshAll();
-  setInterval(function () { refreshHealth(); refreshAnnouncements(); refreshFeedback(); }, 5000);
+  setInterval(function () { refreshHealth(); refreshAnnouncements(); checkPrefsHealth(); refreshFeedback(); }, 5000);
 })();
 </script>
 </body>
