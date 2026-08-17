@@ -1,6 +1,6 @@
 import { DashboardStats, AnalyticsReport } from '../../models/analytics.model';
 
-export let MOCK_DASHBOARD_STATS: DashboardStats = {
+export const MOCK_DASHBOARD_STATS: DashboardStats = {
   totalUsers: 1284,
   activeDocuments: 8742,
   storageUsed: '2.4 TB',
