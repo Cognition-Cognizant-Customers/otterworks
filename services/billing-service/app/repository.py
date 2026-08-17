@@ -16,6 +16,8 @@ from app.domain import (
     UsageEvent,
 )
 
+_INDEXED_DATABASES: set[tuple[object, str]] = set()
+
 
 class PostgresPlansRepository:
     def __init__(self, connection: psycopg.Connection) -> None:
@@ -123,7 +125,7 @@ class MongoRatingRepository:
         self.database = database
 
     def _ensure_indexes(self) -> None:
-        key = (id(self.database.client), self.database.name)
+        key = (self.database.client, self.database.name)
         if key not in _INDEXED_DATABASES:
             self.database.rating_periods.create_index(
                 [("tenant_id", 1), ("period_start", 1)],
@@ -243,6 +245,3 @@ class MongoRatingRepository:
             }
         )
         return self._period(row)
-
-
-_INDEXED_DATABASES: set[tuple[int, str]] = set()
