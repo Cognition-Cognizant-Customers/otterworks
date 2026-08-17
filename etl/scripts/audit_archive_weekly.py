@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 
 class DecimalEncoder(json.JSONEncoder):
@@ -149,7 +150,7 @@ def main():
                     for k in batch:
                         batch_writer.delete_item(Key=k)
                 deleted_count += len(batch)
-            except:
+            except (BotoCoreError, ClientError):
                 # TODO ETL-167: Handle throttling / partial failures
                 pass
             batch = []
@@ -161,7 +162,7 @@ def main():
                 for k in batch:
                     batch_writer.delete_item(Key=k)
             deleted_count += len(batch)
-        except:
+        except (BotoCoreError, ClientError):
             pass
 
     print("[%s] Deleted %d events from DynamoDB" % (

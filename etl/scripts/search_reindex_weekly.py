@@ -67,7 +67,7 @@ def main():
                             break
                         time.sleep(1)
                 print("[%s] Deleted index: %s" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), index_name))
-        except:
+        except (requests.RequestException, ValueError):
             print("[%s] Index %s did not exist, skipping delete" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), index_name))
 
     # ---- Create indices ----
