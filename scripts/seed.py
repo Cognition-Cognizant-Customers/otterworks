@@ -12,8 +12,10 @@ admin dashboard shows real metrics instead of in-memory mock data.
 Usage:
     uv run scripts/seed.py
 
-Environment overrides (all optional — defaults match docker-compose):
-    DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+Environment:
+    DB_PASSWORD (required) — the postgres password; for local development this is
+    the POSTGRES_PASSWORD of the postgres service in docker-compose.yml.
+    DB_HOST, DB_PORT, DB_NAME, DB_USER (optional — defaults match docker-compose).
 """
 
 import os
@@ -27,12 +29,22 @@ from psycopg2.extras import execute_values, Json
 
 # ── Connection ────────────────────────────────────────────────────────────────
 
+def db_password() -> str:
+    value = os.getenv("DB_PASSWORD")
+    if not value:
+        sys.exit(
+            "DB_PASSWORD is not set. Export it before seeding, e.g.\n"
+            "  export DB_PASSWORD=\"$(docker compose exec -T postgres printenv POSTGRES_PASSWORD)\""
+        )
+    return value
+
+
 DB_CONFIG = {
     "host":     os.getenv("DB_HOST",     "localhost"),
     "port":     int(os.getenv("DB_PORT", "5432")),
     "dbname":   os.getenv("DB_NAME",     "otterworks"),
     "user":     os.getenv("DB_USER",     "otterworks"),
-    "password": os.getenv("DB_PASSWORD", "otterworks_dev"),
+    "password": db_password(),
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
