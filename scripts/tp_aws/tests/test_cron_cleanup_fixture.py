@@ -296,6 +296,30 @@ def test_unicode_and_empty_reference_are_safe(estate):
     with pytest.raises(ClientError):
         estate["s3"].head_object(Bucket=STORAGE_BUCKET, Key=source_key)
 
+    previous_audit = (
+        estate["dynamodb"]
+        .Table(AUDIT_TABLE)
+        .get_item(Key={"object_key": source_key})["Item"]
+    )
+    recreated_body = b"recreated-unicode"
+    estate["s3"].put_object(Bucket=STORAGE_BUCKET, Key=source_key, Body=recreated_body)
+    recycled_result = module.handler(
+        _event(encoded_event_key, datetime.now(timezone.utc) + timedelta(days=1)),
+        None,
+    )
+    assert recycled_result["status"] == "quarantined"
+    assert recycled_result["quarantine_key"] != previous_audit["quarantine_key"]
+    assert (
+        estate["s3"]
+        .get_object(Bucket=QUARANTINE_BUCKET, Key=recycled_result["quarantine_key"])[
+            "Body"
+        ]
+        .read()
+        == recreated_body
+    )
+    with pytest.raises(ClientError):
+        estate["s3"].head_object(Bucket=STORAGE_BUCKET, Key=source_key)
+
 
 def test_retained_rows_are_rechecked_by_event_and_sweep(estate):
     module = _load_handler()

@@ -207,7 +207,7 @@ def _already_processed(source_key: str) -> dict | None:
     if (
         decision == "quarantined"
         and quarantine_key
-        and _head(_setting("STORAGE_BUCKET", "ow-tp-file-storage"), source_key) is None
+        and _resolve_source(source_key) is None
         and _quarantine_exists(quarantine_key)
     ):
         return {
