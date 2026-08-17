@@ -12,6 +12,7 @@ def test_redacted_uri_with_srv_credentials() -> None:
 def test_redacted_uri_with_plain_credentials() -> None:
     uri = "mongodb://alice:sup3rs3cret@localhost:27017/ow_tp_demo"
     assert redacted_uri(uri) == "mongodb://alice:<redacted>@localhost:27017/ow_tp_demo"
+    assert redacted_uri_for_report(uri) == "mongodb://localhost:27017/ow_tp_demo"
 
 
 def test_redacted_uri_without_credentials() -> None:
@@ -32,13 +33,13 @@ def test_redacted_uri_fails_closed_for_unescaped_password_delimiters() -> None:
         "pa/ss": "mongodb://alice:pa/ss@localhost:27017/ow_tp_redact",
         "pa?ss": "mongodb://alice:pa?ss@localhost:27017/ow_tp_redact",
         "pa#ss": "mongodb://alice:pa#ss@localhost:27017/ow_tp_redact",
+        "1234/5": "mongodb://alice:1234/5@localhost:27017/ow_tp_redact",
     }
     for secret, uri in cases.items():
-        rendered = redacted_uri(uri)
-        assert rendered == (
-            "mongodb://alice:<redacted>@localhost:27017/ow_tp_redact"
-        )
-        assert secret not in rendered
+        for rendered in (redacted_uri(uri), redacted_uri_for_report(uri)):
+            assert rendered == "mongodb://<unparseable-uri-withheld>"
+            assert secret not in rendered
+            assert "localhost:27017" not in rendered
 
 
 def test_redacted_uri_for_report_removes_userinfo() -> None:
@@ -49,7 +50,8 @@ def test_redacted_uri_for_report_removes_userinfo() -> None:
     assert "pa%40ss%2Fword" not in rendered
 
 
-def test_credential_free_at_in_query_is_unchanged() -> None:
+def test_credential_free_at_in_query_is_withheld() -> None:
     uri = "mongodb://localhost:27017/db?appName=a@b"
-    assert redacted_uri(uri) == uri
-    assert redacted_uri_for_report(uri) == uri
+    expected = "mongodb://<unparseable-uri-withheld>"
+    assert redacted_uri(uri) == expected
+    assert redacted_uri_for_report(uri) == expected

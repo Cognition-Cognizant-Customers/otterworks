@@ -13,6 +13,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from typing import Any
 
 # Every collection written by the Wave 1 migrations, with the field that carries
@@ -32,9 +33,19 @@ MIGRATED_COLLECTIONS: dict[str, str] = {
 WEBHOOK_URL_ENV = "OW_TP_MONGO_RECON_WEBHOOK_URL"
 WEBHOOK_SECRET_ENV = "OW_TP_MONGO_RECON_WEBHOOK_SECRET"
 WEBHOOK_SECRET_HEADER = "X-Webhook-Secret"
+OPAQUE_URI_MARKER = "<unparseable-uri-withheld>"
 
 
-def _uri_parts(uri: str) -> tuple[str, str, str, str] | None:
+@dataclass(frozen=True)
+class _UriParts:
+    scheme: str
+    userinfo: str
+    host: str
+    suffix: str
+    opaque: bool = False
+
+
+def _uri_parts(uri: str) -> _UriParts | None:
     """Return scheme, userinfo, host, and suffix without exposing userinfo."""
     scheme, separator, remainder = uri.partition("://")
     if not separator:
@@ -50,36 +61,17 @@ def _uri_parts(uri: str) -> tuple[str, str, str, str] | None:
         userinfo = authority[:at]
         host = authority[at + 1:]
         suffix = remainder[authority_end:]
-        return scheme, userinfo, host, suffix
+        return _UriParts(scheme, userinfo, host, suffix)
     if "@" not in remainder:
         return None
-    if ":" not in authority or _has_numeric_port(authority):
-        return None
 
-    # An @ beyond the authority boundary means a malformed URI with an
-    # unescaped delimiter in its userinfo. Fail closed using the last @.
-    at = remainder.rfind("@")
-    userinfo = remainder[:at]
-    host_and_suffix = remainder[at + 1:]
-    host_end = len(host_and_suffix)
-    for delimiter in "/?#":
-        position = host_and_suffix.find(delimiter)
-        if position != -1:
-            host_end = min(host_end, position)
-    return scheme, userinfo, host_and_suffix[:host_end], host_and_suffix[host_end:]
+    # An @ beyond the authority boundary is ambiguous: it may be an
+    # unescaped delimiter in userinfo or a credential-free path/query value.
+    return _UriParts(scheme, "", "", "", opaque=True)
 
 
-def _has_numeric_port(authority: str) -> bool:
-    """Recognize a credential-free host:port authority."""
-    if authority.startswith("["):
-        closing = authority.find("]")
-        return (
-            closing != -1
-            and authority[closing + 1:closing + 2] == ":"
-            and authority[closing + 2:].isdigit()
-        )
-    host, separator, port = authority.rpartition(":")
-    return bool(separator and host and port.isdigit())
+def _opaque_uri(scheme: str) -> str:
+    return f"{scheme}://{OPAQUE_URI_MARKER}"
 
 
 def redacted_uri(uri: str) -> str:
@@ -87,9 +79,10 @@ def redacted_uri(uri: str) -> str:
     parts = _uri_parts(uri)
     if parts is None:
         return uri
-    scheme, userinfo, host, suffix = parts
-    username = userinfo.partition(":")[0]
-    return f"{scheme}://{username}:<redacted>@{host}{suffix}"
+    if parts.opaque:
+        return _opaque_uri(parts.scheme)
+    username = parts.userinfo.partition(":")[0]
+    return f"{parts.scheme}://{username}:<redacted>@{parts.host}{parts.suffix}"
 
 
 def redacted_uri_for_report(uri: str) -> str:
@@ -97,8 +90,9 @@ def redacted_uri_for_report(uri: str) -> str:
     parts = _uri_parts(uri)
     if parts is None:
         return uri
-    scheme, _, host, suffix = parts
-    return f"{scheme}://{host}{suffix}"
+    if parts.opaque:
+        return _opaque_uri(parts.scheme)
+    return f"{parts.scheme}://{parts.host}{parts.suffix}"
 
 
 def namespace_filter(collection: str, ns: str) -> dict[str, str]:
