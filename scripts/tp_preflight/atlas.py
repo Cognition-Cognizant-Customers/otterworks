@@ -171,6 +171,19 @@ def add_validator_capabilities(ddl_result, ddl_detail, collmod_result=None, coll
           collmod_detail or ddl_detail)
 
 
+def validator_error_detail(exc):
+    detail = exception_detail(exc)
+    try:
+        from pymongo.errors import OperationFailure
+    except ImportError:
+        return detail
+    if isinstance(exc, OperationFailure):
+        lowered = detail.lower()
+        if "not authorized" in lowered or "not allowed to do action" in lowered:
+            return f"{detail}; probing credential lacks dbAdmin on {probe_database}"
+    return detail
+
+
 def cleanup_collection(name, database):
     try:
         database.drop_collection(name)
@@ -380,10 +393,7 @@ def validator_ddl():
         ddl_result = "verified"
         ddl_detail = "$jsonSchema validator rejected a violating insert and accepted a conforming insert; collection cleaned"
     except Exception as exc:
-        error_detail = (
-            f"{exception_detail(exc)}; probing credential lacks dbAdmin on "
-            f"{probe_database}"
-        )
+        error_detail = validator_error_detail(exc)
         ddl_detail = error_detail
         if collmod_attempted:
             collmod_detail = error_detail

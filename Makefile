@@ -28,13 +28,17 @@ tp-preflight-atlas: ## Check MongoDB Atlas capability paths and emit a manifest
 	}; \
 	trap restore_workspace EXIT; \
 	if [ -n "$(NS)" ] && terraform -chdir=$$tf_dir workspace select "$(NS)" >/dev/null 2>&1; then \
-		probe_user="$$(terraform -chdir=$$tf_dir output -raw database_username 2>/dev/null || true)"; \
-		probe_password="$$(terraform -chdir=$$tf_dir output -raw database_password 2>/dev/null || true)"; \
-		probe_database="$$(terraform -chdir=$$tf_dir output -raw database_name 2>/dev/null || true)"; \
-		if [ -n "$$probe_user" ] && [ -n "$$probe_password" ] && [ -n "$$probe_database" ] && [ -n "$${MONGODB_ATLAS_URI:-}" ]; then \
-			probe_host="$$(MONGO_BASE_URI="$$MONGODB_ATLAS_URI" python3 -c 'import os; from urllib.parse import urlsplit; host = urlsplit(os.environ["MONGO_BASE_URI"]).hostname; import sys; sys.exit("cluster host missing") if not host else None; print(host)')"; \
-			export OW_TP_PREFLIGHT_MONGO_URI="$$(MONGO_USER="$$probe_user" MONGO_PASSWORD="$$probe_password" MONGO_HOST="$$probe_host" python3 -c 'import os; from urllib.parse import quote; print("mongodb+srv://{}:{}@{}/?retryWrites=true&w=majority".format(quote(os.environ["MONGO_USER"], safe=""), quote(os.environ["MONGO_PASSWORD"], safe=""), os.environ["MONGO_HOST"]))')"; \
-			export OW_TP_PREFLIGHT_DB="$$probe_database"; \
+		if [ -z "$${OW_TP_PREFLIGHT_MONGO_URI:-}" ]; then \
+			probe_user="$$(terraform -chdir=$$tf_dir output -raw database_username 2>/dev/null || true)"; \
+			probe_password="$$(terraform -chdir=$$tf_dir output -raw database_password 2>/dev/null || true)"; \
+			if [ -n "$$probe_user" ] && [ -n "$$probe_password" ] && [ -n "$${MONGODB_ATLAS_URI:-}" ]; then \
+				probe_host="$$(MONGO_BASE_URI="$$MONGODB_ATLAS_URI" python3 -c 'import os; from urllib.parse import urlsplit; host = urlsplit(os.environ["MONGO_BASE_URI"]).hostname; import sys; sys.exit("cluster host missing") if not host else None; print(host)')"; \
+				export OW_TP_PREFLIGHT_MONGO_URI="$$(MONGO_USER="$$probe_user" MONGO_PASSWORD="$$probe_password" MONGO_HOST="$$probe_host" python3 -c 'import os; from urllib.parse import quote; print("mongodb+srv://{}:{}@{}/?retryWrites=true&w=majority".format(quote(os.environ["MONGO_USER"], safe=""), quote(os.environ["MONGO_PASSWORD"], safe=""), os.environ["MONGO_HOST"]))')"; \
+			fi; \
+		fi; \
+		if [ -z "$${OW_TP_PREFLIGHT_DB:-}" ]; then \
+			probe_database="$$(terraform -chdir=$$tf_dir output -raw database_name 2>/dev/null || true)"; \
+			if [ -n "$$probe_database" ]; then export OW_TP_PREFLIGHT_DB="$$probe_database"; fi; \
 		fi; \
 	fi; \
 	scripts/tp-preflight-atlas.sh
