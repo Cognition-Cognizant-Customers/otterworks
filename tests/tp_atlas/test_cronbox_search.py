@@ -13,7 +13,12 @@ SCRIPTS = Path(__file__).resolve().parents[2] / "scripts" / "tp_atlas"
 sys.path.insert(0, str(SCRIPTS))
 
 from cronbox_search_indexes import load_definitions, role_violations  # noqa: E402
-from cronbox_search_ingest import transform_document, transform_file, upsert  # noqa: E402
+from cronbox_search_ingest import (  # noqa: E402
+    fetch_corpus,
+    transform_document,
+    transform_file,
+    upsert,
+)
 from cronbox_search_recon import evaluate_search  # noqa: E402
 
 
@@ -82,6 +87,40 @@ def test_upsert_builds_replace_one_upserts_and_empty_is_noop() -> None:
     assert operations[0]._filter == {"_id": "file-2"}
     assert operations[0]._doc == {"_id": "file-2", "id": "file-2"}
     assert operations[0]._upsert is True
+
+
+def test_fetch_corpus_accepts_collection_and_items_envelopes(monkeypatch) -> None:
+    calls = []
+
+    class Response:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    def get(url, *, params, timeout):
+        del url, timeout
+        calls.append(params)
+        if params["page"] == 1:
+            return Response(current_payload)
+        return Response({key: []})
+
+    monkeypatch.setattr("requests.get", get)
+
+    for current_payload, expected in [
+        ({"documents": [{"id": "document-1"}]}, [{"id": "document-1"}]),
+        ({"items": [{"id": "document-2"}]}, [{"id": "document-2"}]),
+    ]:
+        calls.clear()
+        key = "documents"
+        assert (
+            list(fetch_corpus("http://source", "/api/v1/documents", key, 1)) == expected
+        )
+        assert [call["page"] for call in calls] == [1, 2]
 
 
 def test_committed_definitions_preserve_roles_and_removed_mapping_fails() -> None:

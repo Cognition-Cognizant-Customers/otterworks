@@ -177,7 +177,8 @@ def fetch_corpus(
             timeout=30,
         )
         response.raise_for_status()
-        batch = response.json().get(key, [])
+        payload = response.json()
+        batch = payload.get(key, payload.get("items", []))
         if not batch:
             return
         yield from batch
