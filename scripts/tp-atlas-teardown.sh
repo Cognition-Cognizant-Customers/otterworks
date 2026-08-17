@@ -12,14 +12,19 @@ if [[ "${NS}" == "demo" && "${FORCE:-0}" != "1" ]]; then
   exit 2
 fi
 
-uv run --no-project --with pymongo==4.10.1 \
-  python3 "${REPO_ROOT}/scripts/tp_atlas_teardown.py" --ns "${NS}"
-
 TF_DIR="${REPO_ROOT}/infrastructure/terraform/tp-mongodb"
-terraform -chdir="${TF_DIR}" init -input=false >/dev/null
 export TF_VAR_project_id="${MONGODB_ATLAS_PROJECT_ID:?MONGODB_ATLAS_PROJECT_ID is required}"
 export TF_VAR_public_key="${MONGODB_ATLAS_PUBLIC_KEY:?MONGODB_ATLAS_PUBLIC_KEY is required}"
 export TF_VAR_private_key="${MONGODB_ATLAS_PRIVATE_KEY:?MONGODB_ATLAS_PRIVATE_KEY is required}"
+: "${MONGODB_ATLAS_URI:?MONGODB_ATLAS_URI is required}"
+terraform -chdir="${TF_DIR}" init -input=false >/dev/null
+terraform -chdir="${TF_DIR}" workspace select "${NS}" >/dev/null 2>&1 ||
+  terraform -chdir="${TF_DIR}" workspace new "${NS}" >/dev/null
+workspace="$(terraform -chdir="${TF_DIR}" workspace show)"
+if [[ "${workspace}" == "default" || "${workspace}" != "${NS}" ]]; then
+  echo "refusing to operate in Terraform workspace ${workspace}; expected ${NS}" >&2
+  exit 1
+fi
 if state="$(terraform -chdir="${TF_DIR}" state list 2>/dev/null)" && [[ -n "${state}" ]]; then
   details="$(terraform -chdir="${TF_DIR}" state show -no-color mongodbatlas_database_user.namespace 2>/dev/null || true)"
   acl_details="$(terraform -chdir="${TF_DIR}" state show -no-color mongodbatlas_project_ip_access_list.caller 2>/dev/null || true)"
@@ -32,6 +37,10 @@ if state="$(terraform -chdir="${TF_DIR}" state list 2>/dev/null)" && [[ -n "${st
     exit 1
   fi
 fi
+
+uv run --no-project --with pymongo==4.10.1 \
+  python3 "${REPO_ROOT}/scripts/tp_atlas_teardown.py" --ns "${NS}"
+
 terraform -chdir="${TF_DIR}" destroy -auto-approve -input=false \
   -var="ns=${NS}"
 

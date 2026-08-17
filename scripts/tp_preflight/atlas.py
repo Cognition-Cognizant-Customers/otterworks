@@ -304,6 +304,10 @@ def alert_marker(config):
     return False
 
 
+def alert_config_id(config):
+    return config.get("id") or config.get("alertConfigId")
+
+
 alert_cleanup_registry = {}
 
 
@@ -338,7 +342,7 @@ def reconcile_alert_configs():
             m.add("alert-webhook-config-cleanup", "Reconcile the temporary webhook alert configuration",
                   "Atlas alertConfigs GET", "denied",
                   f"{alert_id}; manual cleanup required")
-        elif any(str(item.get("alertConfigId")) == str(alert_id) and alert_marker(item) for item in current):
+        elif any(str(alert_config_id(item)) == str(alert_id) and alert_marker(item) for item in current):
             delete_alert_config(alert_id)
         else:
             m.add("alert-webhook-config-cleanup", "Reconcile the temporary webhook alert configuration",
@@ -369,18 +373,18 @@ def alert_webhook_config():
     if created is not None and created.ok:
         try:
             body = created.json()
-            alert_id = body.get("alertConfigId")
+            alert_id = alert_config_id(body)
         except ValueError:
             pass
         if not alert_id:
             current = alert_configs_snapshot()
             matches = [item for item in (current or []) if alert_marker(item)]
             for item in matches:
-                item_id = item.get("alertConfigId")
+                item_id = alert_config_id(item)
                 if item_id:
                     alert_cleanup_registry[str(item_id)] = item
             if len(matches) == 1:
-                alert_id = matches[0].get("alertConfigId")
+                alert_id = alert_config_id(matches[0])
     if alert_id:
         alert_cleanup_registry[str(alert_id)] = payload
         reconcile_alert_configs()
@@ -388,7 +392,7 @@ def alert_webhook_config():
         current = alert_configs_snapshot()
         matches = [item for item in (current or []) if alert_marker(item)]
         for item in matches:
-            item_id = item.get("alertConfigId")
+            item_id = alert_config_id(item)
             if item_id:
                 alert_cleanup_registry[str(item_id)] = item
         if matches:
@@ -397,6 +401,10 @@ def alert_webhook_config():
             m.add("alert-webhook-config-cleanup", "Reconcile an ambiguous webhook alert configuration create",
                   "Atlas alertConfigs GET", "denied",
                   "create outcome was ambiguous; manual cleanup required")
+    else:
+        m.add("alert-webhook-config", "Create a temporary webhook-notification alert configuration",
+              "Atlas alertConfigs POST", "denied",
+              f"create succeeded but no alert id was returned or found; run marker {run_marker}; manual cleanup required")
 
 
 def access_list_snapshot(record=True):
@@ -460,8 +468,12 @@ if entry_records is None:
     if os.environ.get("MONGODB_ATLAS_URI"):
         m.add("db-user-write", "Insert and delete a temporary document with the DB user",
               "MongoDB wire protocol", "denied", "access-list snapshot failed; no mutation attempted")
+        m.add("validator-ddl", "Create and exercise a MongoDB $jsonSchema validator",
+              "MongoDB wire protocol", "denied", "access-list snapshot failed; no mutation attempted")
     else:
         m.add("db-user-write", "Insert and delete a temporary document with the DB user",
+              "MongoDB wire protocol", "skipped", "MONGODB_ATLAS_URI is not set")
+        m.add("validator-ddl", "Create and exercise a MongoDB $jsonSchema validator",
               "MongoDB wire protocol", "skipped", "MONGODB_ATLAS_URI is not set")
     raise SystemExit(m.write("atlas"))
 listed = [api_entry_ip(entry) for entry in entry_records if api_entry_ip(entry)]
@@ -514,11 +526,16 @@ try:
               "Atlas accessList GET", "skipped", "MONGODB_ATLAS_URI is not set")
         m.add("db-user-write", "Insert and delete a temporary document with the DB user",
               "MongoDB wire protocol", "skipped", "MONGODB_ATLAS_URI is not set")
+        m.add("validator-ddl", "Create and exercise a MongoDB $jsonSchema validator",
+              "MongoDB wire protocol", "skipped", "MONGODB_ATLAS_URI is not set")
     elif ip is None:
         m.add("vm-ip-listed", "The VM public IP is present or can be self-healed in the Atlas access list",
               "Atlas accessList GET", "denied",
               f"could not determine the VM public address: {ip_lookup_error or 'unknown lookup failure'}")
         m.add("db-user-write", "Insert and delete a temporary document with the DB user",
+              "MongoDB wire protocol", "denied",
+              f"could not determine the VM public address: {ip_lookup_error or 'unknown lookup failure'}")
+        m.add("validator-ddl", "Create and exercise a MongoDB $jsonSchema validator",
               "MongoDB wire protocol", "denied",
               f"could not determine the VM public address: {ip_lookup_error or 'unknown lookup failure'}")
     elif covers(ip, listed):
@@ -544,6 +561,12 @@ try:
                 m.add("vm-ip-listed", "The VM public IP is present or can be self-healed in the Atlas access list",
                       "Atlas accessList POST/DELETE", "denied", f"VM IP {ip}; access-list entries checked={len(listed)}")
                 m.add("db-user-write", "Insert and delete a temporary document with the DB user",
+                      "MongoDB wire protocol",
+                      "denied" if os.environ.get("MONGODB_ATLAS_URI") else "skipped",
+                      "VM IP could not be temporarily allow-listed"
+                      if os.environ.get("MONGODB_ATLAS_URI")
+                      else "MONGODB_ATLAS_URI is not set")
+                m.add("validator-ddl", "Create and exercise a MongoDB $jsonSchema validator",
                       "MongoDB wire protocol",
                       "denied" if os.environ.get("MONGODB_ATLAS_URI") else "skipped",
                       "VM IP could not be temporarily allow-listed"
