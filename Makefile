@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-etl-gen-history legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean tp-search-recon-fixture tp-search-recon tp-cron-analytics-extract tp-cron-analytics-verify tp-cron-analytics-recon dbx-showcase dbx-showcase-help cronbox-up cronbox-seed cronbox-run cronbox-run-all cronbox-capture cronbox-reset cronbox-down tp-skeleton-validate tp-databricks-skeleton-validate tp-terraform-skeleton-validate tp-atlas-skeleton-validate tp-databricks-apply tp-terraform-apply tp-atlas-apply
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-etl-gen-history legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean tp-search-recon-fixture tp-search-recon tp-cron-analytics-extract tp-cron-analytics-verify tp-cron-analytics-recon tp-cron-activity-extract tp-cron-activity-verify tp-cron-activity-recon-fixture tp-cron-activity-recon dbx-showcase dbx-showcase-help cronbox-up cronbox-seed cronbox-run cronbox-run-all cronbox-capture cronbox-reset cronbox-down tp-skeleton-validate tp-databricks-skeleton-validate tp-terraform-skeleton-validate tp-atlas-skeleton-validate tp-databricks-apply tp-terraform-apply tp-atlas-apply
 
 SHELL := /bin/bash
 
@@ -80,6 +80,17 @@ tp-cron-analytics-verify: ## Verify analytics landing and write the fixture reco
 
 tp-cron-analytics-recon: ## Run the live analytics recon (NS=<ns>, DS=<date>, OUT=<path>)
 	python3 scripts/tp_cron_analytics/recon.py --ns $${NS:-demo} --ds $${DS:-2026-01-15} --out $${OUT:-docs/tech-partnerships/recon/cron-analytics-demo.recon.json}
+
+tp-cron-activity-extract: ## Extract activity history into the local fixture (NS=<ns>, DS=<date>)
+	@PYTHON=$$(scripts/tp_cronbox/ensure_venv.sh); AWS_ENDPOINT_URL=$${AWS_ENDPOINT_URL:-http://localhost:4566} "$$PYTHON" scripts/tp_cron_activity/extract_history.py --ns $${NS:-demo} --ds $${DS:-2026-01-15} --target local-fixture
+
+tp-cron-activity-verify: ## Verify activity landing and write the fixture recon report
+	python3 scripts/tp_cron_activity/recon.py --mode fixture --ns $${NS:-demo} --ds $${DS:-2026-01-15} --out docs/tech-partnerships/recon/cron-activity-demo.fixture.recon.json
+
+tp-cron-activity-recon-fixture: tp-cron-activity-verify ## Run the activity fixture recon
+
+tp-cron-activity-recon: ## Run the live activity recon (parent-owned)
+	python3 scripts/tp_cron_activity/recon.py --mode live --ns $${NS:-demo} --ds $${DS:-2026-01-15} --out $${OUT:-docs/tech-partnerships/recon/cron-activity-demo.recon.json}
 
 # Live Databricks billing-history showcase (needs DATABRICKS_DEMO_HOST/TOKEN).
 # Serverless SQL only; every schedule it creates stays PAUSED.
