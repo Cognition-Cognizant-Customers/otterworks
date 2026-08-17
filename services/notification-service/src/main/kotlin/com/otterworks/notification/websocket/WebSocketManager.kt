@@ -33,7 +33,7 @@ class WebSocketManager {
     }
 
     suspend fun pushNotification(userId: String, notification: Notification): Int {
-        val sessions = connections[userId] ?: return 0
+        val sessions: Set<DefaultWebSocketSession> = connections[userId] ?: return 0
 
         val payload = json.encodeToString(notification)
         val deadSessions = mutableListOf<DefaultWebSocketSession>()
