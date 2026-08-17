@@ -16,6 +16,12 @@ repositories {
     mavenCentral()
 }
 
+// Lock resolved dependency versions to gradle.lockfile for reproducible builds.
+// Regenerate after changing dependencies: ./gradlew dependencies --write-locks
+dependencyLocking {
+    lockAllConfigurations()
+}
+
 val ktorVersion = "2.3.9"
 val awsSdkVersion = "1.0.70"
 val coroutinesVersion = "1.8.0"

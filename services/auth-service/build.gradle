@@ -18,6 +18,12 @@ repositories {
     mavenCentral()
 }
 
+// Lock resolved dependency versions to gradle.lockfile for reproducible builds.
+// Regenerate after changing dependencies: ./gradlew dependencies --write-locks
+dependencyLocking {
+    lockAllConfigurations()
+}
+
 dependencies {
     // Spring Boot
     implementation 'org.springframework.boot:spring-boot-starter-web'
