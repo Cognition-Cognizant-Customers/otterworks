@@ -45,8 +45,11 @@ export MONGO_URI="${MONGO_URI:-mongodb://localhost:27017}"
 make tp-mongo-fixture-up
 # Fixture recon reruns the migration for an actual idempotency proof:
 make tp-mongo-documents-recon NS=demo
-# Live recon is read-only by default; a complete report requires
-# --rerun-migration, which intentionally repeats the migration write.
+# Live recon is read-only by default and writes an ignored build/tp-recon report:
+make tp-mongo-documents-recon NS=demo RUN_MODE=live
+# For a complete, schema-valid live report, explicitly repeat the migration:
+make tp-mongo-documents-recon NS=demo RUN_MODE=live RERUN=1 \
+  OUT=docs/tech-partnerships/recon/mongo_documents.live.recon.json
 # stop the shared fixture when the demo is complete:
 # make tp-mongo-fixture-down
 ```

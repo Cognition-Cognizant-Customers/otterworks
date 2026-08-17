@@ -48,8 +48,10 @@ UNIT = "mongo_documents"
 # number in it against whatever deployment MONGO_URI points at.
 RECOMPUTE_COMMAND = (
     "MONGO_URI='<target uri>' MONGO_DB='<target db>' "
-    "make tp-mongo-documents-recon NS={ns} RUN_MODE=live "
-    "# read-only; a complete report requires --rerun-migration, which repeats the migration write"
+    "make tp-mongo-documents-recon NS={ns} RUN_MODE=live RERUN=1 "
+    "OUT=docs/tech-partnerships/recon/mongo_documents.live.recon.json "
+    "# complete report; read-only default: omit RERUN=1 and OUT=... "
+    "(writes an ignored build/tp-recon report)"
 )
 
 UNVERIFIED_FIXTURE = [
