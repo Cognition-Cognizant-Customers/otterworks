@@ -27,6 +27,8 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
     baseline-version: 0
+    placeholders:
+      seedAdminPassword: ${AUTH_SEED_ADMIN_PASSWORD:}
 
 jwt:
   secret: ${JWT_SECRET:dev-jwt-secret-otterworks-2024-change-in-production}
