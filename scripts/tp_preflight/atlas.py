@@ -71,6 +71,16 @@ probe_mongo_uri = (
 probe_database = os.environ.get("OW_TP_PREFLIGHT_DB") or "ow_tp_preflight"
 
 
+def probe_scope_detail(detail):
+    username = "unknown"
+    if probe_mongo_uri:
+        try:
+            username = urllib.parse.unquote(urllib.parse.urlsplit(probe_mongo_uri).username or "unknown")
+        except ValueError:
+            pass
+    return f"{detail}; probe user {username} on {probe_database}"
+
+
 def check(pid, description, method, url, **kwargs):
     try:
         r = method(url, auth=auth, headers=headers, timeout=30, **kwargs)
@@ -165,10 +175,10 @@ pending_cleanup_candidates = {}
 
 def add_validator_capabilities(ddl_result, ddl_detail, collmod_result=None, collmod_detail=None):
     m.add("validator-ddl", "Create and exercise a MongoDB $jsonSchema validator",
-          "MongoDB wire protocol", ddl_result, ddl_detail)
+          "MongoDB wire protocol", ddl_result, probe_scope_detail(ddl_detail))
     m.add("validator-collmod", "Update and exercise an existing collection validator with collMod",
           "MongoDB wire protocol", collmod_result or ddl_result,
-          collmod_detail or ddl_detail)
+          probe_scope_detail(collmod_detail or ddl_detail))
 
 
 def validator_error_detail(exc):
@@ -303,7 +313,8 @@ def db_user_write():
             pending_collections.pop(name, None)
             resolve_cleanup_candidates(pending_cleanup_candidates, database)
             m.add("db-user-write", "Insert and delete a temporary document with the DB user",
-                  "MongoDB wire protocol", "verified", "temporary collection cleaned")
+                  "MongoDB wire protocol", "verified",
+                  probe_scope_detail("temporary collection cleaned"))
             if pending_cleanup_candidates:
                 emit_cleanup_failures(pending_cleanup_candidates)
             try:
@@ -324,7 +335,8 @@ def db_user_write():
             if attempt < 2:
                 time.sleep(5)
     m.add("db-user-write", "Insert and delete a temporary document with the DB user",
-          "MongoDB wire protocol", "denied", exception_detail(last_error))
+          "MongoDB wire protocol", "denied",
+          probe_scope_detail(exception_detail(last_error)))
     emit_cleanup_failures(pending_cleanup_candidates)
 
 
@@ -599,11 +611,13 @@ if entry_records is None:
           "Atlas accessList GET", "denied", "access-list snapshot failed; no mutation attempted")
     if probe_mongo_uri:
         m.add("db-user-write", "Insert and delete a temporary document with the DB user",
-              "MongoDB wire protocol", "denied", "access-list snapshot failed; no mutation attempted")
+              "MongoDB wire protocol", "denied",
+              probe_scope_detail("access-list snapshot failed; no mutation attempted"))
         add_validator_capabilities("denied", "access-list snapshot failed; no mutation attempted")
     else:
         m.add("db-user-write", "Insert and delete a temporary document with the DB user",
-              "MongoDB wire protocol", "skipped", "MONGODB_ATLAS_URI is not set")
+              "MongoDB wire protocol", "skipped",
+              probe_scope_detail("MONGODB_ATLAS_URI is not set"))
         add_validator_capabilities("skipped", "MONGODB_ATLAS_URI is not set")
     raise SystemExit(m.write("atlas"))
 listed = [api_entry_ip(entry) for entry in entry_records if api_entry_ip(entry)]
@@ -656,7 +670,8 @@ try:
         m.add("vm-ip-listed", "The VM public IP is present or can be self-healed in the Atlas access list",
               "Atlas accessList GET", "skipped", "MONGODB_ATLAS_URI is not set")
         m.add("db-user-write", "Insert and delete a temporary document with the DB user",
-              "MongoDB wire protocol", "skipped", "MONGODB_ATLAS_URI is not set")
+              "MongoDB wire protocol", "skipped",
+              probe_scope_detail("MONGODB_ATLAS_URI is not set"))
         add_validator_capabilities("skipped", "MONGODB_ATLAS_URI is not set")
     elif ip is None:
         m.add("vm-ip-listed", "The VM public IP is present or can be self-healed in the Atlas access list",
@@ -664,7 +679,9 @@ try:
               f"could not determine the VM public address: {ip_lookup_error or 'unknown lookup failure'}")
         m.add("db-user-write", "Insert and delete a temporary document with the DB user",
               "MongoDB wire protocol", "denied",
-              f"could not determine the VM public address: {ip_lookup_error or 'unknown lookup failure'}")
+              probe_scope_detail(
+                  f"could not determine the VM public address: {ip_lookup_error or 'unknown lookup failure'}"
+              ))
         add_validator_capabilities(
             "denied",
             f"could not determine the VM public address: {ip_lookup_error or 'unknown lookup failure'}",
@@ -694,9 +711,11 @@ try:
                 m.add("db-user-write", "Insert and delete a temporary document with the DB user",
                       "MongoDB wire protocol",
                       "denied" if probe_mongo_uri else "skipped",
-                      "VM IP could not be temporarily allow-listed"
-                      if probe_mongo_uri
-                      else "MONGODB_ATLAS_URI is not set")
+                      probe_scope_detail(
+                          "VM IP could not be temporarily allow-listed"
+                          if probe_mongo_uri
+                          else "MONGODB_ATLAS_URI is not set"
+                      ))
                 add_validator_capabilities(
                     "denied" if probe_mongo_uri else "skipped",
                     "VM IP could not be temporarily allow-listed"
