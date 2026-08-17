@@ -22,7 +22,7 @@ from bson.binary import Binary
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from migrate_files import transform  # noqa: E402
+from migrate_files import quarantine_id, transform  # noqa: E402
 from mongo_common import bson_value  # noqa: E402
 
 ITEM = {
@@ -117,6 +117,23 @@ def test_unparseable_timestamp_is_quarantined():
 def test_quarantine_record_keeps_raw_bytes_as_hex():
     _, bad = transform(item(size_bytes=None, payload=b"\xff\xfe"))
     assert bad["raw_item"]["payload"] == {"hex": "fffe"}
+
+
+def test_wrongly_typed_required_value_is_quarantined_not_crashed():
+    for attr, bad in (("s3_key", Decimal("7")), ("id", Decimal("7")),
+                      ("ns", b"demo"), ("size_bytes", "166995131")):
+        doc, record = transform(item(**{attr: bad}))
+        assert doc is None
+        assert record["reason"] == f"wrongly_typed_required_attribute:{attr}"
+
+
+def test_distinct_malformed_items_never_share_a_quarantine_id():
+    """Two items rejected for the same reason with no usable key must both survive."""
+    _, first = transform(item(id=..., name="a.zip"))
+    _, second = transform(item(id=..., name="b.zip"))
+    assert first["source_key"] is None and second["source_key"] is None
+    assert quarantine_id(first) != quarantine_id(second)
+    assert quarantine_id(first) == quarantine_id(transform(item(id=..., name="a.zip"))[1])
 
 
 def test_bson_value_keeps_fractional_numbers_as_floats():

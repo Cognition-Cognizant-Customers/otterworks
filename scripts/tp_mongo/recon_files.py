@@ -216,8 +216,6 @@ def main() -> int:
     parser.add_argument("--ns", required=True)
     parser.add_argument("--run-mode", choices=["fixture", "live"], default="fixture")
     parser.add_argument("--out", default=f"docs/tech-partnerships/recon/{UNIT}.recon.json")
-    parser.add_argument("--no-idempotency-rerun", action="store_true",
-                        help="skip the migration rerun (the report then records it as not performed)")
     args = parser.parse_args()
 
     ns = validate_ns(args.ns)
@@ -235,29 +233,26 @@ def main() -> int:
         before = target_state(db, ns)
         log(f"target: {before['count']} documents, checksum {before['checksum']}")
 
-        if args.no_idempotency_rerun:
-            rerun = {"performed": False}
-        else:
-            log("rerunning the migration to prove idempotency")
-            if migrate(ns, 1000) != 0:
-                raise SystemExit("idempotency rerun of the migration failed")
-            after = target_state(db, ns)
-            identical = (after["count"] == before["count"]
-                         and after["checksum"] == before["checksum"]
-                         and after["orphan_keys"] == before["orphan_keys"]
-                         and after["quarantined"] == before["quarantined"])
-            rerun = {
-                "performed": True,
-                "result": "pass" if identical else "fail",
-                "evidence": (
-                    f"rerun of `uv run scripts/tp_mongo/migrate_files.py --ns {ns}`: "
-                    f"count {before['count']}->{after['count']}, "
-                    f"checksum {before['checksum']}->{after['checksum']}, "
-                    f"orphan keys {len(before['orphan_keys'])}->{len(after['orphan_keys'])}, "
-                    f"quarantined {before['quarantined']}->{after['quarantined']}"
-                ),
-            }
-            before = after
+        log("rerunning the migration to prove idempotency")
+        if migrate(ns, 1000) != 0:
+            raise SystemExit("idempotency rerun of the migration failed")
+        after = target_state(db, ns)
+        identical = (after["count"] == before["count"]
+                     and after["checksum"] == before["checksum"]
+                     and after["orphan_keys"] == before["orphan_keys"]
+                     and after["quarantined"] == before["quarantined"])
+        rerun = {
+            "performed": True,
+            "result": "pass" if identical else "fail",
+            "evidence": (
+                f"rerun of `uv run scripts/tp_mongo/migrate_files.py --ns {ns}`: "
+                f"count {before['count']}->{after['count']}, "
+                f"checksum {before['checksum']}->{after['checksum']}, "
+                f"orphan keys {len(before['orphan_keys'])}->{len(after['orphan_keys'])}, "
+                f"quarantined {before['quarantined']}->{after['quarantined']}"
+            ),
+        }
+        before = after
 
         rejects, reject_evidence = validator_rejects_bad_document(db, ns)
         files_validator = validator_state(db, FILES_COLLECTION)

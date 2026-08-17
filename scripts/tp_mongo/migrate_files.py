@@ -26,8 +26,11 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import sys
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -56,6 +59,12 @@ KNOWN_ATTRS = frozenset({
 })
 # Absent or null in any of these is a hard failure into quarantine.
 REQUIRED_ATTRS = ("id", "ns", "s3_key", "size_bytes")
+# A required attribute also has a required source type: a wrongly typed value is
+# attributed to quarantine instead of crashing the run or being rejected by the
+# target validator halfway through a batch.
+REQUIRED_ATTR_TYPES: dict[str, type | tuple[type, ...]] = {
+    "id": str, "ns": str, "s3_key": str, "size_bytes": (int, Decimal),
+}
 CARRIED_ATTRS = ("name", "mime_type", "size_bytes", "s3_key", "folder_id",
                  "owner_id", "version", "is_trashed")
 TIMESTAMP_ATTRS = ("created_at", "updated_at")
@@ -158,6 +167,19 @@ def is_orphan(s3_key: str) -> bool:
     return ORPHAN_KEY_SEGMENT in s3_key
 
 
+def quarantine_id(record: dict) -> str:
+    """Stable, collision-free identity for a quarantine record.
+
+    Keyed on the raw item's own content, so two distinct malformed items never
+    overwrite each other (their source key may be absent or unusable) while a
+    rerun of the same item replaces exactly its own record.
+    """
+    digest = hashlib.sha256(
+        json.dumps(record["raw_item"], sort_keys=True, default=repr).encode()
+    ).hexdigest()[:16]
+    return f"{record['tenant']}|{record['source_key']}|{record['reason']}|{digest}"
+
+
 def transform(item: dict) -> tuple[dict | None, dict | None]:
     """Convert one DynamoDB item into a target document or a quarantine record."""
     raw = hex_safe(item)
@@ -172,6 +194,10 @@ def transform(item: dict) -> tuple[dict | None, dict | None]:
         if item[attr] is None or item[attr] == "":
             return None, {"tenant": str(item.get("ns") or ""),
                           "reason": f"null_required_attribute:{attr}",
+                          "source_key": source_key, "raw_item": raw}
+        if isinstance(item[attr], bool) or not isinstance(item[attr], REQUIRED_ATTR_TYPES[attr]):
+            return None, {"tenant": str(item.get("ns") or ""),
+                          "reason": f"wrongly_typed_required_attribute:{attr}",
                           "source_key": source_key, "raw_item": raw}
 
     for attr in CARRIED_ATTRS + TIMESTAMP_ATTRS:
@@ -227,7 +253,7 @@ def migrate(ns: str, batch_size: int) -> int:
             docs.append(doc)
         else:
             assert bad is not None
-            bad["_id"] = f"{bad['tenant']}|{bad['source_key']}|{bad['reason']}"
+            bad["_id"] = quarantine_id(bad)
             quarantined.append(bad)
 
     orphans = sum(1 for d in docs if d["s3_object_missing"])
