@@ -137,6 +137,9 @@ resource "aws_lambda_event_source_mapping" "audit_archive_ttl" {
       destination_arn = aws_sqs_queue.audit_archive_dlq.arn
     }
   }
+
+  # The mapping is rejected until the function may read the stream.
+  depends_on = [aws_iam_role_policy.audit_archive]
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "audit_archive" {

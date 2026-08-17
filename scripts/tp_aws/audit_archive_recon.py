@@ -361,6 +361,11 @@ def prepare_fixture(target: Target, prefix: str) -> None:
 # --------------------------------------------------------------------------- report
 
 
+def event_id_of(key: str) -> str:
+    """The event_id an archive key was written for (keys are <event_id>__<ts>)."""
+    return Path(key).name.split("__")[0]
+
+
 def filter_patterns(mapping: dict) -> list:
     return [
         json.loads(entry["Pattern"])
@@ -406,7 +411,8 @@ def run(args) -> dict:
     expected_archived = sorted(expected_records)
     expected_retained = golden_retained_ids(namespace)
     corpus = seed_corpus(namespace, args.run_date)
-    baseline_ids = {record["event_id"] for record in corpus} - {UNEXPIRABLE_PROBE}
+    corpus_event_ids = {record["event_id"] for record in corpus}
+    baseline_ids = corpus_event_ids - {UNEXPIRABLE_PROBE}
     pre_existing_objects = set(target.archive_objects())
 
     checks: list[dict] = []
@@ -472,20 +478,42 @@ def run(args) -> dict:
         [rule["ID"] for rule in lifecycle if rule.get("Expiration")],
         f"s3:GetBucketLifecycleConfiguration {args.bucket}",
     )
-    check(
-        checks,
-        "ARC-07/no-schedule",
-        {"scheduled_rules": [], "event_sources": ["dynamodb-stream"]},
-        {
-            "scheduled_rules": target.scheduling_rules(),
-            "event_sources": sorted(
-                "dynamodb-stream" if ":dynamodb:" in mapping.get("EventSourceArn", "") else mapping.get("EventSourceArn", "")
-                for mapping in target.event_source_mappings()
-            )
-            or (["dynamodb-stream"] if args.mode == "fixture" else []),
-        },
-        "events:ListRules + lambda:ListEventSourceMappings",
-    )
+    if args.mode == "live":
+        check(
+            checks,
+            "ARC-07/no-schedule",
+            {"scheduled_rules": [], "event_sources": ["dynamodb-stream"]},
+            {
+                "scheduled_rules": target.scheduling_rules(),
+                "event_sources": sorted(
+                    "dynamodb-stream"
+                    if ":dynamodb:" in mapping.get("EventSourceArn", "")
+                    else mapping.get("EventSourceArn", "")
+                    for mapping in target.event_source_mappings()
+                ),
+            },
+            "events:ListRules + lambda:ListEventSourceMappings",
+        )
+    else:
+        # LocalStack has no deployed function, rule or event source mapping to read,
+        # and a fabricated "observed" trigger would be evidence of nothing.
+        checks.append(
+            {
+                "id": "ARC-07/no-schedule",
+                "expected": {
+                    "scheduled_rules": [],
+                    "event_sources": ["dynamodb-stream"],
+                },
+                "actual": None,
+                "source_of_truth": "events:ListRules + lambda:ListEventSourceMappings",
+                "result": "skipped",
+            }
+        )
+        unverified.append(
+            "Absence of a scheduled EventBridge rule and the DynamoDB-stream event source "
+            "mapping are deployed-only facts: no function or rule exists in the fixture "
+            "estate, so ARC-07/no-schedule is skipped here and proven in the live run."
+        )
     if args.mode == "live":
         mappings = target.event_source_mappings()
         check(
@@ -542,11 +570,14 @@ def run(args) -> dict:
 
     objects = target.archive_objects()
     new_keys = sorted(set(objects) - pre_existing_objects)
-    archived_ids = sorted(
-        {Path(key).name.split("__")[0] for key in new_keys} & baseline_ids
-    )
+    # In live mode the sweep also archives real expiring events, and the stream can
+    # write concurrently: only keys naming a corpus event belong to this run.
+    corpus_keys = sorted(key for key in new_keys if event_id_of(key) in corpus_event_ids)
+    archived_ids = sorted({event_id_of(key) for key in corpus_keys} & baseline_ids)
+    # Retained means "still in the table", read back from the table itself, so a record
+    # the archive path wrongly deleted cannot pass as retained.
     table_ids = set(target.scan_ids())
-    retained_ids = sorted(baseline_ids - set(archived_ids))
+    retained_ids = sorted((baseline_ids & table_ids) - set(archived_ids))
 
     # ---- ARC-02 / ARC-03: sets, recomputed from S3 and DynamoDB
     check(
@@ -588,7 +619,7 @@ def run(args) -> dict:
     )
 
     # ---- ARC-04: storage class / lifecycle transition, read back from S3
-    sample_key = new_keys[0] if new_keys else None
+    sample_key = corpus_keys[0] if corpus_keys else None
     check(
         checks,
         "ARC-04/archive-lifecycle-transition-applies",
@@ -621,7 +652,7 @@ def run(args) -> dict:
     )
 
     # ---- ARC-05: payload fidelity, decoded from the archived objects
-    archived_records = target.archived_records(new_keys)
+    archived_records = target.archived_records(corpus_keys)
     mismatched = sorted(
         event_id
         for event_id, expected in expected_records.items()
@@ -658,8 +689,7 @@ def run(args) -> dict:
         "malformed/unexpirable-retained-and-attributed",
         {"archived": False, "in_table": True, "attributed": True},
         {
-            "archived": UNEXPIRABLE_PROBE
-            in {Path(key).name.split("__")[0] for key in new_keys},
+            "archived": UNEXPIRABLE_PROBE in {event_id_of(key) for key in corpus_keys},
             "in_table": UNEXPIRABLE_PROBE in table_ids,
             "attributed": UNEXPIRABLE_PROBE in first.get("unexpirable", []),
         },
@@ -670,22 +700,26 @@ def run(args) -> dict:
     duplicate_ids = sorted(
         event_id
         for event_id in archived_ids
-        if len([key for key in new_keys if Path(key).name.startswith(f"{event_id}__")]) != 1
+        if len([key for key in corpus_keys if Path(key).name.startswith(f"{event_id}__")])
+        != 1
     )
+    recount = target.archive_objects()
     idempotent = {
         "second_run_archived": second.get("archived", []),
-        "object_count_delta": 0,
+        "object_count_delta": len(
+            [
+                key
+                for key in set(recount) - set(objects)
+                if event_id_of(key) in corpus_event_ids
+            ]
+        ),
         "duplicate_event_ids": duplicate_ids,
     }
     check(
         checks,
         "ARC-06/convergent-reevaluation",
         {"second_run_archived": [], "object_count_delta": 0, "duplicate_event_ids": []},
-        {
-            "second_run_archived": second.get("archived", []),
-            "object_count_delta": len(target.archive_objects()) - len(objects),
-            "duplicate_event_ids": duplicate_ids,
-        },
+        idempotent,
         "second sweep invoke + s3:ListObjectsV2 recount",
     )
 
@@ -703,7 +737,7 @@ def run(args) -> dict:
 
     if not args.keep:
         target.delete_records(corpus)
-        target.delete_objects(new_keys)
+        target.delete_objects(corpus_keys)
         unverified.append(
             "The seeded corpus and the archive objects it produced were removed after the "
             "run; the report is the retained evidence."
@@ -721,7 +755,9 @@ def run(args) -> dict:
         "idempotency_rerun": {
             "performed": True,
             "result": "pass"
-            if not second.get("archived") and not duplicate_ids
+            if not second.get("archived")
+            and not duplicate_ids
+            and not idempotent["object_count_delta"]
             else "fail",
             "evidence": json.dumps(idempotent, sort_keys=True),
         },

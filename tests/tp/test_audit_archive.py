@@ -19,7 +19,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "infrastructure/terraform/tp-cronbox/lambda/audit_archive"))
 
-import handler  # noqa: E402
+import handler
 
 RUN_DATE = datetime(2026, 1, 15, tzinfo=timezone.utc)
 CUTOFF = RUN_DATE - timedelta(days=90)
@@ -47,12 +47,12 @@ class FakeS3:
         self.objects = {}
         self.puts = 0
 
-    def head_object(self, Bucket, Key):  # noqa: N803 - boto3 signature
+    def head_object(self, Bucket, Key):
         if Key not in self.objects:
             raise handler.ClientError({"Error": {"Code": "404"}}, "HeadObject")
         return {"ContentLength": len(self.objects[Key])}
 
-    def put_object(self, Bucket, Key, Body):  # noqa: N803 - boto3 signature
+    def put_object(self, Bucket, Key, Body):
         self.objects[Key] = Body
         self.puts += 1
 

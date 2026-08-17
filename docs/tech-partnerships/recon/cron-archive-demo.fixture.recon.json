@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "cron-archive",
   "namespace": "demo",
-  "generated_at": "2026-08-17T05:24:00Z",
+  "generated_at": "2026-08-17T05:32:52Z",
   "run_mode": "fixture",
   "checks": [
     {
@@ -59,14 +59,9 @@
           "dynamodb-stream"
         ]
       },
-      "actual": {
-        "scheduled_rules": [],
-        "event_sources": [
-          "dynamodb-stream"
-        ]
-      },
+      "actual": null,
       "source_of_truth": "events:ListRules + lambda:ListEventSourceMappings",
-      "result": "pass"
+      "result": "skipped"
     },
     {
       "id": "ARC-02/archived-event-id-set",
@@ -575,6 +570,7 @@
     "DynamoDB TTL physically deletes expired items on a best-effort basis (roughly 48h), so the deletion instant itself is not observed in the validation window; contract coverage_gap ttl_deletion_latency.",
     "The Streams TTL-removal envelope (userIdentity principalId dynamodb.amazonaws.com) is exercised only by synthetic events in the fixture suite; a live TTL deletion is required to observe the real envelope.",
     "S3 lifecycle transitions run asynchronously (daily), so archived objects still read back as STANDARD immediately after the run; the GLACIER transition is verified as deployed configuration via GetBucketLifecycleConfiguration.",
+    "Absence of a scheduled EventBridge rule and the DynamoDB-stream event source mapping are deployed-only facts: no function or rule exists in the fixture estate, so ARC-07/no-schedule is skipped here and proven in the live run.",
     "The seeded corpus and the archive objects it produced were removed after the run; the report is the retained evidence."
   ]
 }
