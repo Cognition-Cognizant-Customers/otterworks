@@ -1,0 +1,172 @@
+{
+  "kind": "recon-report",
+  "unit": "mongo_customers",
+  "namespace": "demo",
+  "generated_at": "2026-08-17T04:49:32Z",
+  "run_mode": "fixture",
+  "recompute_command": "MONGO_URI='<target-uri>' MONGO_DB=ow_tp_demo uv run --no-project --with pymongo==4.10.1 --with oracledb==2.5.1 python3 scripts/tp_mongo/recon_customers.py --ns demo --run-mode live --rerun-migration --out docs/tech-partnerships/recon/mongo_customers.recon.json",
+  "checks": [
+    {
+      "id": "customers.count",
+      "expected": 25000,
+      "actual": 25000,
+      "source_of_truth": "ow_tp_demo.customers countDocuments after write",
+      "result": "pass"
+    },
+    {
+      "id": "customers.checksum",
+      "expected": "4f92feef2ad58dbab30e289957931928",
+      "actual": "4f92feef2ad58dbab30e289957931928",
+      "source_of_truth": "md5 over (_id, balances.current) read back from ow_tp_demo.customers",
+      "result": "pass"
+    },
+    {
+      "id": "customers.attributes_folded",
+      "expected": 8333,
+      "actual": 8333,
+      "source_of_truth": "sum of attributes_entries sizes in ow_tp_demo.customers",
+      "result": "pass"
+    },
+    {
+      "id": "customers.attributes_folded.distinct_eav_ids",
+      "expected": 8333,
+      "actual": 8333,
+      "source_of_truth": "distinct attributes_entries.eav_id in ow_tp_demo.customers",
+      "result": "pass"
+    },
+    {
+      "id": "customers.csv_lists_are_arrays",
+      "expected": 19985,
+      "actual": 19985,
+      "source_of_truth": "$type:array vs $exists on ow_tp_demo.customers.related_acct_ids",
+      "result": "pass"
+    },
+    {
+      "id": "customers.csv_lists_never_scalar",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "$expr $type of ow_tp_demo.customers.related_acct_ids that is present but not an array",
+      "result": "pass"
+    },
+    {
+      "id": "customers.csv_list_items_are_account_ids",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "array elements of ow_tp_demo.customers.related_acct_ids that are not bare digit strings",
+      "result": "pass"
+    },
+    {
+      "id": "customers.malformed_lists_absent_not_truncated",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "ow_tp_demo.customers docs quarantined for a malformed list that still carry the field",
+      "result": "pass"
+    },
+    {
+      "id": "customers.dates_are_bson",
+      "expected": 24950,
+      "actual": 24950,
+      "source_of_truth": "$type:date vs $exists on ow_tp_demo.customers.signup_date",
+      "result": "pass"
+    },
+    {
+      "id": "customers.dates_not_strings",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "$type:string on ow_tp_demo.customers.signup_date",
+      "result": "pass"
+    },
+    {
+      "id": "customers.dirty_dates_never_fail_open",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "ow_tp_demo.customers docs quarantined for a dirty date that still carry signup_date",
+      "result": "pass"
+    },
+    {
+      "id": "customers.quarantine_enumerated",
+      "expected": 81,
+      "actual": 81,
+      "source_of_truth": "ow_tp_demo.customers_quarantine docs naming source PK + anomaly id",
+      "result": "pass"
+    },
+    {
+      "id": "customers.quarantine_pk_resolves",
+      "expected": 81,
+      "actual": 81,
+      "source_of_truth": "each customers_quarantine.source.primary_key.value resolves to one customers._id",
+      "result": "pass"
+    },
+    {
+      "id": "customers.sparse_fields_absent_not_null",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "$type:null across 10 sparse paths in ow_tp_demo.customers",
+      "result": "pass"
+    },
+    {
+      "id": "customers.namespace_isolated",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "documents of another namespace in ow_tp_demo",
+      "result": "pass"
+    },
+    {
+      "id": "customers.validator_rejects_bad_document",
+      "expected": true,
+      "actual": true,
+      "source_of_truth": "insert of a dirty-date/string-list document into ow_tp_demo.customers is refused by $jsonSchema",
+      "result": "pass"
+    },
+    {
+      "id": "customers.idempotent",
+      "expected": {
+        "customers": "8e44d9e764ea02d01195488674069b4a",
+        "customers_quarantine": "aa3fc26eca5834665551f3375eb06b9d"
+      },
+      "actual": {
+        "customers": "8e44d9e764ea02d01195488674069b4a",
+        "customers_quarantine": "aa3fc26eca5834665551f3375eb06b9d"
+      },
+      "source_of_truth": "canonical extended-JSON md5 of both collections around a second migration run",
+      "result": "pass"
+    },
+    {
+      "id": "customers.planted_anomalies_exact_set",
+      "expected": [
+        "dirty_dates:50",
+        "malformed_csv_lists:31"
+      ],
+      "actual": [
+        "dirty_dates:50",
+        "malformed_csv_lists:31"
+      ],
+      "source_of_truth": "ow_tp_demo.customers_quarantine counts per anomaly id vs manifest planted_anomalies",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "migration rerun for ns=demo; canonical-JSON md5 per collection before={\"customers\": \"8e44d9e764ea02d01195488674069b4a\", \"customers_quarantine\": \"aa3fc26eca5834665551f3375eb06b9d\"} after={\"customers\": \"8e44d9e764ea02d01195488674069b4a\", \"customers_quarantine\": \"aa3fc26eca5834665551f3375eb06b9d\"}; rerun summary { \"anomalies_by_id\": { \"dirty_signup_dt\": 50, \"malformed_related_acct_ids\": 31 }, \"namespace\": \"demo\", \"removed_stale_customers\": 0, \"removed_stale_quarantine\": 0, \"source_rows_read\": 25000, \"target_database\": \"ow_tp_demo\", \"unit\": \"mongo_customers\", \"written_customers\": 25000, \"written_quarantine\": 81 }"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      "dirty_dates:50",
+      "malformed_csv_lists:31"
+    ],
+    "actual_set": [
+      "dirty_dates:50",
+      "malformed_csv_lists:31"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "Atlas write path: every number above was recomputed from the local mongo:7 fixture (ow_tp_demo), not from the shared Atlas cluster, which this unit is not permitted to touch.",
+    "Atlas validator DDL: create_collection/collMod applying the $jsonSchema validators was executed against the fixture only; the parent's preflight verified the equivalent DDL on the cluster.",
+    "Atlas index builds (ns, cust_no unique, tenant_id, anomalies.anomaly_id) are unverified on the cluster; a pre-existing duplicate cust_no there would surface only on the live run.",
+    "Atlas-side performance/timing of the 25k-document load is unmeasured."
+  ]
+}

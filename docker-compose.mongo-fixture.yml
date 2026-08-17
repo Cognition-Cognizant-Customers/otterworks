@@ -1,0 +1,23 @@
+# OtterWorks Tech-Partnerships — local MongoDB fixture.
+# A pinned mongo:7 standing in for the shared Atlas cluster so migration units
+# develop and reconcile locally: same wire protocol, same $jsonSchema validator
+# semantics, no contention on the shared cluster. Addressed only through
+# MONGO_URI, so the same migration/recon code runs against Atlas unchanged.
+# Standalone and local-only, never started by the golden `make up` path.
+services:
+  mongo-fixture:
+    image: mongo:7
+    command: ["--bind_ip_all"]
+    ports:
+      - "127.0.0.1:${MONGO_FIXTURE_PORT:-27017}:27017"
+    volumes:
+      - mongo-fixture-data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand({ping:1}).ok' | grep -q 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+volumes:
+  mongo-fixture-data:
