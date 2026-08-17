@@ -281,11 +281,11 @@ export function ShareDialog({
                           </div>
                         );
                       })
-                  ) : !ownerId ? (
+                  ) : ownerId ? null : (
                     <p className="text-sm text-gray-500 text-center py-4">
                       No one else has access yet
                     </p>
-                  ) : null}
+                  )}
 
                   {ownerId && sharedWith.filter((u) => u.userId !== ownerId).length === 0 && (
                     <p className="text-sm text-gray-500 text-center py-3">
@@ -376,9 +376,9 @@ export function ShareDialog({
                   <Link2 size={20} className="text-gray-400 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-700 truncate">
-                      {typeof window !== "undefined"
-                        ? `${window.location.origin}/files/${fileId}`
-                        : `/files/${fileId}`}
+                      {typeof window === "undefined"
+                        ? `/files/${fileId}`
+                        : `${window.location.origin}/files/${fileId}`}
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">
                       {linkAccess === "anyone"

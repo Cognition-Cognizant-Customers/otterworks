@@ -100,7 +100,7 @@ export function TextFilePreview({ presignedUrl, fileName }: TextFilePreviewProps
             {fileName}
           </span>
           <span className="text-xs text-gray-400">
-            {lines.length} line{lines.length !== 1 ? "s" : ""}
+            {lines.length} line{lines.length === 1 ? "" : "s"}
           </span>
         </div>
         <div className="overflow-auto max-h-[600px]">

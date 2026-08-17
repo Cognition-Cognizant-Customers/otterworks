@@ -60,7 +60,7 @@ function NotificationsContent() {
           <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
           {unreadCount > 0 && (
             <p className="text-sm text-gray-500 mt-1">
-              {unreadCount} unread notification{unreadCount !== 1 ? "s" : ""}
+              {unreadCount} unread notification{unreadCount === 1 ? "" : "s"}
             </p>
           )}
         </div>
@@ -143,7 +143,7 @@ function NotificationRow({
       tabIndex={0}
       className={cn(
         "flex items-start gap-4 px-5 py-4 transition cursor-pointer",
-        !notification.read ? "bg-otter-50/30" : "hover:bg-gray-50"
+        notification.read ? "hover:bg-gray-50" : "bg-otter-50/30"
       )}
       onClick={handleActivate}
       onKeyDown={(e) => {

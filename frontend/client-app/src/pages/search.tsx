@@ -158,7 +158,7 @@ function SearchContent() {
       ) : submittedQuery ? (
         <div className="space-y-1">
           <p className="text-sm text-gray-500 mb-4">
-            {data?.total || results.length} result{results.length !== 1 ? "s" : ""} for &ldquo;{submittedQuery}&rdquo;
+            {data?.total || results.length} result{results.length === 1 ? "" : "s"} for &ldquo;{submittedQuery}&rdquo;
           </p>
           {results.map((result) => (
             <SearchResultRow key={result.id} result={result} />
