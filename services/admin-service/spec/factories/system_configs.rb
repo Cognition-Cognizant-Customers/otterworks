@@ -1,6 +1,6 @@
 FactoryBot.define do
   factory :system_config do
-    sequence(:key) { |n| "config_key_#{n}" }
+    sequence(:config_key) { |n| "config_key_#{n}" }
     value { 'some_value' }
     value_type { 'string' }
     description { Faker::Lorem.sentence }

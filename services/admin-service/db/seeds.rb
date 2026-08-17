@@ -1,25 +1,25 @@
 # Seed development data for admin service
 
 # System configs
-SystemConfig.find_or_create_by!(key: 'max_upload_size_mb') do |config|
+SystemConfig.find_or_create_by!(config_key: 'max_upload_size_mb') do |config|
   config.value = '100'
   config.value_type = 'integer'
   config.description = 'Maximum file upload size in megabytes'
 end
 
-SystemConfig.find_or_create_by!(key: 'maintenance_mode') do |config|
+SystemConfig.find_or_create_by!(config_key: 'maintenance_mode') do |config|
   config.value = 'false'
   config.value_type = 'boolean'
   config.description = 'Enable maintenance mode for the platform'
 end
 
-SystemConfig.find_or_create_by!(key: 'default_storage_quota_gb') do |config|
+SystemConfig.find_or_create_by!(config_key: 'default_storage_quota_gb') do |config|
   config.value = '5'
   config.value_type = 'integer'
   config.description = 'Default storage quota for new users in GB'
 end
 
-SystemConfig.find_or_create_by!(key: 'session_timeout_minutes') do |config|
+SystemConfig.find_or_create_by!(config_key: 'session_timeout_minutes') do |config|
   config.value = '30'
   config.value_type = 'integer'
   config.description = 'Session timeout in minutes'

@@ -1,8 +1,8 @@
 class SystemConfig < ApplicationRecord
   VALUE_TYPES = %w[string integer boolean json].freeze
 
-  validates :key, presence: true, uniqueness: true,
-                  format: { with: /\A[a-z][a-z0-9_]*\z/, message: 'must be snake_case' }
+  validates :config_key, presence: true, uniqueness: true,
+                         format: { with: /\A[a-z][a-z0-9_]*\z/, message: 'must be snake_case' }
   validates :value, presence: true
   validates :value_type, presence: true, inclusion: { in: VALUE_TYPES }
 
