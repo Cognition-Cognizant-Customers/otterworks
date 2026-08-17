@@ -13,14 +13,28 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.db import connect, migrate, reset
-from app.domain import catalog, change_plan, entitlement, format_money, preview
-from app.repository import MongoInvoicingRepository, PostgresPlansRepository
+from app.domain import (
+    catalog,
+    change_plan,
+    entitlement,
+    format_money,
+    line_amount_for_storage,
+    preview,
+)
+from app.repository import (
+    MongoInvoicingRepository,
+    PostgresPlansRepository,
+    close_shared_mongo_client,
+)
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    migrate()
-    yield
+    try:
+        migrate()
+        yield
+    finally:
+        close_shared_mongo_client()
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
@@ -146,9 +160,7 @@ def issue_invoice(tenant_id: Annotated[UUID, Path()], request: InvoiceIssue) -> 
                     "line_no": line.line_no,
                     "line_type": line.line_type,
                     "description": line.description,
-                    "amount": format_money(
-                        -line.total if line.line_type == "credit" else line.amount
-                    ),
+                    "amount": format_money(line_amount_for_storage(line)),
                 }
                 for line in invoice.lines
             ],

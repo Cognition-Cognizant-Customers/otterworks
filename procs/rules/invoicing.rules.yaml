@@ -128,8 +128,9 @@ rules:
     statement: >-
       Issuing an invoice keys it deterministically by period id md5(tenant_id || period_start)
       and invoice id md5(period_id || 'invoice'), sets status 'issued' with issued_at at the
-      period end, and replaces the invoice's lines with the preview lines, storing the credit
-      line's negated total as its amount.
+      period end, and replaces the invoice's lines with the preview lines, storing every line
+      amount rounded to two decimals and storing the credit line's total — a negative amount —
+      as its amount.
     source:
       file: services/legacy-billing/db/procs/invoicing.sql
       lines: [85, 113]

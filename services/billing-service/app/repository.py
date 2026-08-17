@@ -24,10 +24,28 @@ from app.domain import (
     deterministic_uuid,
     invoice_ids,
     invoice_totals,
-    line_amount_for_storage,
     ordered_lines,
     preview,
+    stored_line_amount,
 )
+
+_SHARED_MONGO_CLIENT: MongoClient | None = None
+
+
+def close_shared_mongo_client() -> None:
+    global _SHARED_MONGO_CLIENT
+    if _SHARED_MONGO_CLIENT is not None:
+        _SHARED_MONGO_CLIENT.close()
+        _SHARED_MONGO_CLIENT = None
+
+
+def shared_mongo_client() -> MongoClient:
+    global _SHARED_MONGO_CLIENT
+    if _SHARED_MONGO_CLIENT is None:
+        _SHARED_MONGO_CLIENT = MongoClient(
+            settings.mongo_uri, tz_aware=True, serverSelectionTimeoutMS=1000
+        )
+    return _SHARED_MONGO_CLIENT
 
 
 class PostgresPlansRepository:
@@ -169,13 +187,10 @@ class MongoInvoicingRepository:
 
     def __init__(self, client: MongoClient | None = None) -> None:
         self.client = client
-        self._owned_client = client is None
 
     def _client(self) -> MongoClient:
         if self.client is None:
-            self.client = MongoClient(
-                settings.mongo_uri, tz_aware=True, serverSelectionTimeoutMS=1000
-            )
+            return shared_mongo_client()
         return self.client
 
     @property
@@ -385,7 +400,7 @@ class MongoInvoicingRepository:
                                 "line_no": line.line_no,
                                 "line_type": line.line_type,
                                 "description": line.description,
-                                "amount": self._money(line_amount_for_storage(line)),
+                                "amount": self._money(stored_line_amount(line)),
                             }
                             for line in ordered_lines(calculated.lines)
                         ],

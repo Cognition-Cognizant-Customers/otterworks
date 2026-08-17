@@ -175,7 +175,11 @@ def ordered_lines(lines: list[InvoiceLine]) -> list[InvoiceLine]:
 
 
 def line_amount_for_storage(line: InvoiceLine) -> Decimal:
-    return -line.total if line.line_type == "credit" else line.amount
+    return line.total if line.line_type == "credit" else line.amount
+
+
+def stored_line_amount(line: InvoiceLine) -> Decimal:
+    return money(line_amount_for_storage(line))
 
 
 def consume_credits(

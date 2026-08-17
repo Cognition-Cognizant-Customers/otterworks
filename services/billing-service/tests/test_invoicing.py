@@ -15,6 +15,7 @@ from app.domain import (
     line_amount_for_storage,
     ordered_lines,
     preview,
+    stored_line_amount,
 )
 from app.repository import MongoInvoicingRepository
 
@@ -95,11 +96,14 @@ def test_invoice_ids_and_line_ids_are_md5_uuid_text() -> None:
     period_id, invoice_id = invoice_ids(tenant_9, START)
     assert str(period_id) == "5dc02199-0345-1f48-ab13-8eeefeba5910"
     assert str(invoice_id) == "f947416b-6478-ac32-911a-12ca7f03a6fb"
-    credit_line = preview(
-        TENANT, START, END, PLAN, Decimal("5.56"), False, Decimal("100")
-    ).lines[4]
-    assert line_amount_for_storage(credit_line) == -credit_line.total
-    assert line_amount_for_storage(credit_line) == Decimal("59.06")
+    credit_line = preview(TENANT, START, END, PLAN, Decimal("5.56"), False, Decimal("100")).lines[4]
+    assert line_amount_for_storage(credit_line) == credit_line.total
+    assert line_amount_for_storage(credit_line) == Decimal("-59.06")
+    tax_lines = preview(TENANT, START, END, PLAN, Decimal("5.56"), False, Decimal("0")).lines[2:4]
+    assert [stored_line_amount(tax_line) for tax_line in tax_lines] == [
+        Decimal("2.25"),
+        Decimal("2.25"),
+    ]
 
 
 @pytest.mark.rule("INVOICING-007")
