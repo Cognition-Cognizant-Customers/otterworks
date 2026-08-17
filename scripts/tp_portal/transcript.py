@@ -5,7 +5,11 @@ record: execute transcript_spec.json in order against a FRESH store and save
         every (request, status, body) as the golden transcript.
 replay: execute the same spec against another base URL and diff each response
         against the golden transcript, emitting a machine-readable
-        *.recon.json report.
+        *.recon.json report conforming to
+        docs/tech-partnerships/contracts/schema/recon-report.schema.json.
+        The transcript is executed twice (each pass preceded by --reset-cmd,
+        which must restore the target to a fresh state) so the report carries
+        first-class idempotency-rerun evidence.
 
 Parity contract (declared in transcript_spec.json):
 - status codes match exactly;
@@ -17,7 +21,8 @@ Parity contract (declared in transcript_spec.json):
 
 Usage:
   transcript.py record --base-url http://localhost:8095 --out golden.json
-  transcript.py replay --base-url https://<api> --golden golden.json --out replay.recon.json
+  transcript.py replay --base-url https://<api> --golden golden.json \
+      --reset-cmd 'python3 reset_tables.py' --out replay.recon.json
 """
 from __future__ import annotations
 
@@ -26,6 +31,7 @@ import copy
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.error
@@ -126,12 +132,17 @@ def spec_fingerprint():
         return hashlib.sha256(f.read()).hexdigest()
 
 
-def cmd_replay(args):
-    with open(args.golden) as f:
-        golden = json.load(f)
-    results = run(args.base_url)
+def build_checks(golden, results, source_of_truth):
     checks = []
+    if len(golden["steps"]) != len(results):
+        raise SystemExit(
+            f"golden transcript has {len(golden['steps'])} steps but the spec produced "
+            f"{len(results)}; re-record the golden transcript")
     for g, r in zip(golden["steps"], results):
+        if g["id"] != r["id"]:
+            raise SystemExit(
+                f"step order diverged: golden={g['id']} live={r['id']}; "
+                "re-record the golden transcript")
         mismatches = []
         if g["status"] != r["status"]:
             mismatches.append(f"status: golden={g['status']} live={r['status']}")
@@ -140,38 +151,100 @@ def cmd_replay(args):
                 "body: golden=" + json.dumps(g["body"], sort_keys=True)[:400]
                 + " live=" + json.dumps(r["body"], sort_keys=True)[:400])
         mismatches.extend(f"timestamp format: {p}" for p in r["timestamp_format_problems"])
+        status_only = g["assert_status_only"]
         checks.append({
             "id": g["id"],
             "method": g["method"],
             "path": g["path"],
-            "assert_status_only": g["assert_status_only"],
+            "assert_status_only": status_only,
+            "expected": {"status": g["status"]} if status_only
+            else {"status": g["status"], "body": g["body"]},
+            "actual": {"status": r["status"]} if status_only
+            else {"status": r["status"], "body": r["body"]},
+            "source_of_truth": source_of_truth,
             "result": "pass" if not mismatches else "fail",
             "mismatches": mismatches,
         })
+    return checks
+
+
+def cmd_replay(args):
+    with open(args.golden) as f:
+        golden = json.load(f)
+    source_of_truth = (f"golden transcript {os.path.basename(args.golden)} "
+                       f"recorded from {golden['source_base_url']}")
+
+    def one_pass():
+        subprocess.run(args.reset_cmd, shell=True, check=True)
+        return build_checks(golden, run(args.base_url), source_of_truth)
+
+    checks = one_pass()
+    rerun_checks = one_pass()
+
+    # Planted anomalies = the deliberately invalid requests in the spec (golden 4xx).
+    anomaly_expected = [g["id"] for g in golden["steps"] if g["status"] >= 400]
+    live_status = {c["id"]: c["actual"]["status"] for c in checks}
+    anomaly_actual = [i for i in anomaly_expected if live_status.get(i, 0) >= 400]
+    anomaly_unexpected = [c["id"] for c in checks
+                          if c["actual"]["status"] >= 400 and c["id"] not in anomaly_expected]
+
+    live_spec_sha = spec_fingerprint()
+    if golden["spec_sha"] != live_spec_sha:
+        checks.append({
+            "id": "spec-fingerprint",
+            "method": "META",
+            "path": os.path.basename(SPEC_PATH),
+            "assert_status_only": False,
+            "expected": golden["spec_sha"],
+            "actual": live_spec_sha,
+            "source_of_truth": source_of_truth,
+            "result": "fail",
+            "mismatches": ["golden was recorded from a different spec"],
+        })
+    passed = sum(1 for c in checks if c["result"] == "pass")
+    rerun_passed = sum(1 for c in rerun_checks if c["result"] == "pass")
+    rerun_ok = rerun_passed == len(rerun_checks)
+    rerun_failures = [c for c in rerun_checks if c["result"] == "fail"]
+
     report = {
         "kind": "recon-report",
         "unit": "legacy-portal-decomposition/http-parity",
+        "namespace": args.namespace,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "golden_source": golden["source_base_url"],
         "golden_spec_sha": golden["spec_sha"],
-        "live_spec_sha": spec_fingerprint(),
+        "live_spec_sha": live_spec_sha,
         "replay_base_url": args.base_url,
         "run_mode": args.run_mode,
         "steps_total": len(checks),
-        "steps_passed": sum(1 for c in checks if c["result"] == "pass"),
+        "steps_passed": passed,
+        "values_recomputed_from_target": True,
+        "idempotency_rerun": {
+            "performed": True,
+            "result": "pass" if rerun_ok else "fail",
+            "evidence": (f"transcript replayed twice, each pass after `{args.reset_cmd}`: "
+                         f"first {passed}/{len(checks)}, rerun {rerun_passed}/{len(rerun_checks)}"),
+            "rerun_failures": rerun_failures,
+        },
+        "planted_anomaly_detections": {
+            "expected_set": anomaly_expected,
+            "actual_set": anomaly_actual,
+            "missing": [i for i in anomaly_expected if i not in anomaly_actual],
+            "unexpected": anomaly_unexpected,
+        },
         "unverified_paths": args.unverified,
         "checks": checks,
     }
-    if golden["spec_sha"] != report["live_spec_sha"]:
-        report["checks"].append({"id": "spec-fingerprint", "result": "fail",
-                                 "mismatches": ["golden was recorded from a different spec"]})
     with open(args.out, "w") as f:
         json.dump(report, f, indent=2)
     failed = [c for c in report["checks"] if c["result"] == "fail"]
-    print(f"{report['steps_passed']}/{report['steps_total']} steps passed -> {args.out}")
+    print(f"{report['steps_passed']}/{report['steps_total']} steps passed "
+          f"(rerun {rerun_passed}/{len(rerun_checks)}) -> {args.out}")
     for c in failed:
         print(f"FAIL {c['id']}: {'; '.join(c['mismatches'])}")
-    return 1 if failed else 0
+    for c in rerun_failures:
+        print(f"RERUN-FAIL {c['id']}: {'; '.join(c['mismatches'])}")
+    return 1 if failed or not rerun_ok else 0
 
 
 def main():
@@ -186,6 +259,10 @@ def main():
     pp.add_argument("--golden", required=True)
     pp.add_argument("--out", required=True)
     pp.add_argument("--run-mode", default="live", choices=["live", "fixture"])
+    pp.add_argument("--namespace", default="demo")
+    pp.add_argument("--reset-cmd", required=True,
+                    help="Shell command restoring the target to a fresh state; run before "
+                         "each of the two replay passes (idempotency evidence)")
     pp.add_argument("--unverified", action="append", default=[],
                     help="Path/behavior intentionally outside this replay's coverage "
                          "(listed verbatim in the recon report)")

@@ -17,7 +17,8 @@ import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
  *
  * <p>Table layout: partition key {@code pk} (N) = announcement id. Item {@code pk=0} is the
  * atomic id-allocation counter (parity with the monolith's H2 identity column). Volumes are
- * portal-scale, so list operations use Scan.
+ * portal-scale, so list operations use strongly consistent Scans, keeping read-after-write
+ * behavior identical to the monolith.
  */
 public class DynamoAnnouncementStore implements AnnouncementStore {
 
@@ -58,8 +59,12 @@ public class DynamoAnnouncementStore implements AnnouncementStore {
 
     @Override
     public Optional<Announcement> find(long id) {
+        if (Long.toString(id).equals(COUNTER_PK)) {
+            return Optional.empty();
+        }
         var response = client.getItem(GetItemRequest.builder()
                 .tableName(tableName)
+                .consistentRead(true)
                 .key(Map.of("pk", AttributeValue.fromN(Long.toString(id))))
                 .build());
         if (!response.hasItem() || response.item().isEmpty()) {
@@ -70,7 +75,7 @@ public class DynamoAnnouncementStore implements AnnouncementStore {
 
     @Override
     public List<Announcement> findAll() {
-        return client.scanPaginator(ScanRequest.builder().tableName(tableName).build())
+        return client.scanPaginator(ScanRequest.builder().tableName(tableName).consistentRead(true).build())
                 .items().stream()
                 .filter(item -> !COUNTER_PK.equals(item.get("pk").n()))
                 .map(DynamoAnnouncementStore::fromItem)

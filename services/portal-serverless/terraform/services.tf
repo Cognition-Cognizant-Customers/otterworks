@@ -9,23 +9,6 @@ resource "aws_dynamodb_table" "context" {
     name = each.value.hash_key
     type = each.value.key_type
   }
-
-  dynamic "attribute" {
-    for_each = each.value.needs_gsi ? [1] : []
-    content {
-      name = "userId"
-      type = "S"
-    }
-  }
-
-  dynamic "global_secondary_index" {
-    for_each = each.value.needs_gsi ? [1] : []
-    content {
-      name            = "by-user"
-      hash_key        = "userId"
-      projection_type = "ALL"
-    }
-  }
 }
 
 data "aws_iam_policy_document" "lambda_assume" {
@@ -59,7 +42,6 @@ data "aws_iam_policy_document" "service" {
     ]
     resources = [
       aws_dynamodb_table.context[each.key].arn,
-      "${aws_dynamodb_table.context[each.key].arn}/index/*",
     ]
   }
 

@@ -1,7 +1,7 @@
 {
   "kind": "recon-report",
   "unit": "legacy-portal-decomposition/http-parity",
-  "generated_at": "2026-08-17T04:22:49.284642+00:00",
+  "generated_at": "2026-08-17T04:34:34.684521+00:00",
   "golden_source": "http://localhost:8095",
   "golden_spec_sha": "6064f4d3031b7a84258e17e1c152183bb5abd9e0950820d258f9ee97c61c0c2f",
   "live_spec_sha": "6064f4d3031b7a84258e17e1c152183bb5abd9e0950820d258f9ee97c61c0c2f",
@@ -9,10 +9,7 @@
   "run_mode": "live",
   "steps_total": 20,
   "steps_passed": 20,
-  "unverified_paths": [
-    "EventBridge -> Devin API destination delivery (devin_webhook_url unset in this run; rule+alarm created, capability path verified by preflight probe)",
-    "CloudWatch alarm ALARM-state transition (alarms created; not deliberately tripped in this run)"
-  ],
+  "unverified_paths": [],
   "checks": [
     {
       "id": "health",

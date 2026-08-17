@@ -25,7 +25,7 @@ resource "aws_cloudwatch_metric_alarm" "api_5xx" {
   alarm_name          = "${local.prefix}-api-5xx"
   alarm_description   = "HTTP 5xx responses from the decomposed portal API."
   namespace           = "AWS/ApiGateway"
-  metric_name         = "5XXError"
+  metric_name         = "5xx"
   statistic           = "Sum"
   period              = 60
   evaluation_periods  = 1
