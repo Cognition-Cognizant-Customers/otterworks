@@ -130,6 +130,8 @@ def normalize_line(raw: dict[str, Any]) -> dict[str, Any]:
     def required_int(value: Any, field: str) -> int:
         if value is None:
             raise NullRequiredField(field)
+        if isinstance(value, bytes):
+            value = decode_text(value)
         try:
             return int(value)
         except (TypeError, ValueError) as exc:
@@ -508,7 +510,7 @@ def migrate(args: argparse.Namespace) -> None:
                         raw,
                         args.ns,
                         batch_no,
-                        "null_required_field",
+                        "unparseable_required_field",
                         f"{exc.field} is unparseable",
                     )
                 else:

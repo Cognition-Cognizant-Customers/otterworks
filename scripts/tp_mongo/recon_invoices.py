@@ -668,7 +668,7 @@ def report(
             "Live-Atlas write path and its validator DDL are unverified; only the parent's uncontended Atlas run proves them.",
             "Date NULL and parse-failure branches are unverified because the demo baseline has zero NULL or malformed invoice_dt/due_dt values, so null_invoice_dt, null_due_dt, unparseable_invoice_dt, and unparseable_due_dt never fired.",
             "null_amount, unparseable_amount, and null_invoice_id quarantine branches are unverified because the baseline has zero such rows.",
-            "null_required_field quarantine branch is unverified because the baseline has no NULL or unparseable required non-amount line fields.",
+            "null_required_field and unparseable_required_field quarantine branches are unverified because the baseline has no NULL or unparseable required non-amount line fields.",
             "invalid_encoding quarantine branch is unverified because the baseline has zero non-decodable values.",
             "Malformed GL_ACCT_CSV tolerate-and-attribute path is unverified because baseline CSVs are all well-formed.",
             "Duplicate non-null invoice_no attribution is unverified because the demo baseline has no duplicate INVOICE_NO values.",

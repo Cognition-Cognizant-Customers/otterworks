@@ -178,6 +178,48 @@ def test_required_numeric_fields_are_explicitly_attributed(field, value, error_t
     assert error.value.field == field.upper()
 
 
+def test_required_numeric_null_and_unparseable_anomalies_are_distinct():
+    null_raw = raw_quarantine_line(line_no=None)
+    with pytest.raises(NullRequiredField):
+        normalize_line(null_raw)
+    null_document = quarantine_document(
+        null_raw,
+        "demo",
+        85559852,
+        "null_required_field",
+        "LINE_NO is NULL",
+    )
+
+    unparseable_raw = raw_quarantine_line(line_no="not-an-int")
+    with pytest.raises(UnparseableRequiredField):
+        normalize_line(unparseable_raw)
+    unparseable_document = quarantine_document(
+        unparseable_raw,
+        "demo",
+        85559852,
+        "unparseable_required_field",
+        "LINE_NO is unparseable",
+    )
+
+    assert null_document["anomaly_id"] == "null_required_field"
+    assert unparseable_document["anomaly_id"] == "unparseable_required_field"
+
+
+def test_non_utf8_required_numeric_is_invalid_encoding():
+    raw = raw_quarantine_line(line_no=b"\xff")
+    with pytest.raises(DecodingError):
+        normalize_line(raw)
+    document = quarantine_document(
+        raw,
+        "demo",
+        85559852,
+        "invalid_encoding",
+        "a source string could not be decoded as UTF-8",
+    )
+    assert document["anomaly_id"] == "invalid_encoding"
+    assert document["source_row"]["LINE_NO"] == "0xff"
+
+
 def test_posted_null_and_unparseable_values_are_distinct():
     null_line = line_document(normalize_line(raw_quarantine_line(posted_yn=None)))
     assert null_line["posted"] is None

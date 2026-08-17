@@ -89,7 +89,7 @@ SOURCE_ROW_COLUMNS = (
 )
 
 
-class DecodingError(ValueError):
+class DecodingError(Exception):
     """A source value was not valid UTF-8."""
 
     def __init__(self, raw: bytes) -> None:
@@ -418,6 +418,7 @@ def quarantine_validator() -> dict[str, Any]:
                         "unparseable_amount",
                         "invalid_encoding",
                         "null_required_field",
+                        "unparseable_required_field",
                     ]
                 },
                 "reason": {"bsonType": "string"},
