@@ -39,3 +39,25 @@ live event path and records the omission in `unverified_paths`.
 Local fixture proof for the handler itself lives in
 `scripts/tp_aws/tests/test_cron_cleanup_fixture.py` and runs against
 LocalStack (`make infra-up`), never real AWS.
+
+## Child self-check: `--mode fixture`
+
+The same recon runs against the LocalStack estate as the child's committed
+evidence. It uses `-fixture`-suffixed stand-in buckets and tables, seeds and
+resets that estate itself, and drives the packaged handler in-process because
+the fixture has no EventBridge or Lambda:
+
+```bash
+make infra-up
+uv run --no-project --with boto3==1.35.99 python3 \
+    scripts/tp_aws/cron_cleanup_recon.py --mode fixture --ns demo \
+    --out docs/tech-partnerships/recon/cron-cleanup-demo.fixture.recon.json
+make tp-validate-recon FILE=docs/tech-partnerships/recon/cron-cleanup-demo.fixture.recon.json
+```
+
+Every deployed-only fact — bucket EventBridge notification, quarantine
+lifecycle expiry, rule schedule/state/pattern, EventBridge target and Lambda
+DLQ, provisioned concurrency, resource tags — is reported `skipped` with its
+reason in `unverified_paths`, along with the fact that the values come from the
+fixture rather than the deployed target. It is evidence about the logic; only
+the parent's `--mode live` run satisfies the contract's read-back requirement.

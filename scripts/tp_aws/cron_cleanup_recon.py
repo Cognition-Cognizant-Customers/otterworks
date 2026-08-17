@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Live reconciliation for the cron-cleanup unit (replaces storage_cleanup_daily.py).
+"""Reconciliation for the cron-cleanup unit (replaces storage_cleanup_daily.py).
 
 Every value in the emitted report is recomputed from the deployed AWS target:
 S3 listings and object bodies, DynamoDB items, and the notification / lifecycle /
@@ -18,12 +18,25 @@ exercise the event-driven path (a probe object pair under this unit's own
 reconciliation sweep). Probe artifacts are cleaned up before exit. Loading the
 deterministic estate is a separate parent step,
 ``scripts/tp_aws/seed_cron_cleanup_estate.py``.
+
+``--mode fixture`` is the child's self-check: the same checks run against the
+LocalStack estate under ``-fixture``-suffixed stand-in names, driving the packaged
+handler in-process because the fixture has no EventBridge or Lambda. It seeds its
+own estate, and every deployed-only fact (bucket notification, lifecycle rule,
+EventBridge rule, Lambda/DLQ configuration, tags) is reported ``skipped`` with the
+reason recorded in ``unverified_paths`` — it is evidence about the logic, never a
+substitute for the live run:
+
+    uv run --no-project --with boto3==1.35.99 python3 \
+        scripts/tp_aws/cron_cleanup_recon.py --mode fixture \
+        --out docs/tech-partnerships/recon/cron-cleanup-demo.fixture.recon.json
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+import importlib.util
 import json
 import os
 import re
@@ -46,6 +59,8 @@ FUNCTION_NAME = os.environ.get("OW_TP_FUNCTION", "ow-tp-orphan-quarantine")
 RULE_NAME = os.environ.get("OW_TP_RULE", "ow-tp-orphan-detect")
 DLQ_NAME = os.environ.get("OW_TP_DLQ", "ow-tp-orphan-quarantine-dlq")
 REGION = os.environ.get("AWS_REGION", "us-east-1")
+LOCALSTACK_ENDPOINT = os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4566")
+HANDLER_PATH = ROOT / "infrastructure/lambda/ow-tp-orphan-quarantine/handler.py"
 
 FILES_PREFIX = "files/"
 QUARANTINE_PREFIX = "quarantined"
@@ -170,11 +185,201 @@ def source_key_of(quarantine_key: str) -> str | None:
 
 
 # --------------------------------------------------------------------------
+# target binding: deployed AWS (live) or the LocalStack fixture estate
+# --------------------------------------------------------------------------
+
+
+def use_fixture_names() -> None:
+    """Rebind the estate names so the fixture run can never touch real resources."""
+    global STORAGE_BUCKET, QUARANTINE_BUCKET, METADATA_TABLE, AUDIT_TABLE
+    STORAGE_BUCKET = f"{STORAGE_BUCKET}-fixture"
+    QUARANTINE_BUCKET = f"{QUARANTINE_BUCKET}-fixture"
+    METADATA_TABLE = f"{METADATA_TABLE}-fixture"
+    AUDIT_TABLE = f"{AUDIT_TABLE}-fixture"
+
+
+def load_fixture_handler(endpoint: str):
+    """Import the packaged handler pointed at the fixture estate.
+
+    The fixture has no Lambda service, so the deployed artifact is executed
+    in-process instead. ``RECHECK_DELAY_SECONDS=0`` disables the event-path
+    write-order recheck: the fixture seeds metadata before the object, so there
+    is no young-object race to wait out, and the wait is reported as unverified.
+    """
+    os.environ.update(
+        {
+            "AWS_ENDPOINT_URL": endpoint,
+            "AWS_REGION": REGION,
+            "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID", "fixture"),
+            "AWS_SECRET_ACCESS_KEY": os.environ.get(
+                "AWS_SECRET_ACCESS_KEY", "fixture-secret"
+            ),
+            "STORAGE_BUCKET": STORAGE_BUCKET,
+            "QUARANTINE_BUCKET": QUARANTINE_BUCKET,
+            "METADATA_TABLE": METADATA_TABLE,
+            "AUDIT_TABLE": AUDIT_TABLE,
+            "FILES_PREFIX": FILES_PREFIX,
+            "QUARANTINE_PREFIX": QUARANTINE_PREFIX,
+            "RECHECK_DELAY_SECONDS": "0",
+        }
+    )
+    spec = importlib.util.spec_from_file_location("cron_cleanup_handler", HANDLER_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load handler from {HANDLER_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def build_clients(mode: str, endpoint: str) -> dict:
+    if mode == "live":
+        session = boto3.session.Session(region_name=REGION)
+        lam = session.client("lambda")
+        clients = {
+            "mode": mode,
+            "s3": session.client("s3"),
+            "ddb": session.client("dynamodb"),
+            "lambda": lam,
+            "events": session.client("events"),
+            "sqs": session.client("sqs"),
+            "invoke_label": f"lambda:Invoke {FUNCTION_NAME}",
+        }
+
+        def invoke(payload: dict) -> tuple[str | None, dict]:
+            response = lam.invoke(
+                FunctionName=FUNCTION_NAME,
+                InvocationType="RequestResponse",
+                Payload=json.dumps(payload).encode(),
+            )
+            return (
+                response.get("FunctionError"),
+                json.loads(response["Payload"].read() or b"{}"),
+            )
+
+        clients["invoke"] = invoke
+        return clients
+
+    use_fixture_names()
+    module = load_fixture_handler(endpoint)
+    session = boto3.session.Session(
+        region_name=REGION,
+        aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+    )
+    clients = {
+        "mode": mode,
+        "s3": session.client("s3", endpoint_url=endpoint),
+        "ddb": session.client("dynamodb", endpoint_url=endpoint),
+        "lambda": None,
+        "events": None,
+        "sqs": None,
+        "invoke_label": f"in-process {HANDLER_PATH.name} against {endpoint}",
+    }
+
+    def invoke_fixture(payload: dict) -> tuple[str | None, dict]:
+        try:
+            return None, module.handler(payload, None)
+        # Lambda reports any handler exception as FunctionError; mirror that here
+        # so a fixture failure lands in a check instead of aborting the run.
+        except Exception as error:  # noqa: BLE001
+            return type(error).__name__, {"errorMessage": str(error)}
+
+    clients["invoke"] = invoke_fixture
+    return clients
+
+
+def deliver_synthetic_events(clients: dict, sizes: dict[str, int]) -> None:
+    """Stand in for EventBridge delivery in fixture mode; a no-op when live."""
+    if clients["mode"] != "fixture":
+        return
+    for key, size in sorted(sizes.items()):
+        clients["invoke"](eventbridge_event(key, size, now()))
+
+
+def prepare_fixture_estate(clients: dict, ns: str, exp: dict) -> None:
+    """Create, reset and seed the fixture estate, then drive it through the handler."""
+    if clients["mode"] != "fixture":
+        raise RuntimeError("the fixture estate may only be prepared in fixture mode")
+    if not STORAGE_BUCKET.endswith("-fixture"):
+        raise RuntimeError("refusing to reset an estate that is not -fixture suffixed")
+
+    s3, ddb = clients["s3"], clients["ddb"]
+    for bucket in (STORAGE_BUCKET, QUARANTINE_BUCKET):
+        try:
+            s3.create_bucket(Bucket=bucket)
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] not in {
+                "BucketAlreadyExists",
+                "BucketAlreadyOwnedByYou",
+            }:
+                raise
+    tables = {METADATA_TABLE: "id", AUDIT_TABLE: "object_key"}
+    for table, hash_key in tables.items():
+        try:
+            ddb.create_table(
+                TableName=table,
+                KeySchema=[{"AttributeName": hash_key, "KeyType": "HASH"}],
+                AttributeDefinitions=[
+                    {"AttributeName": hash_key, "AttributeType": "S"}
+                ],
+                BillingMode="PAY_PER_REQUEST",
+            )
+            ddb.get_waiter("table_exists").wait(TableName=table)
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] != "ResourceInUseException":
+                raise
+
+    # Start from empty so every set comparison below means something.
+    for bucket in (STORAGE_BUCKET, QUARANTINE_BUCKET):
+        for key in list_objects(s3, bucket, ""):
+            s3.delete_object(Bucket=bucket, Key=key)
+    for table, hash_key in tables.items():
+        for item in scan_table(ddb, table):
+            ddb.delete_item(TableName=table, Key={hash_key: item[hash_key]})
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import seed_cron_cleanup_estate as seeder
+
+    seeder.STORAGE_BUCKET = STORAGE_BUCKET
+    seeder.METADATA_TABLE = METADATA_TABLE
+    seeder.seed_estate(s3, ddb, ns, exp)
+
+    deliver_synthetic_events(
+        clients, list_objects(s3, STORAGE_BUCKET, f"{FILES_PREFIX}{ns}/")
+    )
+
+
+# --------------------------------------------------------------------------
 # configuration read-back (CLN-06, CLN-08)
 # --------------------------------------------------------------------------
 
 
+DEPLOYED_ONLY_CHECKS = (
+    ("CLN-06/storage_bucket_eventbridge_enabled", True),
+    ("CLN-06/quarantine_lifecycle_expiry_configured", True),
+    ("CLN-06/eventbridge_rule_has_no_schedule", ""),
+    ("CLN-06/eventbridge_rule_enabled", "ENABLED"),
+    ("CLN-06/eventbridge_rule_pattern", ["Object Created", ["aws.s3"]]),
+    ("CLN-06/eventbridge_target_is_lambda_with_dlq", [True, True]),
+    ("CLN-08/lambda_dlq_is_unit_queue", True),
+    ("CLN-08/lambda_no_provisioned_concurrency", 0),
+    ("CLN-08/lambda_tagged_project", "otterworks-tp"),
+    ("CLN-08/dlq_tagged_project", "otterworks-tp"),
+    ("CLN-08/unit_resource_names_prefixed", [True, True, True]),
+)
+
+DEPLOYED_ONLY_REASON = (
+    "deployed-only configuration: the fixture estate has no bucket notification, "
+    "lifecycle rule, EventBridge rule, Lambda function or SQS queue to read back"
+)
+
+
 def config_checks(checks: list[dict], clients: dict) -> None:
+    if clients["mode"] == "fixture":
+        for cid, expected in DEPLOYED_ONLY_CHECKS:
+            skip(checks, cid, expected, DEPLOYED_ONLY_REASON)
+        return
+
     s3, events, lam, sqs = (
         clients["s3"],
         clients["events"],
@@ -501,7 +706,7 @@ def live_event_checks(
     checks: list[dict], clients: dict, probe_prefix: str, timeout: int
 ) -> tuple[dict, list[str]]:
     """Exercise the event path with two probes: plain and multi-byte key."""
-    s3, ddb, lam = clients["s3"], clients["ddb"], clients["lambda"]
+    s3, ddb = clients["s3"], clients["ddb"]
     probes = {
         "plain": f"{probe_prefix}probe.bin",
         "unicode": f"{probe_prefix}{UNICODE_PROBE_NAME}",
@@ -509,6 +714,7 @@ def live_event_checks(
     body = b"recon-probe-bytes\x00\xff"
     for key in probes.values():
         s3.put_object(Bucket=STORAGE_BUCKET, Key=key, Body=body)
+    deliver_synthetic_events(clients, dict.fromkeys(probes.values(), len(body)))
 
     deadline = time.time() + timeout
     observed: dict[str, dict | None] = {
@@ -573,16 +779,9 @@ def live_event_checks(
         before_quarantine = list_objects(
             s3, QUARANTINE_BUCKET, before["quarantine_key"]["S"]
         )
-        response = lam.invoke(
-            FunctionName=FUNCTION_NAME,
-            InvocationType="RequestResponse",
-            Payload=json.dumps(
-                eventbridge_event(
-                    probes["plain"], len(body), before["detected_at"]["S"]
-                )
-            ).encode(),
+        function_error, payload = clients["invoke"](
+            eventbridge_event(probes["plain"], len(body), before["detected_at"]["S"])
         )
-        payload = json.loads(response["Payload"].read() or b"{}")
         after = audit_item(ddb, probes["plain"]) or {}
         after_quarantine = list_objects(
             s3, QUARANTINE_BUCKET, before["quarantine_key"]["S"]
@@ -593,15 +792,15 @@ def live_event_checks(
                     checks,
                     "CLN-07/replay_no_function_error",
                     None,
-                    response.get("FunctionError"),
-                    f"lambda:Invoke {FUNCTION_NAME} replay of the identical event",
+                    function_error,
+                    f"{clients['invoke_label']} replay of the identical event",
                 ),
                 check(
                     checks,
                     "CLN-07/replay_reports_already_quarantined",
                     "already_quarantined",
                     payload.get("status"),
-                    f"lambda:Invoke {FUNCTION_NAME} response payload",
+                    f"{clients['invoke_label']} response payload",
                 ),
                 check(
                     checks,
@@ -623,7 +822,7 @@ def live_event_checks(
             ]
         )
         replay_evidence = (
-            f"identical EventBridge event replayed through lambda:Invoke; status="
+            f"identical EventBridge event replayed through {clients['invoke_label']}; status="
             f"{payload.get('status')}, detected_at unchanged, quarantine object set unchanged"
         )
     else:
@@ -669,20 +868,15 @@ def cleanup_probes(clients: dict, probes: dict[str, str], probe_prefix: str) -> 
 
 
 def sweep_checks(checks: list[dict], clients: dict, exp: dict) -> str:
-    lam, ddb, s3 = clients["lambda"], clients["ddb"], clients["s3"]
+    ddb, s3 = clients["ddb"], clients["s3"]
     quarantine_before = list_objects(s3, QUARANTINE_BUCKET, f"{QUARANTINE_PREFIX}/")
-    response = lam.invoke(
-        FunctionName=FUNCTION_NAME,
-        InvocationType="RequestResponse",
-        Payload=json.dumps({"mode": "reconcile"}).encode(),
-    )
-    payload = json.loads(response["Payload"].read() or b"{}")
+    function_error, payload = clients["invoke"]({"mode": "reconcile"})
     check(
         checks,
         "CLN-05/sweep_no_function_error",
         None,
-        response.get("FunctionError"),
-        f"lambda:Invoke {FUNCTION_NAME} mode=reconcile (on demand, never scheduled)",
+        function_error,
+        f"{clients['invoke_label']} mode=reconcile (on demand, never scheduled)",
     )
 
     summary_keys = sorted(
@@ -810,12 +1004,39 @@ COVERAGE_GAPS = [
 ]
 
 
+FIXTURE_UNVERIFIED = [
+    (
+        "run_mode=fixture: every value is recomputed from the LocalStack fixture estate "
+        "(-fixture suffixed stand-in buckets and tables), not from the deployed AWS "
+        "target; only the parent's live run satisfies the contract's read-back requirement."
+    ),
+    (
+        "run_mode=fixture: EventBridge delivery itself is not exercised. The rule, its "
+        "target and the object-created pattern do not exist in the fixture, so the handler "
+        "is invoked in-process with synthetic envelopes of the shape the rule would deliver."
+    ),
+    (
+        "run_mode=fixture: the deployed-only configuration checks reported as skipped "
+        "(bucket EventBridge notification, quarantine lifecycle expiry, rule "
+        "schedule/state/pattern, EventBridge target and Lambda DLQ, provisioned "
+        "concurrency, resource tags) can only be read back from AWS."
+    ),
+    (
+        "run_mode=fixture: the event-path write-order recheck runs with "
+        "RECHECK_DELAY_SECONDS=0, so the bounded young-object wait is not exercised; the "
+        "fixture seeds each metadata item before its object, which is the ordering that "
+        "recheck exists to tolerate."
+    ),
+]
+
+
 def build_report(
     ns: str,
     checks: list[dict],
     unverified: list[str],
     anomalies: dict,
     evidence: str,
+    run_mode: str,
 ) -> dict:
     """Assemble the schema-valid report; idempotency is the CLN-07 check set."""
     replayed = [c for c in checks if c["id"].startswith("CLN-07/")]
@@ -824,7 +1045,7 @@ def build_report(
         "unit": "cron-cleanup",
         "namespace": ns,
         "generated_at": now(),
-        "run_mode": "live",
+        "run_mode": run_mode,
         "checks": checks,
         "values_recomputed_from_target": True,
         "idempotency_rerun": {
@@ -843,27 +1064,30 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ns", default="demo")
     parser.add_argument(
+        "--mode",
+        choices=["live", "fixture"],
+        default="live",
+        help="live reads the deployed AWS target; fixture is the child self-check",
+    )
+    parser.add_argument(
         "--out", default="docs/tech-partnerships/recon/cron-cleanup-demo.recon.json"
     )
+    parser.add_argument("--endpoint", default=LOCALSTACK_ENDPOINT)
     parser.add_argument("--probe-timeout", type=int, default=300)
     parser.add_argument(
         "--skip-probe", action="store_true", help="skip the live event-path probe"
     )
     args = parser.parse_args()
 
-    session = boto3.session.Session(region_name=REGION)
-    clients = {
-        "s3": session.client("s3"),
-        "ddb": session.client("dynamodb"),
-        "lambda": session.client("lambda"),
-        "events": session.client("events"),
-        "sqs": session.client("sqs"),
-    }
+    clients = build_clients(args.mode, args.endpoint)
 
     exp = expectations(args.ns)
     probe_prefix = f"{FILES_PREFIX}{args.ns}/recon-{uuid.uuid4().hex[:8]}/"
     checks: list[dict] = []
     unverified = list(COVERAGE_GAPS)
+    if args.mode == "fixture":
+        unverified.extend(FIXTURE_UNVERIFIED)
+        prepare_fixture_estate(clients, args.ns, exp)
 
     config_checks(checks, clients)
 
@@ -912,7 +1136,12 @@ def main() -> int:
 
     anomalies = anomaly_sets(clients, args.ns, exp, probe_prefix)
     report = build_report(
-        args.ns, checks, unverified, anomalies, f"{replay_evidence}; {sweep_evidence}"
+        args.ns,
+        checks,
+        unverified,
+        anomalies,
+        f"{replay_evidence}; {sweep_evidence}",
+        args.mode,
     )
 
     out = Path(args.out)
