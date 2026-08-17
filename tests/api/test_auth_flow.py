@@ -3,6 +3,9 @@ import pytest
 
 pytestmark = pytest.mark.api_flow
 
+TOO_SHORT_INPUT = "short"
+WRONG_LOGIN_INPUT = "wrong-password"
+
 
 def test_register_login_profile_refresh_and_logout(api_client):
     user = api_client.register_user("auth-flow")
@@ -54,7 +57,7 @@ def test_register_login_profile_refresh_and_logout(api_client):
 def test_auth_validation_and_protected_routes(api_client):
     invalid_register = api_client.client.post(
         "/api/v1/auth/register",
-        json={"email": "not-an-email", "password": "short", "displayName": ""},
+        json={"email": "not-an-email", "password": TOO_SHORT_INPUT, "displayName": ""},
     )
     assert invalid_register.status_code == 400
 
@@ -71,7 +74,7 @@ def test_auth_validation_and_protected_routes(api_client):
 
     invalid_login = api_client.client.post(
         "/api/v1/auth/login",
-        json={"email": user.email, "password": "wrong-password"},
+        json={"email": user.email, "password": WRONG_LOGIN_INPUT},
     )
     assert invalid_login.status_code in {400, 401}
 

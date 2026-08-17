@@ -76,7 +76,8 @@ build: ## Build all service images
 	docker compose -f docker-compose.infra.yml -f docker-compose.yml build
 
 seed: ## Seed development data (services must be running)
-	uv run scripts/seed.py
+	DB_PASSWORD="$${DB_PASSWORD:-$$(docker exec otterworks-postgres printenv POSTGRES_PASSWORD)}" \
+		uv run scripts/seed.py
 
 wait-for-db: ## Wait for Postgres to accept connections
 	@echo "Waiting for Postgres to be healthy..."

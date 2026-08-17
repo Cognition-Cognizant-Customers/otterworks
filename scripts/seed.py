@@ -10,10 +10,12 @@ storage quotas, audit log entries, feature flags, and announcements so the
 admin dashboard shows real metrics instead of in-memory mock data.
 
 Usage:
-    uv run scripts/seed.py
+    make seed          # reads the local docker-compose credential for you
+    DB_PASSWORD=... uv run scripts/seed.py
 
-Environment overrides (all optional — defaults match docker-compose):
-    DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+Environment:
+    DB_PASSWORD (required — no credential is baked into this script)
+    DB_HOST, DB_PORT, DB_NAME, DB_USER (optional, defaults match docker-compose)
 """
 
 import os
@@ -27,12 +29,24 @@ from psycopg2.extras import execute_values, Json
 
 # ── Connection ────────────────────────────────────────────────────────────────
 
+def db_password() -> str:
+    value = os.getenv("DB_PASSWORD")
+    if not value:
+        print(
+            "ERROR: DB_PASSWORD is not set. Run 'make seed', which reads the "
+            "credential from the local docker-compose Postgres container, or "
+            "export DB_PASSWORD yourself.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return value
+
+
 DB_CONFIG = {
     "host":     os.getenv("DB_HOST",     "localhost"),
     "port":     int(os.getenv("DB_PORT", "5432")),
     "dbname":   os.getenv("DB_NAME",     "otterworks"),
     "user":     os.getenv("DB_USER",     "otterworks"),
-    "password": os.getenv("DB_PASSWORD", "otterworks_dev"),
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -421,7 +435,7 @@ def main() -> None:
     print(f"  Target: {DB_CONFIG['user']}@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['dbname']}\n")
 
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
+        conn = psycopg2.connect(**DB_CONFIG, password=db_password())
     except psycopg2.OperationalError as e:
         print(f"ERROR: Could not connect to database — {e}", file=sys.stderr)
         print("Make sure the stack is running: make infra-up && make up", file=sys.stderr)
