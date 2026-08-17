@@ -1,0 +1,38 @@
+{
+  "unit": "dbx-orchestrate",
+  "source_artifact_path": "etl/legacy-extra/run_all.sh",
+  "target_objects": [
+    "ow_tp_custbill_chain_<ns> (multi-task job: ingest -> parse -> finance)",
+    "ow_tp.ops.chain_runs_<ns>"
+  ],
+  "golden_baseline_location": "etl/legacy-extra/crontab plus the deterministic legacy run_all output for the unit's own namespace (ingest 2 files, parse 50+50 records with trailer 50 each, finance report written) — the end-state outputs the chain must reproduce",
+  "acceptance_checks": [
+    {"id": "orch-dag-dependencies", "description": "Task dependencies are declared (parse depends on ingest completing, finance depends on parse), replacing the crontab's :05 offset and run_all.sh's sleep 600 — no time-based coupling anywhere."},
+    {"id": "orch-max-active-runs", "description": "The job sets max_concurrent_runs=1 so an overlapping trigger queues instead of racing (the legacy 02:10 finance / 02:00 analytics overlap cannot recur)."},
+    {"id": "orch-failure-propagation", "description": "A failing upstream task blocks its downstream tasks and the run reports failure — the chain never ends in 'done (probably)' after a failed stage."},
+    {"id": "orch-retries-and-alerting", "description": "Tasks declare bounded retries, and the job has a failure notification path; a failed run is observable without reading /var/log/etl."},
+    {"id": "orch-end-to-end-parity", "description": "One chain run over a freshly seeded namespace reproduces the same end-state as the deterministic legacy run_all: same landed files, same silver row count, same six-row gold aggregate to the cent."},
+    {"id": "orch-idempotency", "description": "Re-running the chain over the same input leaves all target row counts and the export byte-identical."},
+    {"id": "orch-schedule-paused", "description": "Any schedule the job carries is created PAUSED; the demo triggers it by Run Now (no unattended compute)."}
+  ],
+  "planted_anomalies": [
+    {"id": "stage_overlap_race", "status": "must-detect", "description": "Concurrent triggers must serialize (max_concurrent_runs=1) instead of a later stage reading a half-produced artifact."},
+    {"id": "silent_stage_failure", "status": "must-detect", "description": "A stage that fails must fail the run; the converted chain must not report overall success with a failed stage."},
+    {"id": "non_numeric_amount", "status": "coverage_gap", "reason": "Record-level anomaly detection belongs to dbx-parse; the orchestration unit asserts stage sequencing and end-state parity, not record validation."}
+  ],
+  "encoding_policy": {
+    "input_encoding": "inherited from the tasks it orchestrates (byte-transparent ingest, lossless-fallback parse)",
+    "byte_transparency": "the orchestration layer must not rewrite, re-encode, or normalize any artifact passed between tasks",
+    "invalid_bytes": "handled by the owning task; the chain neither inspects nor repairs record content"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "fail",
+    "null_attribution": "fail",
+    "details": "Run parameters (namespace, source period, target paths) are mandatory: a missing or empty parameter fails the run rather than defaulting to a namespace or path that could touch another slice."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "A chain run with no new input succeeds having done nothing and leaves all prior outputs intact — the 'just rerun everything' path must be safe."
+  },
+  "trigger_granularity": "per-batch"
+}

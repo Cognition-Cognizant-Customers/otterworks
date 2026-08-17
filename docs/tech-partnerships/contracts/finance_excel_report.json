@@ -1,0 +1,39 @@
+{
+  "unit": "dbx-finance",
+  "source_artifact_path": "etl/legacy-extra/jobs/finance_excel_report.pl",
+  "target_objects": [
+    "ow_tp.gold.custbill_billing_summary_<ns>",
+    "/Volumes/ow_tp/gold/exports/<ns>/finance_billing.csv",
+    "ow_tp_finance_<ns> (job)"
+  ],
+  "golden_baseline_location": "$OTTERWORKS_LEGACY_ROOT/reports/finance_billing_<YYYYMMDD>.csv from a deterministic legacy run of the unit's own namespace (six rows for the demo seed: EUR/INVOICE 22 101554.41, EUR/CREDIT 6 33375.97, GBP/INVOICE 32 183113.58, GBP/CREDIT 5 28454.59, USD/INVOICE 28 130502.15, USD/CREDIT 7 33390.44)",
+  "acceptance_checks": [
+    {"id": "finance-aggregate-parity", "description": "Gold grouped by currency x record_type equals the legacy report rows exactly: same six groups, same record counts, same totals to the cent."},
+    {"id": "finance-independent-recompute", "description": "Expected values are recomputed independently from the legacy .psv files (awk one-liner in runbook-databricks.md Beat 4), not copied from a document or from the gold table itself."},
+    {"id": "finance-real-artifact", "description": "The delivered export is a real, correctly-typed artifact (CSV declared as CSV, or a genuine spreadsheet), never a CSV renamed .xls."},
+    {"id": "finance-verified-delivery", "description": "Delivery is verified: the export object exists in the volume after the run with the expected byte size and row count, and the run fails if delivery did not happen (replacing the sendmail pipe that silently no-ops)."},
+    {"id": "finance-managed-recipients", "description": "No hard-coded personal recipient (jake@...) anywhere; recipients/destination are configuration, and the demo run delivers to the volume path above."},
+    {"id": "finance-idempotency", "description": "Re-running produces a byte-identical export and unchanged gold rows for the same input namespace."},
+    {"id": "finance-empty-input", "description": "A run with no silver rows writes an empty-result export with headers and zero data rows, and does not delete or overwrite the prior good export with a truncated one."}
+  ],
+  "planted_anomalies": [
+    {"id": "silent_delivery_noop", "status": "must-detect", "description": "A delivery that does not actually place the artifact must fail the run rather than report success."},
+    {"id": "mislabelled_artifact_type", "status": "must-detect", "description": "The converted job must not emit a file whose extension disagrees with its content."},
+    {"id": "non_numeric_amount", "status": "coverage_gap", "reason": "Record-level anomalies are quarantined upstream by dbx-parse; the gold aggregate consumes validated silver rows only, so it never sees them."}
+  ],
+  "encoding_policy": {
+    "input_encoding": "UTF-8 for silver reads; exports are written UTF-8 without BOM",
+    "byte_transparency": "not applicable to aggregates, but customer-name text passed through into any export must be preserved unchanged from silver",
+    "invalid_bytes": "cannot occur — silver is already validated; if an undecodable value is nonetheless encountered the run fails rather than emitting a mangled export"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "fail",
+    "null_attribution": "fail",
+    "details": "A NULL currency or record_type may never be bucketed into a plausible group or an 'UNKNOWN' bucket that changes the reported six-row shape: the run fails and names the offending rows."
+  },
+  "empty_input_semantics": {
+    "action": "write-empty-result",
+    "details": "Header-only export plus zero gold rows for that namespace/run; prior exports are retained, never truncated in place."
+  },
+  "trigger_granularity": "per-batch"
+}

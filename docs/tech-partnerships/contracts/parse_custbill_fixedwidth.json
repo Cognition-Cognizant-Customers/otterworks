@@ -1,0 +1,40 @@
+{
+  "unit": "dbx-parse",
+  "source_artifact_path": "etl/legacy-extra/jobs/parse_custbill_fixedwidth.sh",
+  "target_objects": [
+    "ow_tp.silver.custbill_records_<ns>",
+    "ow_tp.silver.custbill_quarantine_<ns>",
+    "ow_tp_parse_<ns> (job)"
+  ],
+  "golden_baseline_location": "$OTTERWORKS_LEGACY_ROOT/parsed/*.psv from a deterministic legacy run of the unit's own namespace (100 pipe-delimited rows for the two-file demo seed: 50 + 50, trailer says 50 each)",
+  "acceptance_checks": [
+    {"id": "parse-row-parity", "description": "Silver row count equals the legacy .psv row count (100 for the demo seed) and every silver row matches a .psv row on all six fields: cust_id, name, date, amount, currency, record_type."},
+    {"id": "parse-amount-exactness", "description": "Amounts are typed as exact decimals (implied-decimal source, integer cents internally), never floats; every amount matches the legacy value to the cent."},
+    {"id": "parse-date-typing", "description": "Dates are real DATE values; a value the legacy string surgery accepted but which is not a valid calendar date is quarantined, not silently stored."},
+    {"id": "parse-trailer-reconciliation", "description": "Per-file trailer count is compared to the parsed record count and a mismatch FAILS the file (the legacy script logged it and moved on); the mismatch is recorded in quarantine with the file name and both counts."},
+    {"id": "parse-quarantine-completeness", "description": "Every rejected record lands in the quarantine table with source file, source line number, the raw line, and a reason code — nothing is dropped silently."},
+    {"id": "parse-live-corruption", "description": "Injecting a letter into an amount field of a fresh drop yields exactly one additional quarantined row with a non-numeric-amount reason and leaves the valid row count otherwise unchanged, while the legacy parser passes the same record."},
+    {"id": "parse-idempotency", "description": "Re-running the parse over the same bronze input leaves silver and quarantine row counts and contents unchanged."},
+    {"id": "parse-empty-input", "description": "A run over an empty bronze slice succeeds, writes no rows, and leaves prior silver/quarantine output intact."}
+  ],
+  "planted_anomalies": [
+    {"id": "non_numeric_amount", "status": "must-detect", "description": "Amount field containing a non-digit character (injected live during the demo) must be quarantined with a non-numeric-amount reason."},
+    {"id": "invalid_calendar_date", "status": "must-detect", "description": "A syntactically well-formed but non-existent date (e.g. 20230231) must be quarantined rather than coerced."},
+    {"id": "trailer_count_mismatch", "status": "must-detect", "description": "A file whose trailer count disagrees with its record count must fail that file and be recorded in quarantine."}
+  ],
+  "encoding_policy": {
+    "input_encoding": "latin-1-safe byte read: decode with a lossless single-byte fallback, never strict UTF-8 decode",
+    "byte_transparency": "the raw line stored in quarantine must be the exact source bytes (hex- or base64-safe), so an invalid byte can be inspected after the fact",
+    "invalid_bytes": "a record containing an undecodable byte is quarantined with an encoding reason; it must never abort the whole run and never be silently repaired"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "fail",
+    "null_attribution": "fail",
+    "details": "Fixed-width slicing is positional: a record whose length or field layout does not match the contract is quarantined (fail-closed). A NULL or missing source value may never fail open into a plausible-looking row — no zero-amount, no epoch date, no empty-string currency substitutions."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "Empty bronze slice: succeed, write nothing, leave prior silver/quarantine output intact (the legacy chain's 'rerun everything' entry must not be able to erase a day's output)."
+  },
+  "trigger_granularity": "per-file"
+}

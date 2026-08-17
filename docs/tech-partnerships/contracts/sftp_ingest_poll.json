@@ -1,0 +1,39 @@
+{
+  "unit": "dbx-ingest",
+  "source_artifact_path": "etl/legacy-extra/jobs/sftp_ingest_poll.ksh",
+  "target_objects": [
+    "/Volumes/ow_tp/bronze/landing/<ns>/ingest/",
+    "ow_tp.bronze.custbill_raw_<ns>",
+    "ow_tp_ingest_<ns> (job)"
+  ],
+  "golden_baseline_location": "$OTTERWORKS_LEGACY_ROOT/incoming/ and $OTTERWORKS_LEGACY_ROOT/archive/ from a deterministic legacy run of the unit's own namespace (make legacy-etl-gen-data NS=<ns> then TP_FAKETIME='2026-01-15 00:00:00' scripts/tp-run-deterministic.sh make legacy-etl-run JOB=sftp_ingest_poll NS=<ns>)",
+  "acceptance_checks": [
+    {"id": "ingest-file-parity", "description": "Every file the legacy poller moved into incoming/ is present in the landing volume for the namespace, same file names, same byte count per file (3430 bytes each for the two-file demo seed)."},
+    {"id": "ingest-byte-parity", "description": "SHA-256 of each landed object equals the SHA-256 of the corresponding legacy incoming/ file — bytes are transported unmodified."},
+    {"id": "ingest-atomicity", "description": "No partially-written file is ever visible to the downstream reader: landing is a single atomic publish (upload to a staging path then move, or Auto Loader commit), replacing the legacy size-compared-twice settle protocol."},
+    {"id": "ingest-no-host-branching", "description": "No hostname-conditional behaviour anywhere in the converted job; one code path for all environments."},
+    {"id": "ingest-mutual-exclusion", "description": "Concurrency is bounded by the platform (max_concurrent_runs=1 on the job), not by lock files that are never removed; a second concurrent trigger neither double-lands nor is blocked forever."},
+    {"id": "ingest-idempotency", "description": "Re-running the ingest over the same source drop lands no duplicate rows/objects and leaves bronze row counts unchanged."},
+    {"id": "ingest-empty-input", "description": "A run with an empty drop directory completes successfully, lands nothing, and leaves prior bronze output intact."}
+  ],
+  "planted_anomalies": [
+    {"id": "half_written_file", "status": "must-detect", "description": "A file still being written when the poller fires must never be read downstream; the converted job must only publish complete objects."},
+    {"id": "stale_lock_file", "status": "must-detect", "description": "The legacy 'parse lock exists, probably stale, proceeding' path must not exist: mutual exclusion is platform-enforced."},
+    {"id": "trailer_count_mismatch", "status": "coverage_gap", "reason": "Trailer/record-count reconciliation is the parse unit's responsibility (dbx-parse); the ingest unit is byte-transparent and does not interpret record content."}
+  ],
+  "encoding_policy": {
+    "input_encoding": "none — treat CUSTBILL drops as opaque bytes (the legacy ksh/bash stages have no decoding layer)",
+    "byte_transparency": "required: bronze landing must preserve source bytes exactly; no decode/re-encode, no newline translation, no trimming",
+    "invalid_bytes": "must not fail the run; invalid byte sequences are landed as-is and only interpreted (and possibly quarantined) downstream in silver"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "fail",
+    "details": "The ingest unit does not parse records, so it tolerates any content; it must never substitute a default or empty value for a missing source attribute (file name, size, source period) — a missing attribute fails the run rather than landing a plausible-looking row."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "Empty drop directory: succeed, land nothing, do not truncate or delete prior bronze output."
+  },
+  "trigger_granularity": "per-file"
+}
