@@ -536,20 +536,33 @@ def wait_for_ttl_probe(
 def delete_probe_objects(
     target: Target,
     probe_keys: set[str],
-    attempts: int = 2,
-    interval_seconds: int = 1,
+    interval_seconds: int = 5,
+    max_seconds: int = 45,
+    batching_window_seconds: int = 30,
+    clock=None,
+    sleeper=None,
 ) -> None:
     """Delete deterministic probe keys, then catch a write racing cleanup."""
-    for attempt in range(attempts):
-        if attempt:
-            pending = probe_keys & set(target.archive_objects())
-        else:
-            pending = set(probe_keys)
-        if not pending:
+    clock = clock or time.monotonic
+    sleeper = sleeper or time.sleep
+    target.delete_objects(sorted(probe_keys))
+    started_at = clock()
+    deadline = started_at + max_seconds
+    quiet_deadline = started_at + batching_window_seconds + interval_seconds
+    while True:
+        pending = probe_keys & set(target.archive_objects())
+        now = clock()
+        if pending:
+            target.delete_objects(sorted(pending))
+            quiet_deadline = min(
+                deadline, now + batching_window_seconds + interval_seconds
+            )
+        elif now >= quiet_deadline:
             return
-        target.delete_objects(sorted(pending))
-        if attempt + 1 < attempts:
-            time.sleep(interval_seconds)
+        remaining = deadline - now
+        if remaining <= 0:
+            return
+        sleeper(min(interval_seconds, remaining))
 
 
 def run(args) -> dict:

@@ -171,11 +171,15 @@ def test_probe_archive_key_matches_handler_for_ttl_and_ttl_less_records() -> Non
 
 
 class StubCleanupTarget:
-    def __init__(self) -> None:
+    def __init__(self, listings: list[list[str]] | None = None) -> None:
         self.deleted: list[str] = []
+        self.listings = listings or [[]]
+        self.list_calls = 0
 
     def archive_objects(self) -> list[str]:
-        return []
+        listing = self.listings[min(self.list_calls, len(self.listings) - 1)]
+        self.list_calls += 1
+        return listing
 
     def delete_objects(self, keys: list[str]) -> None:
         self.deleted.extend(keys)
@@ -184,5 +188,31 @@ class StubCleanupTarget:
 def test_probe_cleanup_deletes_derived_keys_even_when_listing_misses_them() -> None:
     target = StubCleanupTarget()
     key = "audit-archive/expired/dt=unknown/demo-probe__stamp.jsonl.gz"
-    delete_probe_objects(target, {key})
+    clock, sleeper = fake_clock()
+    delete_probe_objects(
+        target,
+        {key},
+        interval_seconds=5,
+        max_seconds=45,
+        batching_window_seconds=10,
+        clock=clock,
+        sleeper=sleeper,
+    )
     assert target.deleted == [key]
+
+
+def test_probe_cleanup_catches_key_appearing_on_later_poll() -> None:
+    key = "audit-archive/expired/dt=unknown/demo-probe__stamp.jsonl.gz"
+    target = StubCleanupTarget([[], [], [key], []])
+    clock, sleeper = fake_clock()
+    delete_probe_objects(
+        target,
+        {key},
+        interval_seconds=5,
+        max_seconds=45,
+        batching_window_seconds=10,
+        clock=clock,
+        sleeper=sleeper,
+    )
+    assert target.deleted == [key, key]
+    assert clock() == 25
