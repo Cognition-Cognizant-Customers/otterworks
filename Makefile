@@ -38,20 +38,6 @@ tp-validate-contracts: ## Validate JSON contracts (intentionally fails until pro
 tp-validate-recon: ## Validate recon reports (FILE=<path>; no reports is valid, other JSON is informational)
 	uv run --no-project --with jsonschema==4.25.1 --with rfc3339-validator==0.1.4 python3 scripts/tp_validate.py recon $(FILE)
 
-tp-mongo-migrate-invoices: ## Migrate Oracle invoices into MongoDB (NS=<namespace>)
-ifndef NS
-	$(error NS is required, e.g. make tp-mongo-migrate-invoices NS=demo)
-endif
-	$(call validate_ns)
-	uv run --no-project --with pymongo==4.10.1 --with oracledb==2.5.1 scripts/tp_mongo/migrate_invoices.py --ns $(NS)
-
-tp-mongo-recon-invoices: ## Reconcile the MongoDB invoice migration (NS=<namespace>, RUN_MODE=fixture|live, REPORT=<path>)
-ifndef NS
-	$(error NS is required, e.g. make tp-mongo-recon-invoices NS=demo)
-endif
-	$(call validate_ns)
-	uv run --no-project --with pymongo==4.10.1 --with oracledb==2.5.1 scripts/tp_mongo/recon_invoices.py --ns $(NS) --run-mode $(or $(RUN_MODE),fixture) --out $(or $(REPORT),docs/tech-partnerships/recon/mongo_invoices.recon.json)
-
 tp-fixture-land: ## Land source artifacts in the local Databricks transport fixture (NS=<ns>)
 	python3 scripts/tp_databricks/local_fixture.py land --ns $${NS:-fixture} --source $${FIXTURE_SOURCE:-etl/legacy-extra}
 
@@ -126,8 +112,7 @@ tp-mongo-fixture-down: ## Stop the local MongoDB fixture and drop its data
 	MONGO_FIXTURE_PORT=$(MONGO_FIXTURE_PORT) $(MONGO_FIXTURE_COMPOSE) down -v
 
 tp-mongo-test: ## Unit-test the MongoDB migration document models (no services needed)
-	uv run --no-project --with pymongo==4.10.1 --with boto3==1.35.36 --with pytest==8.3.3 \
-		python3 -m pytest scripts/tp_mongo -q
+	$(MONGO_UV) --with boto3==1.35.36 --with pytest==8.3.3 python3 -m pytest scripts/tp_mongo -q
 
 tp-mongo-customers: ## Migrate Oracle CUSTOMER_MASTER + EAV into <db>.customers (NS=<namespace>)
 ifndef NS
@@ -159,6 +144,22 @@ endif
 	$(call validate_ns)
 	$(MONGO_ENV) $(MONGO_FILES_UV) python3 scripts/tp_mongo/recon_files.py --ns $(NS) \
 		--run-mode $(or $(RUN_MODE),fixture)
+
+tp-mongo-invoices: ## Migrate Oracle invoices into <db>.invoices (NS=<namespace>)
+ifndef NS
+	$(error NS is required, e.g. make tp-mongo-invoices NS=demo)
+endif
+	$(call validate_ns)
+	$(MONGO_ENV) $(MONGO_UV) python3 scripts/tp_mongo/migrate_invoices.py --ns $(NS)
+
+tp-mongo-invoices-recon: ## Recon invoices by reading the target back (NS=<namespace>, RUN_MODE=fixture|live)
+ifndef NS
+	$(error NS is required, e.g. make tp-mongo-invoices-recon NS=demo)
+endif
+	$(call validate_ns)
+	$(MONGO_ENV) $(MONGO_UV) python3 scripts/tp_mongo/recon_invoices.py --ns $(NS) \
+		--run-mode $(or $(RUN_MODE),fixture) \
+		--out $(or $(REPORT),docs/tech-partnerships/recon/mongo_invoices.recon.json)
 
 # --- Legacy Billing: Oracle billing estate (before-state for modernization demos) ---
 

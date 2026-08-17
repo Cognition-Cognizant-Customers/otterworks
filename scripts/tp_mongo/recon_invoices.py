@@ -16,7 +16,7 @@ from typing import Any
 from bson import Decimal128
 from bson.json_util import CANONICAL_JSON_OPTIONS
 from bson.json_util import dumps as bson_dumps
-from common import (
+from invoices_model import (
     decimal_text,
     install_decimal_handler,
     load_manifest,

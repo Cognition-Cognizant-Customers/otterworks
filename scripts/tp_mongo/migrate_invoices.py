@@ -9,7 +9,7 @@ import os
 import sys
 from typing import Any
 
-from common import (
+from invoices_model import (
     LINE_COLUMNS,
     SOURCE_ROW_COLUMNS,
     DecodingError,
