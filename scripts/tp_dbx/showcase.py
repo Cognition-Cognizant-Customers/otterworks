@@ -178,21 +178,21 @@ def cmd_recon(dbx: Databricks, args) -> int:
     run_id = uuid.uuid4().hex[:12]
     checks = _checks(dbx, n)
 
-    idempotency = {"performed": True, "result": "pass", "evidence": "backfill rerun skipped"}
-    if not args.skip_idempotency:
-        dbx.sql_ok(S.build_silver(n))
-        dbx.sql_ok(S.build_quarantine(n))
-        dbx.sql_ok(S.build_gold(n))
-        rerun = _checks(dbx, n)
-        same = rerun == checks
-        idempotency = {
-            "performed": True,
-            "result": "pass" if same else "fail",
-            "evidence": ("silver/quarantine/gold rebuilt from bronze; all "
-                         f"{len(checks)} checks byte-identical" if same
-                         else "check values changed on rerun"),
-        }
-        checks = rerun
+    # the report is audit evidence and its schema pins performed to true, so the
+    # rerun is not optional: there is no honest way to emit a skipped one
+    dbx.sql_ok(S.build_silver(n))
+    dbx.sql_ok(S.build_quarantine(n))
+    dbx.sql_ok(S.build_gold(n))
+    rerun = _checks(dbx, n)
+    same = rerun == checks
+    idempotency = {
+        "performed": True,
+        "result": "pass" if same else "fail",
+        "evidence": ("silver/quarantine/gold rebuilt from bronze; all "
+                     f"{len(checks)} checks byte-identical" if same
+                     else "check values changed on rerun"),
+    }
+    checks = rerun
 
     expected_anomalies = sorted(
         [a["file"], a["kind"], a["cust_id"]] for a in data["planted_anomalies"]
@@ -260,7 +260,7 @@ def cmd_recon(dbx: Databricks, args) -> int:
 def cmd_timetravel(dbx: Databricks, args) -> int:
     n = names(args)
     table = {"gold": n.gold, "silver": n.silver, "bronze": n.bronze}[args.table]
-    history = dbx.sql_ok(f"DESCRIBE HISTORY {table}")
+    history = dbx.sql_ok(S.describe_history(n, table))
     versions = [dict(zip(history.columns, row)) for row in history.rows]
     print(f"{table}: {len(versions)} Delta versions")
     for entry in versions[: args.limit]:
@@ -269,7 +269,7 @@ def cmd_timetravel(dbx: Databricks, args) -> int:
         newest = int(versions[0]["version"])
         previous = int(versions[1]["version"])
         for version in (previous, newest):
-            totals = dbx.sql_ok(S.timetravel_totals(n, version)).dicts()[0]
+            totals = dbx.sql_ok(S.timetravel_totals(n, table, version)).dicts()[0]
             print(f"  totals AS OF v{version}: {totals}")
     print(f"  restore command (not run): RESTORE TABLE {table} TO VERSION AS OF <version>")
     return 0
@@ -774,7 +774,6 @@ def main() -> int:
     backfill.add_argument("--period", default="")
     recon = sub.add_parser("recon")
     recon.add_argument("--out", default="")
-    recon.add_argument("--skip-idempotency", action="store_true")
     timetravel = sub.add_parser("timetravel")
     timetravel.add_argument("--table", default="gold", choices=["bronze", "silver", "gold"])
     timetravel.add_argument("--limit", type=int, default=5)

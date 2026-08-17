@@ -195,8 +195,12 @@ def recon_checks(n: Names) -> str:
     WITH gold AS (SELECT * FROM {n.gold}),
     exp AS (SELECT * FROM {n.expectations}),
     totals AS (
-      SELECT concat('annual_total/', CAST(e.source_year AS STRING), '/', e.currency, '/', e.record_type) AS check_id,
-             concat(CAST(e.record_count AS STRING), '|', CAST(e.total_amount_cents AS STRING)) AS expected,
+      -- coalesce across the full outer join: a gold group with no expectation is
+      -- a mismatch to report, not a NULL check_id that blows up the report
+      SELECT concat('annual_total/', CAST(coalesce(e.source_year, g.source_year) AS STRING), '/',
+                    coalesce(e.currency, g.currency), '/', coalesce(e.record_type, g.record_type)) AS check_id,
+             concat(CAST(coalesce(e.record_count, 0) AS STRING), '|',
+                    CAST(coalesce(e.total_amount_cents, 0) AS STRING)) AS expected,
              concat(CAST(coalesce(g.record_count, 0) AS STRING), '|', CAST(coalesce(g.total_amount_cents, 0) AS STRING)) AS actual
       FROM exp e FULL OUTER JOIN gold g
         ON e.source_year = g.source_year AND e.currency = g.currency AND e.record_type = g.record_type
@@ -316,8 +320,15 @@ def describe_history(n: Names, table: str) -> str:
     return f"DESCRIBE HISTORY {table}"
 
 
-def timetravel_totals(n: Names, version: int) -> str:
-    return f"""
-    SELECT coalesce(sum(record_count), 0) AS record_count,
-           coalesce(sum(total_amount_cents), 0) AS total_amount_cents
-    FROM {n.gold} VERSION AS OF {version}"""
+def timetravel_totals(n: Names, table: str, version: int) -> str:
+    """As-of evidence for the table actually asked about; each layer has its own
+    money column (bronze has none), so the projection follows the layer."""
+    if table == n.gold:
+        measures = ("coalesce(sum(record_count), 0) AS record_count, "
+                    "coalesce(sum(total_amount_cents), 0) AS total_amount_cents")
+    elif table == n.silver:
+        measures = ("count(*) AS record_count, "
+                    "coalesce(sum(amount_cents), 0) AS total_amount_cents")
+    else:
+        measures = "count(*) AS record_count"
+    return f"SELECT {measures} FROM {table} VERSION AS OF {version}"
