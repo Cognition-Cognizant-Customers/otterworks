@@ -5,7 +5,7 @@ output "api_base_url" {
 
 output "demo_site_url" {
   description = "S3-hosted Otter Portal demo page (empty when enable_demo_site=false)."
-  value = var.enable_demo_site ? "http://${aws_s3_bucket_website_configuration.demo_site[0].website_endpoint}" : ""
+  value       = var.enable_demo_site ? "http://${aws_s3_bucket_website_configuration.demo_site[0].website_endpoint}" : ""
 }
 
 output "lambda_functions" {

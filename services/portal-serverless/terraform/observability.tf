@@ -21,6 +21,54 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   }
 }
 
+resource "aws_cloudwatch_metric_alarm" "feedback_dlq_messages" {
+  alarm_name          = "${local.prefix}-feedback-dlq-messages"
+  alarm_description   = "Feedback moderation messages are waiting in the DLQ."
+  namespace           = "AWS/SQS"
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  statistic           = "Maximum"
+  period              = 60
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  dimensions = {
+    QueueName = aws_sqs_queue.feedback_events_dlq.name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "moderation_errors" {
+  alarm_name          = "${local.prefix}-moderation-errors"
+  alarm_description   = "Errors in the asynchronous feedback moderation Lambda."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  statistic           = "Sum"
+  period              = 60
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  dimensions = {
+    FunctionName = aws_lambda_function.moderation.function_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "feedback_queue_age" {
+  alarm_name          = "${local.prefix}-feedback-queue-age"
+  alarm_description   = "Feedback moderation queue has an old message."
+  namespace           = "AWS/SQS"
+  metric_name         = "ApproximateAgeOfOldestMessage"
+  statistic           = "Maximum"
+  period              = 60
+  evaluation_periods  = 1
+  threshold           = 60
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  dimensions = {
+    QueueName = aws_sqs_queue.feedback_events.name
+  }
+}
+
 resource "aws_cloudwatch_event_rule" "alarm_to_devin" {
   name        = "${local.prefix}-alarm-to-devin"
   description = "Route portal Lambda alarm state changes to the Devin incident webhook."

@@ -5,6 +5,7 @@ import com.otterworks.portal.common.ApiHandler;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 
 /**
  * Lambda entry point for the feedback bounded context.
@@ -19,14 +20,27 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 public class Handler extends ApiHandler {
 
     private final FeedbackService service;
+    private final FeedbackEventPublisher eventPublisher;
+    private final String namespace;
 
     public Handler() {
-        this(new FeedbackService(new DynamoFeedbackStore(
-                DynamoDbClient.create(), System.getenv("TABLE_NAME"))));
+        this(
+                new FeedbackService(new DynamoFeedbackStore(
+                        DynamoDbClient.create(), System.getenv("TABLE_NAME"))),
+                new EventBridgeFeedbackEventPublisher(
+                        EventBridgeClient.create(), System.getenv("EVENT_BUS_NAME")),
+                System.getenv("NAMESPACE"));
     }
 
     public Handler(FeedbackService service) {
+        this(service, (feedback, namespace) -> {}, null);
+    }
+
+    public Handler(
+            FeedbackService service, FeedbackEventPublisher eventPublisher, String namespace) {
         this.service = service;
+        this.eventPublisher = eventPublisher;
+        this.namespace = namespace;
     }
 
     @Override
@@ -37,7 +51,9 @@ public class Handler extends ApiHandler {
                 SubmitRequest request = parseBody(body, SubmitRequest.class);
                 requireText(request.userId, "userId", 100);
                 requireText(request.message, "message", 2000);
-                return new Result(201, service.submit(request.userId, request.rating, request.message));
+                Feedback feedback = service.submit(request.userId, request.rating, request.message);
+                eventPublisher.publish(feedback, namespace);
+                return new Result(201, feedback);
             }
             if ("GET".equals(method)) {
                 String userId = query.get("userId");
