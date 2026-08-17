@@ -220,7 +220,7 @@ ifndef NS
 endif
 	$(call validate_ns)
 	@echo "Dropping schema otterworks_$(NS)..."
-	PGPASSWORD=$${DB_PASSWORD:-otterworks_dev} psql \
+	PGPASSWORD=$${DB_PASSWORD:-$${POSTGRES_PASSWORD:-otterworks_dev}} psql \
 		-h $${DB_HOST:-localhost} -p $${DB_PORT:-5432} \
 		-U $${DB_USER:-otterworks} -d $${DB_NAME:-otterworks} \
 		-c "DROP SCHEMA IF EXISTS otterworks_$(NS) CASCADE;"
@@ -232,7 +232,7 @@ ifndef NS
 endif
 	$(call validate_ns)
 	@echo "Creating schema otterworks_$(NS)..."
-	PGPASSWORD=$${DB_PASSWORD:-otterworks_dev} psql \
+	PGPASSWORD=$${DB_PASSWORD:-$${POSTGRES_PASSWORD:-otterworks_dev}} psql \
 		-h $${DB_HOST:-localhost} -p $${DB_PORT:-5432} \
 		-U $${DB_USER:-otterworks} -d $${DB_NAME:-otterworks} \
 		-f testdata/harness/create_schema.sql \

@@ -32,7 +32,7 @@ DB_CONFIG = {
     "port":     int(os.getenv("DB_PORT", "5432")),
     "dbname":   os.getenv("DB_NAME",     "otterworks"),
     "user":     os.getenv("DB_USER",     "otterworks"),
-    "password": os.getenv("DB_PASSWORD", "otterworks_dev"),
+    "password": os.getenv("DB_PASSWORD") or os.getenv("POSTGRES_PASSWORD", "otterworks_dev"),
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
