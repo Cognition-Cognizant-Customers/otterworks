@@ -58,6 +58,7 @@ from platform_common import (  # noqa: E402
     json_schema_validator,
     namespace_filter,
     post_failure_webhook,
+    redacted_uri,
     redacted_webhook_request,
 )
 
@@ -463,7 +464,8 @@ def main() -> int:
     )
     report_dir.mkdir(parents=True, exist_ok=True)
 
-    log(f"ns={ns} run_mode={args.run_mode} db={database_name(ns)} uri={mongo_uri()}")
+    log(f"ns={ns} run_mode={args.run_mode} db={database_name(ns)} "
+        f"uri={redacted_uri(mongo_uri())}")
     log(f"per-unit reports for THIS run: {report_dir}")
 
     # Measured first: a unit recon re-runs its migration, which would repair a lost

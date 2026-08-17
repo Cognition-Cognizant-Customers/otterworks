@@ -34,6 +34,25 @@ WEBHOOK_SECRET_ENV = "OW_TP_MONGO_RECON_WEBHOOK_SECRET"
 WEBHOOK_SECRET_HEADER = "X-Webhook-Secret"
 
 
+def redacted_uri(uri: str) -> str:
+    """Render a MongoDB URI without exposing its password."""
+    scheme, separator, remainder = uri.partition("://")
+    if not separator:
+        return uri
+    authority_end = len(remainder)
+    for delimiter in "/?#":
+        position = remainder.find(delimiter)
+        if position != -1:
+            authority_end = min(authority_end, position)
+    authority = remainder[:authority_end]
+    if "@" not in authority:
+        return uri
+    userinfo, _, host = authority.rpartition("@")
+    username = userinfo.partition(":")[0]
+    suffix = remainder[authority_end:]
+    return f"{scheme}://{username}:<redacted>@{host}{suffix}"
+
+
 def namespace_filter(collection: str, ns: str) -> dict[str, str]:
     """Return the `{<ns field>: ns}` filter for one migrated collection."""
     try:

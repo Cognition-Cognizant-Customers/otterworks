@@ -41,6 +41,7 @@ from mongo_common import (  # noqa: E402
     mongo_uri,
     validate_ns,
 )
+from platform_common import redacted_uri  # noqa: E402
 
 # Legacy SEGMENT_CD is an opaque code in the estate: CUSTOMER_MASTER stores the
 # number and no code-description table was ever migrated, so the report reads the
@@ -260,7 +261,7 @@ def main() -> int:
 
     print(body, end="")
     print(f"\nreport_digest={report_digest}  generated_at="
-          f"{datetime.now(timezone.utc).isoformat()}  uri={mongo_uri()}  wrote {out}")
+          f"{datetime.now(timezone.utc).isoformat()}  uri={redacted_uri(mongo_uri())}  wrote {out}")
 
     if args.json_out:
         json_out = Path(args.json_out)
