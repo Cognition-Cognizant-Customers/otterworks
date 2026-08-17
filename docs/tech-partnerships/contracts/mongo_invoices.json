@@ -1,0 +1,32 @@
+{
+  "unit": "mongo_invoices",
+  "source_artifact_path": "services/legacy-billing/db/oracle/ (OW_BILLING.INVOICE_HEADER, OW_BILLING.INVOICE_LINE)",
+  "target_objects": ["ow_tp_demo.invoices", "ow_tp_demo.invoices_quarantine"],
+  "golden_baseline_location": "testdata/legacy/manifests/demo.json (targets.oracle.OW_BILLING.INVOICE_HEADER, targets.oracle.OW_BILLING.INVOICE_LINE)",
+  "acceptance_checks": [
+    {"id": "invoices.count", "description": "ow_tp_demo.invoices holds exactly 18750 documents, recomputed from Atlas"},
+    {"id": "invoices.embedded_line_count", "description": "The sum of embedded line items across all invoices is exactly 149963 (150000 source rows minus 37 orphans)"},
+    {"id": "invoices.checksum", "description": "Order-independent md5 over the migrated invoice-line line format equals manifest checksum 88a66751f0b08b476b492105a2efc537 for the non-orphaned lines"},
+    {"id": "invoices.line_totals_preserved", "description": "Per-invoice line amount sums and the header total agree exactly at Decimal128 precision; no float arithmetic is used for money"},
+    {"id": "invoices.orphans_quarantined", "description": "The 37 INVOICE_LINE rows whose INVOICE_ID has no header are quarantined with their source ids and are not attached to any invoice"},
+    {"id": "invoices.idempotent", "description": "A second migration run leaves counts, embedded line counts, checksums and the quarantine set byte-identical"}
+  ],
+  "planted_anomalies": [
+    {"id": "orphaned_rows", "description": "37 INVOICE_LINE rows reference a non-existent INVOICE_HEADER and must be detected and quarantined, never embedded under a synthesized header", "status": "must-detect"}
+  ],
+  "encoding_policy": {
+    "input_encoding": "UTF-8 as read through python-oracledb from the AL32UTF8 database",
+    "byte_transparency": "Descriptions and identifiers are carried through unchanged; monetary values are read as Decimal and stored as BSON Decimal128 without rounding",
+    "invalid_bytes": "A value that cannot be decoded is quarantined with the raw bytes hex-encoded; it is never replaced by a lossy substitute character"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "fail",
+    "details": "A line whose parent header is missing, or whose amount is NULL or unparseable, is quarantined with its anomaly id rather than embedded. A NULL or missing source value may never fail open into a zero amount or a default date."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "A run that reads zero source rows leaves prior Atlas output untouched and exits non-zero; an empty read at demo scale is a source-connectivity failure."
+  },
+  "trigger_granularity": "per-batch"
+}

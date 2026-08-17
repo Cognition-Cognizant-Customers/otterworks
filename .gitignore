@@ -81,6 +81,11 @@ infrastructure/terraform/*.tfstate
 infrastructure/terraform/*.tfstate.backup
 infrastructure/terraform/.terraform.lock.hcl
 infrastructure/terraform/plan.out
+infrastructure/terraform/tp-mongodb/.terraform/
+infrastructure/terraform/tp-mongodb/.terraform.lock.hcl
+infrastructure/terraform/tp-mongodb/*.tfstate
+infrastructure/terraform/tp-mongodb/*.tfstate.backup
+infrastructure/terraform/tp-mongodb/plan.out
 
 # --- Docker ---
 *.log

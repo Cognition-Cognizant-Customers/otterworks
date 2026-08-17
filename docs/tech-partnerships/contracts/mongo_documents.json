@@ -1,0 +1,34 @@
+{
+  "unit": "mongo_documents",
+  "source_artifact_path": "testdata/legacy/seed.py postgres target (otterworks_demo.documents, otterworks_demo.document_versions, otterworks_demo.document_snapshots)",
+  "target_objects": ["ow_tp_demo.documents", "ow_tp_demo.document_snapshots", "ow_tp_demo.documents_quarantine"],
+  "golden_baseline_location": "testdata/legacy/manifests/demo.json (targets.postgres.otterworks_demo.documents, .document_versions, .document_snapshots)",
+  "acceptance_checks": [
+    {"id": "documents.count", "description": "ow_tp_demo.documents holds exactly 2000 documents, recomputed from Atlas"},
+    {"id": "documents.version_count", "description": "The total number of embedded versions across all documents is exactly 13876"},
+    {"id": "documents.checksums", "description": "Order-independent md5 over the migrated document and version line formats equal manifest checksums e70001cf6110014dab6e1d80adb40285 and 13bc033b2780a0569d7f2217e85d7303"},
+    {"id": "documents.snapshot_count", "description": "All 390 snapshots are migrated and each references its document by id; snapshots are not embedded"},
+    {"id": "documents.version_gaps_reported", "description": "The 10 documents whose version numbers are non-contiguous are reported by document id, with the missing version numbers enumerated, and are migrated as-is rather than renumbered"},
+    {"id": "documents.orphaned_snapshots_reported", "description": "The 6 snapshots whose document_id has no parent document are reported by snapshot id and are not attached to any document"},
+    {"id": "documents.idempotent", "description": "A second migration run leaves counts, checksums and the reported anomaly sets byte-identical"}
+  ],
+  "planted_anomalies": [
+    {"id": "version_gaps", "description": "10 documents have gaps in their version sequence; the gaps must be detected and reported, never closed by renumbering", "status": "must-detect"},
+    {"id": "orphaned_snapshots", "description": "6 document_snapshots rows reference a non-existent document and must be detected and reported, never attached to a synthesized parent", "status": "must-detect"}
+  ],
+  "encoding_policy": {
+    "input_encoding": "UTF-8 as read through psycopg2 from the UTF8 database",
+    "byte_transparency": "Titles, bodies and metadata are carried through unchanged; timestamps are converted to BSON dates in UTC without shifting the instant",
+    "invalid_bytes": "A value that cannot be decoded is quarantined with the raw bytes hex-encoded; it is never replaced by a lossy substitute character"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "fail",
+    "details": "Version gaps and orphaned snapshots are tolerated and attributed into the anomaly report because they are properties of the estate, not of the record encoding. A NULL or missing required source value fails that record into quarantine and may never fail open into a plausible default."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "A run that reads zero source rows leaves prior Atlas output untouched and exits non-zero; an empty read at demo scale is a source-connectivity failure."
+  },
+  "trigger_granularity": "per-batch"
+}
