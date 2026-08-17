@@ -57,6 +57,8 @@ class BulkOperationsService
       user.soft_delete!
     when 'update_role'
       user.update!(role: params[:role])
+    else
+      raise ArgumentError, "Unsupported operation: #{operation}"
     end
   end
 
