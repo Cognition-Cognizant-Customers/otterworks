@@ -21,6 +21,24 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   }
 }
 
+resource "aws_cloudwatch_metric_alarm" "api_5xx" {
+  alarm_name          = "${local.prefix}-api-5xx"
+  alarm_description   = "HTTP 5xx responses from the decomposed portal API."
+  namespace           = "AWS/ApiGateway"
+  metric_name         = "5XXError"
+  statistic           = "Sum"
+  period              = 60
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    ApiId = aws_apigatewayv2_api.portal.id
+    Stage = aws_apigatewayv2_stage.default.name
+  }
+}
+
 resource "aws_cloudwatch_event_rule" "alarm_to_devin" {
   name        = "${local.prefix}-alarm-to-devin"
   description = "Route portal Lambda alarm state changes to the Devin incident webhook."
