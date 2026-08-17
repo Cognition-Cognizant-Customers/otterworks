@@ -17,6 +17,8 @@ from datetime import datetime
 
 import requests
 
+TASK_URL_FMT = "%s/tasks/%s"
+
 
 def main():
     print("[%s] search_reindex_weekly.py starting..." % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
@@ -55,7 +57,7 @@ def main():
                     deadline = time.monotonic() + 60
                     while time.monotonic() < deadline:
                         task_resp = requests.get(
-                            "%s/tasks/%s" % (meilisearch_url, task_uid),
+                            TASK_URL_FMT % (meilisearch_url, task_uid),
                             headers=meili_headers,
                         )
                         task_resp.raise_for_status()
@@ -83,7 +85,7 @@ def main():
             deadline = time.monotonic() + 60
             while time.monotonic() < deadline:
                 task_resp = requests.get(
-                    "%s/tasks/%s" % (meilisearch_url, task_uid),
+                    TASK_URL_FMT % (meilisearch_url, task_uid),
                     headers=meili_headers,
                 )
                 task_resp.raise_for_status()
@@ -111,7 +113,7 @@ def main():
         deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
             task_resp = requests.get(
-                "%s/tasks/%s" % (meilisearch_url, task_uid),
+                TASK_URL_FMT % (meilisearch_url, task_uid),
                 headers=meili_headers,
             )
             task_resp.raise_for_status()
@@ -137,7 +139,7 @@ def main():
         deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
             task_resp = requests.get(
-                "%s/tasks/%s" % (meilisearch_url, task_uid),
+                TASK_URL_FMT % (meilisearch_url, task_uid),
                 headers=meili_headers,
             )
             task_resp.raise_for_status()
@@ -190,7 +192,7 @@ def main():
             deadline = time.monotonic() + 120
             while time.monotonic() < deadline:
                 task_resp = requests.get(
-                    "%s/tasks/%s" % (meilisearch_url, task_uid),
+                    TASK_URL_FMT % (meilisearch_url, task_uid),
                     headers=meili_headers,
                 )
                 task_resp.raise_for_status()
@@ -254,7 +256,7 @@ def main():
             deadline = time.monotonic() + 120
             while time.monotonic() < deadline:
                 task_resp = requests.get(
-                    "%s/tasks/%s" % (meilisearch_url, task_uid),
+                    TASK_URL_FMT % (meilisearch_url, task_uid),
                     headers=meili_headers,
                 )
                 task_resp.raise_for_status()

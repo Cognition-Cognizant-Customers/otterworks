@@ -272,6 +272,8 @@ AUDIT_ACTIONS = [
     ("announcement.updated",   "Announcement"),
 ]
 
+DONE_MSG = "  Done."
+
 # ── Seeding functions ─────────────────────────────────────────────────────────
 
 def seed_users(cur) -> None:
@@ -304,7 +306,7 @@ def seed_users(cur) -> None:
         SET suspended_at = %s, suspended_reason = 'Policy violation — account under review'
         WHERE email = 'david.kim@otterworks.io' AND suspended_at IS NULL
     """, (days_ago(44),))
-    log("  Done.")
+    log(DONE_MSG)
 
 
 def seed_quotas(cur) -> None:
@@ -327,7 +329,7 @@ def seed_quotas(cur) -> None:
         VALUES %s
         ON CONFLICT (user_id) DO NOTHING
     """, rows, template="(%s, %s::uuid, %s, %s, %s, %s, %s)")
-    log("  Done.")
+    log(DONE_MSG)
 
 
 def seed_feature_flags(cur) -> None:
@@ -345,7 +347,7 @@ def seed_feature_flags(cur) -> None:
         VALUES %s
         ON CONFLICT (name) DO NOTHING
     """, rows, template="(%s, %s, %s, %s, %s, %s, %s)")
-    log("  Done.")
+    log(DONE_MSG)
 
 
 def seed_announcements(cur) -> None:
@@ -363,7 +365,7 @@ def seed_announcements(cur) -> None:
         VALUES %s
         ON CONFLICT DO NOTHING
     """, rows, template="(%s, %s, %s, %s, %s, %s, %s, %s, %s)")
-    log("  Done.")
+    log(DONE_MSG)
 
 
 def seed_audit_logs(cur) -> None:
@@ -411,7 +413,7 @@ def seed_audit_logs(cur) -> None:
     """, rows, template=(
         "(%s, %s::uuid, %s, %s, %s, %s::uuid, %s::jsonb, %s, %s, %s, %s)"
     ))
-    log("  Done.")
+    log(DONE_MSG)
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
