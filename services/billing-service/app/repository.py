@@ -473,33 +473,43 @@ class MongoInvoicingRepository:
                     credit,
                 )
                 subtotal, tax, credit_applied, total = invoice_totals(calculated)
-                self.database.billing_invoices.replace_one(
+                self.database.billing_invoices.update_one(
                     {"_id": str(invoice_id)},
                     {
-                        "_id": str(invoice_id),
-                        "tenant_id": str(tenant_id),
-                        "period_id": str(period_id),
-                        "issued_at": self._date(period_end),
-                        "status": "issued",
-                        "subtotal": self._money(subtotal),
-                        "tax": self._money(tax),
-                        "total": self._money(total),
-                        "line_count": len(calculated.lines),
-                        "lines": [
-                            {
-                                "line_id": str(deterministic_uuid(f"{invoice_id}{line.line_no}")),
-                                "line_no": line.line_no,
-                                "line_type": line.line_type,
-                                "description": line.description,
-                                "amount": self._money(stored_line_amount(line)),
-                            }
-                            for line in ordered_lines(calculated.lines)
-                        ],
-                        "source": {"system": "billing-service", "module": "invoicing"},
+                        "$set": {
+                            "status": "issued",
+                            "subtotal": self._money(subtotal),
+                            "tax": self._money(tax),
+                            "total": self._money(total),
+                            "line_count": len(calculated.lines),
+                            "lines": [
+                                {
+                                    "line_id": str(
+                                        deterministic_uuid(f"{invoice_id}{line.line_no}")
+                                    ),
+                                    "line_no": line.line_no,
+                                    "line_type": line.line_type,
+                                    "description": line.description,
+                                    "amount": self._money(stored_line_amount(line)),
+                                }
+                                for line in ordered_lines(calculated.lines)
+                            ],
+                            "source": {"system": "billing-service", "module": "invoicing"},
+                        },
+                        "$setOnInsert": {
+                            "_id": str(invoice_id),
+                            "tenant_id": str(tenant_id),
+                            "period_id": str(period_id),
+                            "issued_at": self._date(period_end),
+                        },
                     },
                     upsert=True,
                     session=session,
                 )
+                persisted_invoice = self.database.billing_invoices.find_one(
+                    {"_id": str(invoice_id)}, session=session
+                )
+                issued_at = persisted_invoice["issued_at"].date()
                 for note_id, remaining in consume_credits(notes, credit_applied):
                     self.database.billing_credit_notes.update_one(
                         {"_id": str(note_id)},
@@ -512,7 +522,7 @@ class MongoInvoicingRepository:
             invoice_id,
             tenant_id,
             period_id,
-            period_end,
+            issued_at,
             "issued",
             subtotal,
             tax,

@@ -7,6 +7,7 @@ import pytest
 from app.domain import (
     CreditNoteRow,
     PlanRow,
+    Rating,
     SubscriptionRow,
     UsageEvent,
     calculate_rating,
@@ -130,6 +131,84 @@ def test_invoice_ids_and_line_ids_are_md5_uuid_text() -> None:
         Decimal("2.25"),
         Decimal("2.25"),
     ]
+
+
+@pytest.mark.rule("INVOICING-006")
+def test_reissuance_preserves_first_issued_at() -> None:
+    class Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def start_transaction(self):
+            return self
+
+        def end_session(self):
+            return None
+
+    class Client:
+        def start_session(self):
+            return Session()
+
+    class Invoices:
+        def __init__(self):
+            self.rows = {}
+
+        def update_one(self, query, update, **_kwargs):
+            row = self.rows.setdefault(query["_id"], {"_id": query["_id"]})
+            row.update(update["$set"])
+            for key, value in update["$setOnInsert"].items():
+                row.setdefault(key, value)
+
+        def find_one(self, query, **_kwargs):
+            return self.rows.get(query["_id"])
+
+    class CreditNotes:
+        def find(self, *_args, **_kwargs):
+            class Cursor:
+                def sort(self, *_sort_args):
+                    return []
+
+            return Cursor()
+
+    class Database:
+        client = Client()
+
+        def __init__(self):
+            self.billing_invoices = Invoices()
+            self.billing_credit_notes = CreditNotes()
+
+    class RatingRepository:
+        def upsert_rating(self, *_args, **_kwargs):
+            return None
+
+    subscription = SubscriptionRow(
+        UUID("20000000-0000-0000-0000-000000000006"),
+        TENANT,
+        PLAN.plan_id,
+        date(2026, 1, 1),
+        None,
+        "active",
+        None,
+    )
+    rating = Rating(201, 100, 0, 101, 0, 101, Decimal("5.56"), subscription)
+    database = Database()
+    repository = MongoInvoicingRepository(database)
+    first = repository.issue(PLAN, False, TENANT, START, END, RatingRepository(), rating)
+    second = repository.issue(
+        PLAN,
+        False,
+        TENANT,
+        START,
+        date(2026, 3, 31),
+        RatingRepository(),
+        rating,
+    )
+    assert first.issued_at == date(2026, 2, 28)
+    assert second.issued_at == first.issued_at
+    assert database.billing_invoices.rows[str(first.invoice_id)]["status"] == "issued"
 
 
 @pytest.mark.rule("INVOICING-007")
