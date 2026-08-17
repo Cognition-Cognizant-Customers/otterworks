@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-function Skeleton({ className }: { className?: string }) {
+function Skeleton({ className }: Readonly<{ className?: string }>) {
   return (
     <div
       className={cn(
@@ -36,7 +36,7 @@ export function FileListRowSkeleton() {
   );
 }
 
-export function FileGridSkeleton({ count = 8 }: { count?: number }) {
+export function FileGridSkeleton({ count = 8 }: Readonly<{ count?: number }>) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
       {Array.from({ length: count }).map((_, i) => (
@@ -46,7 +46,7 @@ export function FileGridSkeleton({ count = 8 }: { count?: number }) {
   );
 }
 
-export function FileListSkeleton({ count = 6 }: { count?: number }) {
+export function FileListSkeleton({ count = 6 }: Readonly<{ count?: number }>) {
   return (
     <div className="space-y-1">
       {Array.from({ length: count }).map((_, i) => (

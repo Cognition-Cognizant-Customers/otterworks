@@ -33,7 +33,7 @@ export function ShareDialog({
   onClose,
   onPermissionChange,
   onRemoveAccess,
-}: ShareDialogProps) {
+}: Readonly<ShareDialogProps>) {
   const [email, setEmail] = useState("");
   const [permission, setPermission] = useState<"view" | "edit">("view");
   const [isSharing, setIsSharing] = useState(false);

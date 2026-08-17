@@ -8,7 +8,7 @@ interface TextFilePreviewProps {
   fileName: string;
 }
 
-export function TextFilePreview({ presignedUrl, fileName }: TextFilePreviewProps) {
+export function TextFilePreview({ presignedUrl, fileName }: Readonly<TextFilePreviewProps>) {
   const [content, setContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [truncated, setTruncated] = useState(false);
@@ -136,7 +136,7 @@ interface PdfFilePreviewProps {
   presignedUrl?: string;
 }
 
-export function PdfFilePreview({ presignedUrl }: PdfFilePreviewProps) {
+export function PdfFilePreview({ presignedUrl }: Readonly<PdfFilePreviewProps>) {
   if (!presignedUrl) {
     return (
       <div className="text-center py-8">
@@ -174,7 +174,7 @@ interface ImageFilePreviewProps {
   fileName: string;
 }
 
-export function ImageFilePreview({ presignedUrl, fileName }: ImageFilePreviewProps) {
+export function ImageFilePreview({ presignedUrl, fileName }: Readonly<ImageFilePreviewProps>) {
   const [error, setError] = useState(false);
 
   useEffect(() => {

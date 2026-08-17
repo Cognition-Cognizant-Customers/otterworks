@@ -68,7 +68,7 @@ export function FileCard({
   onSelect,
   selectionActive = false,
   onStarToggle,
-}: FileCardProps) {
+}: Readonly<FileCardProps>) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { user } = useAuthStore();
   const userId = user?.id ?? "";
@@ -293,14 +293,14 @@ function FileMenu({
   onShare,
   onRename,
   onDownload,
-}: {
+}: Readonly<{
   file: FileItem;
   onClose: () => void;
   onDelete?: (id: string) => void;
   onShare?: (id: string) => void;
   onRename?: () => void;
   onDownload?: (id: string, name: string) => void;
-}) {
+}>) {
   return (
     <>
       <div className="fixed inset-0 z-10" onClick={onClose} />

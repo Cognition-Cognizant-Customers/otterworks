@@ -49,7 +49,7 @@ const COLLAB_WS_URL =
     ? `${NATIVE_WS_SCHEME}://${NATIVE_WS_HOST}:8085`
     : `${WEB_WS_SCHEME}://localhost:8085`);
 
-export function CollaborativeEditor({ documentId, initialContent, onUpdate }: CollaborativeEditorProps) {
+export function CollaborativeEditor({ documentId, initialContent, onUpdate }: Readonly<CollaborativeEditorProps>) {
   const { user } = useAuthStore();
   const [ydoc] = useState(() => new Y.Doc());
   const [provider, setProvider] = useState<WebsocketProvider | null>(null);
@@ -258,11 +258,11 @@ function SaveStatusIndicator({
   connectionStatus,
   isSynced,
   hasLocalChanges,
-}: {
+}: Readonly<{
   connectionStatus: "connected" | "disconnected" | "connecting";
   isSynced: boolean;
   hasLocalChanges: boolean;
-}) {
+}>) {
   if (connectionStatus === "disconnected") {
     return (
       <div className="flex items-center gap-1.5">
@@ -303,12 +303,12 @@ function ToolbarButton({
   active,
   title,
   children,
-}: {
+}: Readonly<{
   onClick: () => void;
   active: boolean;
   title: string;
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <button
       onClick={onClick}

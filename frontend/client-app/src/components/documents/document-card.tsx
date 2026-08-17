@@ -14,7 +14,7 @@ interface DocumentCardProps {
   onStarToggle?: () => void;
 }
 
-export function DocumentCard({ document, onDelete, onShare, view = "grid", onStarToggle }: DocumentCardProps) {
+export function DocumentCard({ document, onDelete, onShare, view = "grid", onStarToggle }: Readonly<DocumentCardProps>) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { user } = useAuthStore();
   const userId = user?.id ?? "";
@@ -179,12 +179,12 @@ function DocMenu({
   onClose,
   onDelete,
   onShare,
-}: {
+}: Readonly<{
   docId: string;
   onClose: () => void;
   onDelete?: (id: string) => void;
   onShare?: (id: string) => void;
-}) {
+}>) {
   return (
     <>
       <div className="fixed inset-0 z-10" onClick={onClose} />
