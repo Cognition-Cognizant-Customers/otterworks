@@ -270,7 +270,7 @@ tp-smoke: ## Golden-path smoke gate for tech-partnerships (mirrors .github/workf
 	cd services/search-service && uv run --no-project --with-requirements requirements-dev.txt python -m pytest
 	@echo "tp-smoke: all checks passed"
 
-tp-run-branch: ## Cut and push the per-run working branch for a rehearsal (TRACK=mongodb|databricks|aws)
+tp-run-branch: ## Cut and push the per-run working branch for a rehearsal (TRACK=mongodb|databricks|aws|modernize)
 	@scripts/tp-run-branch.sh $(TRACK)
 
 test-api-flows: ## Run black-box API flow tests against the local API gateway

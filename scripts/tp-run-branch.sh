@@ -5,15 +5,15 @@
 # never a PR target for migration work. Each run gets a fresh branch cut from
 # it, and every unit PR targets that branch:
 #
-#   scripts/tp-run-branch.sh <track>        # track: mongodb | databricks | aws
+#   scripts/tp-run-branch.sh <track>        # track: mongodb | databricks | aws | modernize
 #
 # Prints the branch name on success. Pushes the branch so PRs can target it.
 set -euo pipefail
 
 track="${1:-}"
 case "$track" in
-  mongodb|databricks|aws) ;;
-  *) echo "usage: $0 <mongodb|databricks|aws>" >&2; exit 2 ;;
+  mongodb|databricks|aws|modernize) ;;
+  *) echo "usage: $0 <mongodb|databricks|aws|modernize>" >&2; exit 2 ;;
 esac
 
 branch="tp-run/${track}-$(date -u +%Y%m%dT%H%M%SZ)"

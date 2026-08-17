@@ -12,7 +12,7 @@ This runbook composes the three standalone tracks — read them first:
 
 - `tech-partnerships` is the legacy **before**-state only. It is never a PR
   target for migration work. Each rehearsal or live run cuts a fresh working
-  branch with `make tp-run-branch TRACK=<mongodb|databricks|aws>`
+  branch with `make tp-run-branch TRACK=<mongodb|databricks|aws|modernize>`
   (`tp-run/<track>-<timestamp>`); every unit PR targets that branch. The
   smoke gate runs on `tp-run/*` PRs too.
 - `tech-partnerships-solutions` is a fallback recording of a prior completed
