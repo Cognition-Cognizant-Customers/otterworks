@@ -184,9 +184,9 @@ export class AnnouncementsComponent implements OnInit {
   newAnnouncement: Partial<Announcement> = { priority: 'medium', targetAudience: 'all' };
 
   constructor(
-    private api: AdminApiService,
-    private snackBar: MatSnackBar,
-    private dialog: MatDialog,
+    private readonly api: AdminApiService,
+    private readonly snackBar: MatSnackBar,
+    private readonly dialog: MatDialog,
   ) {}
 
   ngOnInit(): void {

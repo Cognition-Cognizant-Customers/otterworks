@@ -143,7 +143,7 @@ export class AnalyticsComponent implements OnInit {
     plugins: { legend: { position: 'right' } },
   };
 
-  constructor(private api: AdminApiService) {}
+  constructor(private readonly api: AdminApiService) {}
 
   ngOnInit(): void {
     this.api.getAnalyticsReport().subscribe(report => {

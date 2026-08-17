@@ -111,7 +111,7 @@ export class FeaturesComponent implements OnInit {
   loading = true;
   searchTerm = '';
 
-  constructor(private api: AdminApiService, private snackBar: MatSnackBar) {}
+  constructor(private readonly api: AdminApiService, private readonly snackBar: MatSnackBar) {}
 
   ngOnInit(): void {
     this.api.getFeatureFlags().subscribe(flags => {

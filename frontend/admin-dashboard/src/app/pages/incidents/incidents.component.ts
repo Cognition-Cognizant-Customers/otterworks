@@ -442,9 +442,9 @@ export class IncidentsComponent implements OnInit, OnDestroy {
   private pollSub?: Subscription;
 
   constructor(
-    private api: AdminApiService,
-    private snackBar: MatSnackBar,
-    private dialog: MatDialog,
+    private readonly api: AdminApiService,
+    private readonly snackBar: MatSnackBar,
+    private readonly dialog: MatDialog,
   ) {}
 
   ngOnInit(): void {

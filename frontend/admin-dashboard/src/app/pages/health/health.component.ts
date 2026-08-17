@@ -171,7 +171,7 @@ export class HealthComponent implements OnInit {
   error = false;
   healthyCounts = { healthy: 0, degraded: 0, down: 0 };
 
-  constructor(private api: AdminApiService) {}
+  constructor(private readonly api: AdminApiService) {}
 
   ngOnInit(): void {
     this.loadHealth();

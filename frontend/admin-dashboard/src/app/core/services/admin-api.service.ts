@@ -35,7 +35,7 @@ export class AdminApiService {
 
   readonly statsChanged$ = new Subject<void>();
 
-  constructor(private http: HttpClient) {}
+  constructor(private readonly http: HttpClient) {}
 
   // ── Dashboard ────────────────────────────────────────────────────────────
 

@@ -24,11 +24,11 @@ export interface DocumentMeta {
 }
 
 export class DocumentStore {
-  private redis: RedisAdapter;
-  private logger: Logger;
-  private documentTtl: number;
-  private snapshotTtl: number;
-  private maxSnapshots: number;
+  private readonly redis: RedisAdapter;
+  private readonly logger: Logger;
+  private readonly documentTtl: number;
+  private readonly snapshotTtl: number;
+  private readonly maxSnapshots: number;
 
   constructor(
     redis: RedisAdapter,
