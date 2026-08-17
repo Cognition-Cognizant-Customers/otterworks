@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean tp-atlas-teardown tp-mongo-fixture-up tp-mongo-fixture-down tp-mongo-customers tp-mongo-customers-recon tp-mongo-test tp-mongo-migrate-files tp-mongo-recon-files tp-mongo-invoices tp-mongo-invoices-recon
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean tp-atlas-teardown tp-mongo-fixture-up tp-mongo-fixture-down tp-mongo-customers tp-mongo-customers-recon tp-mongo-test tp-mongo-migrate-files tp-mongo-recon-files tp-mongo-invoices tp-mongo-invoices-recon tp-mongo-documents tp-mongo-documents-recon
 
 SHELL := /bin/bash
 
@@ -177,7 +177,10 @@ MONGO_FIXTURE_COMPOSE = docker compose -f docker-compose.mongo-fixture.yml -p ot
 MONGO_FIXTURE_PORT ?= 27017
 MONGO_UV = uv run --no-project --with pymongo==4.10.1 --with oracledb==2.5.1
 MONGO_FILES_UV = uv run --no-project --with pymongo==4.10.1 --with boto3==1.35.36
+MONGO_DOCUMENTS_UV = $(MONGO_UV) --with psycopg2-binary==2.9.10
 MONGO_ENV = MONGO_URI=$(or $(MONGO_URI),mongodb://localhost:$(MONGO_FIXTURE_PORT)) MONGO_DB=$(or $(MONGO_DB),ow_tp_$(NS)) DB_PORT=$(ORACLE_BILLING_DB_PORT)
+MONGO_DOCUMENTS_RECON_OUT = $(if $(OUT),$(OUT),$(if $(filter fixture,$(or $(RUN_MODE),fixture)),docs/tech-partnerships/recon/mongo_documents.recon.json,build/tp-recon/mongo_documents.$(NS).partial.json))
+MONGO_DOCUMENTS_RECON_RERUN = $(if $(or $(filter fixture,$(or $(RUN_MODE),fixture)),$(filter 1 true yes,$(RERUN))),--rerun-migration,)
 
 tp-mongo-fixture-up: ## Start the local MongoDB fixture (mongo:7 on localhost:$(MONGO_FIXTURE_PORT))
 	MONGO_FIXTURE_PORT=$(MONGO_FIXTURE_PORT) $(MONGO_FIXTURE_COMPOSE) up -d --wait --wait-timeout 180
@@ -234,6 +237,24 @@ endif
 	$(MONGO_ENV) $(MONGO_UV) --with boto3==1.35.36 python3 scripts/tp_mongo/recon_invoices.py --ns $(NS) \
 		--run-mode $(or $(RUN_MODE),fixture) \
 		--out $(or $(REPORT),docs/tech-partnerships/recon/mongo_invoices.recon.json)
+
+tp-mongo-documents: ## Migrate Postgres documents into <db>.documents (NS=<namespace>)
+ifndef NS
+	$(error NS is required, e.g. make tp-mongo-documents NS=demo)
+endif
+	$(call validate_ns)
+	$(MONGO_ENV) DB_PORT=$(or $(DB_PORT),5432) $(MONGO_DOCUMENTS_UV) python3 scripts/tp_mongo/migrate_documents.py --ns $(NS)
+
+tp-mongo-documents-recon: ## Recon documents by reading the target back (NS=<namespace>, RUN_MODE=fixture|live)
+ifndef NS
+	$(error NS is required, e.g. make tp-mongo-documents-recon NS=demo)
+endif
+	$(call validate_ns)
+	@mkdir -p "$(dir $(MONGO_DOCUMENTS_RECON_OUT))"
+	$(MONGO_ENV) DB_PORT=$(or $(DB_PORT),5432) $(MONGO_DOCUMENTS_UV) python3 scripts/tp_mongo/recon_documents.py --ns $(NS) \
+		--run-mode $(or $(RUN_MODE),fixture) \
+		$(MONGO_DOCUMENTS_RECON_RERUN) \
+		--out "$(MONGO_DOCUMENTS_RECON_OUT)"
 
 # --- Legacy Billing: Oracle billing estate (before-state for modernization demos) ---
 

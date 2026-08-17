@@ -11,6 +11,7 @@ from psycopg.rows import dict_row
 from pymongo import MongoClient
 
 from app.config import settings
+from app.repository import MongoInvoicingRepository
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "db" / "migrations" / "001_initial.sql"
@@ -105,8 +106,6 @@ def reset() -> None:
         ]
     )
     ensure_rating_indexes()
-    from app.repository import MongoInvoicingRepository
-
     MongoInvoicingRepository(database).reset()
 
 

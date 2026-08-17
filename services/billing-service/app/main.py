@@ -31,6 +31,7 @@ from app.domain import (
     finalize_result,
     format_money,
     preview,
+    stored_line_amount,
     usage_summary,
 )
 from app.repository import MongoInvoicingRepository, MongoRatingRepository, PostgresPlansRepository
@@ -360,9 +361,7 @@ def issue_invoice(tenant_id: Annotated[UUID, Path()], request: InvoiceIssue) -> 
                     "line_no": line.line_no,
                     "line_type": line.line_type,
                     "description": line.description,
-                    "amount": format_money(
-                        line.total if line.line_type == "credit" else line.amount
-                    ),
+                    "amount": format_money(stored_line_amount(line)),
                 }
                 for line in invoice.lines
             ],
