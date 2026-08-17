@@ -38,6 +38,8 @@ Credentials are read from the environment with local-dev defaults, so no setup i
 cp .env.example .env
 ```
 
+Postgres only applies `POSTGRES_PASSWORD` when it initializes its data directory, so if you change it after the stack has already run, recreate the volume first with `docker compose -f docker-compose.infra.yml -f docker-compose.yml down -v` (otherwise services fail with `password authentication failed`).
+
 On first run, `scripts/init-db.sql` creates the required Postgres databases and `scripts/localstack-init.sh` provisions S3 buckets, SQS queues, SNS topics, and DynamoDB tables in LocalStack automatically.
 
 To stop everything:
