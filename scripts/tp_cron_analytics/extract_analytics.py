@@ -73,7 +73,11 @@ def extract(ns: str, ds: str) -> list[dict]:
     _, dynamo, sqs = clients()
     queue_url = sqs.get_queue_url(QueueName=QUEUE)["QueueUrl"]
     records = []
-    seen_source_ids = set()
+    # Bronze identity is (namespace, report_date, source, source_id), so dedup is
+    # per source: an event carrying the same event_id on the queue and in the
+    # table is two events, exactly as the legacy job's concatenation treated it.
+    seen_sqs_ids: set[str] = set()
+    seen_ddb_ids: set[str] = set()
     while True:
         response = sqs.receive_message(
             QueueUrl=queue_url,
@@ -87,9 +91,9 @@ def extract(ns: str, ds: str) -> list[dict]:
         for message in messages:
             body = message.get("Body", "")
             record_source_id = source_id(body)
-            if record_source_id in seen_source_ids:
+            if record_source_id in seen_sqs_ids:
                 continue
-            seen_source_ids.add(record_source_id)
+            seen_sqs_ids.add(record_source_id)
             records.append(envelope(ns, ds, "sqs", record_source_id, 0, None, body))
 
     table = dynamo.Table(EVENTS_TABLE)
@@ -108,9 +112,9 @@ def extract(ns: str, ds: str) -> list[dict]:
     for item in items:
         event_id = str(item.get("event_id", ""))
         if event_id.startswith(prefix):
-            if event_id in seen_source_ids:
+            if event_id in seen_ddb_ids:
                 continue
-            seen_source_ids.add(event_id)
+            seen_ddb_ids.add(event_id)
             body = json.dumps(
                 item, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
                 default=json_default,

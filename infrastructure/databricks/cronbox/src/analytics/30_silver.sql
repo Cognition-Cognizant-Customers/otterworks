@@ -6,6 +6,12 @@
 -- begins_with(event_date, ds) by the extractor and land in full, so the
 -- adjacent-day events stay auditable in bronze and are excluded here.
 --
+-- Acceptance is the exact complement of the reject predicate in
+-- 20_bronze_reject.sql. from_json runs in PERMISSIVE mode, so an unparseable
+-- body yields a struct of all-NULL fields rather than a NULL struct; the
+-- _corrupt_record field is what actually distinguishes it, and it also rejects
+-- JSON that is valid but not an object. An empty body parses to a NULL struct.
+--
 -- The hour is taken textually from the ISO timestamp rather than through a
 -- timestamp cast, so the result is independent of the warehouse session
 -- timezone and matches the legacy `datetime.fromisoformat(...).hour`, which
@@ -56,7 +62,8 @@ USING (
       source_event_date,
       from_json(
         raw_body,
-        'STRUCT<event_id: STRING, eventType: STRING, event_type: STRING, timestamp: STRING, event_date: STRING, ownerId: STRING, editedBy: STRING, authorId: STRING, deletedBy: STRING, userId: STRING, documentId: STRING, fileId: STRING, sizeBytes: BIGINT, title: STRING, name: STRING>'
+        'STRUCT<event_id: STRING, eventType: STRING, event_type: STRING, timestamp: STRING, event_date: STRING, ownerId: STRING, editedBy: STRING, authorId: STRING, deletedBy: STRING, userId: STRING, documentId: STRING, fileId: STRING, sizeBytes: BIGINT, title: STRING, name: STRING, _corrupt_record: STRING>',
+        map('columnNameOfCorruptRecord', '_corrupt_record')
       ) AS payload
     FROM ow_tp.bronze.cronbox_events_raw
     WHERE namespace = :ns
@@ -65,6 +72,7 @@ USING (
       AND raw_body IS NOT NULL
   )
   WHERE payload IS NOT NULL
+    AND payload._corrupt_record IS NULL
     AND (
       source = 'sqs'
       OR SUBSTRING(COALESCE(source_event_date, payload.event_date, ''), 1, 10) = :ds

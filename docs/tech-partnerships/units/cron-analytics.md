@@ -61,6 +61,24 @@ string bodies. The envelope's `raw_body_b64`/`decode_error` path and its
 encoding policy, but are not exercised by the seeded estate. The exercised
 reject path is the eight non-JSON SQS bodies.
 
+Deduplication in the extractor is per source, because bronze identity is
+`(namespace, report_date, source, source_id)` and the legacy job concatenated the
+two streams: the same `event_id` arriving on the queue and in the table is two
+events. Within the SQS stream, `source_id` is the payload `event_id` when present
+and otherwise `sha256:<hexdigest>` of the raw body, so two distinct messages with
+byte-identical bodies and no `event_id` collapse to one bronze row. That is the
+price of an id that is stable across reruns (an SQS `MessageId` changes on every
+reseed and would make the landing file non-reproducible), and the seeded estate
+carries an `event_id` on every event.
+
+The malformed-body predicate keys on a `_corrupt_record` field in the `from_json`
+schema, not on a NULL parse result: `from_json` is PERMISSIVE, so an unparseable
+body yields a struct of all-NULL fields. Verified read-only on the serverless
+warehouse — `from_json('not-json-1', <schema>) IS NULL` is `false`, while the
+corrupt-record field is populated; `is_valid_json` is not resolvable on this
+runtime. `20_bronze_reject.sql` and `30_silver.sql` use exactly complementary
+predicates, so no row is both rejected and aggregated.
+
 The extractor scans DynamoDB with the run-MONTH prefix. The run-DAY prefix rule
 is applied in `30_silver.sql`, preserving the legacy semantics while keeping
 the 16 adjacent-day exclusions auditable and provable from the target bronze
