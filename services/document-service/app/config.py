@@ -1,15 +1,15 @@
 """Application configuration via pydantic-settings."""
 
 import os
-from urllib.parse import quote_plus
+from urllib.parse import quote
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
 def _default_database_url() -> str:
-    user = quote_plus(os.environ.get("POSTGRES_USER", "otterworks"))
-    password = quote_plus(os.environ.get("POSTGRES_PASSWORD", "otterworks_dev"))
+    user = quote(os.environ.get("POSTGRES_USER", "otterworks"), safe="")
+    password = quote(os.environ.get("POSTGRES_PASSWORD", "otterworks_dev"), safe="")
     host = os.environ.get("POSTGRES_HOST", "localhost")
     port = os.environ.get("POSTGRES_PORT", "5432")
     database = os.environ.get("POSTGRES_DB", "otterworks")
