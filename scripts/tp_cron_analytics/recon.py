@@ -489,7 +489,7 @@ def build_checks(baseline: dict, contract: dict, after: dict, job_shape: dict, l
         checks,
         "ANL-04/excluded_total",
         sum(adjacent.values()),
-        sum(after["excluded_by_day"].values()),
+        sum(count for day, count in after["excluded_by_day"].items() if day != ds),
         f"{golden} (manifest.json DynamoDB ids outside the run date)",
     )
 
