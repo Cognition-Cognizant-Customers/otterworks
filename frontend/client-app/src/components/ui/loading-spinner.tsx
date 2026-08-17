@@ -13,13 +13,12 @@ export function LoadingSpinner({ size = "md", className }: LoadingSpinnerProps) 
   };
 
   return (
-    <div
+    <output
       className={cn(
-        "animate-spin rounded-full border-gray-200 border-t-otter-600",
+        "block animate-spin rounded-full border-gray-200 border-t-otter-600",
         sizeClasses[size],
         className
       )}
-      role="status"
       aria-label="Loading"
     />
   );
