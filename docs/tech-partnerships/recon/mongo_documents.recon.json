@@ -1,0 +1,298 @@
+{
+  "kind": "recon-report",
+  "unit": "mongo_documents",
+  "namespace": "demo",
+  "generated_at": "2026-08-17T07:10:45Z",
+  "run_mode": "fixture",
+  "target": {
+    "database": "ow_tp_demo",
+    "uri": "mongodb://localhost:27017",
+    "collections": [
+      "documents",
+      "document_snapshots",
+      "documents_quarantine"
+    ]
+  },
+  "checks": [
+    {
+      "id": "documents.count",
+      "expected": 2000,
+      "actual": 2000,
+      "source_of_truth": "testdata/legacy/manifests/demo.json vs mongodb ow_tp_demo (recomputed after write)",
+      "result": "pass"
+    },
+    {
+      "id": "documents.version_count",
+      "expected": 13876,
+      "actual": 13876,
+      "source_of_truth": "testdata/legacy/manifests/demo.json vs mongodb ow_tp_demo (recomputed after write)",
+      "result": "pass"
+    },
+    {
+      "id": "documents.checksums",
+      "expected": {
+        "documents": "e70001cf6110014dab6e1d80adb40285",
+        "versions": "13bc033b2780a0569d7f2217e85d7303"
+      },
+      "actual": {
+        "documents": "e70001cf6110014dab6e1d80adb40285",
+        "versions": "13bc033b2780a0569d7f2217e85d7303"
+      },
+      "source_of_truth": "testdata/legacy/manifests/demo.json vs mongodb ow_tp_demo (recomputed after write)",
+      "result": "pass"
+    },
+    {
+      "id": "documents.snapshot_count",
+      "expected": 390,
+      "actual": 390,
+      "source_of_truth": "testdata/legacy/manifests/demo.json vs mongodb ow_tp_demo (recomputed after write)",
+      "result": "pass"
+    },
+    {
+      "id": "documents.snapshot_checksum",
+      "expected": "abe69084205723d6ad79e825b8c752dd",
+      "actual": "abe69084205723d6ad79e825b8c752dd",
+      "source_of_truth": "testdata/legacy/manifests/demo.json vs mongodb ow_tp_demo (recomputed after write)",
+      "result": "pass"
+    },
+    {
+      "id": "documents.snapshots_not_embedded",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "mongodb ow_tp_demo (recomputed after write)",
+      "result": "pass"
+    },
+    {
+      "id": "documents.field_parity",
+      "expected": {
+        "documents": "571ed85b95ce82840e42e99941629fa7",
+        "versions": "c4580b2c8232b63ccc109b41d12c2e28",
+        "snapshots": "edf5ba83217866f1080da6a6b1370e03"
+      },
+      "actual": {
+        "documents": "571ed85b95ce82840e42e99941629fa7",
+        "versions": "c4580b2c8232b63ccc109b41d12c2e28",
+        "snapshots": "edf5ba83217866f1080da6a6b1370e03"
+      },
+      "source_of_truth": "postgres otterworks_demo (legacy source estate) vs mongodb ow_tp_demo (recomputed after write) (every migrated field incl. UTC timestamps)",
+      "result": "pass"
+    },
+    {
+      "id": "documents.timestamps_representable_in_bson",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "postgres otterworks_demo (legacy source estate)",
+      "result": "pass"
+    },
+    {
+      "id": "documents.version_gaps_reported",
+      "expected": [
+        "4e73d26c-1b17-4c29-a972-723f6a81d5a6:missing=3",
+        "54f581c5-c84d-4e03-9d49-8a53205d5468:missing=6",
+        "55651142-8ab8-4fc3-93f7-2f53b8924e79:missing=2",
+        "5908ebb5-dbb7-45f5-b6c7-0e35421f3512:missing=2",
+        "83683854-d16e-42ff-a6cd-dba0778c8ebc:missing=5",
+        "91e0ef71-06e8-4176-8634-b3d37c66435b:missing=3",
+        "9e712908-6721-4e4a-837d-a235146eb26b:missing=4",
+        "cf385bde-c00f-43f4-ba79-5e734af2a082:missing=3",
+        "d03d71b1-a7e5-494a-bb12-c1e79866b084:missing=9",
+        "fb541d99-8a4a-4911-a0e3-934d4bbf312d:missing=2"
+      ],
+      "actual": [
+        "4e73d26c-1b17-4c29-a972-723f6a81d5a6:missing=3",
+        "54f581c5-c84d-4e03-9d49-8a53205d5468:missing=6",
+        "55651142-8ab8-4fc3-93f7-2f53b8924e79:missing=2",
+        "5908ebb5-dbb7-45f5-b6c7-0e35421f3512:missing=2",
+        "83683854-d16e-42ff-a6cd-dba0778c8ebc:missing=5",
+        "91e0ef71-06e8-4176-8634-b3d37c66435b:missing=3",
+        "9e712908-6721-4e4a-837d-a235146eb26b:missing=4",
+        "cf385bde-c00f-43f4-ba79-5e734af2a082:missing=3",
+        "d03d71b1-a7e5-494a-bb12-c1e79866b084:missing=9",
+        "fb541d99-8a4a-4911-a0e3-934d4bbf312d:missing=2"
+      ],
+      "source_of_truth": "postgres otterworks_demo (legacy source estate) vs mongodb ow_tp_demo (recomputed after write)",
+      "result": "pass"
+    },
+    {
+      "id": "documents.version_gaps_count",
+      "expected": 10,
+      "actual": 10,
+      "source_of_truth": "testdata/legacy/manifests/demo.json vs mongodb ow_tp_demo (recomputed after write)",
+      "result": "pass"
+    },
+    {
+      "id": "documents.version_sequence_over_bound_quarantined",
+      "expected": [],
+      "actual": [],
+      "source_of_truth": "postgres otterworks_demo (legacy source estate) expected quarantine vs mongodb ow_tp_demo (recomputed after write)",
+      "result": "pass"
+    },
+    {
+      "id": "documents.version_sequence_annotations",
+      "expected": [],
+      "actual": [],
+      "source_of_truth": "mongodb ow_tp_demo (recomputed after write) persisted version_sequence vs recomputed embedded versions",
+      "result": "pass"
+    },
+    {
+      "id": "documents.orphaned_snapshots_reported",
+      "expected": [
+        "60bfc8b6-ef1b-4ecf-bf98-49267e67054d",
+        "9e6c9aa9-2522-4008-b8de-d94a2964917c",
+        "ae8c479d-8de3-46f8-bfc8-a942df697f2f",
+        "cce98042-94a1-4e9a-98b9-4b1069a76fa1",
+        "e0de8004-a5ec-472f-b008-150408e83560",
+        "e61553f8-e4ea-4caf-b7d7-863fa9547358"
+      ],
+      "actual": [
+        "60bfc8b6-ef1b-4ecf-bf98-49267e67054d",
+        "9e6c9aa9-2522-4008-b8de-d94a2964917c",
+        "ae8c479d-8de3-46f8-bfc8-a942df697f2f",
+        "cce98042-94a1-4e9a-98b9-4b1069a76fa1",
+        "e0de8004-a5ec-472f-b008-150408e83560",
+        "e61553f8-e4ea-4caf-b7d7-863fa9547358"
+      ],
+      "source_of_truth": "postgres otterworks_demo (legacy source estate) vs mongodb ow_tp_demo (recomputed after write)",
+      "result": "pass"
+    },
+    {
+      "id": "documents.orphaned_snapshots_count",
+      "expected": 6,
+      "actual": 6,
+      "source_of_truth": "testdata/legacy/manifests/demo.json vs mongodb ow_tp_demo (recomputed after write)",
+      "result": "pass"
+    },
+    {
+      "id": "documents.unflagged_missing_parents",
+      "expected": [],
+      "actual": [],
+      "source_of_truth": "mongodb ow_tp_demo (recomputed after write)",
+      "result": "pass"
+    },
+    {
+      "id": "documents.quarantine_empty",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "mongodb ow_tp_demo (recomputed after write)",
+      "result": "pass"
+    },
+    {
+      "id": "documents.no_truncated_version_arrays",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "mongodb ow_tp_demo (recomputed after write)",
+      "result": "pass"
+    },
+    {
+      "id": "documents.validators_reject_invalid",
+      "expected": {
+        "documents": {
+          "validator_present": true,
+          "violating_insert_rejected": true,
+          "count_unchanged": true,
+          "probe_absent": true
+        },
+        "document_snapshots": {
+          "validator_present": true,
+          "violating_insert_rejected": true,
+          "count_unchanged": true,
+          "probe_absent": true
+        }
+      },
+      "actual": {
+        "documents": {
+          "validator_present": true,
+          "violating_insert_rejected": true,
+          "count_unchanged": true,
+          "probe_absent": true
+        },
+        "document_snapshots": {
+          "validator_present": true,
+          "violating_insert_rejected": true,
+          "count_unchanged": true,
+          "probe_absent": true
+        }
+      },
+      "source_of_truth": "mongodb ow_tp_demo (recomputed after write)",
+      "result": "pass"
+    },
+    {
+      "id": "documents.baseline_matches_contract",
+      "expected": {
+        "contract_md5s": [
+          "13bc033b2780a0569d7f2217e85d7303",
+          "e70001cf6110014dab6e1d80adb40285"
+        ]
+      },
+      "actual": {
+        "manifest_md5s": [
+          "13bc033b2780a0569d7f2217e85d7303",
+          "e70001cf6110014dab6e1d80adb40285"
+        ]
+      },
+      "source_of_truth": "docs/tech-partnerships/contracts/mongo_documents.json acceptance_checks.documents.checksums vs testdata/legacy/manifests/demo.json documents+versions checksums",
+      "result": "pass"
+    },
+    {
+      "id": "documents.idempotent",
+      "expected": "pass",
+      "actual": "pass",
+      "source_of_truth": "migration rerun is opt-in; --rerun-migration is required to compare mongodb ow_tp_demo before and after a write",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "planted_anomaly_detections": {
+    "expected_set": [
+      "4e73d26c-1b17-4c29-a972-723f6a81d5a6:missing=3",
+      "54f581c5-c84d-4e03-9d49-8a53205d5468:missing=6",
+      "55651142-8ab8-4fc3-93f7-2f53b8924e79:missing=2",
+      "5908ebb5-dbb7-45f5-b6c7-0e35421f3512:missing=2",
+      "83683854-d16e-42ff-a6cd-dba0778c8ebc:missing=5",
+      "91e0ef71-06e8-4176-8634-b3d37c66435b:missing=3",
+      "9e712908-6721-4e4a-837d-a235146eb26b:missing=4",
+      "cf385bde-c00f-43f4-ba79-5e734af2a082:missing=3",
+      "d03d71b1-a7e5-494a-bb12-c1e79866b084:missing=9",
+      "fb541d99-8a4a-4911-a0e3-934d4bbf312d:missing=2",
+      "orphaned_snapshot=60bfc8b6-ef1b-4ecf-bf98-49267e67054d",
+      "orphaned_snapshot=9e6c9aa9-2522-4008-b8de-d94a2964917c",
+      "orphaned_snapshot=ae8c479d-8de3-46f8-bfc8-a942df697f2f",
+      "orphaned_snapshot=cce98042-94a1-4e9a-98b9-4b1069a76fa1",
+      "orphaned_snapshot=e0de8004-a5ec-472f-b008-150408e83560",
+      "orphaned_snapshot=e61553f8-e4ea-4caf-b7d7-863fa9547358"
+    ],
+    "actual_set": [
+      "4e73d26c-1b17-4c29-a972-723f6a81d5a6:missing=3",
+      "54f581c5-c84d-4e03-9d49-8a53205d5468:missing=6",
+      "55651142-8ab8-4fc3-93f7-2f53b8924e79:missing=2",
+      "5908ebb5-dbb7-45f5-b6c7-0e35421f3512:missing=2",
+      "83683854-d16e-42ff-a6cd-dba0778c8ebc:missing=5",
+      "91e0ef71-06e8-4176-8634-b3d37c66435b:missing=3",
+      "9e712908-6721-4e4a-837d-a235146eb26b:missing=4",
+      "cf385bde-c00f-43f4-ba79-5e734af2a082:missing=3",
+      "d03d71b1-a7e5-494a-bb12-c1e79866b084:missing=9",
+      "fb541d99-8a4a-4911-a0e3-934d4bbf312d:missing=2",
+      "orphaned_snapshot=60bfc8b6-ef1b-4ecf-bf98-49267e67054d",
+      "orphaned_snapshot=9e6c9aa9-2522-4008-b8de-d94a2964917c",
+      "orphaned_snapshot=ae8c479d-8de3-46f8-bfc8-a942df697f2f",
+      "orphaned_snapshot=cce98042-94a1-4e9a-98b9-4b1069a76fa1",
+      "orphaned_snapshot=e0de8004-a5ec-472f-b008-150408e83560",
+      "orphaned_snapshot=e61553f8-e4ea-4caf-b7d7-863fa9547358"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "Writes against the shared MongoDB Atlas cluster: this run targeted the local mongo:7 fixture only (make tp-mongo-fixture-up), so Atlas wire-protocol writes, Atlas-side $jsonSchema validator DDL and Atlas index builds are unverified here. The parent session's single uncontended run against Atlas is the only live proof.",
+    "Atlas-specific operational behaviour: M0 free-tier storage headroom for this collection set, Atlas index build time, and read/write performance under Atlas latency.",
+    "Atlas alert configuration: the parent's capability preflight reports alert-webhook-config DENIED (HTTP 401 USER_UNAUTHORIZED); nothing in this unit depends on it and it was not exercised.",
+    "Atlas access-list and credential handling: this unit never touched the Atlas project access list or Atlas credentials."
+  ],
+  "recompute_command": "MONGO_URI='<target uri>' MONGO_DB='<target db>' make tp-mongo-documents-recon NS=demo RUN_MODE=live RERUN=1 OUT=docs/tech-partnerships/recon/mongo_documents.live.recon.json # complete report; read-only default: omit RERUN=1 and OUT=... (writes an ignored build/tp-recon report)",
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "migration re-run end to end; target re-read before and after: documents=2000 embedded_versions=13876 snapshots=390 documents_checksum=e70001cf6110014dab6e1d80adb40285 versions_checksum=13bc033b2780a0569d7f2217e85d7303 snapshots_checksum=abe69084205723d6ad79e825b8c752dd anomaly sets unchanged=True"
+  },
+  "recon_result": "pass"
+}
