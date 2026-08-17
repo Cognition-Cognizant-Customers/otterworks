@@ -1,0 +1,84 @@
+{
+  "platform": "databricks",
+  "checked_at": "2026-08-17T04:32:42.694032+00:00",
+  "credential_identity": "d***@cognition.ai",
+  "probes": [
+    {
+      "id": "files-get-directory",
+      "description": "List the landing volume directory",
+      "api": "Files API GET",
+      "result": "verified",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "files-put",
+      "description": "Write a temporary landing file",
+      "api": "Files API PUT",
+      "result": "verified",
+      "detail": "HTTP 204"
+    },
+    {
+      "id": "files-get-file",
+      "description": "Read the temporary landing file",
+      "api": "Files API GET",
+      "result": "verified",
+      "detail": "HTTP 200, 24 bytes"
+    },
+    {
+      "id": "files-delete",
+      "description": "Delete the temporary landing file",
+      "api": "Files API DELETE",
+      "result": "verified",
+      "detail": "HTTP 204"
+    },
+    {
+      "id": "uc-create-list",
+      "description": "Create and list a temporary Unity Catalog schema",
+      "api": "SQL Statement + Unity Catalog APIs",
+      "result": "verified",
+      "detail": "HTTP 200, state=SUCCEEDED; list HTTP 200"
+    },
+    {
+      "id": "uc-schema-delete",
+      "description": "Delete the temporary Unity Catalog schema",
+      "api": "SQL Statement",
+      "result": "verified",
+      "detail": "HTTP 200, state=SUCCEEDED"
+    },
+    {
+      "id": "jobs-create-list",
+      "description": "Create and list a temporary job",
+      "api": "Jobs API 2.1",
+      "result": "verified",
+      "detail": "create HTTP 200, list HTTP 200"
+    },
+    {
+      "id": "jobs-delete",
+      "description": "Delete the temporary job",
+      "api": "Jobs API 2.0",
+      "result": "verified",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "secret-scope",
+      "description": "Create and delete a temporary secret scope",
+      "api": "Secrets API 2.0",
+      "result": "verified",
+      "detail": "create HTTP 200"
+    },
+    {
+      "id": "secret-scope-delete",
+      "description": "Delete the temporary secret scope",
+      "api": "Secrets API 2.0",
+      "result": "verified",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "serverless-warehouse",
+      "description": "An existing serverless SQL warehouse is available",
+      "api": "SQL Warehouses API",
+      "result": "verified",
+      "detail": "[{\"id\": \"565cd2fd713738c4\", \"name\": \"Serverless Starter Warehouse\", \"state\": \"RUNNING\", \"enable_serverless_compute\": true}]"
+    }
+  ]
+}

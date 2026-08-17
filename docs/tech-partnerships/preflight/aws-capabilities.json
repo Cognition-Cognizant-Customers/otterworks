@@ -1,0 +1,189 @@
+{
+  "platform": "aws",
+  "checked_at": "2026-08-17T04:34:02.104745+00:00",
+  "credential_identity": "arn:aws:iam::[REDACTED-ACCOUNT]:user/Devin-PartnerWorkshops-Demo",
+  "probes": [
+    {
+      "id": "region",
+      "description": "Resolve the AWS region used by the preflight",
+      "api": "AWS environment",
+      "result": "verified",
+      "detail": "us-east-1"
+    },
+    {
+      "id": "identity",
+      "description": "Identify the AWS caller",
+      "api": "aws sts get-caller-identity",
+      "result": "verified",
+      "detail": "command succeeded"
+    },
+    {
+      "id": "lambda-create-permission",
+      "description": "Simulate permission for lambda:CreateFunction",
+      "api": "aws iam simulate-principal-policy --action-names lambda:CreateFunction",
+      "result": "verified",
+      "detail": "decision=allowed"
+    },
+    {
+      "id": "stepfunctions-create-permission",
+      "description": "Simulate permission for states:CreateStateMachine",
+      "api": "aws iam simulate-principal-policy --action-names states:CreateStateMachine",
+      "result": "verified",
+      "detail": "decision=allowed"
+    },
+    {
+      "id": "eventbridge-create-permission",
+      "description": "Simulate permission for events:PutRule",
+      "api": "aws iam simulate-principal-policy --action-names events:PutRule",
+      "result": "verified",
+      "detail": "decision=allowed"
+    },
+    {
+      "id": "sqs-create-permission",
+      "description": "Simulate permission for sqs:CreateQueue",
+      "api": "aws iam simulate-principal-policy --action-names sqs:CreateQueue",
+      "result": "verified",
+      "detail": "decision=allowed"
+    },
+    {
+      "id": "dynamodb-create-permission",
+      "description": "Simulate permission for dynamodb:CreateTable",
+      "api": "aws iam simulate-principal-policy --action-names dynamodb:CreateTable",
+      "result": "verified",
+      "detail": "decision=allowed"
+    },
+    {
+      "id": "s3-create-permission",
+      "description": "Simulate permission for s3:CreateBucket",
+      "api": "aws iam simulate-principal-policy --action-names s3:CreateBucket",
+      "result": "verified",
+      "detail": "decision=allowed"
+    },
+    {
+      "id": "iam-create-permission",
+      "description": "Simulate permission for iam:CreateRole",
+      "api": "aws iam simulate-principal-policy --action-names iam:CreateRole",
+      "result": "verified",
+      "detail": "decision=allowed"
+    },
+    {
+      "id": "lambda-permissions",
+      "description": "List Lambda functions",
+      "api": "aws lambda list-functions",
+      "result": "verified",
+      "detail": "command succeeded"
+    },
+    {
+      "id": "stepfunctions-permissions",
+      "description": "List Step Functions state machines",
+      "api": "aws stepfunctions list-state-machines",
+      "result": "verified",
+      "detail": "command succeeded"
+    },
+    {
+      "id": "eventbridge-permissions",
+      "description": "List EventBridge rules",
+      "api": "aws events list-rules",
+      "result": "verified",
+      "detail": "command succeeded"
+    },
+    {
+      "id": "sqs-permissions",
+      "description": "List SQS queues",
+      "api": "aws sqs list-queues",
+      "result": "verified",
+      "detail": "command succeeded"
+    },
+    {
+      "id": "dynamodb-permissions",
+      "description": "List DynamoDB tables",
+      "api": "aws dynamodb list-tables",
+      "result": "verified",
+      "detail": "command succeeded"
+    },
+    {
+      "id": "s3-permissions",
+      "description": "List S3 buckets",
+      "api": "aws s3api list-buckets",
+      "result": "verified",
+      "detail": "command succeeded"
+    },
+    {
+      "id": "iam-permissions",
+      "description": "List IAM roles",
+      "api": "aws iam list-roles",
+      "result": "verified",
+      "detail": "command succeeded"
+    },
+    {
+      "id": "iam-role-create",
+      "description": "Create a temporary IAM role to prove role creation permission",
+      "api": "aws iam create-role --role-name ow-tp-preflight-e0ad685256c9 --assume-role-policy-document {\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"Service\": \"lambda.amazonaws.com\"}, \"Action\": \"sts:AssumeRole\"}]}",
+      "result": "verified",
+      "detail": "command succeeded"
+    },
+    {
+      "id": "iam-role-delete",
+      "description": "Delete the temporary IAM role",
+      "api": "iam:DeleteRole",
+      "result": "verified",
+      "detail": "command succeeded"
+    },
+    {
+      "id": "leftover-tag-scan",
+      "description": "Scan for Project=otterworks-tp resources",
+      "api": "aws resourcegroupstaggingapi get-resources --tag-filters Key=Project,Values=otterworks-tp",
+      "result": "informational",
+      "detail": "13 existing resource(s): [\"arn:aws:cloudwatch:us-east-1:[REDACTED-ACCOUNT]:alarm:ow-tp-portal-demo-announcements-errors\", \"arn:aws:cloudwatch:us-east-1:[REDACTED-ACCOUNT]:alarm:ow-tp-portal-demo-feedback-errors\", \"arn:aws:dynamodb:us-east-1:[REDACTED-ACCOUNT]:table/ow-tp-portal-demo-feedback\", \"arn:aws:apigateway:us-east-1::/apis/g2rqbb7uw6\", \"arn:aws:apigateway:us-east-1::/apis/g2rqbb7uw6/stages/$default\", \"arn:aws:dynamodb:us-east-1:[REDACTED-ACCOUNT]:table/ow-tp-portal-demo-preferences\", \"arn:aws:events:us-east-1:[REDACTED-ACCOUNT]:rule/ow-tp-portal-demo-alarm-to-devin\", \"arn:aws:s3:::ow-tp-portal-demo-demo-site\", \"arn:aws:dynamodb:us-east-1:[REDACTED-ACCOUNT]:table/ow-tp-portal-demo-announcements\", \"arn:aws:cloudwatch:us-east-1:[REDACTED-ACCOUNT]:alarm:ow-tp-portal-demo-preferences-errors\", \"arn:aws:lambda:us-east-1:[REDACTED-ACCOUNT]:function:ow-tp-portal-demo-preferences\", \"arn:aws:lambda:us-east-1:[REDACTED-ACCOUNT]:function:ow-tp-portal-demo-feedback\", \"arn:aws:lambda:us-east-1:[REDACTED-ACCOUNT]:function:ow-tp-portal-demo-announcements"
+    },
+    {
+      "id": "leftover-lambda-scan",
+      "description": "Scan for leftover ow-tp- resources",
+      "api": "aws lambda list-functions --query Functions[?starts_with(FunctionName,'ow-tp-')].FunctionName",
+      "result": "informational",
+      "detail": "3 existing resource(s): [\"ow-tp-portal-demo-preferences\", \"ow-tp-portal-demo-feedback\", \"ow-tp-portal-demo-announcements\"]"
+    },
+    {
+      "id": "leftover-sfn-scan",
+      "description": "Scan for leftover ow-tp- resources",
+      "api": "aws stepfunctions list-state-machines --query stateMachines[?starts_with(name,'ow-tp-')].name",
+      "result": "verified",
+      "detail": "none found"
+    },
+    {
+      "id": "leftover-eventbridge-scan",
+      "description": "Scan for leftover ow-tp- resources",
+      "api": "aws events list-rules --name-prefix ow-tp-",
+      "result": "informational",
+      "detail": "1 existing resource(s): [\"ow-tp-portal-demo-alarm-to-devin\"]"
+    },
+    {
+      "id": "leftover-sqs-scan",
+      "description": "Scan for leftover ow-tp- resources",
+      "api": "aws sqs list-queues --queue-name-prefix ow-tp-",
+      "result": "verified",
+      "detail": "none found"
+    },
+    {
+      "id": "leftover-dynamodb-scan",
+      "description": "Scan for leftover ow-tp- resources",
+      "api": "aws dynamodb list-tables --query TableNames[?starts_with(@,'ow-tp-')]",
+      "result": "informational",
+      "detail": "3 existing resource(s): [\"ow-tp-portal-demo-announcements\", \"ow-tp-portal-demo-feedback\", \"ow-tp-portal-demo-preferences\"]"
+    },
+    {
+      "id": "leftover-s3-scan",
+      "description": "Scan for leftover ow-tp- resources",
+      "api": "aws s3api list-buckets --query Buckets[?starts_with(Name,'ow-tp-')].Name",
+      "result": "informational",
+      "detail": "1 existing resource(s): [\"ow-tp-portal-demo-demo-site\"]"
+    },
+    {
+      "id": "leftover-iam-scan",
+      "description": "Scan for leftover ow-tp- resources",
+      "api": "aws iam list-roles --query Roles[?starts_with(RoleName,'ow-tp-')].RoleName",
+      "result": "informational",
+      "detail": "3 existing resource(s): [\"ow-tp-portal-demo-announcements-role\", \"ow-tp-portal-demo-feedback-role\", \"ow-tp-portal-demo-preferences-role\"]"
+    }
+  ]
+}

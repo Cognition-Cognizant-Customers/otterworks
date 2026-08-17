@@ -1,0 +1,63 @@
+{
+  "platform": "atlas",
+  "checked_at": "2026-08-17T04:34:27.090382+00:00",
+  "credential_identity": "unavailable",
+  "probes": [
+    {
+      "id": "project-read",
+      "description": "Read the Atlas project",
+      "api": "https://cloud.mongodb.com/api/atlas/v2/groups/[REDACTED]",
+      "result": "verified",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "cluster-read",
+      "description": "Read cluster configuration",
+      "api": "https://cloud.mongodb.com/api/atlas/v2/groups/[REDACTED]/clusters",
+      "result": "verified",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "db-user-read",
+      "description": "Read database users",
+      "api": "https://cloud.mongodb.com/api/atlas/v2/groups/[REDACTED]/databaseUsers",
+      "result": "verified",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "access-list-read",
+      "description": "Read the Atlas API access list",
+      "api": "https://cloud.mongodb.com/api/atlas/v2/groups/[REDACTED]/accessList",
+      "result": "verified",
+      "detail": "2 entries across 1 page(s)"
+    },
+    {
+      "id": "access-list-post",
+      "description": "Create a temporary API access-list entry",
+      "api": "https://cloud.mongodb.com/api/atlas/v2/groups/[REDACTED]/accessList",
+      "result": "verified",
+      "detail": "HTTP 201"
+    },
+    {
+      "id": "vm-ip-listed",
+      "description": "The VM public IP is present in the Atlas access list",
+      "api": "Atlas accessList GET",
+      "result": "verified",
+      "detail": "VM IP 140.232.64.3; covered by 2 access-list entries"
+    },
+    {
+      "id": "db-user-write",
+      "description": "Insert and delete a temporary document with the DB user",
+      "api": "MongoDB wire protocol",
+      "result": "verified",
+      "detail": "temporary collection cleaned"
+    },
+    {
+      "id": "access-list-delete",
+      "description": "Delete a temporary API access-list entry",
+      "api": "Atlas accessList DELETE",
+      "result": "verified",
+      "detail": "HTTP 204: 203.0.113.254"
+    }
+  ]
+}
