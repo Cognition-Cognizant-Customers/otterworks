@@ -356,9 +356,6 @@ build_helm_args() {
       add_secret SPRING_FLYWAY_PASSWORD "${DB_PASSWORD}"
       add_secret SPRING_DATASOURCE_PASSWORD "${DB_PASSWORD}"
       EXTRA_ARGS+=(--set-string "config.AUTH_ADMIN_SEED_EMAIL=${ADMIN_SEED_EMAIL}")
-      # Databases migrated before the admin seed left V1 carry the old checksum;
-      # repair realigns it instead of crash-looping the service.
-      EXTRA_ARGS+=(--set-string "config.AUTH_FLYWAY_REPAIR_ON_MIGRATE=${AUTH_FLYWAY_REPAIR_ON_MIGRATE:-true}")
       add_secret AUTH_ADMIN_SEED_PASSWORD "${ADMIN_SEED_PASSWORD}" ;;
     file-service)
       EXTRA_ARGS+=(--set-string "config.AWS_REGION=${AWS_REGION}")

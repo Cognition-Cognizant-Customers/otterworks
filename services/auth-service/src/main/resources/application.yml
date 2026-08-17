@@ -29,8 +29,6 @@ spring:
     baseline-version: 0
 
 auth:
-  flyway:
-    repair-on-migrate: ${AUTH_FLYWAY_REPAIR_ON_MIGRATE:false}
   admin-seed:
     enabled: ${AUTH_ADMIN_SEED_ENABLED:true}
     email: ${AUTH_ADMIN_SEED_EMAIL:admin@otterworks.dev}

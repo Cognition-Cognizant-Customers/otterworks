@@ -1,6 +1,9 @@
 package com.otterworks.auth.config;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.flywaydb.core.api.output.ValidateOutput;
+import org.flywaydb.core.api.output.ValidateResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.flyway.FlywayMigrationStrategy;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -8,17 +11,43 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class FlywayConfig {
 
+  private static final Logger log = LoggerFactory.getLogger(FlywayConfig.class);
+
+  /** Version of the migration the admin seed was removed from. */
+  private static final String SEED_MIGRATION_VERSION = "1";
+
+  private static final String CHECKSUM_MISMATCH = "CHECKSUM_MISMATCH";
+
   /**
-   * Opt-in strategy for databases created before the admin seed was removed from V1: repairing the
-   * schema history realigns the resulting checksum change instead of failing startup. Left off by
-   * default so checksum validation keeps protecting other environments.
+   * Databases created before the admin seed was removed from V1 record its old checksum and would
+   * otherwise fail startup. Repair runs only when validation fails for exactly that reason on
+   * exactly that migration, so any other checksum drift still fails loudly.
    */
   @Bean
-  @ConditionalOnProperty(name = "auth.flyway.repair-on-migrate", havingValue = "true")
-  public FlywayMigrationStrategy repairingFlywayMigrationStrategy() {
+  public FlywayMigrationStrategy seedMigrationAwareStrategy() {
     return flyway -> {
-      flyway.repair();
+      ValidateResult validation = flyway.validateWithResult();
+      if (!validation.validationSuccessful && isSeedMigrationChecksumOnly(validation)) {
+        log.warn(
+            "Repairing the schema history: V{} changed when the admin seed moved out of the"
+                + " migration",
+            SEED_MIGRATION_VERSION);
+        flyway.repair();
+      }
       flyway.migrate();
     };
+  }
+
+  private static boolean isSeedMigrationChecksumOnly(ValidateResult validation) {
+    if (validation.invalidMigrations.isEmpty()) {
+      return false;
+    }
+    for (ValidateOutput invalid : validation.invalidMigrations) {
+      if (!SEED_MIGRATION_VERSION.equals(invalid.version)
+          || !CHECKSUM_MISMATCH.equals(invalid.errorDetails.errorCode.name())) {
+        return false;
+      }
+    }
+    return true;
   }
 }

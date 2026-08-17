@@ -22,10 +22,9 @@ belongs to a different account.
 ## Cluster deployments
 
 `scripts/deploy-dev.sh` and `scripts/deploy-tenant.sh` pass `AUTH_ADMIN_SEED_PASSWORD` to the
-auth-service release as a Helm secret and set `AUTH_FLYWAY_REPAIR_ON_MIGRATE=true` (existing cluster
-and tenant databases were migrated by the previous `V1`). They default to the same documented demo
-credential as local dev so deployed environments keep a usable admin login; export
-`ADMIN_SEED_PASSWORD` (and optionally `ADMIN_SEED_EMAIL`) for anything that is not a demo.
+auth-service release as a Helm secret. They default to the same documented demo credential as local
+dev so deployed environments keep a usable admin login; export `ADMIN_SEED_PASSWORD` (and optionally
+`ADMIN_SEED_EMAIL`) for anything that is not a demo.
 
 ## Local development
 
@@ -45,7 +44,7 @@ can never match, so databases created before this change stop accepting the leak
 seeder then sets the configured password on the next boot. The revocation matches the leaked hash by
 MD5 digest, so an admin password that was already rotated is left alone.
 
-Because `V1` itself changed, a database migrated by the previous `V1` fails checksum validation on
-startup. Set `AUTH_FLYWAY_REPAIR_ON_MIGRATE=true` (already set for docker-compose) to run
-`flyway repair` before `migrate` once; it is off by default so checksum validation keeps protecting
-other environments.
+Because `V1` itself changed, a database migrated by the previous `V1` records the old checksum.
+`FlywayConfig` validates before migrating and runs `flyway repair` only when the sole validation
+error is a checksum mismatch on `V1`, so that upgrade heals itself once and any other drift — an
+edited or missing migration — still fails startup.
