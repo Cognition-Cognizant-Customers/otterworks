@@ -88,7 +88,7 @@ export class DocumentStore {
 
   async getDocumentMeta(documentId: string): Promise<DocumentMeta | null> {
     const data = await this.redis.hgetall(`${DOC_META_KEY}${documentId}`);
-    if (!data || !data.documentId) return null;
+    if (!data?.documentId) return null;
     return {
       documentId: data.documentId,
       createdAt: data.createdAt,
