@@ -1,0 +1,235 @@
+module: rating
+rules:
+  - id: RATING-001
+    statement: >-
+      Rating selects the single subscription whose window overlaps the requested
+      period, preferring the latest starts_on, treating a NULL ends_on as open.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [31, 41]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [quota_units, billable_units, overage_amount]
+    confidence: high
+    scenarios: [RATING-001, RATING-003]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-17"
+      note: Approved for the MongoDB-backed rating extraction.
+  - id: RATING-002
+    statement: >-
+      used_units is the sum of usage-event units whose occurred_at calendar date
+      falls inside the inclusive period, and is zero when the tenant has no
+      usage in the period.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [43, 46]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [used_units]
+    confidence: high
+    scenarios: [RATING-001]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-17"
+      note: Approved for the MongoDB-backed rating extraction.
+  - id: RATING-003
+    statement: >-
+      rollover_units sums the rollover recorded by prior rating periods that
+      start strictly before the requested period and no earlier than three
+      calendar months before it, capped at twice the plan's included units;
+      a tenant with no such period rolls over zero.
+    question: >-
+      The lookback sum is capped twice (once inside the aggregate, once again
+      afterwards) and the interval bound is inclusive of period_start minus
+      three months. Is the double cap plus the inclusive lower bound intended,
+      so a period exactly three months back still contributes?
+    answer: >-
+      Yes. Both caps are 2x included_units so the second is redundant but
+      harmless, and the lower bound stays inclusive: the 2025-11-01 period of
+      RATING-002 contributes to a 2026-02-01 run and the recorded rollover of
+      200 depends on it.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [48, 56]
+    inputs: [tenant_id, period_start]
+    outputs: [rollover_units]
+    confidence: high
+    scenarios: [RATING-002]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-17"
+      note: Approved for the MongoDB-backed rating extraction.
+  - id: RATING-004
+    statement: >-
+      billable_units is used_units less rollover_units less the plan's included
+      units, floored at zero.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [57, 57]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [billable_units]
+    confidence: high
+    scenarios: [RATING-001, RATING-002]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-17"
+      note: Approved for the MongoDB-backed rating extraction.
+  - id: RATING-005
+    statement: >-
+      Billable units split at a fixed first-tier width of 101 units: the first
+      tier takes min(billable, 101) and the second tier the remainder.
+    question: >-
+      The first tier is the literal 101, not the plan's included units and not
+      a round 100. Is the off-by-one literal the intended boundary?
+    answer: >-
+      Yes, the literal 101 is preserved as-is. RATING-004 (101 billable units)
+      and RATING-005 (102 billable units) pin the boundary exactly: the second
+      tier only opens at the 102nd billable unit.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [58, 59]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [first_tier_units, second_tier_units]
+    confidence: high
+    scenarios: [RATING-004, RATING-005, RATING-006]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-17"
+      note: Approved for the MongoDB-backed rating extraction.
+  - id: RATING-006
+    statement: >-
+      The overage amount is the first tier at the plan's overage rate plus the
+      second tier at 1.5x that rate, summed at full precision and only then
+      rounded once to two decimals, half away from zero.
+    question: >-
+      Is rounding applied once to the summed tiers rather than per tier, and is
+      the tie direction half-up rather than banker's rounding?
+    answer: >-
+      Yes to both. RATING-004 records 5.56 for 101 units at 0.055 (5.555 exact,
+      half-up), which a per-tier or half-even rounding would not produce.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [60, 60]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [overage_amount]
+    confidence: high
+    scenarios: [RATING-004, RATING-006]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-17"
+      note: Approved for the MongoDB-backed rating extraction.
+  - id: RATING-007
+    statement: >-
+      When the selected subscription is suspended and its suspension date falls
+      inside the period, billable units and the overage amount are prorated by
+      the inclusive day span from the suspension date to the period end over the
+      inclusive period length; units round half away from zero to an integer and
+      the amount is prorated from the already-rounded amount and rounded again
+      to two decimals.
+    question: >-
+      Proration multiplies the amount that was already rounded at two decimals,
+      so the amount is rounded twice. Is that double rounding intended rather
+      than one rounding of the prorated full-precision amount?
+    answer: >-
+      Yes, the double rounding is preserved. RATING-003 records 4.37, which is
+      round(8.73 * 0.5); rounding the full-precision 8.7325 * 0.5 once would
+      give 4.37 as well, but the recorded billable 100 = round(200 * 0.5)
+      confirms the same two-step order, and the two-step form is what the
+      procedure specifies.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [62, 72]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [billable_units, overage_amount]
+    confidence: high
+    scenarios: [RATING-003]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-17"
+      note: Approved for the MongoDB-backed rating extraction.
+  - id: RATING-008
+    statement: >-
+      The usage summary groups the period's usage events by kind, ordered by
+      kind, reporting the event count and the summed units per kind.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [79, 93]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [kind, event_count, units]
+    confidence: high
+    scenarios: [RATING-007]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-17"
+      note: Approved for the MongoDB-backed rating extraction.
+  - id: RATING-009
+    statement: >-
+      Finalizing a period upserts the period keyed by tenant and period start
+      and stores the rating outcome for it, where the persisted rollover_units
+      is the unused quota, max(quota_units - used_units, 0), rather than the
+      rollover consumed by the rating, and the creation timestamp is the period
+      end at midnight UTC; a re-finalize refreshes the period end, used_units,
+      rollover_units, billable_units and overage_amount only, leaving the stored
+      quota_units, created_at and subscription attribution at their first-write
+      values.
+    question: >-
+      The persisted rollover_units disagrees with the rollover_units the rating
+      returns for the same period (0 unused quota versus 200 consumed rollover
+      in RATING-008). Is the stored column the unused quota by design?
+    answer: >-
+      Yes. The stored value feeds the next period's lookback as unused quota and
+      is deliberately a different quantity from the rollover the rating applied;
+      RATING-008 records the stored 0 alongside used_units 260 and quota 100.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [95, 138]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [used_units, quota_units, rollover_units, billable_units, overage_amount]
+    confidence: high
+    scenarios: [RATING-008]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-17"
+      note: >-
+        Approved for the MongoDB-backed rating extraction, including collapsing
+        the period row and its result row into one document so the two
+        statements stay a single atomic write.
+  - id: RATING-010
+    statement: >-
+      A tenant with no overlapping subscription, or a subscription whose plan
+      row is missing, still reports its measured used_units but reports rollover,
+      billable and both tier counts as zero with an absent quota and an absent
+      overage amount; the missing plan never falls open to a zero rate or a zero
+      quota that would look like a real rating.
+    question: >-
+      The procedure leaves the plan record NULL instead of raising when no plan
+      or subscription matches, which makes quota and money NULL while the unit
+      arithmetic collapses to zero through LEAST/GREATEST. Should the extraction
+      reproduce the NULL result or reject the request?
+    answer: >-
+      Reproduce it: quota_units and overage_amount are reported as absent
+      (JSON null) and the unit fields as zero, exactly as the procedure returns.
+      No scenario grades this path, so it is covered by target unit tests only
+      and is called out as a coverage gap.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [39, 60]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [quota_units, billable_units, overage_amount]
+    confidence: medium
+    scenarios: [RATING-001]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-17"
+      note: >-
+        Approved as the documented NULL-semantics decision; no recorded scenario
+        exercises a missing plan, so this rule is a declared coverage gap.
