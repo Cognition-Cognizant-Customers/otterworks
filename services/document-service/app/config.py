@@ -1,6 +1,12 @@
 """Application configuration via pydantic-settings."""
 
+import os
+
 from pydantic_settings import BaseSettings
+
+# Local-development fallback only; real deployments set DOC_SVC_DATABASE_URL
+# (or POSTGRES_PASSWORD) from their secret store.
+_DEV_DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "otterworks_dev")
 
 
 class Settings(BaseSettings):
@@ -9,7 +15,7 @@ class Settings(BaseSettings):
     debug: bool = False
 
     database_url: str = (
-        "postgresql+asyncpg://otterworks:otterworks_dev@localhost:5432/otterworks"
+        f"postgresql+asyncpg://otterworks:{_DEV_DB_PASSWORD}@localhost:5432/otterworks"
     )
     db_pool_size: int = 10
     db_max_overflow: int = 20
