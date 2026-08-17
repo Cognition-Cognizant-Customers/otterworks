@@ -18,6 +18,8 @@ public class FlywayConfig {
 
   private static final String CHECKSUM_MISMATCH = "CHECKSUM_MISMATCH";
 
+  private static final String NOT_APPLIED_SUFFIX = "_NOT_APPLIED";
+
   /**
    * Databases created before the admin seed was removed from V1 record its old checksum and would
    * otherwise fail startup. Repair runs only when validation fails for exactly that reason on
@@ -39,15 +41,18 @@ public class FlywayConfig {
   }
 
   private static boolean isSeedMigrationChecksumOnly(ValidateResult validation) {
-    if (validation.invalidMigrations.isEmpty()) {
-      return false;
-    }
+    boolean seedMigrationMismatch = false;
     for (ValidateOutput invalid : validation.invalidMigrations) {
-      if (!SEED_MIGRATION_VERSION.equals(invalid.version)
-          || !CHECKSUM_MISMATCH.equals(invalid.errorDetails.errorCode.name())) {
+      String errorCode = invalid.errorDetails.errorCode.name();
+      if (errorCode.endsWith(NOT_APPLIED_SUFFIX)) {
+        // Migrations this upgrade still has to apply, V5 among them.
+        continue;
+      }
+      if (!SEED_MIGRATION_VERSION.equals(invalid.version) || !CHECKSUM_MISMATCH.equals(errorCode)) {
         return false;
       }
+      seedMigrationMismatch = true;
     }
-    return true;
+    return seedMigrationMismatch;
   }
 }
