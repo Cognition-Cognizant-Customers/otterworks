@@ -5,13 +5,15 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
+DEFAULT_CONTENT_TYPE = "text/markdown"
+
 # ---- Document schemas ----
 
 
 class DocumentCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=500)
     content: str = Field(default="")
-    content_type: str = Field(default="text/markdown")
+    content_type: str = Field(default=DEFAULT_CONTENT_TYPE)
     owner_id: UUID | None = None
     folder_id: UUID | None = None
 
@@ -21,7 +23,7 @@ class DocumentUpdate(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=500)
     content: str = Field(default="")
-    content_type: str = Field(default="text/markdown")
+    content_type: str = Field(default=DEFAULT_CONTENT_TYPE)
     folder_id: UUID | None = None
 
 
@@ -107,7 +109,7 @@ class TemplateCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=500)
     description: str = Field(default="")
     content: str = Field(default="")
-    content_type: str = Field(default="text/markdown")
+    content_type: str = Field(default=DEFAULT_CONTENT_TYPE)
     created_by: UUID
 
 
