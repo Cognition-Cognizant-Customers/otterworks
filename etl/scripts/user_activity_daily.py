@@ -30,10 +30,10 @@ def main():
     aws_access_key = config.get("aws", "access_key")
     aws_secret_key = config.get("aws", "secret_key")
     aws_region = config.get("aws", "region")
-    expected_bucket_owner = os.environ.get(
-        "ETL_EXPECTED_BUCKET_OWNER",
-        config.get("aws", "expected_bucket_owner", fallback=""),
-    ).strip()
+    expected_bucket_owner = (
+        os.environ.get("ETL_EXPECTED_BUCKET_OWNER", "").strip()
+        or config.get("aws", "expected_bucket_owner", fallback="").strip()
+    )
     if not expected_bucket_owner:
         sys.exit("ERROR: aws.expected_bucket_owner (or ETL_EXPECTED_BUCKET_OWNER) is not configured")
 
