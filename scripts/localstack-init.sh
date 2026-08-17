@@ -12,6 +12,8 @@ make_bucket()   { bucket_exists "$1" || awslocal s3 mb "s3://$1"; }
 
 # S3 Buckets
 make_bucket otterworks-files
+make_bucket otterworks-file-storage
+make_bucket otterworks-file-quarantine
 make_bucket otterworks-data-lake
 make_bucket otterworks-audit-archive
 
@@ -19,6 +21,7 @@ make_bucket otterworks-audit-archive
 awslocal sqs create-queue --queue-name otterworks-notifications
 awslocal sqs create-queue --queue-name otterworks-audit-events-queue
 awslocal sqs create-queue --queue-name otterworks-search-events
+awslocal sqs create-queue --queue-name otterworks-analytics
 
 # SNS Topic (create-topic returns the existing ARN if it already exists)
 awslocal sns create-topic --name otterworks-events
@@ -55,6 +58,12 @@ table_exists otterworks-file-metadata || awslocal dynamodb create-table \
   --table-name otterworks-file-metadata \
   --attribute-definitions AttributeName=id,AttributeType=S \
   --key-schema AttributeName=id,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST
+
+table_exists otterworks-analytics-events || awslocal dynamodb create-table \
+  --table-name otterworks-analytics-events \
+  --attribute-definitions AttributeName=event_id,AttributeType=S \
+  --key-schema AttributeName=event_id,KeyType=HASH \
   --billing-mode PAY_PER_REQUEST
 
 table_exists otterworks-audit-events || awslocal dynamodb create-table \

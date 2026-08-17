@@ -1,0 +1,42 @@
+{
+  "report_type": "daily_analytics",
+  "report_date": "2026-01-15",
+  "generated_at": "2026-01-15T00:00:00+00:00",
+  "summary": {
+    "active_users": 12,
+    "active_documents": 25,
+    "active_files": 9,
+    "total_events": 272,
+    "documents_created": 46,
+    "documents_edited": 46,
+    "comments_added": 45,
+    "files_uploaded": 45,
+    "files_shared": 45,
+    "files_deleted": 45,
+    "bytes_uploaded": 54875
+  },
+  "highlights": {
+    "peak_hour": {
+      "hour": "00",
+      "event_count": 12
+    },
+    "most_active_users": [
+      "unknown",
+      "user-001",
+      "user-002",
+      "user-003",
+      "user-004"
+    ]
+  },
+  "document_metrics": {
+    "created": 46,
+    "edited": 46,
+    "comments": 45
+  },
+  "file_metrics": {
+    "uploaded": 45,
+    "shared": 45,
+    "deleted": 45,
+    "bytes_uploaded": 54875
+  }
+}

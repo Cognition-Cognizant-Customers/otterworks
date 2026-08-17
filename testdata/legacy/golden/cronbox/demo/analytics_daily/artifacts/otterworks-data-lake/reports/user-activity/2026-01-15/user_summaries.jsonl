@@ -1,0 +1,13 @@
+{"user_id": "user-005", "total_actions": 639, "active_days": 29, "actions_by_type": {"file_deleted": 21, "document_edited": 84, "file_uploaded": 28}}
+{"user_id": "user-004", "total_actions": 611, "active_days": 29, "actions_by_type": {"file_shared": 21, "document_edited": 56, "file_uploaded": 28}}
+{"user_id": "user-003", "total_actions": 583, "active_days": 29, "actions_by_type": {"file_uploaded": 49, "document_edited": 28}}
+{"user_id": "user-002", "total_actions": 556, "active_days": 29, "actions_by_type": {"comment_added": 22, "document_edited": 84, "file_uploaded": 28}}
+{"user_id": "user-001", "total_actions": 528, "active_days": 29, "actions_by_type": {"document_edited": 78, "file_uploaded": 28}}
+{"user_id": "user-000", "total_actions": 499, "active_days": 29, "actions_by_type": {"document_created": 21, "document_edited": 28, "file_uploaded": 28}}
+{"user_id": "unknown", "total_actions": 22, "active_days": 1, "actions_by_type": {"document_created": 4, "file_deleted": 4, "file_shared": 4, "file_uploaded": 4, "comment_added": 3, "document_edited": 3}}
+{"user_id": "user-006", "total_actions": 21, "active_days": 1, "actions_by_type": {"document_created": 21}}
+{"user_id": "user-007", "total_actions": 21, "active_days": 1, "actions_by_type": {"document_edited": 21}}
+{"user_id": "user-008", "total_actions": 20, "active_days": 1, "actions_by_type": {"comment_added": 20}}
+{"user_id": "user-009", "total_actions": 20, "active_days": 1, "actions_by_type": {"file_uploaded": 20}}
+{"user_id": "user-010", "total_actions": 20, "active_days": 1, "actions_by_type": {"file_shared": 20}}
+{"user_id": "user-011", "total_actions": 20, "active_days": 1, "actions_by_type": {"file_deleted": 20}}

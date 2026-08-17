@@ -1,0 +1,25 @@
+{
+  "report_type": "storage_cleanup",
+  "report_date": "2026-01-15",
+  "generated_at": "2026-01-15T00:00:00+00:00",
+  "inventory": {
+    "total_objects": 76,
+    "total_size_bytes": 878,
+    "total_size_gb": 0.0
+  },
+  "orphans": {
+    "orphaned_objects": 4,
+    "orphaned_bytes": 24,
+    "orphaned_size_gb": 0.0,
+    "orphan_percentage": 5.26
+  },
+  "cleanup": {
+    "objects_quarantined": 4,
+    "objects_failed": 0,
+    "quarantine_bucket": "otterworks-file-quarantine"
+  },
+  "savings": {
+    "storage_freed_gb": 0.0,
+    "estimated_monthly_savings_usd": 0.0
+  }
+}

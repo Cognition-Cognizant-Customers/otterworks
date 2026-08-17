@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-etl-gen-history legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean dbx-showcase dbx-showcase-help
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-etl-gen-history legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean dbx-showcase dbx-showcase-help cronbox-up cronbox-seed cronbox-run cronbox-run-all cronbox-capture cronbox-reset cronbox-down
 
 SHELL := /bin/bash
 
@@ -358,6 +358,30 @@ endif
 	uv run testdata/legacy/validate.py --ns $(NS) --targets "$(SEED_LEGACY_TARGETS)"
 
 # --- Infrastructure ---
+
+cronbox-up: infra-up ## Start Cron Box's local corpus API (NS=<ns>)
+	@PYTHON=$$(scripts/tp_cronbox/ensure_venv.sh); test -f scripts/tp_cronbox/state/corpus.pid || (nohup "$$PYTHON" scripts/tp_cronbox/corpus_api.py --port 8088 > scripts/tp_cronbox/state/corpus.log 2>&1 & echo $$! > scripts/tp_cronbox/state/corpus.pid)
+
+cronbox-seed: ## Seed the deterministic Cron Box estate (NS=<ns>, RUN_DATE=2026-01-15)
+	@PYTHON=$$(scripts/tp_cronbox/ensure_venv.sh); AWS_ENDPOINT_URL=$${AWS_ENDPOINT_URL:-http://localhost:4566} "$$PYTHON" scripts/tp_cronbox/seed_cronbox.py --ns $${NS:-demo} --run-date $${RUN_DATE:-2026-01-15}
+
+cronbox-run: ## Run one immutable legacy Cron Box job (NS=<ns>, JOB=<name>)
+	@test -n "$(JOB)" || { echo "JOB is required"; exit 2; }
+	@NS=$${NS:-demo} scripts/tp_cronbox/run_cronbox.sh "$(JOB)"
+
+cronbox-run-all: ## Run all five jobs in real cron order after a fresh seed
+	@for job in analytics_daily storage_cleanup_daily audit_archive_weekly search_reindex_weekly user_activity_daily; do $(MAKE) cronbox-run NS=$${NS:-demo} JOB=$$job || exit $$?; done
+
+cronbox-capture: ## Capture one job's resulting state (NS=<ns>, JOB=<name>)
+	@test -n "$(JOB)" || { echo "JOB is required"; exit 2; }
+	@PYTHON=$$(scripts/tp_cronbox/ensure_venv.sh); "$$PYTHON" scripts/tp_cronbox/capture_baseline.py --ns $${NS:-demo} --run-date $${RUN_DATE:-2026-01-15} --job "$(JOB)"
+
+cronbox-reset: ## Restore the golden id-keyed audit table
+	@PYTHON=$$(scripts/tp_cronbox/ensure_venv.sh); AWS_ENDPOINT_URL=$${AWS_ENDPOINT_URL:-http://localhost:4566} "$$PYTHON" scripts/tp_cronbox/reset_cronbox.py
+
+cronbox-down: ## Stop Cron Box's corpus API
+	@if test -f scripts/tp_cronbox/state/corpus.pid; then kill "$$(cat scripts/tp_cronbox/state/corpus.pid)" 2>/dev/null || true; rm -f scripts/tp_cronbox/state/corpus.pid; fi
+	@$(MAKE) cronbox-reset
 
 tf-init: ## Initialize Terraform
 	cd infrastructure/terraform && terraform init

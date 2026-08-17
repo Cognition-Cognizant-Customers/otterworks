@@ -1,0 +1,4 @@
+boto3==1.35.99
+pandas==2.2.3
+psycopg2-binary==2.9.10
+requests==2.32.3

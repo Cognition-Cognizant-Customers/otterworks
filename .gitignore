@@ -109,3 +109,6 @@ __pycache__/
 
 # Legacy seed manifests (runtime artifacts)
 testdata/legacy/manifests/*.json
+
+# Cron Box runtime state
+scripts/tp_cronbox/state/

@@ -1,0 +1,23 @@
+{
+  "report_type": "audit_archive_compliance",
+  "execution_date": "2026-01-15",
+  "generated_at": "2026-01-15T00:00:00+00:00",
+  "retention_policy": {
+    "retention_days": 90,
+    "cutoff_date": "2025-10-17T00:00:00Z"
+  },
+  "results": {
+    "events_scanned": 81,
+    "events_archived": 81,
+    "events_deleted_from_source": 81,
+    "archive_location": "s3://otterworks-audit-archive/audit-archive/year=2026/week=2026-01-15/audit_events.jsonl.gz",
+    "archive_storage_class": "GLACIER",
+    "compressed_size_bytes": 1301
+  },
+  "compliance": {
+    "gdpr_compliant": true,
+    "soc2_compliant": true,
+    "data_encrypted_at_rest": true,
+    "data_encrypted_in_transit": true
+  }
+}
