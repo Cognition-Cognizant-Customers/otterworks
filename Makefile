@@ -120,6 +120,17 @@ tp-fixture-verify: ## Verify local fixture bytes and checksums (NS=<ns>)
 tp-fixture-clean: ## Remove local Databricks transport fixture (NS=<ns>)
 	python3 scripts/tp_databricks/local_fixture.py clean --ns $${NS:-fixture}
 
+TP_MONGO_COMPOSE = docker compose -f docker-compose.tp-mongodb.yml -p otterworks-tp-mongodb
+
+tp-mongo-up: ## Start the local MongoDB fixture (localhost:27019)
+	$(TP_MONGO_COMPOSE) up -d --wait
+
+tp-mongo-down: ## Stop the local MongoDB fixture and keep its data volume
+	$(TP_MONGO_COMPOSE) down
+
+tp-mongo-reset: ## Stop the local MongoDB fixture and remove its data volume
+	$(TP_MONGO_COMPOSE) down -v
+
 PROCS_COMPOSE = docker compose -f docker-compose.procs.yml -p otterworks-procs-$(NS)
 PROCS_UV = uv run --with psycopg[binary]==3.2.9 --with pyyaml==6.0.2
 PROCS_PORT_OFFSET = $(shell if command -v python3 >/dev/null 2>&1 && test -n "$(NS)"; then python3 -c "import zlib; print(zlib.crc32('$(NS)'.encode()) % 1000)"; fi)

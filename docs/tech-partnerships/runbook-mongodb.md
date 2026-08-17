@@ -34,6 +34,17 @@ Expected seed output (deterministic for `NS=demo`):
 
 Manifest: `testdata/legacy/manifests/demo.json` (seed `714559852`).
 
+### Local MongoDB fixture
+
+Migration development uses the local MongoDB fixture only; it never connects
+to MongoDB Atlas. Set `MONGO_URI` for migration commands, or use the local
+default:
+
+```bash
+export MONGO_URI="${MONGO_URI:-mongodb://localhost:27019/?directConnection=true}"
+make tp-mongo-up
+```
+
 ## Beat 1 — Before-state tour (0:00–0:10)
 
 ### 1a. The Oracle horror (5 min)
