@@ -64,3 +64,18 @@ def test_credential_free_at_in_query_is_withheld() -> None:
     expected = "mongodb://<unparseable-uri-withheld>"
     assert redacted_uri(uri) == expected
     assert redacted_uri_for_report(uri) == expected
+
+
+def test_schemeless_credentials_are_withheld() -> None:
+    uri = "alice:s3cret@cluster.example/db"
+    expected = "<unparseable-uri-withheld>"
+    for rendered in (redacted_uri(uri), redacted_uri_for_report(uri)):
+        assert rendered == expected
+        assert "s3cret" not in rendered
+        assert "cluster.example" not in rendered
+
+
+def test_schemeless_credential_free_uri_is_unchanged() -> None:
+    uri = "localhost:27017"
+    assert redacted_uri(uri) == uri
+    assert redacted_uri_for_report(uri) == uri

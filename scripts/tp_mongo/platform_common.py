@@ -49,6 +49,8 @@ def _uri_parts(uri: str) -> _UriParts | None:
     """Return scheme, userinfo, host, and suffix without exposing userinfo."""
     scheme, separator, remainder = uri.partition("://")
     if not separator:
+        if "@" in uri:
+            return _UriParts("", "", "", "", opaque=True)
         return None
     authority_end = len(remainder)
     for delimiter in "/?#":
@@ -72,6 +74,8 @@ def _uri_parts(uri: str) -> _UriParts | None:
 
 
 def _opaque_uri(scheme: str) -> str:
+    if not scheme:
+        return OPAQUE_URI_MARKER
     return f"{scheme}://{OPAQUE_URI_MARKER}"
 
 
