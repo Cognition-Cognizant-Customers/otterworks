@@ -1,0 +1,994 @@
+{
+  "checks": [
+    {
+      "actual": 25000,
+      "expected": 25000,
+      "id": "platform.customers.document_count",
+      "result": "pass",
+      "source_of_truth": "ow_tp_drift01.customers countDocuments after write (expected value owned by the customers unit; actual counted in the target by this job before any migration was re-run)"
+    },
+    {
+      "actual": 81,
+      "expected": 81,
+      "id": "platform.customers.quarantine_count",
+      "result": "pass",
+      "source_of_truth": "ow_tp_drift01.customers_quarantine docs naming source PK + anomaly id (expected value owned by the customers unit; actual counted in the target by this job before any migration was re-run)"
+    },
+    {
+      "actual": 18750,
+      "expected": 18750,
+      "id": "platform.invoices.document_count",
+      "result": "pass",
+      "source_of_truth": "baseline manifest targets.oracle.OW_BILLING.INVOICE_HEADER.rows; target count_documents({ns}) (expected value owned by the invoices unit; actual counted in the target by this job before any migration was re-run)"
+    },
+    {
+      "actual": 149963,
+      "expected": 149963,
+      "id": "platform.invoices.embedded_line_count",
+      "result": "pass",
+      "source_of_truth": "baseline manifest INVOICE_LINE.rows minus planted anomaly count; target aggregation over lines (expected value owned by the invoices unit; actual counted in the target by this job before any migration was re-run)"
+    },
+    {
+      "actual": 37,
+      "expected": 37,
+      "id": "platform.invoices.orphan_lines_quarantined",
+      "result": "pass",
+      "source_of_truth": "baseline manifest planted anomaly orphaned_rows.count; target count_documents (expected value owned by the invoices unit; actual counted in the target by this job before any migration was re-run)"
+    },
+    {
+      "actual": 2000,
+      "expected": 2000,
+      "id": "platform.documents.document_count",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/drift01.json vs mongodb ow_tp_drift01 (recomputed after write) (expected value owned by the documents unit; actual counted in the target by this job before any migration was re-run)"
+    },
+    {
+      "actual": 14042,
+      "expected": 14042,
+      "id": "platform.documents.embedded_version_count",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/drift01.json vs mongodb ow_tp_drift01 (recomputed after write) (expected value owned by the documents unit; actual counted in the target by this job before any migration was re-run)"
+    },
+    {
+      "actual": 10000,
+      "expected": 10000,
+      "id": "platform.files.document_count",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/drift01.json (dynamodb.file-metadata) (expected value owned by the files unit; actual counted in the target by this job before any migration was re-run)"
+    },
+    {
+      "actual": 25000,
+      "expected": 25000,
+      "id": "customers.count",
+      "result": "pass",
+      "source_of_truth": "ow_tp_drift01.customers countDocuments after write"
+    },
+    {
+      "actual": "aba7ca871d775c70a3de243835d72a2c",
+      "expected": "aba7ca871d775c70a3de243835d72a2c",
+      "id": "customers.checksum",
+      "result": "pass",
+      "source_of_truth": "md5 over (_id, balances.current) read back from ow_tp_drift01.customers"
+    },
+    {
+      "actual": 8333,
+      "expected": 8333,
+      "id": "customers.attributes_folded",
+      "result": "pass",
+      "source_of_truth": "sum of attributes_entries sizes in ow_tp_drift01.customers"
+    },
+    {
+      "actual": 8333,
+      "expected": 8333,
+      "id": "customers.attributes_folded.distinct_eav_ids",
+      "result": "pass",
+      "source_of_truth": "distinct attributes_entries.eav_id in ow_tp_drift01.customers"
+    },
+    {
+      "actual": 19971,
+      "expected": 19971,
+      "id": "customers.csv_lists_are_arrays",
+      "result": "pass",
+      "source_of_truth": "$type:array vs $exists on ow_tp_drift01.customers.related_acct_ids"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "customers.csv_lists_never_scalar",
+      "result": "pass",
+      "source_of_truth": "$expr $type of ow_tp_drift01.customers.related_acct_ids that is present but not an array"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "customers.csv_list_items_are_account_ids",
+      "result": "pass",
+      "source_of_truth": "array elements of ow_tp_drift01.customers.related_acct_ids that are not bare digit strings"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "customers.malformed_lists_absent_not_truncated",
+      "result": "pass",
+      "source_of_truth": "ow_tp_drift01.customers docs quarantined for a malformed list that still carry the field"
+    },
+    {
+      "actual": 24950,
+      "expected": 24950,
+      "id": "customers.dates_are_bson",
+      "result": "pass",
+      "source_of_truth": "$type:date vs $exists on ow_tp_drift01.customers.signup_date"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "customers.dates_not_strings",
+      "result": "pass",
+      "source_of_truth": "$type:string on ow_tp_drift01.customers.signup_date"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "customers.dirty_dates_never_fail_open",
+      "result": "pass",
+      "source_of_truth": "ow_tp_drift01.customers docs quarantined for a dirty date that still carry signup_date"
+    },
+    {
+      "actual": 81,
+      "expected": 81,
+      "id": "customers.quarantine_enumerated",
+      "result": "pass",
+      "source_of_truth": "ow_tp_drift01.customers_quarantine docs naming source PK + anomaly id"
+    },
+    {
+      "actual": 81,
+      "expected": 81,
+      "id": "customers.quarantine_pk_resolves",
+      "result": "pass",
+      "source_of_truth": "each customers_quarantine.source.primary_key.value resolves to one customers._id"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "customers.sparse_fields_absent_not_null",
+      "result": "pass",
+      "source_of_truth": "$type:null across 10 sparse paths in ow_tp_drift01.customers"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "customers.namespace_isolated",
+      "result": "pass",
+      "source_of_truth": "documents of another namespace in ow_tp_drift01"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "customers.validator_rejects_bad_document",
+      "result": "pass",
+      "source_of_truth": "insert of a dirty-date/string-list document into ow_tp_drift01.customers is refused by $jsonSchema"
+    },
+    {
+      "actual": {
+        "customers": "d8c29de15a7c301ed6477d6a1d9abbfe",
+        "customers_quarantine": "fa33d1421b375655accd82120d784c60"
+      },
+      "expected": {
+        "customers": "d8c29de15a7c301ed6477d6a1d9abbfe",
+        "customers_quarantine": "fa33d1421b375655accd82120d784c60"
+      },
+      "id": "customers.idempotent",
+      "result": "pass",
+      "source_of_truth": "canonical extended-JSON md5 of both collections around a second migration run"
+    },
+    {
+      "actual": [
+        "dirty_dates:50",
+        "malformed_csv_lists:31"
+      ],
+      "expected": [
+        "dirty_dates:50",
+        "malformed_csv_lists:31"
+      ],
+      "id": "customers.planted_anomalies_exact_set",
+      "result": "pass",
+      "source_of_truth": "ow_tp_drift01.customers_quarantine counts per anomaly id vs manifest planted_anomalies"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "platform.unit_recon_exit_code.customers",
+      "result": "pass",
+      "source_of_truth": "exit status of scripts/tp_mongo/recon_customers.py run by this job"
+    },
+    {
+      "actual": 18750,
+      "expected": 18750,
+      "id": "invoices.count",
+      "result": "pass",
+      "source_of_truth": "baseline manifest targets.oracle.OW_BILLING.INVOICE_HEADER.rows; target count_documents({ns})"
+    },
+    {
+      "actual": 149963,
+      "expected": 149963,
+      "id": "invoices.embedded_line_count",
+      "result": "pass",
+      "source_of_truth": "baseline manifest INVOICE_LINE.rows minus planted anomaly count; target aggregation over lines"
+    },
+    {
+      "actual": "a9417dd8c0ca1226122a62f4c28a38fc",
+      "expected": "a9417dd8c0ca1226122a62f4c28a38fc",
+      "id": "invoices.checksum",
+      "result": "pass",
+      "source_of_truth": "manifest digest spans all 150000 source rows, including quarantined orphans; target read-back"
+    },
+    {
+      "actual": "ea9ac12556858c977905476c9e1a7114",
+      "expected": "ea9ac12556858c977905476c9e1a7114",
+      "id": "invoices.checksum_non_orphan_lines",
+      "result": "pass",
+      "source_of_truth": "Oracle batch recomputation over header-backed lines; target read-back over embedded non-orphan lines"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "invoices.line_totals_preserved",
+      "result": "pass",
+      "source_of_truth": "target aggregation comparing total_amt with Decimal128 sum of embedded line amounts; Python read-back mismatch count=0"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "invoices.money_is_decimal128",
+      "result": "pass",
+      "source_of_truth": "target $type aggregation over invoice and embedded-line money fields"
+    },
+    {
+      "actual": 37,
+      "expected": 37,
+      "id": "invoices.orphans_quarantined",
+      "result": "pass",
+      "source_of_truth": "baseline manifest planted anomaly orphaned_rows.count; target count_documents"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "invoices.orphan_line_id_set_equality",
+      "result": "pass",
+      "source_of_truth": "Oracle LEFT JOIN recomputation of orphan line_id set versus target quarantine"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "invoices.orphans_not_embedded",
+      "result": "pass",
+      "source_of_truth": "target read-back intersection of Oracle orphan IDs and embedded line IDs"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "invoices.null_invoice_id_quarantined",
+      "result": "pass",
+      "source_of_truth": "Oracle batch INVOICE_ID IS NULL count versus target null_invoice_id quarantine count"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "invoices.no_synthesized_headers",
+      "result": "pass",
+      "source_of_truth": "Oracle batch header ID set versus target invoice IDs"
+    },
+    {
+      "actual": 7,
+      "expected": 7,
+      "id": "invoices.zero_line_invoices",
+      "result": "pass",
+      "source_of_truth": "Oracle batch headers with no matching lines versus target line_count"
+    },
+    {
+      "actual": 30208,
+      "expected": 30208,
+      "id": "invoices.null_posted_lines",
+      "result": "pass",
+      "source_of_truth": "Oracle non-orphan POSTED_YN IS NULL count versus target embedded posted:null and posted_raw:null count"
+    },
+    {
+      "actual": 18750,
+      "expected": 18750,
+      "id": "invoices.legacy_total_mismatch_lines",
+      "result": "pass",
+      "source_of_truth": "Oracle header TOTAL_AMT versus grouped source-line sum; target data_quality/flag count"
+    },
+    {
+      "actual": [
+        "invoices",
+        "invoices_quarantine"
+      ],
+      "expected": [
+        "invoices",
+        "invoices_quarantine"
+      ],
+      "id": "invoices.validators_present",
+      "result": "pass",
+      "source_of_truth": "target listCollections options.$jsonSchema"
+    },
+    {
+      "actual": "rejected_code_121",
+      "expected": "rejected_code_121",
+      "id": "invoices.validator_rejects_bad_document",
+      "result": "pass",
+      "source_of_truth": "target negative insert probe; MongoDB document validation error code 121 and probe absence"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "platform.unit_recon_exit_code.invoices",
+      "result": "pass",
+      "source_of_truth": "exit status of scripts/tp_mongo/recon_invoices.py run by this job"
+    },
+    {
+      "actual": 2000,
+      "expected": 2000,
+      "id": "documents.count",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/drift01.json vs mongodb ow_tp_drift01 (recomputed after write)"
+    },
+    {
+      "actual": 14042,
+      "expected": 14042,
+      "id": "documents.version_count",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/drift01.json vs mongodb ow_tp_drift01 (recomputed after write)"
+    },
+    {
+      "actual": {
+        "documents": "1b0e5b717af4c3e0d2155bd8993ec236",
+        "versions": "ac978f9fd1403ec7e20436e7241da318"
+      },
+      "expected": {
+        "documents": "1b0e5b717af4c3e0d2155bd8993ec236",
+        "versions": "ac978f9fd1403ec7e20436e7241da318"
+      },
+      "id": "documents.checksums",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/drift01.json vs mongodb ow_tp_drift01 (recomputed after write)"
+    },
+    {
+      "actual": 380,
+      "expected": 380,
+      "id": "documents.snapshot_count",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/drift01.json vs mongodb ow_tp_drift01 (recomputed after write)"
+    },
+    {
+      "actual": "5f62a71410cb6b7097eb48c155e48840",
+      "expected": "5f62a71410cb6b7097eb48c155e48840",
+      "id": "documents.snapshot_checksum",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/drift01.json vs mongodb ow_tp_drift01 (recomputed after write)"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "documents.snapshots_not_embedded",
+      "result": "pass",
+      "source_of_truth": "mongodb ow_tp_drift01 (recomputed after write)"
+    },
+    {
+      "actual": {
+        "documents": "7e388fcb53a68d80f2798813e1cce727",
+        "snapshots": "4c227dc0a3eeee11b1b79e0dfcf43351",
+        "versions": "919d6aca3ab270411ffb8840db270fca"
+      },
+      "expected": {
+        "documents": "7e388fcb53a68d80f2798813e1cce727",
+        "snapshots": "4c227dc0a3eeee11b1b79e0dfcf43351",
+        "versions": "919d6aca3ab270411ffb8840db270fca"
+      },
+      "id": "documents.field_parity",
+      "result": "pass",
+      "source_of_truth": "postgres otterworks_drift01 (legacy source estate) vs mongodb ow_tp_drift01 (recomputed after write) (every migrated field incl. UTC timestamps)"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "documents.timestamps_representable_in_bson",
+      "result": "pass",
+      "source_of_truth": "postgres otterworks_drift01 (legacy source estate)"
+    },
+    {
+      "actual": [
+        "1e52c45f-f36a-4113-96bd-04f927a1b123:missing=3",
+        "20e6af83-7c51-4db0-8dac-f1ac8d81d366:missing=2",
+        "56c1253d-8d10-4459-8b5a-8748acaf6e05:missing=2",
+        "5a993f9a-adc7-4c16-9539-7c76778d2f52:missing=6",
+        "71527689-8bb6-4364-8fae-b8e6a49b3039:missing=5",
+        "7ebed449-e102-4610-9f91-dccb2a376889:missing=2",
+        "91360b93-ddf8-4afa-89e5-8b6cd7a5d4b6:missing=2",
+        "bd8de2aa-0cc6-4aeb-b4dd-9daca84d058e:missing=3",
+        "d6467dc6-901d-4d3c-85a4-c6d74920bb32:missing=2",
+        "ebd42035-ca00-4e85-a84b-c3b5f702f8c4:missing=8"
+      ],
+      "expected": [
+        "1e52c45f-f36a-4113-96bd-04f927a1b123:missing=3",
+        "20e6af83-7c51-4db0-8dac-f1ac8d81d366:missing=2",
+        "56c1253d-8d10-4459-8b5a-8748acaf6e05:missing=2",
+        "5a993f9a-adc7-4c16-9539-7c76778d2f52:missing=6",
+        "71527689-8bb6-4364-8fae-b8e6a49b3039:missing=5",
+        "7ebed449-e102-4610-9f91-dccb2a376889:missing=2",
+        "91360b93-ddf8-4afa-89e5-8b6cd7a5d4b6:missing=2",
+        "bd8de2aa-0cc6-4aeb-b4dd-9daca84d058e:missing=3",
+        "d6467dc6-901d-4d3c-85a4-c6d74920bb32:missing=2",
+        "ebd42035-ca00-4e85-a84b-c3b5f702f8c4:missing=8"
+      ],
+      "id": "documents.version_gaps_reported",
+      "result": "pass",
+      "source_of_truth": "postgres otterworks_drift01 (legacy source estate) vs mongodb ow_tp_drift01 (recomputed after write)"
+    },
+    {
+      "actual": 10,
+      "expected": 10,
+      "id": "documents.version_gaps_count",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/drift01.json vs mongodb ow_tp_drift01 (recomputed after write)"
+    },
+    {
+      "actual": [],
+      "expected": [],
+      "id": "documents.version_sequence_over_bound_quarantined",
+      "result": "pass",
+      "source_of_truth": "postgres otterworks_drift01 (legacy source estate) expected quarantine vs mongodb ow_tp_drift01 (recomputed after write)"
+    },
+    {
+      "actual": [],
+      "expected": [],
+      "id": "documents.version_sequence_annotations",
+      "result": "pass",
+      "source_of_truth": "mongodb ow_tp_drift01 (recomputed after write) persisted version_sequence vs recomputed embedded versions"
+    },
+    {
+      "actual": [
+        "2a1f7dff-44e7-40c1-adb4-d4672429dbf6",
+        "6b9add1e-836b-458f-80fd-dd5ee60d1ecf",
+        "79495103-1b03-400c-b5b9-9515f8188850",
+        "b6d0f16a-e7a9-41bd-b2d8-3f81342a2801",
+        "b98ff568-8e5e-4c24-b785-0b9240f44dcf",
+        "f27edc17-91d7-443c-87b1-46501aa89cbc"
+      ],
+      "expected": [
+        "2a1f7dff-44e7-40c1-adb4-d4672429dbf6",
+        "6b9add1e-836b-458f-80fd-dd5ee60d1ecf",
+        "79495103-1b03-400c-b5b9-9515f8188850",
+        "b6d0f16a-e7a9-41bd-b2d8-3f81342a2801",
+        "b98ff568-8e5e-4c24-b785-0b9240f44dcf",
+        "f27edc17-91d7-443c-87b1-46501aa89cbc"
+      ],
+      "id": "documents.orphaned_snapshots_reported",
+      "result": "pass",
+      "source_of_truth": "postgres otterworks_drift01 (legacy source estate) vs mongodb ow_tp_drift01 (recomputed after write)"
+    },
+    {
+      "actual": 6,
+      "expected": 6,
+      "id": "documents.orphaned_snapshots_count",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/drift01.json vs mongodb ow_tp_drift01 (recomputed after write)"
+    },
+    {
+      "actual": [],
+      "expected": [],
+      "id": "documents.unflagged_missing_parents",
+      "result": "pass",
+      "source_of_truth": "mongodb ow_tp_drift01 (recomputed after write)"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "documents.quarantine_empty",
+      "result": "pass",
+      "source_of_truth": "mongodb ow_tp_drift01 (recomputed after write)"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "documents.no_truncated_version_arrays",
+      "result": "pass",
+      "source_of_truth": "mongodb ow_tp_drift01 (recomputed after write)"
+    },
+    {
+      "actual": {
+        "document_snapshots": {
+          "count_unchanged": true,
+          "probe_absent": true,
+          "validator_present": true,
+          "violating_insert_rejected": true
+        },
+        "documents": {
+          "count_unchanged": true,
+          "probe_absent": true,
+          "validator_present": true,
+          "violating_insert_rejected": true
+        }
+      },
+      "expected": {
+        "document_snapshots": {
+          "count_unchanged": true,
+          "probe_absent": true,
+          "validator_present": true,
+          "violating_insert_rejected": true
+        },
+        "documents": {
+          "count_unchanged": true,
+          "probe_absent": true,
+          "validator_present": true,
+          "violating_insert_rejected": true
+        }
+      },
+      "id": "documents.validators_reject_invalid",
+      "result": "pass",
+      "source_of_truth": "mongodb ow_tp_drift01 (recomputed after write)"
+    },
+    {
+      "actual": {
+        "manifest_md5s": [
+          "1b0e5b717af4c3e0d2155bd8993ec236",
+          "ac978f9fd1403ec7e20436e7241da318"
+        ]
+      },
+      "expected": {
+        "contract_md5s": []
+      },
+      "id": "documents.baseline_matches_contract",
+      "result": "skipped",
+      "source_of_truth": "contract is demo-scoped, reconciling ns=drift01; check skipped because the contract does not describe this namespace"
+    },
+    {
+      "actual": "pass",
+      "expected": "pass",
+      "id": "documents.idempotent",
+      "result": "pass",
+      "source_of_truth": "migration rerun is opt-in; --rerun-migration is required to compare mongodb ow_tp_drift01 before and after a write"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "platform.unit_recon_exit_code.documents",
+      "result": "pass",
+      "source_of_truth": "exit status of scripts/tp_mongo/recon_documents.py run by this job"
+    },
+    {
+      "actual": 10000,
+      "expected": 10000,
+      "id": "files.count",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/drift01.json (dynamodb.file-metadata)"
+    },
+    {
+      "actual": "2b9c608aa862a463e0036bda81bfb68c",
+      "expected": "2b9c608aa862a463e0036bda81bfb68c",
+      "id": "files.checksum",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/drift01.json (dynamodb.file-metadata); recomputed as md5-sum over id|size_bytes|s3_key read back from ow_tp_drift01.files"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "files.tenant_field",
+      "result": "pass",
+      "source_of_truth": "ow_tp_drift01.files documents lacking a non-empty tenant field"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "files.attribute_types_preserved",
+      "result": "pass",
+      "source_of_truth": "BSON type of size_bytes/version/is_trashed/created_at/updated_at read back from the target"
+    },
+    {
+      "actual": 40,
+      "expected": 40,
+      "id": "files.orphans_reported",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/drift01.json (dynamodb.file-metadata) planted_anomalies.orphaned_metadata vs documents carrying s3_object_missing=true in the target"
+    },
+    {
+      "actual": [
+        "09f495dc-ee0b-439e-a8c4-cc44ee06f430",
+        "0b28e74b-43a0-411e-9179-7a2eddb2e98d",
+        "0b307a4f-bdd2-4a53-b8fa-defadccdcfdd",
+        "0dd54e64-d5c4-4d85-b4d2-f7acd356b92f",
+        "190d12fa-c479-4a6b-8059-397073e48577",
+        "3321cb4e-1542-47f6-9a98-3a5d7f548270",
+        "3d5eb225-72b9-4ff2-a45f-8e8238fd9440",
+        "44670974-9488-4d97-a181-f566c61ed924",
+        "528a2c11-d4f2-4bdc-a9f2-2514e9f17b6d",
+        "52e6164a-eb70-4bc0-ab47-536dd66bf7bc",
+        "5592550e-39a7-41c3-8adf-1ad31de6158f",
+        "634de631-bbe4-4e6f-a903-51c8b75c1367",
+        "65fdee9e-adfb-4360-a715-599a87d844f0",
+        "6f918f2b-3539-4d6b-b90b-6889cbb500b5",
+        "7196374e-4c93-46bb-8fde-44299dc58a0c",
+        "721b5161-90a5-4c15-8ef4-0eac54699299",
+        "7bb08767-9398-477d-bcbb-7ddc3c7609a9",
+        "84fb5d4d-337f-4b4f-a690-1fd663e269a6",
+        "89a19f91-30e5-4084-8375-a13d1d06b57f",
+        "905bb99e-db8f-4ee5-ad74-a74bf6702539",
+        "90a6f072-85bf-46a1-a195-1fd28853e2c8",
+        "939df053-413c-4e52-bbf4-18ba6563ae5c",
+        "94204662-e52c-48cb-9ca6-e75c50236b53",
+        "95cad77e-2298-4317-be32-265fb72b2cf8",
+        "9db45e72-eda7-4cc4-9622-29d3b684d059",
+        "a202e222-5506-4580-8287-85d1ded98b83",
+        "a783614c-f9d6-4831-ad34-33bbe98bc40b",
+        "aab1e3c4-c30e-471d-9522-c684df34aa0e",
+        "b2190a47-f343-4e03-ac1d-ee54693798ac",
+        "bd9f8f4f-2de0-40e2-b7d2-83c20194980f",
+        "c59a95cf-24c6-41e5-b556-f1de471a2777",
+        "c6716966-5148-4c8c-9d2c-65354197e03d",
+        "c798f265-fb3d-4f67-b9de-60d696191a87",
+        "cb890398-c48a-47a7-a764-7e04fe5e4332",
+        "cc72405b-23f7-47b6-87c4-5d2823395173",
+        "d258354a-dd21-4821-93c0-54a596d88c12",
+        "d3f430e2-1127-4e63-aea1-8f1ffa1252aa",
+        "e62e78d2-4751-4bc7-95d8-995287b22cf0",
+        "ebbd4b17-7f0e-4a2a-b804-52174042de6a",
+        "f1be24c3-9f69-414e-828b-c07741f647c4"
+      ],
+      "expected": [
+        "09f495dc-ee0b-439e-a8c4-cc44ee06f430",
+        "0b28e74b-43a0-411e-9179-7a2eddb2e98d",
+        "0b307a4f-bdd2-4a53-b8fa-defadccdcfdd",
+        "0dd54e64-d5c4-4d85-b4d2-f7acd356b92f",
+        "190d12fa-c479-4a6b-8059-397073e48577",
+        "3321cb4e-1542-47f6-9a98-3a5d7f548270",
+        "3d5eb225-72b9-4ff2-a45f-8e8238fd9440",
+        "44670974-9488-4d97-a181-f566c61ed924",
+        "528a2c11-d4f2-4bdc-a9f2-2514e9f17b6d",
+        "52e6164a-eb70-4bc0-ab47-536dd66bf7bc",
+        "5592550e-39a7-41c3-8adf-1ad31de6158f",
+        "634de631-bbe4-4e6f-a903-51c8b75c1367",
+        "65fdee9e-adfb-4360-a715-599a87d844f0",
+        "6f918f2b-3539-4d6b-b90b-6889cbb500b5",
+        "7196374e-4c93-46bb-8fde-44299dc58a0c",
+        "721b5161-90a5-4c15-8ef4-0eac54699299",
+        "7bb08767-9398-477d-bcbb-7ddc3c7609a9",
+        "84fb5d4d-337f-4b4f-a690-1fd663e269a6",
+        "89a19f91-30e5-4084-8375-a13d1d06b57f",
+        "905bb99e-db8f-4ee5-ad74-a74bf6702539",
+        "90a6f072-85bf-46a1-a195-1fd28853e2c8",
+        "939df053-413c-4e52-bbf4-18ba6563ae5c",
+        "94204662-e52c-48cb-9ca6-e75c50236b53",
+        "95cad77e-2298-4317-be32-265fb72b2cf8",
+        "9db45e72-eda7-4cc4-9622-29d3b684d059",
+        "a202e222-5506-4580-8287-85d1ded98b83",
+        "a783614c-f9d6-4831-ad34-33bbe98bc40b",
+        "aab1e3c4-c30e-471d-9522-c684df34aa0e",
+        "b2190a47-f343-4e03-ac1d-ee54693798ac",
+        "bd9f8f4f-2de0-40e2-b7d2-83c20194980f",
+        "c59a95cf-24c6-41e5-b556-f1de471a2777",
+        "c6716966-5148-4c8c-9d2c-65354197e03d",
+        "c798f265-fb3d-4f67-b9de-60d696191a87",
+        "cb890398-c48a-47a7-a764-7e04fe5e4332",
+        "cc72405b-23f7-47b6-87c4-5d2823395173",
+        "d258354a-dd21-4821-93c0-54a596d88c12",
+        "d3f430e2-1127-4e63-aea1-8f1ffa1252aa",
+        "e62e78d2-4751-4bc7-95d8-995287b22cf0",
+        "ebbd4b17-7f0e-4a2a-b804-52174042de6a",
+        "f1be24c3-9f69-414e-828b-c07741f647c4"
+      ],
+      "id": "files.orphan_keys_match_source",
+      "result": "pass",
+      "source_of_truth": "item keys from a fresh scan of otterworks-file-metadata vs keys marked in the target"
+    },
+    {
+      "actual": "pass",
+      "expected": "pass",
+      "id": "files.idempotent",
+      "result": "pass",
+      "source_of_truth": "second migration run followed by a fresh recomputation from the target"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "files.validator_present",
+      "result": "pass",
+      "source_of_truth": "listCollections options for files and files_quarantine"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "files.validator_rejects_violation",
+      "result": "pass",
+      "source_of_truth": "insert rejected: Document failed validation"
+    },
+    {
+      "actual": 10000,
+      "expected": 10000,
+      "id": "files.no_foreign_tenant_documents",
+      "result": "pass",
+      "source_of_truth": "ow_tp_drift01.files total document count vs tenant=drift01 count"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "files.quarantine_count",
+      "result": "pass",
+      "source_of_truth": "ow_tp_drift01.files_quarantine documents for tenant=drift01; the seeded estate plants no malformed metadata items, so quarantine must be empty"
+    },
+    {
+      "actual": {
+        "docs_with_extras": 0,
+        "extra_attribute_names": []
+      },
+      "expected": {
+        "docs_with_extras": 0,
+        "extra_attribute_names": []
+      },
+      "id": "files.extras_attribution",
+      "result": "pass",
+      "source_of_truth": "extras subdocuments read back from the target; the seeded estate carries no attributes outside the known set"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "platform.unit_recon_exit_code.files",
+      "result": "pass",
+      "source_of_truth": "exit status of scripts/tp_mongo/recon_files.py run by this job"
+    },
+    {
+      "actual": [
+        "customers:dirty_dates:50",
+        "customers:malformed_csv_lists:31",
+        "documents:1e52c45f-f36a-4113-96bd-04f927a1b123:missing=3",
+        "documents:20e6af83-7c51-4db0-8dac-f1ac8d81d366:missing=2",
+        "documents:56c1253d-8d10-4459-8b5a-8748acaf6e05:missing=2",
+        "documents:5a993f9a-adc7-4c16-9539-7c76778d2f52:missing=6",
+        "documents:71527689-8bb6-4364-8fae-b8e6a49b3039:missing=5",
+        "documents:7ebed449-e102-4610-9f91-dccb2a376889:missing=2",
+        "documents:91360b93-ddf8-4afa-89e5-8b6cd7a5d4b6:missing=2",
+        "documents:bd8de2aa-0cc6-4aeb-b4dd-9daca84d058e:missing=3",
+        "documents:d6467dc6-901d-4d3c-85a4-c6d74920bb32:missing=2",
+        "documents:ebd42035-ca00-4e85-a84b-c3b5f702f8c4:missing=8",
+        "documents:orphaned_snapshot=2a1f7dff-44e7-40c1-adb4-d4672429dbf6",
+        "documents:orphaned_snapshot=6b9add1e-836b-458f-80fd-dd5ee60d1ecf",
+        "documents:orphaned_snapshot=79495103-1b03-400c-b5b9-9515f8188850",
+        "documents:orphaned_snapshot=b6d0f16a-e7a9-41bd-b2d8-3f81342a2801",
+        "documents:orphaned_snapshot=b98ff568-8e5e-4c24-b785-0b9240f44dcf",
+        "documents:orphaned_snapshot=f27edc17-91d7-443c-87b1-46501aa89cbc",
+        "files:orphaned_metadata",
+        "invoices:orphaned_rows"
+      ],
+      "expected": [
+        "customers:dirty_dates:50",
+        "customers:malformed_csv_lists:31",
+        "documents:1e52c45f-f36a-4113-96bd-04f927a1b123:missing=3",
+        "documents:20e6af83-7c51-4db0-8dac-f1ac8d81d366:missing=2",
+        "documents:56c1253d-8d10-4459-8b5a-8748acaf6e05:missing=2",
+        "documents:5a993f9a-adc7-4c16-9539-7c76778d2f52:missing=6",
+        "documents:71527689-8bb6-4364-8fae-b8e6a49b3039:missing=5",
+        "documents:7ebed449-e102-4610-9f91-dccb2a376889:missing=2",
+        "documents:91360b93-ddf8-4afa-89e5-8b6cd7a5d4b6:missing=2",
+        "documents:bd8de2aa-0cc6-4aeb-b4dd-9daca84d058e:missing=3",
+        "documents:d6467dc6-901d-4d3c-85a4-c6d74920bb32:missing=2",
+        "documents:ebd42035-ca00-4e85-a84b-c3b5f702f8c4:missing=8",
+        "documents:orphaned_snapshot=2a1f7dff-44e7-40c1-adb4-d4672429dbf6",
+        "documents:orphaned_snapshot=6b9add1e-836b-458f-80fd-dd5ee60d1ecf",
+        "documents:orphaned_snapshot=79495103-1b03-400c-b5b9-9515f8188850",
+        "documents:orphaned_snapshot=b6d0f16a-e7a9-41bd-b2d8-3f81342a2801",
+        "documents:orphaned_snapshot=b98ff568-8e5e-4c24-b785-0b9240f44dcf",
+        "documents:orphaned_snapshot=f27edc17-91d7-443c-87b1-46501aa89cbc",
+        "files:orphaned_metadata",
+        "invoices:orphaned_rows"
+      ],
+      "id": "platform.planted_anomalies_exact_set",
+      "result": "pass",
+      "source_of_truth": "union of every unit's planted-anomaly set from testdata/legacy/manifests/<ns>.json versus the anomaly set each unit recomputed from the target, compared as sets"
+    },
+    {
+      "actual": {
+        "customers": 0,
+        "customers_quarantine": 0,
+        "document_snapshots": 0,
+        "documents": 0,
+        "documents_quarantine": 0,
+        "files": 0,
+        "files_quarantine": 0,
+        "invoices": 0,
+        "invoices_quarantine": 0
+      },
+      "expected": {
+        "customers": 0,
+        "customers_quarantine": 0,
+        "document_snapshots": 0,
+        "documents": 0,
+        "documents_quarantine": 0,
+        "files": 0,
+        "files_quarantine": 0,
+        "invoices": 0,
+        "invoices_quarantine": 0
+      },
+      "id": "platform.namespace_isolated",
+      "result": "pass",
+      "source_of_truth": "ow_tp_drift01: documents in each migrated collection whose namespace field is not this namespace"
+    },
+    {
+      "actual": [
+        "customers",
+        "customers_quarantine",
+        "document_snapshots",
+        "documents",
+        "documents_quarantine",
+        "files",
+        "files_quarantine",
+        "invoices",
+        "invoices_quarantine"
+      ],
+      "expected": [
+        "customers",
+        "customers_quarantine",
+        "document_snapshots",
+        "documents",
+        "documents_quarantine",
+        "files",
+        "files_quarantine",
+        "invoices",
+        "invoices_quarantine"
+      ],
+      "id": "platform.validators_enforced_on_every_collection",
+      "result": "pass",
+      "source_of_truth": "listCollections options for each collection in ow_tp_drift01 (queried by exact name, which Atlas M0 requires)"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "platform.money_never_float",
+      "result": "pass",
+      "source_of_truth": "ow_tp_drift01.invoices: header and embedded-line money fields whose BSON type is double instead of decimal"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "platform.invoice_line_count_matches_embedded",
+      "result": "pass",
+      "source_of_truth": "ow_tp_drift01.invoices: documents whose line_count disagrees with the size of their own embedded lines array"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "platform.invoice_header_total_matches_lines",
+      "result": "pass",
+      "source_of_truth": "ow_tp_drift01.invoices: invoices whose migrated header total_amt does not equal the Decimal128 sum of its own embedded line amounts, summed by the server before any migration was re-run"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "platform.invoice_customer_join_resolves",
+      "result": "pass",
+      "source_of_truth": "ow_tp_drift01: invoices whose cust_id resolves to no migrated customer (the join the legacy report needed, recomputed against the target)"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "id": "platform.documents_attribution_present",
+      "result": "pass",
+      "source_of_truth": "ow_tp_drift01.documents: documents with a missing or empty owner_id"
+    },
+    {
+      "actual": {
+        "distinct_digests": 1,
+        "runs": 2
+      },
+      "expected": {
+        "distinct_digests": 1,
+        "runs": 2
+      },
+      "id": "platform.aggregation_report_deterministic",
+      "result": "pass",
+      "source_of_truth": "ow_tp_drift01: the stage aggregation pipeline executed twice against the same target state (digest 2cbf7da3ffe31f992c73da24d586c167)"
+    }
+  ],
+  "generated_at": "2026-08-17T09:41:50.564147Z",
+  "idempotency_rerun": {
+    "evidence": "every unit re-ran its own migration during this job and recomputed the target afterwards; customers: performed=True result=pass (migration rerun for ns=drift01; canonical-JSON md5 per collection before={\"customers\": \"d8c29de15a7c301ed6477d6a1d9abbfe\", \"customers_quarantine\": \"fa33d1421b375655accd82120d784c60\"} after={\"customers) | invoices: performed=True result=pass (fingerprint_a={'invoice_doc_count': 18750, 'total_embedded_line_count': 149963, 'all_lines_checksum': 'a9417dd8c0ca1226122a62f4c28a38fc', 'quarantine_count': 37, 'sorted_quarantine_id_hash': 'a2662e1f) | documents: performed=True result=pass (migration re-run end to end; target re-read before and after: documents=2000 embedded_versions=14042 snapshots=380 documents_checksum=1b0e5b717af4c3e0d2155bd8993ec236 versions_checksum=ac978f9fd1403ec) | files: performed=True result=pass (rerun of `uv run scripts/tp_mongo/migrate_files.py --ns drift01`: count 10000->10000, checksum 2b9c608aa862a463e0036bda81bfb68c->2b9c608aa862a463e0036bda81bfb68c, orphan keys 40->40, quarantined 0->0)",
+    "performed": true,
+    "result": "pass"
+  },
+  "kind": "recon-report",
+  "mongo_uri_source": "MONGO_URI environment variable",
+  "namespace": "drift01",
+  "planted_anomaly_detections": {
+    "actual_set": [
+      "customers:dirty_dates:50",
+      "customers:malformed_csv_lists:31",
+      "documents:1e52c45f-f36a-4113-96bd-04f927a1b123:missing=3",
+      "documents:20e6af83-7c51-4db0-8dac-f1ac8d81d366:missing=2",
+      "documents:56c1253d-8d10-4459-8b5a-8748acaf6e05:missing=2",
+      "documents:5a993f9a-adc7-4c16-9539-7c76778d2f52:missing=6",
+      "documents:71527689-8bb6-4364-8fae-b8e6a49b3039:missing=5",
+      "documents:7ebed449-e102-4610-9f91-dccb2a376889:missing=2",
+      "documents:91360b93-ddf8-4afa-89e5-8b6cd7a5d4b6:missing=2",
+      "documents:bd8de2aa-0cc6-4aeb-b4dd-9daca84d058e:missing=3",
+      "documents:d6467dc6-901d-4d3c-85a4-c6d74920bb32:missing=2",
+      "documents:ebd42035-ca00-4e85-a84b-c3b5f702f8c4:missing=8",
+      "documents:orphaned_snapshot=2a1f7dff-44e7-40c1-adb4-d4672429dbf6",
+      "documents:orphaned_snapshot=6b9add1e-836b-458f-80fd-dd5ee60d1ecf",
+      "documents:orphaned_snapshot=79495103-1b03-400c-b5b9-9515f8188850",
+      "documents:orphaned_snapshot=b6d0f16a-e7a9-41bd-b2d8-3f81342a2801",
+      "documents:orphaned_snapshot=b98ff568-8e5e-4c24-b785-0b9240f44dcf",
+      "documents:orphaned_snapshot=f27edc17-91d7-443c-87b1-46501aa89cbc",
+      "files:orphaned_metadata",
+      "invoices:orphaned_rows"
+    ],
+    "expected_set": [
+      "customers:dirty_dates:50",
+      "customers:malformed_csv_lists:31",
+      "documents:1e52c45f-f36a-4113-96bd-04f927a1b123:missing=3",
+      "documents:20e6af83-7c51-4db0-8dac-f1ac8d81d366:missing=2",
+      "documents:56c1253d-8d10-4459-8b5a-8748acaf6e05:missing=2",
+      "documents:5a993f9a-adc7-4c16-9539-7c76778d2f52:missing=6",
+      "documents:71527689-8bb6-4364-8fae-b8e6a49b3039:missing=5",
+      "documents:7ebed449-e102-4610-9f91-dccb2a376889:missing=2",
+      "documents:91360b93-ddf8-4afa-89e5-8b6cd7a5d4b6:missing=2",
+      "documents:bd8de2aa-0cc6-4aeb-b4dd-9daca84d058e:missing=3",
+      "documents:d6467dc6-901d-4d3c-85a4-c6d74920bb32:missing=2",
+      "documents:ebd42035-ca00-4e85-a84b-c3b5f702f8c4:missing=8",
+      "documents:orphaned_snapshot=2a1f7dff-44e7-40c1-adb4-d4672429dbf6",
+      "documents:orphaned_snapshot=6b9add1e-836b-458f-80fd-dd5ee60d1ecf",
+      "documents:orphaned_snapshot=79495103-1b03-400c-b5b9-9515f8188850",
+      "documents:orphaned_snapshot=b6d0f16a-e7a9-41bd-b2d8-3f81342a2801",
+      "documents:orphaned_snapshot=b98ff568-8e5e-4c24-b785-0b9240f44dcf",
+      "documents:orphaned_snapshot=f27edc17-91d7-443c-87b1-46501aa89cbc",
+      "files:orphaned_metadata",
+      "invoices:orphaned_rows"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "reproduce_command": "MONGO_URI=<target-uri> make tp-mongo-recon-platform NS=drift01 RUN_MODE=live",
+  "run_mode": "live",
+  "unit": "mongo_platform",
+  "unit_reports": {
+    "customers": {
+      "checks": 18,
+      "exit_code": 0,
+      "generated_at": "2026-08-17T09:36:07Z",
+      "path": "/home/ubuntu/repos/otterworks/build/tp-recon/platform/drift01-05815b8d/customers.recon.json"
+    },
+    "documents": {
+      "checks": 20,
+      "exit_code": 0,
+      "generated_at": "2026-08-17T09:40:46Z",
+      "path": "/home/ubuntu/repos/otterworks/build/tp-recon/platform/drift01-05815b8d/documents.recon.json"
+    },
+    "files": {
+      "checks": 12,
+      "exit_code": 0,
+      "generated_at": "2026-08-17T09:41:26Z",
+      "path": "/home/ubuntu/repos/otterworks/build/tp-recon/platform/drift01-05815b8d/files.recon.json"
+    },
+    "invoices": {
+      "checks": 16,
+      "exit_code": 0,
+      "generated_at": "2026-08-17T09:39:52.086084Z",
+      "path": "/home/ubuntu/repos/otterworks/build/tp-recon/platform/drift01-05815b8d/invoices.recon.json"
+    }
+  },
+  "unverified_paths": [
+    "Atlas alert configuration: alert-webhook-config is DENIED (HTTP 401 USER_UNAUTHORIZED) per the capability preflight; nothing in this unit depends on it.",
+    "Atlas cluster write path, $jsonSchema validator DDL on Atlas, and Atlas index creation: this run targets the local mongo:7 fixture only (docker-compose.mongo-fixture.yml); the parent owns the single live window.",
+    "Atlas-side authentication, TLS, and access-list behaviour are exercised only by the parent's live run.",
+    "Binary (BSON binary) attribute conversion: the seeded ns=demo estate contains no DynamoDB binary attributes, so that branch of the type mapping is implemented and unit-tested locally but not exercised by production seed data.",
+    "Date NULL and parse-failure branches are unverified because the demo baseline has zero NULL or malformed invoice_dt/due_dt values, so null_invoice_dt, null_due_dt, unparseable_invoice_dt, and unparseable_due_dt never fired.",
+    "Duplicate non-null invoice_no attribution is unverified because the demo baseline has no duplicate INVOICE_NO values.",
+    "Live Atlas execution is unverified from this unit: it develops and self-verifies against a local MongoDB fixture and marks its runs run_mode=fixture; only the parent's uncontended Atlas window proves the live path.",
+    "Live-Atlas write path and its validator DDL are unverified; only the parent's uncontended Atlas run proves them.",
+    "Malformed GL_ACCT_CSV tolerate-and-attribute path is unverified because baseline CSVs are all well-formed.",
+    "Per-object S3 existence for the 9,960 non-orphan items: the seeded estate writes no objects to the otterworks-files bucket, so 'no backing object' is taken from the seed's planted /missing/ key segment, which is the same definition the immutable baseline validator (testdata/legacy/validate.py) uses.",
+    "The s3.data-lake hourly objects in the baseline manifest have no MongoDB unit, so no check in this report covers them.",
+    "Unparseable POSTED_YN attribution is unverified because the demo baseline has zero non-null values outside Y/N.",
+    "invalid_encoding quarantine branch is unverified because the baseline has zero non-decodable values.",
+    "null_amount, unparseable_amount, and null_invoice_id quarantine branches are unverified because the baseline has zero such rows.",
+    "null_required_field and unparseable_required_field quarantine branches are unverified because the baseline has no NULL or unparseable required non-amount line fields."
+  ],
+  "values_recomputed_from_target": true
+}
