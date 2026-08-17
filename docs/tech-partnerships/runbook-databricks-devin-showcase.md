@@ -176,6 +176,47 @@ are the deterministic ones above.
 The red path is always rehearsed in a throwaway namespace, never in `demo`:
 `demo` has to stay green and browsable for the live take.
 
+## Last staged run — 2026-08-17 (branch `tp-run/databricks-20260817T043248Z`)
+
+Parent-run live rollup, after the last commit on the run branch:
+
+| Check | Observed |
+|---|---|
+| `CMD=recon NS=demo` | `checks: 49, failed: 0, anomalies expected/actual: 30/30, missing: 0, unexpected: 0`, idempotency rerun pass |
+| `CMD=status NS=demo` | bronze 3,024 / files 72 / 2019–2024 / silver 2,856 / quarantined 30 / gold 1,439,098,122 cents / 36 expectation rows |
+| `CMD=timetravel NS=demo` | 19 Delta versions on `ow_tp.gold.custbill_annual_demo`, as-of totals identical across the last two versions |
+| `CMD=lineage NS=demo` | volume → bronze, bronze → silver, silver → gold all `resolved` |
+| Green recon job run | [961038345502176](https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/runs/961038345502176) — `recon_check: SUCCESS`, `notify_devin: EXCLUDED` |
+
+Artifacts:
+
+- Recon job: <https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/139369716277099> (schedule PAUSED)
+- Recon SQL alert: <https://dbc-8bc9474f-40ae.cloud.databricks.com/sql/alerts/1693644416063495> (PAUSED)
+- Pipeline `ow_tp_custbill_history_dlt_demo`: `a2088c7a-c13d-4c68-975e-df54866d1baa` (serverless, development, no schedule, not continuous)
+- Lineage tab: <https://dbc-8bc9474f-40ae.cloud.databricks.com/explore/data/ow_tp/silver/custbill_history_demo?activeTab=lineage>
+- Dashboard: published under `/Shared/ow_tp`
+
+Failure beat, rehearsed live in throwaway namespace `rehprnt` (`CMD=drift ARGS="--kind stale"`):
+
+| Beat | Evidence |
+|---|---|
+| Green before | run [126955645173955](https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/runs/126955645173955) — `recon_check: SUCCESS`, `notify_devin: EXCLUDED` |
+| Red | run [9257219846441](https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/runs/9257219846441) — `SUCCESS_WITH_FAILURES`, `recon_check: FAILED`, `notify_devin: SUCCESS` |
+| Devin session spawned by the notifier | <https://partner-workshops.devinenterprise.com/sessions/34de1c943c0c4fdd841acd47e7d295ee> — diagnosed the stale target (2025 drops landed, never backfilled), backfilled, recon 57/57 with anomalies 35/35 |
+| Green after remediation | run [528199017573904](https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/runs/528199017573904) — `SUCCESS` |
+| Audit PR | <https://github.com/Cognition-Partner-Workshops/otterworks/pull/978> (based on the run branch) |
+
+An earlier rehearsal of the same loop in namespace `rehearsalplat` produced
+run [373323304874944](https://dbc-8bc9474f-40ae.cloud.databricks.com/?o=7474651138173478#job/613726149349528/run/373323304874944)
+(malformed drift) and audit PR
+<https://github.com/Cognition-Partner-Workshops/otterworks/pull/966>. Both
+rehearsal namespaces were torn down and verified absent
+(`silver_tables: [], recon_job: false, pipeline: false, alert: false, dashboard: false, landed_paths: []`).
+
+Cost state at hand-off: recon job schedule PAUSED, SQL alert PAUSED, pipeline
+`IDLE` with no schedule and `continuous: false`, **0** clusters, one pre-existing
+serverless warehouse (`565cd2fd713738c4`, `auto_stop=10`).
+
 ## Cost controls
 
 Leaving the demo staged is cheap; leaving it *scheduled* is what costs money.
