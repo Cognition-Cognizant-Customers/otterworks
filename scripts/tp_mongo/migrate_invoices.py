@@ -556,6 +556,7 @@ def migrate(args: argparse.Namespace) -> None:
 
 def main() -> int:
     args = parser().parse_args()
+    validate_namespace(args.ns)
     batch_no = resolve_batch(args.ns, args.batch_no)
     migrate(args)
     print(f"migrated namespace={args.ns} batch={batch_no}")

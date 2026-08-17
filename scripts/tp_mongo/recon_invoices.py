@@ -73,13 +73,13 @@ def run_migration(args: argparse.Namespace) -> None:
             str(args.oracle_port),
             "--oracle-user",
             args.oracle_user,
-            "--oracle-password",
-            args.oracle_password,
             "--oracle-service",
             args.oracle_service,
         ]
     )
-    subprocess.run(command, check=True)
+    child_env = os.environ.copy()
+    child_env["DB_PASSWORD"] = args.oracle_password
+    subprocess.run(command, check=True, env=child_env)
 
 
 def source_facts(
@@ -272,7 +272,9 @@ def aggregation_count(collection: Any, pipeline: list[dict[str, Any]]) -> int:
 
 def validator_names(database: Any) -> list[str]:
     names: list[str] = []
-    for info in database.list_collections():
+    for info in database.list_collections(
+        filter={"name": {"$in": ["invoices", "invoices_quarantine"]}}
+    ):
         validator = info.get("options", {}).get("validator", {})
         if isinstance(validator, dict) and "$jsonSchema" in validator:
             names.append(info["name"])
