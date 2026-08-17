@@ -91,7 +91,7 @@ command -v jq >/dev/null 2>&1        || { err "jq not found (required to read IR
 
 # ---------- Step 1: Provision Platform (VPC, EKS, ECR) ----------
 
-if [ "${SKIP_TERRAFORM}" = false ] && [ "${SKIP_PLATFORM}" = false ]; then
+if [[ "${SKIP_TERRAFORM}" = false ]] && [[ "${SKIP_PLATFORM}" = false ]]; then
   log "Provisioning platform infrastructure (VPC, EKS, ECR)..."
   cd "${REPO_ROOT}/platform/terraform"
   terraform init -input=false
@@ -104,7 +104,7 @@ fi
 
 # ---------- Step 2: Provision Application Infrastructure ----------
 
-if [ "${SKIP_TERRAFORM}" = false ]; then
+if [[ "${SKIP_TERRAFORM}" = false ]]; then
   DB_PASSWORD="${DB_PASSWORD:?ERROR: DB_PASSWORD must be set when running Terraform}"
   log "Provisioning application infrastructure (RDS, DynamoDB, S3, SQS, etc.)..."
   cd "${REPO_ROOT}/infrastructure/terraform"
@@ -153,7 +153,7 @@ build_and_push() {
   if [[ " ${FRONTEND_SERVICES[*]} " == *" ${service} "* ]]; then
     # The web-app service's source lives in frontend/client-app; other frontend
     # service names match their directory names.
-    if [ "${service}" = "web-app" ]; then
+    if [[ "${service}" = "web-app" ]]; then
       service_dir="${REPO_ROOT}/frontend/client-app"
     else
       service_dir="${REPO_ROOT}/frontend/${service}"
@@ -162,7 +162,7 @@ build_and_push() {
     service_dir="${REPO_ROOT}/services/${service}"
   fi
 
-  if [ ! -f "${service_dir}/Dockerfile" ]; then
+  if [[ ! -f "${service_dir}/Dockerfile" ]]; then
     warn "No Dockerfile for ${service}, skipping..."
     return 0
   fi
@@ -174,7 +174,7 @@ build_and_push() {
   docker push "${image}"
 }
 
-if [ "${SKIP_BUILD}" = false ]; then
+if [[ "${SKIP_BUILD}" = false ]]; then
   log "Building and pushing Docker images..."
   for service in "${ALL_SERVICES[@]}"; do
     build_and_push "${service}" || warn "Failed to build ${service}, continuing..."
@@ -203,7 +203,7 @@ load_infra_outputs() {
   terraform -chdir="$d" init -input=false >/dev/null 2>&1 || true
   local rds; rds="$(terraform -chdir="$d" output -raw rds_endpoint 2>/dev/null || echo "")"
   RDS_HOST="${rds%%:*}"; RDS_PORT="${rds##*:}"
-  [ "$RDS_PORT" = "$rds" ] && RDS_PORT=5432 || true
+  [[ "$RDS_PORT" = "$rds" ]] && RDS_PORT=5432 || true
   REDIS_HOST="$(terraform -chdir="$d" output -raw redis_endpoint 2>/dev/null || echo "")"
   S3_FILE_BUCKET="$(terraform -chdir="$d" output -raw s3_file_bucket 2>/dev/null || echo "")"
   S3_AUDIT_BUCKET="$(terraform -chdir="$d" output -raw s3_audit_archive_bucket 2>/dev/null || echo "")"
@@ -219,7 +219,7 @@ load_infra_outputs() {
   DB_NAME="${DB_NAME:-otterworks}"; DB_USER="${DB_USER:-otterworks_admin}"
   # MeiliSearch runs in-cluster (see deploy_meilisearch); search-service reaches it by Service DNS.
   MEILISEARCH_URL="${MEILISEARCH_URL:-http://meilisearch:7700}"
-  if [ -z "${RDS_HOST}" ]; then
+  if [[ -z "${RDS_HOST}" ]]; then
     warn "Terraform outputs unavailable; services will deploy without wired config."
   fi
   resolve_db_endpoint
@@ -236,7 +236,7 @@ resolve_db_endpoint() {
   DB_ENDPOINT_PORT="${RDS_PORT}"
   DB_SESSION_PORT="${RDS_PORT}"
 
-  [ "${DB_VIA_PGBOUNCER:-true}" = "true" ] || return 0
+  [[ "${DB_VIA_PGBOUNCER:-true}" = "true" ]] || return 0
   kubectl -n "${PGBOUNCER_NAMESPACE:-otterworks-platform}" get svc pgbouncer >/dev/null 2>&1 || {
     warn "pgbouncer not found; wiring services straight to RDS (install with demo-platform/scripts/install-pgbouncer.sh)"
     return 0
@@ -278,7 +278,7 @@ golden_host() {
 assert_no_loadbalancer_services() {
   local found
   found="$(kubectl -n "${NAMESPACE}" get svc -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.name}{"\n"}{end}' 2>/dev/null)"
-  if [ -n "${found}" ]; then
+  if [[ -n "${found}" ]]; then
     err "LoadBalancer Services found in ${NAMESPACE}; these create untracked ELBs:"
     err "${found}"
     err "Route them through the shared ingress controller instead, then delete them:"
@@ -294,7 +294,7 @@ build_helm_args() {
   EXTRA_ARGS=()
   SECRET_KV=()
   local role; role="$(irsa_arn "$service")"
-  if [ -n "$role" ]; then EXTRA_ARGS+=(--set "serviceAccount.roleArn=${role}"); fi
+  if [[ -n "$role" ]]; then EXTRA_ARGS+=(--set "serviceAccount.roleArn=${role}"); fi
   if [[ " ${JVM_SERVICES} " == *" ${service} "* ]]; then
     EXTRA_ARGS+=(--set resources.requests.memory=512Mi --set resources.limits.memory=1024Mi --set resources.limits.cpu=1000m)
   fi
@@ -323,15 +323,15 @@ build_helm_args() {
   esac
 
   local port="${CONTAINER_PORT[$service]:-}"
-  if [ -n "$port" ]; then EXTRA_ARGS+=(--set "service.port=${port}" --set "service.targetPort=${port}"); fi
+  if [[ -n "$port" ]]; then EXTRA_ARGS+=(--set "service.port=${port}" --set "service.targetPort=${port}"); fi
   # Backends are cluster-internal. api-gateway falls through the case above to
   # pick up its JWT secret but keeps the Ingress that block gave it; Helm honors
   # the last --set, so disabling here unconditionally would silently strip it.
-  if [ "$service" != "api-gateway" ]; then
+  if [[ "$service" != "api-gateway" ]]; then
     EXTRA_ARGS+=(--set ingress.enabled=false)
   fi
 
-  if [ -n "${JWT_SECRET}" ]; then
+  if [[ -n "${JWT_SECRET}" ]]; then
     case "$service" in
       api-gateway|auth-service|document-service|collab-service|admin-service)
         add_secret JWT_SECRET "${JWT_SECRET}" ;;
@@ -412,7 +412,7 @@ deploy_service() {
   local service=$1
   local chart_dir="${REPO_ROOT}/infrastructure/helm/${service}"
 
-  if [ ! -d "${chart_dir}" ]; then
+  if [[ ! -d "${chart_dir}" ]]; then
     warn "No Helm chart for ${service}, skipping..."
     return 0
   fi
@@ -423,7 +423,7 @@ deploy_service() {
   # Write secrets to a locked-down temp values file passed via -f, so the values
   # are never exposed in the process argument list (ps / /proc/*/cmdline).
   local secret_file="" secret_args=()
-  if [ "${#SECRET_KV[@]}" -gt 0 ]; then
+  if [[ "${#SECRET_KV[@]}" -gt 0 ]]; then
     secret_file="$(mktemp)"
     chmod 600 "${secret_file}"
     jq -n --args '{secrets: (reduce range(0; ($ARGS.positional | length); 2) as $i
@@ -442,8 +442,8 @@ deploy_service() {
     --wait \
     --timeout 3m \
     && local rc=0 || local rc=1
-  [ -n "${secret_file}" ] && rm -f "${secret_file}"
-  if [ "${rc}" -ne 0 ]; then warn "Helm deploy failed for ${service}"; return 1; fi
+  [[ -n "${secret_file}" ]] && rm -f "${secret_file}"
+  if [[ "${rc}" -ne 0 ]]; then warn "Helm deploy failed for ${service}"; return 1; fi
 }
 
 # MeiliSearch is the search-service backend. The IaC provisions it on ECS, but the
@@ -518,7 +518,7 @@ done
 log "Checking pod status in namespace ${NAMESPACE}..."
 kubectl get pods -n "${NAMESPACE}" -o wide
 
-if [ ${#FAILED[@]} -gt 0 ]; then
+if [[ ${#FAILED[@]} -gt 0 ]]; then
   warn "The following services failed to deploy: ${FAILED[*]}"
   exit 1
 fi

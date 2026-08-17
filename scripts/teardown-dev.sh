@@ -44,27 +44,27 @@ command -v aws >/dev/null 2>&1       || { err "aws CLI not found"; exit 1; }
 
 # --- Account safety check ---
 ACTIVE_ACCOUNT="$(aws sts get-caller-identity --query Account --output text 2>/dev/null || true)"
-[ -n "${ACTIVE_ACCOUNT}" ] || { err "Unable to resolve AWS account (are creds exported?)"; exit 1; }
+[[ -n "${ACTIVE_ACCOUNT}" ]] || { err "Unable to resolve AWS account (are creds exported?)"; exit 1; }
 log "Active AWS account: ${ACTIVE_ACCOUNT} (region ${AWS_REGION})"
-if [ -n "${EXPECTED_ACCOUNT_ID:-}" ] && [ "${EXPECTED_ACCOUNT_ID}" != "${ACTIVE_ACCOUNT}" ]; then
+if [[ -n "${EXPECTED_ACCOUNT_ID:-}" ]] && [[ "${EXPECTED_ACCOUNT_ID}" != "${ACTIVE_ACCOUNT}" ]]; then
   err "Active account ${ACTIVE_ACCOUNT} != EXPECTED_ACCOUNT_ID ${EXPECTED_ACCOUNT_ID}. Aborting."
   exit 1
 fi
 
 # --- Confirmation ---
-if [ "${MODE}" = "all" ]; then
+if [[ "${MODE}" = "all" ]]; then
   warn "FULL teardown selected: this DESTROYS RDS/Redis/S3 data and all infra."
   CONFIRM_WORD="destroy-all"
 else
   log  "Keep-data teardown: drops the EKS cluster + nodes only (data preserved)."
   CONFIRM_WORD="destroy-eks"
 fi
-if [ "${ASSUME_YES}" = false ]; then
+if [[ "${ASSUME_YES}" = false ]]; then
   read -r -p "Type '${CONFIRM_WORD}' to proceed: " reply
-  [ "${reply}" = "${CONFIRM_WORD}" ] || { err "Confirmation mismatch, aborting."; exit 1; }
+  [[ "${reply}" = "${CONFIRM_WORD}" ]] || { err "Confirmation mismatch, aborting."; exit 1; }
 fi
 
-if [ "${MODE}" = "all" ]; then
+if [[ "${MODE}" = "all" ]]; then
   # Destroy the application infra layer FIRST (it depends on the platform VPC/OIDC),
   # then the platform layer. Note: S3 buckets that still contain objects will block
   # destroy unless emptied first.
