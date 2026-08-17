@@ -23,17 +23,20 @@ CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_created_at ON users(created_at);
 
 -- Seed admin user (password: Admin123!)
-INSERT INTO users (id, email, password_hash, display_name, email_verified, created_at, updated_at)
-VALUES (
-    'a0000000-0000-0000-0000-000000000001',
-    'admin@otterworks.dev',
-    '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', -- nosemgrep: generic.secrets.security.detected-bcrypt-hash.detected-bcrypt-hash
-    'Admin User',
-    true,
-    NOW(),
-    NOW()
-);
-
-INSERT INTO user_roles (user_id, role) VALUES
-('a0000000-0000-0000-0000-000000000001', 'ADMIN'),
-('a0000000-0000-0000-0000-000000000001', 'USER');
+WITH seeded_admin AS (
+    INSERT INTO users (id, email, password_hash, display_name, email_verified, created_at, updated_at)
+    VALUES (
+        'a0000000-0000-0000-0000-000000000001',
+        'admin@otterworks.dev',
+        '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', -- nosemgrep: generic.secrets.security.detected-bcrypt-hash.detected-bcrypt-hash
+        'Admin User',
+        true,
+        NOW(),
+        NOW()
+    )
+    RETURNING id
+)
+INSERT INTO user_roles (user_id, role)
+SELECT seeded_admin.id, seeded_role.role
+FROM seeded_admin
+CROSS JOIN (VALUES ('ADMIN'), ('USER')) AS seeded_role(role);
