@@ -39,12 +39,10 @@ public abstract class ApiHandler implements RequestHandler<APIGatewayV2HTTPEvent
             error.put("error", e.getReason());
             error.put("message", e.getMessage());
             return respond(e.getStatus(), error);
-        } catch (Exception e) {
-            Map<String, String> error = new LinkedHashMap<>();
-            error.put("error", "Internal Server Error");
-            error.put("message", e.getClass().getSimpleName());
-            return respond(500, error);
         }
+        // Unexpected exceptions propagate so the invocation is recorded as a failure:
+        // that is what increments the AWS/Lambda Errors metric and trips the per-context
+        // CloudWatch alarm. API Gateway converts the failed invocation into a plain 500.
     }
 
     /**

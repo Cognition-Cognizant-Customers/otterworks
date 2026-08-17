@@ -58,6 +58,9 @@ public class DynamoAnnouncementStore implements AnnouncementStore {
 
     @Override
     public Optional<Announcement> find(long id) {
+        if (Long.toString(id).equals(COUNTER_PK)) {
+            return Optional.empty();
+        }
         var response = client.getItem(GetItemRequest.builder()
                 .tableName(tableName)
                 .key(Map.of("pk", AttributeValue.fromN(Long.toString(id))))

@@ -7,21 +7,19 @@ import java.util.stream.Collectors;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
-import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 
 /**
  * DynamoDB persistence for the feedback context.
  *
- * <p>Table layout: partition key {@code pk} (N) = feedback id, with a {@code by-user} GSI on
- * {@code userId}. Item {@code pk=0} is the atomic id-allocation counter. Volumes are
- * portal-scale, so the average-rating aggregate uses Scan.
+ * <p>Table layout: partition key {@code pk} (N) = feedback id. Item {@code pk=0} is the atomic
+ * id-allocation counter. Volumes are portal-scale, so reads use strongly consistent Scans on
+ * the base table, which keeps read-after-write behavior identical to the monolith.
  */
 public class DynamoFeedbackStore implements FeedbackStore {
 
     static final String COUNTER_PK = "0";
-    static final String BY_USER_INDEX = "by-user";
 
     private final DynamoDbClient client;
     private final String tableName;
@@ -58,10 +56,10 @@ public class DynamoFeedbackStore implements FeedbackStore {
 
     @Override
     public List<Feedback> findByUserId(String userId) {
-        return client.queryPaginator(QueryRequest.builder()
+        return client.scanPaginator(ScanRequest.builder()
                         .tableName(tableName)
-                        .indexName(BY_USER_INDEX)
-                        .keyConditionExpression("userId = :u")
+                        .consistentRead(true)
+                        .filterExpression("userId = :u")
                         .expressionAttributeValues(Map.of(":u", AttributeValue.fromS(userId)))
                         .build())
                 .items().stream()
@@ -71,7 +69,7 @@ public class DynamoFeedbackStore implements FeedbackStore {
 
     @Override
     public List<Feedback> findAll() {
-        return client.scanPaginator(ScanRequest.builder().tableName(tableName).build())
+        return client.scanPaginator(ScanRequest.builder().tableName(tableName).consistentRead(true).build())
                 .items().stream()
                 .filter(item -> !COUNTER_PK.equals(item.get("pk").n()))
                 .map(DynamoFeedbackStore::fromItem)

@@ -18,11 +18,10 @@ locals {
   # become service boundaries.
   services = {
     announcements = {
-      handler   = "com.otterworks.portal.announcements.Handler::handleRequest"
-      jar       = "${path.module}/../announcements-service/target/announcements-service.jar"
-      hash_key  = "pk"
-      key_type  = "N"
-      needs_gsi = false
+      handler  = "com.otterworks.portal.announcements.Handler::handleRequest"
+      jar      = "${path.module}/../announcements-service/target/announcements-service.jar"
+      hash_key = "pk"
+      key_type = "N"
       routes = [
         "GET /health",
         "GET /api/announcements",
@@ -32,22 +31,20 @@ locals {
       ]
     }
     preferences = {
-      handler   = "com.otterworks.portal.preferences.Handler::handleRequest"
-      jar       = "${path.module}/../preferences-service/target/preferences-service.jar"
-      hash_key  = "userId"
-      key_type  = "S"
-      needs_gsi = false
+      handler  = "com.otterworks.portal.preferences.Handler::handleRequest"
+      jar      = "${path.module}/../preferences-service/target/preferences-service.jar"
+      hash_key = "userId"
+      key_type = "S"
       routes = [
         "GET /api/preferences/{userId}",
         "PUT /api/preferences/{userId}",
       ]
     }
     feedback = {
-      handler   = "com.otterworks.portal.feedback.Handler::handleRequest"
-      jar       = "${path.module}/../feedback-service/target/feedback-service.jar"
-      hash_key  = "pk"
-      key_type  = "N"
-      needs_gsi = true
+      handler  = "com.otterworks.portal.feedback.Handler::handleRequest"
+      jar      = "${path.module}/../feedback-service/target/feedback-service.jar"
+      hash_key = "pk"
+      key_type = "N"
       routes = [
         "POST /api/feedback",
         "GET /api/feedback",
