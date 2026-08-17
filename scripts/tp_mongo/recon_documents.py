@@ -34,7 +34,7 @@ from common import (
     mongo_client,
     mongo_uri,
     pg_connect,
-    redacted_uri,
+    redacted_uri_for_report,
     source_schema,
     target_db_name,
     validate_namespace,
@@ -686,7 +686,7 @@ def main() -> int:
         "run_mode": args.run_mode,
         "target": {
             "database": target_db_name(args.ns),
-            "uri": redacted_uri(mongo_uri()),
+            "uri": redacted_uri_for_report(mongo_uri()),
             "collections": [DOCUMENTS, SNAPSHOTS, QUARANTINE],
         },
         "checks": checks,

@@ -13,16 +13,13 @@ import os
 from pathlib import Path
 from types import ModuleType
 
-from platform_common import redacted_uri as _redacted_uri
+from platform_common import redacted_uri_for_report
 
 ROOT = Path(__file__).resolve().parents[2]
 
 DOCUMENTS = "documents"
 SNAPSHOTS = "document_snapshots"
 QUARANTINE = "documents_quarantine"
-
-redacted_uri = _redacted_uri
-
 
 def mongo_uri() -> str:
     fixture_uri = f"mongodb://localhost:{os.environ.get('MONGO_FIXTURE_PORT', '27017')}"

@@ -34,23 +34,56 @@ WEBHOOK_SECRET_ENV = "OW_TP_MONGO_RECON_WEBHOOK_SECRET"
 WEBHOOK_SECRET_HEADER = "X-Webhook-Secret"
 
 
-def redacted_uri(uri: str) -> str:
-    """Render a MongoDB URI without exposing its password."""
+def _uri_parts(uri: str) -> tuple[str, str, str, str] | None:
+    """Return scheme, userinfo, host, and suffix without exposing userinfo."""
     scheme, separator, remainder = uri.partition("://")
     if not separator:
-        return uri
+        return None
     authority_end = len(remainder)
     for delimiter in "/?#":
         position = remainder.find(delimiter)
         if position != -1:
             authority_end = min(authority_end, position)
     authority = remainder[:authority_end]
-    if "@" not in authority:
+    if "@" in authority:
+        at = authority.rfind("@")
+        userinfo = authority[:at]
+        host = authority[at + 1:]
+        suffix = remainder[authority_end:]
+        return scheme, userinfo, host, suffix
+    if "@" not in remainder:
+        return None
+
+    # An @ beyond the authority boundary means a malformed URI with an
+    # unescaped delimiter in its userinfo. Fail closed using the last @.
+    at = remainder.rfind("@")
+    userinfo = remainder[:at]
+    host_and_suffix = remainder[at + 1:]
+    host_end = len(host_and_suffix)
+    for delimiter in "/?#":
+        position = host_and_suffix.find(delimiter)
+        if position != -1:
+            host_end = min(host_end, position)
+    return scheme, userinfo, host_and_suffix[:host_end], host_and_suffix[host_end:]
+
+
+def redacted_uri(uri: str) -> str:
+    """Render a MongoDB URI with its password replaced."""
+    parts = _uri_parts(uri)
+    if parts is None:
         return uri
-    userinfo, _, host = authority.rpartition("@")
+    scheme, userinfo, host, suffix = parts
     username = userinfo.partition(":")[0]
-    suffix = remainder[authority_end:]
     return f"{scheme}://{username}:<redacted>@{host}{suffix}"
+
+
+def redacted_uri_for_report(uri: str) -> str:
+    """Render a MongoDB URI without any userinfo for persisted reports."""
+    parts = _uri_parts(uri)
+    if parts is None:
+        return uri
+    scheme, _, host, suffix = parts
+    return f"{scheme}://{host}{suffix}"
 
 
 def namespace_filter(collection: str, ns: str) -> dict[str, str]:
