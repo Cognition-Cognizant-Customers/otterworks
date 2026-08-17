@@ -469,6 +469,34 @@ def wait_for_quarantine(s3, ddb, key: str, deadline: float) -> dict | None:
     return None
 
 
+def wait_for_estate_settled(clients: dict, exp: dict, timeout: int) -> list[str]:
+    """Bounded wait until every seeded orphan has been processed by the event path.
+
+    The seed's own object-created events drive the same Lambda, which holds a
+    young object for up to RECHECK_DELAY_SECONDS before quarantining it. Comparing
+    the sets while the estate is still in flight would report drift that does not
+    exist, so poll first and return whatever is still unprocessed at the deadline.
+    """
+    s3, ddb = clients["s3"], clients["ddb"]
+    pending = list(exp["orphan_keys"])
+    deadline = time.time() + timeout
+    while True:
+        remaining = []
+        for key in pending:
+            item = audit_item(ddb, key)
+            settled = (
+                item is not None
+                and item.get("decision", {}).get("S") == "quarantined"
+                and not object_exists(s3, STORAGE_BUCKET, key)
+            )
+            if not settled:
+                remaining.append(key)
+        pending = remaining
+        if not pending or time.time() >= deadline:
+            return pending
+        time.sleep(5)
+
+
 def live_event_checks(
     checks: list[dict], clients: dict, probe_prefix: str, timeout: int
 ) -> tuple[dict, list[str]]:
@@ -858,6 +886,23 @@ def main() -> int:
         probes = live["probes"]
         replay_evidence = live["evidence"]
         unverified.extend(probe_unverified)
+
+    pending = wait_for_estate_settled(clients, exp, args.probe_timeout)
+    check(
+        checks,
+        "CLN-01/seeded_orphans_settled_before_comparison",
+        [],
+        pending,
+        (
+            f"polled dynamodb:GetItem {AUDIT_TABLE} + s3:HeadObject {STORAGE_BUCKET} "
+            f"for up to {args.probe_timeout}s"
+        ),
+    )
+    if pending:
+        unverified.append(
+            "CLN-01/CLN-03: the seeded orphan set had not finished processing within "
+            "--probe-timeout, so the set comparisons below may reflect an in-flight estate."
+        )
 
     estate_checks(checks, clients, args.ns, exp, probe_prefix)
     sweep_evidence = sweep_checks(checks, clients, exp)

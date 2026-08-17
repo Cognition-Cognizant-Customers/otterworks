@@ -54,6 +54,8 @@ def _load_handler():
     os.environ.update(
         {
             "AWS_ENDPOINT_URL": ENDPOINT,
+            "AWS_ACCESS_KEY_ID": "123456789012",
+            "AWS_SECRET_ACCESS_KEY": "cronbox-local-secret",
             "AWS_REGION": REGION,
             "STORAGE_BUCKET": STORAGE_BUCKET,
             "QUARANTINE_BUCKET": QUARANTINE_BUCKET,
@@ -239,6 +241,40 @@ def test_event_quarantine_set_and_replay(estate):
     )
     assert replay["status"] == "already_quarantined"
     assert audit_after == audit_before
+
+
+def test_recreated_quarantined_key_is_processed_again(estate):
+    module = _load_handler()
+    source_key = estate["orphan_keys"][0]
+    previous_audit = (
+        estate["dynamodb"]
+        .Table(AUDIT_TABLE)
+        .get_item(Key={"object_key": source_key})["Item"]
+    )
+    recreated_body = b"recreated"
+    estate["s3"].put_object(Bucket=STORAGE_BUCKET, Key=source_key, Body=recreated_body)
+
+    event_time = datetime.now(timezone.utc) + timedelta(days=1)
+    result = module.handler(_event(source_key, event_time), None)
+
+    assert result["status"] == "quarantined"
+    assert result["quarantine_key"] != previous_audit["quarantine_key"]
+    assert (
+        estate["s3"]
+        .get_object(Bucket=QUARANTINE_BUCKET, Key=result["quarantine_key"])["Body"]
+        .read()
+        == recreated_body
+    )
+    with pytest.raises(ClientError):
+        estate["s3"].head_object(Bucket=STORAGE_BUCKET, Key=source_key)
+
+    current_audit = (
+        estate["dynamodb"]
+        .Table(AUDIT_TABLE)
+        .get_item(Key={"object_key": source_key})["Item"]
+    )
+    assert current_audit["quarantine_key"] == result["quarantine_key"]
+    assert current_audit["detected_at"] != previous_audit["detected_at"]
 
 
 def test_unicode_and_empty_reference_are_safe(estate):

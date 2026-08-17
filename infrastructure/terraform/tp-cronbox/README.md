@@ -32,3 +32,7 @@ The handler also exposes an on-demand `{"mode": "reconcile"}` sweep for manual
 reconciliation. A production variant would use an SQS delay queue for the
 metadata write-order recheck rather than waiting inside Lambda. This bounded
 in-invocation wait keeps the resource set to the contract's list.
+
+Each event still performs a full metadata scan, mirroring the legacy daily
+scan. A future `s3_key` GSI is the follow-up optimization and belongs to the
+parent because it would alter the shared metadata table.

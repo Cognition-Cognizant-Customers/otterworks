@@ -16,10 +16,6 @@ def _client_kwargs() -> dict:
     endpoint = os.getenv("AWS_ENDPOINT_URL")
     if endpoint:
         kwargs["endpoint_url"] = endpoint
-        kwargs["aws_access_key_id"] = os.getenv("AWS_ACCESS_KEY_ID", "123456789012")
-        kwargs["aws_secret_access_key"] = os.getenv(
-            "AWS_SECRET_ACCESS_KEY", "cronbox-local-secret"
-        )
     return kwargs
 
 
@@ -95,9 +91,9 @@ def _quarantine_exists(key: str) -> bool:
     )
 
 
-def _metadata_snapshot() -> tuple[list[str], int]:
+def _metadata_snapshot() -> tuple[set[str], int]:
     table = dynamodb.Table(_setting("METADATA_TABLE", "ow-tp-file-metadata"))
-    references: list[str] = []
+    references: set[str] = set()
     unresolvable = 0
     scan_kwargs = {"ProjectionExpression": "s3_key"}
     while True:
@@ -105,7 +101,7 @@ def _metadata_snapshot() -> tuple[list[str], int]:
         for item in page.get("Items", []):
             key = item.get("s3_key")
             if isinstance(key, str) and key:
-                references.append(key)
+                references.add(key)
             else:
                 unresolvable += 1
         last_key = page.get("LastEvaluatedKey")
@@ -185,9 +181,14 @@ def _put_audit(item: dict) -> None:
         _audit_table().put_item(
             Item=item,
             ConditionExpression=(
-                "attribute_not_exists(object_key) OR decision <> :quarantined"
+                "attribute_not_exists(object_key) "
+                "OR decision <> :quarantined "
+                "OR quarantine_key <> :quarantine_key"
             ),
-            ExpressionAttributeValues={":quarantined": "quarantined"},
+            ExpressionAttributeValues={
+                ":quarantined": "quarantined",
+                ":quarantine_key": item.get("quarantine_key", ""),
+            },
         )
     except ClientError as error:
         if (
@@ -206,6 +207,7 @@ def _already_processed(source_key: str) -> dict | None:
     if (
         decision == "quarantined"
         and quarantine_key
+        and _head(_setting("STORAGE_BUCKET", "ow-tp-file-storage"), source_key) is None
         and _quarantine_exists(quarantine_key)
     ):
         return {
@@ -264,7 +266,7 @@ def _process_object(
     detected_at: datetime,
     trigger_source: str,
     context=None,
-    metadata_snapshot: tuple[list[str], int] | None = None,
+    metadata_snapshot: tuple[set[str], int] | None = None,
 ) -> dict:
     existing = _already_processed(raw_key)
     if existing:

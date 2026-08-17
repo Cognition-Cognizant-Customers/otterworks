@@ -52,11 +52,6 @@ resource "aws_iam_role_policy" "orphan_quarantine" {
           aws_s3_bucket.file_storage.arn,
           aws_s3_bucket.file_quarantine.arn,
         ]
-        Condition = {
-          StringLike = {
-            "s3:prefix" = ["files/*", "quarantined/*"]
-          }
-        }
       },
       {
         Effect   = "Allow"
