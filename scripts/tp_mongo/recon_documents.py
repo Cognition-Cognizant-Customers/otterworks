@@ -41,6 +41,14 @@ from common import (
 
 UNIT = "mongo_documents"
 
+# Emitted verbatim in the report: the single command that recomputes every
+# number in it against whatever deployment MONGO_URI points at.
+RECOMPUTE_COMMAND = (
+    "MONGO_URI='<target uri>' uv run --no-project --with pymongo==4.10.1 "
+    "--with psycopg2-binary==2.9.10 python3 scripts/tp_mongo/recon_documents.py "
+    "--ns {ns} --run-mode live --out docs/tech-partnerships/recon/mongo_documents.live.recon.json"
+)
+
 UNVERIFIED_FIXTURE = [
     "Writes against the shared MongoDB Atlas cluster: this run targeted the local mongo:7 fixture only (make tp-mongo-up), so Atlas wire-protocol writes, Atlas-side $jsonSchema validator DDL and Atlas index builds are unverified here. The parent session's single uncontended run against Atlas is the only live proof.",
     "Atlas-specific operational behaviour: M0 free-tier storage headroom for this collection set, Atlas index build time, and read/write performance under Atlas latency.",
@@ -528,6 +536,7 @@ def main() -> int:
             "unexpected": sorted(set(actual_set) - set(expected_set)),
         },
         "unverified_paths": UNVERIFIED_FIXTURE if args.run_mode == "fixture" else UNVERIFIED_LIVE,
+        "recompute_command": RECOMPUTE_COMMAND.format(ns=args.ns),
     }
     if idempotency is not None:
         report["idempotency_rerun"] = idempotency
@@ -543,8 +552,6 @@ def main() -> int:
         print(text)
     for c in checks:
         print(f"[recon] {c['result']:>4}  {c['id']}")
-    if idempotency:
-        print(f"[recon] {idempotency['result']:>4}  documents.idempotent")
     print(f"[recon] result: {report['recon_result']}")
     return 0 if report["recon_result"] == "pass" else 1
 

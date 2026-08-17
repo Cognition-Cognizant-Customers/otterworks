@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_documents",
   "namespace": "demo",
-  "generated_at": "2026-08-17T04:53:38Z",
+  "generated_at": "2026-08-17T04:55:12Z",
   "run_mode": "fixture",
   "target": {
     "database": "ow_tp_demo",
@@ -266,6 +266,7 @@
     "Atlas alert configuration: the parent's capability preflight reports alert-webhook-config DENIED (HTTP 401 USER_UNAUTHORIZED); nothing in this unit depends on it and it was not exercised.",
     "Atlas access-list and credential handling: this unit never touched the Atlas project access list or Atlas credentials."
   ],
+  "recompute_command": "MONGO_URI='<target uri>' uv run --no-project --with pymongo==4.10.1 --with psycopg2-binary==2.9.10 python3 scripts/tp_mongo/recon_documents.py --ns demo --run-mode live --out docs/tech-partnerships/recon/mongo_documents.live.recon.json",
   "idempotency_rerun": {
     "performed": true,
     "result": "pass",
