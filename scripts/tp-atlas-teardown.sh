@@ -48,8 +48,13 @@ else
   manage_caller_access_list=false
 fi
 
-uv run --no-project --with pymongo==4.10.1 \
-  python3 "${REPO_ROOT}/scripts/tp_atlas_teardown.py" --ns "${NS}"
+database_username="$(terraform -chdir="${TF_DIR}" output -raw database_username 2>/dev/null || true)"
+database_password="$(terraform -chdir="${TF_DIR}" output -raw database_password 2>/dev/null || true)"
+database_name="$(terraform -chdir="${TF_DIR}" output -raw database_name 2>/dev/null || true)"
+printf '%s\0%s\0%s' "${database_username}" "${database_password}" "${database_name}" |
+  uv run --no-project --with pymongo==4.10.1 \
+    python3 "${REPO_ROOT}/scripts/tp_atlas_teardown.py" \
+      --ns "${NS}" --credentials-stdin
 
 terraform -chdir="${TF_DIR}" destroy -auto-approve -input=false \
   -var="ns=${NS}" \
