@@ -109,3 +109,6 @@ __pycache__/
 
 # Legacy seed manifests (runtime artifacts)
 testdata/legacy/manifests/*.json
+
+# recon reports are per-run evidence, not code (see tech-partnerships branch policy)
+docs/tech-partnerships/recon/*.recon.json
