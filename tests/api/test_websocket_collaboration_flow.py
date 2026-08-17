@@ -1,5 +1,6 @@
 import os
 import time
+import uuid
 
 import pytest
 import socketio
@@ -12,6 +13,10 @@ def _collab_url(base_url: str) -> str:
     return os.getenv("OTTERWORKS_COLLAB_WS_URL", base_url.replace("http://", "ws://").replace("https://", "wss://"))
 
 
+def _invalid_token() -> str:
+    return os.getenv("OTTERWORKS_INVALID_WS_TOKEN") or f"invalid-{uuid.uuid4().hex}"
+
+
 def test_socketio_rejects_missing_or_invalid_token(base_url):
     sio = socketio.Client(reconnection=False, request_timeout=3)
     with pytest.raises(socketio.exceptions.ConnectionError):
@@ -21,7 +26,7 @@ def test_socketio_rejects_missing_or_invalid_token(base_url):
     with pytest.raises(socketio.exceptions.ConnectionError):
         invalid.connect(
             _collab_url(base_url),
-            auth={"token": "not-a-valid-token"},
+            auth={"token": _invalid_token()},
             transports=["websocket"],
         )
 
