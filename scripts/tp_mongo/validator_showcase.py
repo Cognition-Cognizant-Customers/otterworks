@@ -36,6 +36,7 @@ from platform_common import (  # noqa: E402
     MIGRATED_COLLECTIONS,
     json_schema_validator,
     namespace_filter,
+    redacted_uri,
 )
 
 PROBE_ID_PREFIX = "ow_tp_validator_showcase"
@@ -144,7 +145,7 @@ def main() -> int:
     results: list[dict[str, Any]] = []
     try:
         database = client[database_name(ns)]
-        print(f"MongoDB server-side validators in force  uri={mongo_uri()} "
+        print(f"MongoDB server-side validators in force  uri={redacted_uri(mongo_uri())} "
               f"db={database_name(ns)} ns={ns}")
         for collection in MIGRATED_COLLECTIONS:
             print(f"\n== {collection}")

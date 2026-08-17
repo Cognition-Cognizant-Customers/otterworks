@@ -13,6 +13,8 @@ import os
 from pathlib import Path
 from types import ModuleType
 
+from platform_common import redacted_uri_for_report
+
 ROOT = Path(__file__).resolve().parents[2]
 
 DOCUMENTS = "documents"
@@ -23,14 +25,6 @@ QUARANTINE = "documents_quarantine"
 def mongo_uri() -> str:
     fixture_uri = f"mongodb://localhost:{os.environ.get('MONGO_FIXTURE_PORT', '27017')}"
     return os.environ.get("MONGO_URI") or fixture_uri
-
-
-def redacted_uri(uri: str) -> str:
-    """Hide any embedded credentials so a URI can be printed or committed."""
-    if "@" not in uri:
-        return uri
-    scheme, _, rest = uri.partition("://")
-    return f"{scheme}://<redacted>@{rest.rpartition('@')[2]}"
 
 
 def target_db_name(ns: str) -> str:

@@ -35,7 +35,7 @@ from mongo_common import (  # noqa: E402
     mongo_uri,
     validate_ns,
 )
-from platform_common import namespace_filter  # noqa: E402
+from platform_common import namespace_filter, redacted_uri  # noqa: E402
 
 # The persistent showcase namespace: mutating it silently would poison the demo.
 PROTECTED_NAMESPACES = frozenset({"demo"})
@@ -200,7 +200,8 @@ def main() -> int:
     try:
         database = client[database_name(ns)]
         print(f"staging drift: mutation={args.mutation} ns={ns} "
-              f"db={database_name(ns)} uri={mongo_uri()} count={args.count}")
+              f"db={database_name(ns)} uri={redacted_uri(mongo_uri())} "
+              f"count={args.count}")
         effect = MUTATORS[args.mutation](database, ns, args.count)
     finally:
         client.close()

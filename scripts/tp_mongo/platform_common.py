@@ -13,6 +13,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from typing import Any
 
 # Every collection written by the Wave 1 migrations, with the field that carries
@@ -32,6 +33,71 @@ MIGRATED_COLLECTIONS: dict[str, str] = {
 WEBHOOK_URL_ENV = "OW_TP_MONGO_RECON_WEBHOOK_URL"
 WEBHOOK_SECRET_ENV = "OW_TP_MONGO_RECON_WEBHOOK_SECRET"
 WEBHOOK_SECRET_HEADER = "X-Webhook-Secret"
+OPAQUE_URI_MARKER = "<unparseable-uri-withheld>"
+
+
+@dataclass(frozen=True)
+class _UriParts:
+    scheme: str
+    userinfo: str
+    host: str
+    suffix: str
+    opaque: bool = False
+
+
+def _uri_parts(uri: str) -> _UriParts | None:
+    """Return scheme, userinfo, host, and suffix without exposing userinfo."""
+    scheme, separator, remainder = uri.partition("://")
+    if not separator:
+        if "@" in uri:
+            return _UriParts("", "", "", "", opaque=True)
+        return None
+    authority_end = len(remainder)
+    for delimiter in "/?#":
+        position = remainder.find(delimiter)
+        if position != -1:
+            authority_end = min(authority_end, position)
+    if any(
+        position > authority_end
+        for position, character in enumerate(remainder)
+        if character == "@"
+    ):
+        return _UriParts(scheme, "", "", "", opaque=True)
+    authority = remainder[:authority_end]
+    if "@" in authority:
+        at = authority.rfind("@")
+        userinfo = authority[:at]
+        host = authority[at + 1:]
+        suffix = remainder[authority_end:]
+        return _UriParts(scheme, userinfo, host, suffix)
+    return None
+
+
+def _opaque_uri(scheme: str) -> str:
+    if not scheme:
+        return OPAQUE_URI_MARKER
+    return f"{scheme}://{OPAQUE_URI_MARKER}"
+
+
+def redacted_uri(uri: str) -> str:
+    """Render a MongoDB URI with its password replaced."""
+    parts = _uri_parts(uri)
+    if parts is None:
+        return uri
+    if parts.opaque:
+        return _opaque_uri(parts.scheme)
+    username = parts.userinfo.partition(":")[0]
+    return f"{parts.scheme}://{username}:<redacted>@{parts.host}{parts.suffix}"
+
+
+def redacted_uri_for_report(uri: str) -> str:
+    """Render a MongoDB URI without any userinfo for persisted reports."""
+    parts = _uri_parts(uri)
+    if parts is None:
+        return uri
+    if parts.opaque:
+        return _opaque_uri(parts.scheme)
+    return f"{parts.scheme}://{parts.host}{parts.suffix}"
 
 
 def namespace_filter(collection: str, ns: str) -> dict[str, str]:
