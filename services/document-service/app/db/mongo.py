@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import cast
@@ -181,14 +182,15 @@ class MongoDocumentStore:
     async def search(
         self, query_text: str, page: int, size: int
     ) -> tuple[list[MongoDocument], int]:
+        literal_query = re.escape(query_text)
         query = self._filter()
         query.update(
             {
                 "is_deleted": False,
                 "is_template": False,
                 "$or": [
-                    {"title": {"$regex": query_text, "$options": "i"}},
-                    {"content": {"$regex": query_text, "$options": "i"}},
+                    {"title": {"$regex": literal_query, "$options": "i"}},
+                    {"content": {"$regex": literal_query, "$options": "i"}},
                 ],
             }
         )

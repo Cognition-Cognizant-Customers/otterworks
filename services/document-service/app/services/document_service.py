@@ -161,7 +161,7 @@ class DocumentService:
         if document is None:
             return []
         return sorted(
-            document.versions, key=lambda version: version.version_number, reverse=True
+            document.versions, key=lambda version: version.version_number
         )
 
     async def restore_version(

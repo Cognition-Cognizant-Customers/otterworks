@@ -169,6 +169,13 @@ def main() -> int:
             if sample is None:
                 print("    (collection is empty for this namespace: "
                       "type and unmodeled-field probes need a real document)")
+                if schema.get("additionalProperties") is not False:
+                    print("    field absent from the schema: NOT ASSERTED - this "
+                          "validator does not set additionalProperties:false, so "
+                          "unmodeled fields are permitted by design")
+                    probes.append({"probe": "unmodeled_field", "attempted": False,
+                                   "rejected_by_server": None,
+                                   "reason": "validator permits additional properties"})
             else:
                 field, bad_value, why = WRONG_TYPE_PROBES[collection]
                 probe = mutate(sample, "_id", f"{PROBE_ID_PREFIX}_wrong_type")
@@ -225,8 +232,8 @@ def main() -> int:
                                 {
                                     "probe": probe["probe"],
                                     "rejected_by_server": probe["rejected_by_server"],
-                                    "code": probe["code"],
-                                    "code_name": probe["code_name"],
+                                    "code": probe.get("code"),
+                                    "code_name": probe.get("code_name"),
                                 }
                                 for probe in entry["probes"]
                             ],
