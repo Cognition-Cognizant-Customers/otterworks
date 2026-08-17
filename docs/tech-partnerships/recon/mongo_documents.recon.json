@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_documents",
   "namespace": "demo",
-  "generated_at": "2026-08-17T05:06:51Z",
+  "generated_at": "2026-08-17T05:09:46Z",
   "run_mode": "fixture",
   "target": {
     "database": "ow_tp_demo",
@@ -201,12 +201,16 @@
     {
       "id": "documents.baseline_matches_contract",
       "expected": {
-        "documents": "e70001cf6110014dab6e1d80adb40285",
-        "versions": "13bc033b2780a0569d7f2217e85d7303"
+        "contract_md5s": [
+          "13bc033b2780a0569d7f2217e85d7303",
+          "e70001cf6110014dab6e1d80adb40285"
+        ]
       },
       "actual": {
-        "documents": "e70001cf6110014dab6e1d80adb40285",
-        "versions": "13bc033b2780a0569d7f2217e85d7303"
+        "manifest_md5s": [
+          "13bc033b2780a0569d7f2217e85d7303",
+          "e70001cf6110014dab6e1d80adb40285"
+        ]
       },
       "source_of_truth": "docs/tech-partnerships/contracts/mongo_documents.json acceptance_checks.documents.checksums vs testdata/legacy/manifests/demo.json documents+versions checksums",
       "result": "pass"

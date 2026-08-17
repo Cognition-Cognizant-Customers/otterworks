@@ -402,17 +402,18 @@ def build_checks(ns: str, mf: dict, expected: dict, facts: dict) -> list[dict]:
         str(target).startswith(contract_scope)
         for target in contract.get("target_objects", [])
     )
+    manifest_md5s = {
+        docs_want["checksum"],
+        vers_want["checksum"],
+    }
     contract_check = {
         "id": "documents.baseline_matches_contract",
-        "expected": {
-            "documents": docs_want["checksum"],
-            "versions": vers_want["checksum"],
-        },
-        "actual": {
-            "documents": docs_want["checksum"],
-            "versions": vers_want["checksum"],
-        },
-        "source_of_truth": f"docs/tech-partnerships/contracts/{UNIT}.json vs {manifest_src}",
+        "expected": {"contract_md5s": []},
+        "actual": {"manifest_md5s": sorted(manifest_md5s)},
+        "source_of_truth": (
+            f"contract is demo-scoped, reconciling ns={ns}; "
+            "check skipped because the contract does not describe this namespace"
+        ),
         "result": "skipped",
     }
     if contract_applies:
@@ -422,10 +423,8 @@ def build_checks(ns: str, mf: dict, expected: dict, facts: dict) -> list[dict]:
             if check.get("id") == "documents.checksums"
         )
         contract_md5s = set(re.findall(r"\b[0-9a-fA-F]{32}\b", description))
-        manifest_md5s = {
-            docs_want["checksum"],
-            vers_want["checksum"],
-        }
+        contract_check["expected"] = {"contract_md5s": sorted(contract_md5s)}
+        contract_check["actual"] = {"manifest_md5s": sorted(manifest_md5s)}
         contract_check["result"] = (
             "pass" if contract_md5s == manifest_md5s else "fail"
         )
