@@ -73,6 +73,26 @@ def test_version_bound_exceeded_quarantines_without_truncated_document():
     assert str(VERSION_ARRAY_BOUND + 1) in quarantine["detail"]
 
 
+def test_version_bound_counts_only_embedded_versions():
+    versions = [
+        {
+            "_id": f"version-{number}",
+            "version_number": number,
+            "title": "Title",
+            "content": "Body",
+            "created_by": "owner-1",
+            "created_at": datetime(2026, 8, 1, tzinfo=timezone.utc),
+        }
+        for number in range(1, VERSION_ARRAY_BOUND - 3)
+    ]
+    versions.extend([None] * 6)
+
+    document, quarantine, _ = process_document("demo", document_row(), versions)
+
+    assert quarantine is None
+    assert len(document["versions"]) == VERSION_ARRAY_BOUND - 4
+
+
 def test_required_null_field_is_quarantined():
     document, quarantine, _ = process_document(
         "demo", document_row(title=None), []

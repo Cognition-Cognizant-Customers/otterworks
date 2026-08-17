@@ -421,7 +421,7 @@ def process_document(
         )
 
     valid_versions = [version for version in version_rows if version is not None]
-    if len(version_rows) > VERSION_ARRAY_BOUND:
+    if len(valid_versions) > VERSION_ARRAY_BOUND:
         return (
             None,
             quarantine_record(
@@ -429,7 +429,7 @@ def process_document(
                 "documents",
                 source_id,
                 "version_array_over_bound",
-                f"{len(version_rows)} versions exceed bound {VERSION_ARRAY_BOUND}",
+                f"{len(valid_versions)} versions exceed bound {VERSION_ARRAY_BOUND}",
                 raw,
             ),
             False,

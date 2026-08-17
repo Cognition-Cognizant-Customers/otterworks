@@ -105,6 +105,7 @@ def migrate(ns: str) -> dict[str, int]:
         quarantined_document_ids: set[str] = set()
         written_document_ids: set[str] = set()
         written_snapshot_ids: set[str] = set()
+        written_quarantine_ids: set[str] = set()
         document_collection = db[DOCUMENTS]
         quarantine_collection = db[QUARANTINE]
 
@@ -166,6 +167,9 @@ def migrate(ns: str) -> dict[str, int]:
                 quarantine_collection,
                 version_quarantine + document_quarantine,
             )
+            written_quarantine_ids.update(
+                record["_id"] for record in version_quarantine + document_quarantine
+            )
             quarantined += len(version_quarantine) + len(document_quarantine)
             batch = document_cursor.fetchmany(BATCH_SIZE)
         document_cursor.close()
@@ -198,6 +202,9 @@ def migrate(ns: str) -> dict[str, int]:
             if len(snapshot_records) >= BATCH_SIZE:
                 replace_batch(db[SNAPSHOTS], snapshot_records)
                 replace_batch(quarantine_collection, snapshot_quarantine)
+                written_quarantine_ids.update(
+                    record["_id"] for record in snapshot_quarantine
+                )
                 snapshots_written += len(snapshot_records)
                 quarantined += len(snapshot_quarantine)
                 snapshot_records = []
@@ -206,6 +213,9 @@ def migrate(ns: str) -> dict[str, int]:
         snapshot_cursor.close()
         replace_batch(db[SNAPSHOTS], snapshot_records)
         replace_batch(quarantine_collection, snapshot_quarantine)
+        written_quarantine_ids.update(
+            record["_id"] for record in snapshot_quarantine
+        )
         snapshots_written += len(snapshot_records)
         quarantined += len(snapshot_quarantine)
         db[DOCUMENTS].delete_many(
@@ -213,6 +223,9 @@ def migrate(ns: str) -> dict[str, int]:
         )
         db[SNAPSHOTS].delete_many(
             {"ns": ns, "_id": {"$nin": list(written_snapshot_ids)}}
+        )
+        quarantine_collection.delete_many(
+            {"ns": ns, "_id": {"$nin": list(written_quarantine_ids)}}
         )
         return {
             "documents": documents_written,
