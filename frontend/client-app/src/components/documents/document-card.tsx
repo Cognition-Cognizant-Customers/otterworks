@@ -191,7 +191,11 @@ function DocMenu({
         type="button"
         aria-label="Close menu"
         className="fixed inset-0 z-10 cursor-default"
-        onClick={onClose}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onClose();
+        }}
       />
       <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
         <Link
