@@ -35,6 +35,7 @@ resource "mongodbatlas_database_user" "namespace" {
 }
 
 resource "mongodbatlas_project_ip_access_list" "caller" {
+  count      = var.manage_caller_access_list ? 1 : 0
   project_id = data.mongodbatlas_project.shared.id
   ip_address = local.caller_ip
   comment    = "otterworks-tp track=mongodb namespace=${var.ns}"

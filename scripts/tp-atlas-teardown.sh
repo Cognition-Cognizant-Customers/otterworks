@@ -27,22 +27,33 @@ if [[ "${workspace}" == "default" || "${workspace}" != "${NS}" ]]; then
 fi
 if state="$(terraform -chdir="${TF_DIR}" state list 2>/dev/null)" && [[ -n "${state}" ]]; then
   details="$(terraform -chdir="${TF_DIR}" state show -no-color mongodbatlas_database_user.namespace 2>/dev/null || true)"
-  acl_details="$(terraform -chdir="${TF_DIR}" state show -no-color mongodbatlas_project_ip_access_list.caller 2>/dev/null || true)"
   expected_user="ow-tp-${NS,,}"
   expected_comment="otterworks-tp track=mongodb namespace=${NS}"
   if [[ "${details}" != *"username"* || "${details}" != *"${expected_user}"* ||
-        "${details}" != *"ow_tp_${NS,,}"* ||
-        "${acl_details}" != *"${expected_comment}"* ]]; then
+        "${details}" != *"ow_tp_${NS,,}"* ]]; then
     echo "refusing to destroy Terraform state that is not owned by NS=${NS}" >&2
     exit 1
   fi
+  caller_state="$(terraform -chdir="${TF_DIR}" state list | grep '^mongodbatlas_project_ip_access_list.caller' || true)"
+  manage_caller_access_list=false
+  if [[ -n "${caller_state}" ]]; then
+    acl_details="$(terraform -chdir="${TF_DIR}" state show -no-color "${caller_state}" 2>/dev/null || true)"
+    if [[ "${acl_details}" != *"${expected_comment}"* ]]; then
+      echo "refusing to destroy an access-list state without the expected ownership comment" >&2
+      exit 1
+    fi
+    manage_caller_access_list=true
+  fi
+else
+  manage_caller_access_list=false
 fi
 
 uv run --no-project --with pymongo==4.10.1 \
   python3 "${REPO_ROOT}/scripts/tp_atlas_teardown.py" --ns "${NS}"
 
 terraform -chdir="${TF_DIR}" destroy -auto-approve -input=false \
-  -var="ns=${NS}"
+  -var="ns=${NS}" \
+  -var="manage_caller_access_list=${manage_caller_access_list}"
 
 if state="$(terraform -chdir="${TF_DIR}" state list 2>/dev/null)" && [[ -n "${state}" ]]; then
   echo "negative verification FAILED: Terraform state still contains ${state}" >&2

@@ -157,24 +157,26 @@ pending_collections = {}
 pending_validator_collections = {}
 
 
-def reconcile_collection(name):
+def reconcile_collection(name, emit=True):
     entry = pending_collections.pop(name, None)
     if entry is None:
-        return
+        return None
     client, database = entry
     try:
         database.drop_collection(name)
-        m.add("db-user-write-cleanup", "Drop the temporary probe collection",
-              "MongoDB wire protocol", "verified", f"{name} confirmed absent")
+        outcome = ("verified", f"{name} confirmed absent")
     except Exception as exc:
-        m.add("db-user-write-cleanup", "Drop the temporary probe collection",
-              "MongoDB wire protocol", "denied",
-              f"{name} may remain in ow_tp_preflight; manual cleanup required: {exception_detail(exc)}")
+        outcome = ("denied",
+                   f"{name} may remain in ow_tp_preflight; manual cleanup required: {exception_detail(exc)}")
     finally:
         try:
             client.close()
         except Exception:
             pass
+    if emit:
+        m.add("db-user-write-cleanup", "Drop the temporary probe collection",
+              "MongoDB wire protocol", outcome[0], outcome[1])
+    return outcome
 
 
 def reconcile_collections():
@@ -204,29 +206,50 @@ def db_user_write():
     from pymongo import MongoClient
 
     last_error = None
+    cleanup_outcomes = []
     for attempt in range(3):
         client = None
         name = f"ow_tp_preflight_{uuid.uuid4().hex}"
+        created = False
         try:
             client = MongoClient(os.environ["MONGODB_ATLAS_URI"], serverSelectionTimeoutMS=10000)
             database = client["ow_tp_preflight"]
-            pending_collections[name] = (client, database)
             database[name].insert_one({"_id": "probe"})
+            created = True
+            pending_collections[name] = (client, database)
             database[name].delete_one({"_id": "probe"})
             database.drop_collection(name)
             pending_collections.pop(name, None)
+            client.close()
+            if any(result == "denied" for result, _ in cleanup_outcomes):
+                m.add("db-user-write", "Insert and delete a temporary document with the DB user",
+                      "MongoDB wire protocol", "denied",
+                      "write succeeded on retry, but a prior temporary collection cleanup failed; manual cleanup required")
+                for result, detail in cleanup_outcomes:
+                    m.add("db-user-write-cleanup", "Drop the temporary probe collection",
+                          "MongoDB wire protocol", result, detail)
+                return
             m.add("db-user-write", "Insert and delete a temporary document with the DB user",
                   "MongoDB wire protocol", "verified", "temporary collection cleaned")
-            client.close()
             return
         except Exception as exc:
             last_error = exc
-            reconcile_collection(name)
+            if created:
+                outcome = reconcile_collection(name, emit=False)
+                if outcome is not None:
+                    cleanup_outcomes.append(outcome)
+            elif client is not None:
+                try:
+                    client.close()
+                except Exception:
+                    pass
             if attempt < 2:
                 time.sleep(5)
     m.add("db-user-write", "Insert and delete a temporary document with the DB user",
           "MongoDB wire protocol", "denied", exception_detail(last_error))
-    reconcile_collections()
+    for result, detail in cleanup_outcomes:
+        m.add("db-user-write-cleanup", "Drop the temporary probe collection",
+              "MongoDB wire protocol", result, detail)
 
 
 def validator_ddl():

@@ -17,5 +17,5 @@ output "database_password" {
 }
 
 output "caller_ip" {
-  value = mongodbatlas_project_ip_access_list.caller.ip_address
+  value = var.manage_caller_access_list ? mongodbatlas_project_ip_access_list.caller[0].ip_address : local.caller_ip
 }
