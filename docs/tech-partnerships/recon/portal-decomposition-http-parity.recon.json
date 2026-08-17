@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "legacy-portal-decomposition/http-parity",
   "namespace": "demo",
-  "generated_at": "2026-08-17T05:19:47.057679+00:00",
+  "generated_at": "2026-08-17T05:31:03.089912+00:00",
   "golden_source": "http://localhost:8095",
   "golden_spec_sha": "6064f4d3031b7a84258e17e1c152183bb5abd9e0950820d258f9ee97c61c0c2f",
   "live_spec_sha": "6064f4d3031b7a84258e17e1c152183bb5abd9e0950820d258f9ee97c61c0c2f",
@@ -28,7 +28,9 @@
     "missing": [],
     "unexpected": []
   },
-  "unverified_paths": [],
+  "unverified_paths": [
+    "EventBridge -> Devin API destination delivery (devin_webhook_url unset in this run)"
+  ],
   "checks": [
     {
       "id": "health",

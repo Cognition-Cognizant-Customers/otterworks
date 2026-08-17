@@ -31,7 +31,7 @@ public abstract class ApiHandler implements RequestHandler<APIGatewayV2HTTPEvent
                     ? Map.of() : event.getQueryStringParameters();
             String body = event.getBody();
             if (body != null && Boolean.TRUE.equals(event.getIsBase64Encoded())) {
-                body = new String(Base64.getDecoder().decode(body));
+                body = new String(Base64.getDecoder().decode(body), StandardCharsets.UTF_8);
             }
             Result result = "GET".equals(method) && "/health".equals(path)
                     ? health()
