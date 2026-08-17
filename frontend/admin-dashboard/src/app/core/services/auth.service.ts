@@ -1,8 +1,9 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
-import { tap, delay, map } from 'rxjs/operators';
+import { tap, delay } from 'rxjs/operators';
 import { Router } from '@angular/router';
+import { DevAuthConfigService } from './dev-auth-config.service';
 
 export interface AuthUser {
   id: string;
@@ -24,7 +25,11 @@ export class AuthService {
   private currentUserSubject = new BehaviorSubject<AuthUser | null>(this.getStoredUser());
   currentUser$ = this.currentUserSubject.asObservable();
 
-  constructor(private http: HttpClient, private router: Router) {}
+  constructor(
+    private http: HttpClient,
+    private router: Router,
+    private devAuthConfig: DevAuthConfigService
+  ) {}
 
   get isAuthenticated(): boolean {
     return !!this.getToken();
@@ -78,8 +83,16 @@ export class AuthService {
       email,
       displayName: 'Admin User',
       role: 'admin',
-      token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJ1c2VyX2lkIjoiYTAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIiwiZW1haWwiOiJhZG1pbkBvdHRlcndvcmtzLmRldiIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTcwNDA2NzIwMCwiZXhwIjoxOTI0OTA1NjAwfQ.hD5dwgrPNRTzbXa6lbA83Aru7BvQVIQc0rGVySkF1fA',
+      token: this.devAuthConfig.token ?? this.opaqueToken(),
     };
     return of(user).pipe(delay(800));
+  }
+
+  /** Issued when no dev token is configured (e.g. unit tests); the backend rejects it. */
+  private opaqueToken(): string {
+    const bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    const random = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    return `mock-jwt-token-${Date.now()}-${random}`;
   }
 }

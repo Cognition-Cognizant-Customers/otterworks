@@ -4,7 +4,10 @@
   "private": true,
   "scripts": {
     "ng": "ng",
+    "gen:dev-auth": "node scripts/gen-dev-auth.mjs",
+    "prestart": "npm run gen:dev-auth",
     "start": "ng serve --port 4200",
+    "prebuild": "npm run gen:dev-auth",
     "build": "ng build --configuration production",
     "test": "ng test --watch=false --browsers=ChromeHeadless",
     "lint": "ng lint"
