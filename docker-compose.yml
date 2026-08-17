@@ -15,7 +15,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_USER: otterworks
-      POSTGRES_PASSWORD: otterworks_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-otterworks_dev}
       POSTGRES_DB: otterworks
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -61,7 +61,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_USER: otterworks
-      POSTGRES_PASSWORD: otterworks_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-otterworks_dev}
       POSTGRES_DB: otterworks
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -69,7 +69,7 @@ services:
       OTEL_SERVICE_NAME: auth-service
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/otterworks
       SPRING_DATASOURCE_USERNAME: otterworks
-      SPRING_DATASOURCE_PASSWORD: otterworks_dev
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-otterworks_dev}
       JWT_SECRET: ${JWT_SECRET:-otterworks-local-dev-jwt-secret-change-me-in-production}
     depends_on:
       postgres:
@@ -103,7 +103,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_USER: otterworks
-      POSTGRES_PASSWORD: otterworks_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-otterworks_dev}
       POSTGRES_DB: otterworks
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -146,13 +146,13 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_USER: otterworks
-      POSTGRES_PASSWORD: otterworks_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-otterworks_dev}
       POSTGRES_DB: otterworks
       REDIS_HOST: redis
       REDIS_PORT: 6379
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_SERVICE_NAME: document-service
-      DOC_SVC_DATABASE_URL: postgresql+asyncpg://otterworks:otterworks_dev@postgres:5432/otterworks
+      DOC_SVC_DATABASE_URL: postgresql+asyncpg://otterworks:${POSTGRES_PASSWORD:-otterworks_dev}@postgres:5432/otterworks
       DOC_SVC_SNS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:otterworks-events
       DOC_SVC_AWS_ENDPOINT_URL: http://localstack:4566
       DOC_SVC_SNS_ENABLED: 'true'
@@ -189,7 +189,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_USER: otterworks
-      POSTGRES_PASSWORD: otterworks_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-otterworks_dev}
       POSTGRES_DB: otterworks
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -229,7 +229,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_USER: otterworks
-      POSTGRES_PASSWORD: otterworks_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-otterworks_dev}
       POSTGRES_DB: otterworks
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -272,7 +272,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_USER: otterworks
-      POSTGRES_PASSWORD: otterworks_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-otterworks_dev}
       POSTGRES_DB: otterworks
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -314,7 +314,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_USER: otterworks
-      POSTGRES_PASSWORD: otterworks_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-otterworks_dev}
       POSTGRES_DB: otterworks
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -356,7 +356,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_USER: otterworks
-      POSTGRES_PASSWORD: otterworks_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-otterworks_dev}
       POSTGRES_DB: otterworks
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -364,11 +364,11 @@ services:
       OTEL_SERVICE_NAME: admin-service
       RAILS_ENV: development
       JWT_SECRET: ${JWT_SECRET:-otterworks-local-dev-jwt-secret-change-me-in-production}
-      DATABASE_URL: postgres://otterworks:otterworks_dev@postgres:5432/otterworks
+      DATABASE_URL: postgres://otterworks:${POSTGRES_PASSWORD:-otterworks_dev}@postgres:5432/otterworks
       DATABASE_HOST: postgres
       DATABASE_PORT: 5432
       DATABASE_USER: otterworks
-      DATABASE_PASSWORD: otterworks_dev
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-otterworks_dev}
       SECRET_KEY_BASE: dev-secret-key-base-otterworks-change-in-production
       DEVIN_API_KEY: ${DEVIN_API_KEY:-}
       DEVIN_ORG_ID: ${DEVIN_ORG_ID:-}
@@ -407,7 +407,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_USER: otterworks
-      POSTGRES_PASSWORD: otterworks_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-otterworks_dev}
       POSTGRES_DB: otterworks
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -418,7 +418,7 @@ services:
       DB_PORT: 5432
       DB_NAME: otterworks_reports
       DB_USER: otterworks
-      DB_PASSWORD: otterworks_dev
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-otterworks_dev}
       ANALYTICS_SERVICE_URL: http://analytics-service:8088
       AUDIT_SERVICE_URL: http://audit-service:8090
       AUTH_SERVICE_URL: http://auth-service:8081
@@ -455,7 +455,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_USER: otterworks
-      POSTGRES_PASSWORD: otterworks_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-otterworks_dev}
       POSTGRES_DB: otterworks
       REDIS_HOST: redis
       REDIS_PORT: 6379

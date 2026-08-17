@@ -32,6 +32,12 @@ docker compose -f docker-compose.infra.yml up -d
 docker compose -f docker-compose.infra.yml -f docker-compose.yml up -d --build
 ```
 
+Credentials are read from the environment with local-dev defaults, so no setup is required. To override them (e.g. the Postgres password), copy `.env.example` to `.env` — docker compose picks it up automatically:
+
+```bash
+cp .env.example .env
+```
+
 On first run, `scripts/init-db.sql` creates the required Postgres databases and `scripts/localstack-init.sh` provisions S3 buckets, SQS queues, SNS topics, and DynamoDB tables in LocalStack automatically.
 
 To stop everything:
