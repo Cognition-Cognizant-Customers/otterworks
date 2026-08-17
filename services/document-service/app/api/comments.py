@@ -18,6 +18,7 @@ router = APIRouter()
     "/{document_id}/comments",
     response_model=CommentResponse,
     status_code=status.HTTP_201_CREATED,
+    responses={404: {"description": "Document not found"}},
 )
 async def add_comment(
     document_id: UUID,
@@ -46,6 +47,7 @@ async def list_comments(
 @router.delete(
     "/{document_id}/comments/{comment_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    responses={404: {"description": "Comment not found"}},
 )
 async def delete_comment(
     document_id: UUID,

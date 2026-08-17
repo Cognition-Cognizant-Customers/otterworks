@@ -29,6 +29,15 @@ router = APIRouter()
 
 _redis_client: redis_lib.Redis | None = None
 
+_UNAUTHORIZED_RESPONSE: dict[int | str, dict[str, str]] = {
+    401: {"description": "Authentication required"},
+}
+_OWNED_DOCUMENT_RESPONSES: dict[int | str, dict[str, str]] = {
+    **_UNAUTHORIZED_RESPONSE,
+    403: {"description": "Access denied"},
+    404: {"description": "Document not found"},
+}
+
 
 def _get_redis() -> redis_lib.Redis:
     """Return a shared Redis client (lazy-initialised)."""
@@ -119,7 +128,12 @@ async def _do_create_document(
     return document
 
 
-@router.post("/", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=DocumentResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses=dict(_UNAUTHORIZED_RESPONSE),
+)
 async def create_document(
     body: DocumentCreate,
     request: Request,
@@ -135,6 +149,7 @@ async def create_document(
     response_model=DocumentResponse,
     status_code=status.HTTP_201_CREATED,
     include_in_schema=False,
+    responses=dict(_UNAUTHORIZED_RESPONSE),
 )
 async def create_document_no_slash(
     body: DocumentCreate,
@@ -219,7 +234,11 @@ async def list_documents_no_slash(
     return await _do_list_documents(effective_owner, folder_id, page, size, db)
 
 
-@router.get("/{document_id}", response_model=DocumentResponse)
+@router.get(
+    "/{document_id}",
+    response_model=DocumentResponse,
+    responses=dict(_OWNED_DOCUMENT_RESPONSES),
+)
 async def get_document(
     document_id: UUID,
     request: Request,
@@ -236,7 +255,11 @@ async def get_document(
     return document
 
 
-@router.put("/{document_id}", response_model=DocumentResponse)
+@router.put(
+    "/{document_id}",
+    response_model=DocumentResponse,
+    responses=dict(_OWNED_DOCUMENT_RESPONSES),
+)
 async def update_document(
     document_id: UUID,
     body: DocumentUpdate,
@@ -256,7 +279,11 @@ async def update_document(
     return document
 
 
-@router.patch("/{document_id}", response_model=DocumentResponse)
+@router.patch(
+    "/{document_id}",
+    response_model=DocumentResponse,
+    responses=dict(_OWNED_DOCUMENT_RESPONSES),
+)
 async def patch_document(
     document_id: UUID,
     body: DocumentPatch,
@@ -276,7 +303,11 @@ async def patch_document(
     return document
 
 
-@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{document_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses=dict(_OWNED_DOCUMENT_RESPONSES),
+)
 async def delete_document(
     document_id: UUID,
     request: Request,
@@ -294,7 +325,11 @@ async def delete_document(
     logger.info("document_deleted", document_id=str(document_id))
 
 
-@router.get("/{document_id}/versions", response_model=list[DocumentVersionResponse])
+@router.get(
+    "/{document_id}/versions",
+    response_model=list[DocumentVersionResponse],
+    responses=dict(_OWNED_DOCUMENT_RESPONSES),
+)
 async def list_versions(
     document_id: UUID,
     request: Request,
@@ -314,6 +349,11 @@ async def list_versions(
 @router.post(
     "/{document_id}/versions/{version_id}/restore",
     response_model=DocumentResponse,
+    responses={
+        **_UNAUTHORIZED_RESPONSE,
+        403: {"description": "Access denied"},
+        404: {"description": "Document or version not found"},
+    },
 )
 async def restore_version(
     document_id: UUID,
@@ -341,7 +381,7 @@ async def restore_version(
     return document
 
 
-@router.get("/{document_id}/export")
+@router.get("/{document_id}/export", responses=dict(_OWNED_DOCUMENT_RESPONSES))
 async def export_document(
     document_id: UUID,
     request: Request,
@@ -364,6 +404,7 @@ async def export_document(
     "/from-template/{template_id}",
     response_model=DocumentResponse,
     status_code=status.HTTP_201_CREATED,
+    responses={404: {"description": "Template not found"}},
 )
 async def create_from_template(
     template_id: UUID,
