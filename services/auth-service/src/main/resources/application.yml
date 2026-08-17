@@ -27,11 +27,18 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
     baseline-version: 0
-    # Password for the seeded admin@otterworks.dev account; the migration hashes it, so
-    # no digest is committed. Set AUTH_SEED_ADMIN_PASSWORD to override, or to an empty
-    # value to skip seeding the admin account entirely.
+    # Password for the seeded admin@otterworks.dev account; the migration hashes it, so no
+    # digest is committed. Set AUTH_SEED_ADMIN_PASSWORD to override, or to an empty value to
+    # skip seeding the admin account entirely. It is substituted textually into the migration
+    # SQL, so it must not contain a single quote.
     placeholders:
       seedAdminPassword: ${AUTH_SEED_ADMIN_PASSWORD:Admin123!}
+
+auth:
+  flyway:
+    # V1 changed checksum when the committed password digest was removed; repairing the
+    # schema history before migrating keeps already-migrated databases bootable.
+    repair-before-migrate: ${AUTH_FLYWAY_REPAIR_BEFORE_MIGRATE:true}
 
 jwt:
   secret: ${JWT_SECRET:dev-jwt-secret-otterworks-2024-change-in-production}
