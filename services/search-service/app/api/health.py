@@ -36,7 +36,7 @@ INDEX_COUNT = Counter(
 )
 
 
-@health_bp.route("/health")
+@health_bp.route("/health", methods=["GET"])
 def health() -> tuple:
     """Liveness check — returns 200 if the process is running."""
     return jsonify({
@@ -45,7 +45,7 @@ def health() -> tuple:
     }), 200
 
 
-@health_bp.route("/health/ready")
+@health_bp.route("/health/ready", methods=["GET"])
 def readiness() -> tuple:
     """Readiness check — returns 503 if MeiliSearch is unreachable."""
     search_service = current_app.config.get("SEARCH_SERVICE")
@@ -59,7 +59,7 @@ def readiness() -> tuple:
     return jsonify({"ready": False, "reason": "meilisearch_unavailable"}), 503
 
 
-@health_bp.route("/metrics")
+@health_bp.route("/metrics", methods=["GET"])
 def metrics() -> tuple:
     """Prometheus metrics endpoint."""
     return (
