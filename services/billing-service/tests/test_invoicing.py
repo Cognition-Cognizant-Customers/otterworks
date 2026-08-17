@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -7,6 +7,9 @@ import pytest
 from app.domain import (
     CreditNoteRow,
     PlanRow,
+    SubscriptionRow,
+    UsageEvent,
+    calculate_rating,
     consume_credits,
     deterministic_uuid,
     format_money,
@@ -42,7 +45,33 @@ def test_preview_uses_plan_code_and_rounded_fee() -> None:
 
 @pytest.mark.rule("INVOICING-002")
 def test_preview_consumes_rated_overage_without_recomputing() -> None:
-    result = preview(TENANT, START, END, PLAN, Decimal("5.56"), False, Decimal("0"))
+    subscription = SubscriptionRow(
+        UUID("20000000-0000-0000-0000-000000000006"),
+        TENANT,
+        PLAN.plan_id,
+        date(2026, 1, 1),
+        None,
+        "active",
+        None,
+    )
+    rating = calculate_rating(
+        [subscription],
+        [PLAN],
+        [
+            UsageEvent(
+                UUID("30000000-0000-0000-0000-000000000006"),
+                TENANT,
+                datetime(2026, 2, 28, 10, 0, tzinfo=UTC),
+                201,
+                "api",
+            )
+        ],
+        [],
+        TENANT,
+        START,
+        END,
+    )
+    result = preview(TENANT, START, END, PLAN, rating.overage_amount, False, Decimal("0"))
     assert result.lines[1].description == "usage overage"
     assert result.lines[1].amount == Decimal("5.56")
 
@@ -79,11 +108,8 @@ def test_invoice_lines_are_ordered_and_unknown_invoice_is_empty() -> None:
     class EmptyDatabase:
         billing_invoices = EmptyInvoices()
 
-    class EmptyClient:
-        def __getitem__(self, _name):
-            return EmptyDatabase()
-
-    assert MongoInvoicingRepository(EmptyClient()).invoice_lines(UUID(int=0)) == []
+    EmptyDatabase.client = object()
+    assert MongoInvoicingRepository(EmptyDatabase()).invoice_lines(UUID(int=0)) == []
 
 
 @pytest.mark.rule("INVOICING-006")

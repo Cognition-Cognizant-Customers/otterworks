@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
@@ -9,19 +9,21 @@ from uuid import UUID
 import psycopg
 import pymongo
 from bson import Decimal128
-from pymongo import MongoClient
+from pymongo.client_session import ClientSession
 
-from app.config import settings
 from app.domain import (
     CreditNoteRow,
     EntitlementRow,
     InvoiceLine,
     InvoiceRow,
     PlanRow,
-    RatedChargeRow,
+    RatingPeriod,
+    RatingResult,
     SubscriptionRow,
+    UsageEvent,
     consume_credits,
     deterministic_uuid,
+    finalize_result,
     invoice_ids,
     invoice_totals,
     ordered_lines,
@@ -29,23 +31,7 @@ from app.domain import (
     stored_line_amount,
 )
 
-_SHARED_MONGO_CLIENT: MongoClient | None = None
-
-
-def close_shared_mongo_client() -> None:
-    global _SHARED_MONGO_CLIENT
-    if _SHARED_MONGO_CLIENT is not None:
-        _SHARED_MONGO_CLIENT.close()
-        _SHARED_MONGO_CLIENT = None
-
-
-def shared_mongo_client() -> MongoClient:
-    global _SHARED_MONGO_CLIENT
-    if _SHARED_MONGO_CLIENT is None:
-        _SHARED_MONGO_CLIENT = MongoClient(
-            settings.mongo_uri, tz_aware=True, serverSelectionTimeoutMS=1000
-        )
-    return _SHARED_MONGO_CLIENT
+_INDEXED_DATABASES: set[tuple[object, str]] = set()
 
 
 class PostgresPlansRepository:
@@ -121,6 +107,39 @@ class PostgresPlansRepository:
             for row in rows
         ]
 
+    def invoice_context(
+        self, tenant_id: UUID, period_start: date, period_end: date
+    ) -> tuple[PlanRow, bool]:
+        row = self.connection.execute(
+            """
+            SELECT p.id, p.code, p.tier, p.monthly_fee, p.included_units,
+                   p.overage_rate, p.active, t.tax_exempt
+            FROM billing_svc.tenants t
+            JOIN billing_svc.subscriptions s ON s.tenant_id = t.id
+            JOIN billing_svc.plans p ON p.id = s.plan_id
+            WHERE t.id = %s
+              AND s.starts_on <= %s
+              AND (s.ends_on IS NULL OR s.ends_on >= %s)
+            ORDER BY s.starts_on DESC
+            LIMIT 1
+            """,
+            (tenant_id, period_end, period_start),
+        ).fetchone()
+        if row is None:
+            raise LookupError("subscription not found")
+        return (
+            PlanRow(
+                plan_id=row["id"],
+                code=row["code"],
+                tier=row["tier"],
+                monthly_fee=Decimal(row["monthly_fee"]),
+                included_units=row["included_units"],
+                overage_rate=Decimal(row["overage_rate"]),
+                active=row["active"],
+            ),
+            row["tax_exempt"],
+        )
+
     def update_subscription(self, subscription_id: UUID, ends_on: date, status: str) -> None:
         self.connection.execute(
             """
@@ -148,54 +167,148 @@ class PostgresPlansRepository:
             (subscription_id, tenant_id, plan_id, starts_on, status),
         )
 
-    def invoice_context(
-        self, tenant_id: UUID, period_start: date, period_end: date
-    ) -> tuple[PlanRow, bool]:
-        row = self.connection.execute(
-            """
-            SELECT t.tax_exempt, p.id, p.code, p.tier, p.monthly_fee,
-                   p.included_units, p.overage_rate, p.active
-            FROM billing_svc.tenants t
-            JOIN billing_svc.subscriptions s ON s.tenant_id = t.id
-            JOIN billing_svc.plans p ON p.id = s.plan_id
-            WHERE t.id = %s
-              AND s.starts_on <= %s
-              AND (s.ends_on IS NULL OR s.ends_on >= %s)
-            ORDER BY s.starts_on DESC
-            LIMIT 1
-            """,
-            (tenant_id, period_end, period_start),
-        ).fetchone()
-        if row is None:
-            raise LookupError("subscription not found")
-        return (
-            PlanRow(
-                plan_id=row["id"],
-                code=row["code"],
-                tier=row["tier"],
-                monthly_fee=Decimal(row["monthly_fee"]),
-                included_units=row["included_units"],
-                overage_rate=Decimal(row["overage_rate"]),
-                active=row["active"],
-            ),
-            row["tax_exempt"],
+
+class MongoRatingRepository:
+    def __init__(self, database) -> None:
+        self.database = database
+
+    def _ensure_indexes(self) -> None:
+        key = (self.database.client, self.database.name)
+        if key not in _INDEXED_DATABASES:
+            self.database.rating_periods.create_index(
+                [("tenant_id", 1), ("period_start", 1)],
+                unique=True,
+                name="tenant_period_start_unique",
+            )
+            _INDEXED_DATABASES.add(key)
+
+    def list_usage(
+        self,
+        tenant_id: UUID,
+        period_start: date,
+        period_end: date,
+        session: ClientSession | None = None,
+    ) -> list[UsageEvent]:
+        self._ensure_indexes()
+        start = datetime.combine(period_start, time.min, tzinfo=UTC)
+        end = datetime.combine(period_end + timedelta(days=1), time.min, tzinfo=UTC)
+        rows = self.database.usage_events.find(
+            {"tenant_id": tenant_id, "occurred_at": {"$gte": start, "$lt": end}}, session=session
         )
+        return [
+            UsageEvent(row["_id"], row["tenant_id"], row["occurred_at"], row["units"], row["kind"])
+            for row in rows
+        ]
+
+    def list_periods(
+        self, tenant_id: UUID, session: ClientSession | None = None
+    ) -> list[RatingPeriod]:
+        self._ensure_indexes()
+        rows = self.database.rating_periods.find({"tenant_id": tenant_id}, session=session)
+        return [self._period(row) for row in rows]
+
+    @staticmethod
+    def _period(row: dict) -> RatingPeriod:
+        result = row["result"]
+        amount = result["overage_amount"]
+        return RatingPeriod(
+            row["_id"],
+            row["tenant_id"],
+            row["period_start"].date(),
+            row["period_end"].date(),
+            RatingResult(
+                result["result_id"],
+                result["subscription_id"],
+                result["used_units"],
+                result["quota_units"],
+                result["rollover_units"],
+                result["billable_units"],
+                amount.to_decimal() if isinstance(amount, Decimal128) else amount,
+                result["created_at"],
+            ),
+        )
+
+    def upsert_rating(
+        self,
+        period_id: UUID,
+        tenant_id: UUID,
+        period_start: date,
+        period_end: date,
+        result: RatingResult,
+        session: ClientSession | None = None,
+    ) -> RatingPeriod:
+        self._ensure_indexes()
+        period_start_value = datetime.combine(period_start, time.min, tzinfo=UTC)
+        period_end_value = datetime.combine(period_end, time.min, tzinfo=UTC)
+        amount_value = (
+            Decimal128(result.overage_amount) if result.overage_amount is not None else None
+        )
+        self.database.rating_periods.update_one(
+            {
+                "_id": period_id,
+                "tenant_id": tenant_id,
+                "period_start": period_start_value,
+            },
+            [
+                {
+                    "$set": {
+                        "tenant_id": {"$literal": tenant_id},
+                        "period_start": {"$literal": period_start_value},
+                        "period_end": {"$literal": period_end_value},
+                        "result.result_id": {
+                            "$cond": [
+                                {"$eq": [{"$type": "$result.result_id"}, "missing"]},
+                                {"$literal": result.result_id},
+                                "$result.result_id",
+                            ]
+                        },
+                        "result.subscription_id": {
+                            "$cond": [
+                                {"$eq": [{"$type": "$result.subscription_id"}, "missing"]},
+                                {"$literal": result.subscription_id},
+                                "$result.subscription_id",
+                            ]
+                        },
+                        "result.quota_units": {
+                            "$cond": [
+                                {"$eq": [{"$type": "$result.quota_units"}, "missing"]},
+                                {"$literal": result.quota_units},
+                                "$result.quota_units",
+                            ]
+                        },
+                        "result.created_at": {
+                            "$cond": [
+                                {"$eq": [{"$type": "$result.created_at"}, "missing"]},
+                                {"$literal": result.created_at},
+                                "$result.created_at",
+                            ]
+                        },
+                        "result.used_units": {"$literal": result.used_units},
+                        "result.rollover_units": {"$literal": result.rollover_units},
+                        "result.billable_units": {"$literal": result.billable_units},
+                        "result.overage_amount": {"$literal": amount_value},
+                    }
+                }
+            ],
+            upsert=True,
+            session=session,
+        )
+        row = self.database.rating_periods.find_one(
+            {
+                "_id": period_id,
+                "tenant_id": tenant_id,
+                "period_start": period_start_value,
+            },
+            session=session,
+        )
+        return self._period(row)
 
 
 class MongoInvoicingRepository:
-    collections = ("billing_invoices", "billing_credit_notes", "billing_rated_charges")
+    collections = ("billing_invoices", "billing_credit_notes")
 
-    def __init__(self, client: MongoClient | None = None) -> None:
-        self.client = client
-
-    def _client(self) -> MongoClient:
-        if self.client is None:
-            return shared_mongo_client()
-        return self.client
-
-    @property
-    def database(self):
-        return self._client()[settings.mongo_db]
+    def __init__(self, database) -> None:
+        self.database = database
 
     @staticmethod
     def _date(value: date) -> datetime:
@@ -210,61 +323,44 @@ class MongoInvoicingRepository:
         return value.to_decimal() if isinstance(value, Decimal128) else value
 
     def ensure_schema(self) -> None:
-        db = self.database
         validators = self._validators()
         for name in self.collections:
-            if name not in db.list_collection_names():
-                db.create_collection(
+            if name not in self.database.list_collection_names():
+                self.database.create_collection(
                     name,
                     validator=validators[name],
                     validationLevel="strict",
                     validationAction="error",
                 )
             else:
-                db.command(
+                self.database.command(
                     "collMod",
                     name,
                     validator=validators[name],
                     validationLevel="strict",
                     validationAction="error",
                 )
-        db.billing_invoices.create_index([("ns", 1), ("tenant_id", 1)])
-        db.billing_invoices.create_index([("ns", 1), ("period_id", 1)])
-        db.billing_credit_notes.create_index(
-            [("ns", 1), ("tenant_id", 1), ("issued_on", 1), ("_id", 1)]
-        )
-        db.billing_rated_charges.create_index(
-            [("ns", 1), ("tenant_id", 1), ("period_start", 1)], unique=True
-        )
+        key = (self.database.client, self.database.name)
+        if key not in _INDEXED_DATABASES:
+            self.database.billing_invoices.create_index([("tenant_id", 1)])
+            self.database.billing_invoices.create_index([("period_id", 1)])
+            self.database.billing_credit_notes.create_index(
+                [("tenant_id", 1), ("issued_on", 1), ("_id", 1)]
+            )
+            _INDEXED_DATABASES.add(key)
 
     def reset(self) -> None:
-        db = self.database
         for name in self.collections:
-            db.drop_collection(name)
+            self.database.drop_collection(name)
+        _INDEXED_DATABASES.discard((self.database.client, self.database.name))
         self.ensure_schema()
         seed = json.loads(
             (Path(__file__).resolve().parents[1] / "db" / "mongo_seed.json").read_text()
         )
-        ns = settings.mongo_ns
-        db.billing_rated_charges.insert_many(
-            [
-                {
-                    "_id": f"{item['tenant_id']}:{item['period_start']}",
-                    "ns": ns,
-                    "tenant_id": item["tenant_id"],
-                    "period_start": self._date(date.fromisoformat(item["period_start"])),
-                    "period_end": self._date(date.fromisoformat(item["period_end"])),
-                    "overage_amount": self._money(Decimal(item["overage_amount"])),
-                    "provenance": item["provenance"],
-                }
-                for item in seed["rated_charges"]
-            ]
-        )
-        db.billing_credit_notes.insert_many(
+        self.database.billing_credit_notes.insert_many(
             [
                 {
                     "_id": item["id"],
-                    "ns": ns,
                     "tenant_id": item["tenant_id"],
                     "issued_on": self._date(date.fromisoformat(item["issued_on"])),
                     "amount": self._money(Decimal(item["amount"])),
@@ -273,11 +369,10 @@ class MongoInvoicingRepository:
                 for item in seed["credit_notes"]
             ]
         )
-        db.billing_invoices.insert_many(
+        self.database.billing_invoices.insert_many(
             [
                 {
                     "_id": item["id"],
-                    "ns": ns,
                     "tenant_id": item["tenant_id"],
                     "period_id": item["period_id"],
                     "issued_at": datetime.fromisoformat(item["issued_at"].replace("Z", "+00:00")),
@@ -302,28 +397,10 @@ class MongoInvoicingRepository:
             ]
         )
 
-    def rated_charge(self, tenant_id: UUID, period_start: date, session=None) -> RatedChargeRow:
-        row = self.database.billing_rated_charges.find_one(
-            {
-                "ns": settings.mongo_ns,
-                "tenant_id": str(tenant_id),
-                "period_start": self._date(period_start),
-            },
-            session=session,
-        )
-        if row is None:
-            raise LookupError("rated charge not found")
-        return RatedChargeRow(
-            tenant_id=tenant_id,
-            period_start=period_start,
-            period_end=row["period_end"].date(),
-            overage_amount=self._decimal(row["overage_amount"]),
-        )
-
     def credit_notes(
-        self, tenant_id: UUID, session=None, positive_only: bool = False
+        self, tenant_id: UUID, session: ClientSession | None = None, positive_only: bool = False
     ) -> list[CreditNoteRow]:
-        query = {"ns": settings.mongo_ns, "tenant_id": str(tenant_id)}
+        query = {"tenant_id": str(tenant_id)}
         if positive_only:
             query["remaining_amount"] = {"$gt": Decimal128("0.00")}
         rows = self.database.billing_credit_notes.find(query, session=session).sort(
@@ -341,9 +418,7 @@ class MongoInvoicingRepository:
         ]
 
     def invoice_lines(self, invoice_id: UUID) -> list[InvoiceLine]:
-        row = self.database.billing_invoices.find_one(
-            {"_id": str(invoice_id), "ns": settings.mongo_ns}
-        )
+        row = self.database.billing_invoices.find_one({"_id": str(invoice_id)})
         if row is None:
             return []
         return ordered_lines(
@@ -362,13 +437,28 @@ class MongoInvoicingRepository:
         )
 
     def issue(
-        self, plan: PlanRow, tax_exempt: bool, tenant_id: UUID, period_start: date, period_end: date
+        self,
+        plan: PlanRow,
+        tax_exempt: bool,
+        tenant_id: UUID,
+        period_start: date,
+        period_end: date,
+        rating_repository,
+        rating,
     ) -> InvoiceRow:
         period_id, invoice_id = invoice_ids(tenant_id, period_start)
-        session = self._client().start_session()
+        session = self.database.client.start_session()
         try:
             with session, session.start_transaction():
-                rated = self.rated_charge(tenant_id, period_start, session=session)
+                period_id, result = finalize_result(rating, tenant_id, period_start, period_end)
+                rating_repository.upsert_rating(
+                    period_id,
+                    tenant_id,
+                    period_start,
+                    period_end,
+                    result,
+                    session=session,
+                )
                 notes = self.credit_notes(tenant_id, session=session, positive_only=True)
                 credit = sum((note.remaining_amount for note in notes), Decimal("0"))
                 calculated = preview(
@@ -376,16 +466,15 @@ class MongoInvoicingRepository:
                     period_start,
                     period_end,
                     plan,
-                    rated.overage_amount,
+                    rating.overage_amount,
                     tax_exempt,
                     credit,
                 )
                 subtotal, tax, credit_applied, total = invoice_totals(calculated)
                 self.database.billing_invoices.replace_one(
-                    {"_id": str(invoice_id), "ns": settings.mongo_ns},
+                    {"_id": str(invoice_id)},
                     {
                         "_id": str(invoice_id),
-                        "ns": settings.mongo_ns,
                         "tenant_id": str(tenant_id),
                         "period_id": str(period_id),
                         "issued_at": self._date(period_end),
@@ -411,7 +500,7 @@ class MongoInvoicingRepository:
                 )
                 for note_id, remaining in consume_credits(notes, credit_applied):
                     self.database.billing_credit_notes.update_one(
-                        {"_id": str(note_id), "ns": settings.mongo_ns},
+                        {"_id": str(note_id)},
                         {"$set": {"remaining_amount": self._money(remaining)}},
                         session=session,
                     )
@@ -429,11 +518,10 @@ class MongoInvoicingRepository:
             calculated.lines,
         )
 
-    def invoice_state(self, invoice_id: UUID, session=None) -> dict[str, str]:
-        row = self.database.billing_invoices.find_one(
-            {"_id": str(invoice_id), "ns": settings.mongo_ns},
-            session=session,
-        )
+    def invoice_state(
+        self, invoice_id: UUID, session: ClientSession | None = None
+    ) -> dict[str, str]:
+        row = self.database.billing_invoices.find_one({"_id": str(invoice_id)}, session=session)
         if row is None:
             raise LookupError("invoice state not found")
         return {
@@ -445,7 +533,7 @@ class MongoInvoicingRepository:
 
     def ping(self) -> bool:
         try:
-            self._client().admin.command("ping")
+            self.database.client.admin.command("ping")
         except pymongo.errors.PyMongoError:
             return False
         return True
@@ -471,7 +559,6 @@ class MongoInvoicingRepository:
                     "bsonType": "object",
                     "required": [
                         "_id",
-                        "ns",
                         "tenant_id",
                         "period_id",
                         "issued_at",
@@ -486,7 +573,6 @@ class MongoInvoicingRepository:
                     "additionalProperties": False,
                     "properties": {
                         "_id": {"bsonType": "string"},
-                        "ns": {"bsonType": "string"},
                         "tenant_id": {"bsonType": "string"},
                         "period_id": {"bsonType": "string"},
                         "issued_at": {"bsonType": "date"},
@@ -503,46 +589,14 @@ class MongoInvoicingRepository:
             "billing_credit_notes": {
                 "$jsonSchema": {
                     "bsonType": "object",
-                    "required": [
-                        "_id",
-                        "ns",
-                        "tenant_id",
-                        "issued_on",
-                        "amount",
-                        "remaining_amount",
-                    ],
+                    "required": ["_id", "tenant_id", "issued_on", "amount", "remaining_amount"],
                     "additionalProperties": False,
                     "properties": {
                         "_id": {"bsonType": "string"},
-                        "ns": {"bsonType": "string"},
                         "tenant_id": {"bsonType": "string"},
                         "issued_on": {"bsonType": "date"},
                         "amount": money,
                         "remaining_amount": money,
-                    },
-                }
-            },
-            "billing_rated_charges": {
-                "$jsonSchema": {
-                    "bsonType": "object",
-                    "required": [
-                        "_id",
-                        "ns",
-                        "tenant_id",
-                        "period_start",
-                        "period_end",
-                        "overage_amount",
-                        "provenance",
-                    ],
-                    "additionalProperties": False,
-                    "properties": {
-                        "_id": {"bsonType": "string"},
-                        "ns": {"bsonType": "string"},
-                        "tenant_id": {"bsonType": "string"},
-                        "period_start": {"bsonType": "date"},
-                        "period_end": {"bsonType": "date"},
-                        "overage_amount": money,
-                        "provenance": {"bsonType": "string"},
                     },
                 }
             },

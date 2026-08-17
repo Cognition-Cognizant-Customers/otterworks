@@ -127,7 +127,7 @@ PROCS_DB_PORT = $(shell test -n "$(PROCS_PORT_OFFSET)" && python3 -c "print(5543
 PROCS_APP_PORT = $(shell test -n "$(PROCS_PORT_OFFSET)" && python3 -c "print(8096 + $(PROCS_PORT_OFFSET))")
 PROCS_TARGET_DB_PORT = $(shell test -n "$(PROCS_PORT_OFFSET)" && python3 -c "print(56432 + $(PROCS_PORT_OFFSET))")
 PROCS_TARGET_PORT = $(shell test -n "$(PROCS_PORT_OFFSET)" && python3 -c "print(12096 + $(PROCS_PORT_OFFSET))")
-PROCS_MONGO_PORT = $(shell test -n "$(PROCS_PORT_OFFSET)" && python3 -c "print(57432 + $(PROCS_PORT_OFFSET))")
+PROCS_MONGO_PORT = $(shell test -n "$(PROCS_PORT_OFFSET)" && python3 -c "print(27017 + $(PROCS_PORT_OFFSET))")
 PROCS_ENV = NS=$(NS) PROCS_DB_PORT=$(PROCS_DB_PORT) PROCS_APP_PORT=$(PROCS_APP_PORT) PROCS_TARGET_DB_PORT=$(PROCS_TARGET_DB_PORT) PROCS_TARGET_PORT=$(PROCS_TARGET_PORT) PROCS_MONGO_PORT=$(PROCS_MONGO_PORT)
 
 procs-validate:

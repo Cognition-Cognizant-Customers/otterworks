@@ -29,9 +29,9 @@ rules:
         coverage.
   - id: INVOICING-002
     statement: >-
-      The preview usage line carries the period's rated overage rounded to two decimals,
-      described as 'usage overage'; invoicing consumes the rated amount and never
-      recomputes rating.
+      The preview usage line carries the overage returned by live usage rating rounded to
+      two decimals, described as 'usage overage'; invoicing composes with rating rather
+      than recomputing its algorithm.
     source:
       file: services/legacy-billing/db/procs/invoicing.sql
       lines: [31, 50]
@@ -41,16 +41,11 @@ rules:
     scenarios: [INVOICE-001, INVOICE-002]
     question: >-
       billing.fn_usage_rating belongs to the rating module, which is extracted separately.
-      Where does the extracted invoicing module get the rated overage for the period?
+      How does invoicing compose with that extracted module?
     answer: >-
-      From a rated-charge record read through the repository layer, keyed by tenant and
-      period. The fixture values are the ones the recorded rating transcripts already fix
-      for this period (RATING-002 tenant 1 0.00, RATING-003 tenant 2 4.37, RATING-004
-      tenant 6 5.56, RATING-006 tenant 3 5.02) plus tenants 4 and 9, whose 0.00 is fixed
-      by the invoicing transcripts' own recorded subtotal of 49.00 (plan fee only).
-      Invoicing does not implement, stub, or substitute rating: a tenant/period with no
-      rated charge is refused rather than rated locally, and when rating lands its
-      finalized output replaces the fixture rows behind the same repository call.
+      It calls the rating domain with the usage events and prior rating periods read
+      through MongoRatingRepository. Issuance first finalizes the live rating result in
+      the same Mongo transaction, then builds the invoice from the live rating result.
     decision:
       status: approved
       reviewer: product-owner
