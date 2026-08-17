@@ -1,0 +1,205 @@
+{
+  "collections": [
+    {
+      "collection": "customers",
+      "probes": [
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "missing_required_fields",
+          "rejected_by_server": true
+        },
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "wrong_bson_type:signup_date",
+          "rejected_by_server": true
+        },
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "unmodeled_field",
+          "rejected_by_server": true
+        }
+      ],
+      "validator_present": true
+    },
+    {
+      "collection": "customers_quarantine",
+      "probes": [
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "missing_required_fields",
+          "rejected_by_server": true
+        },
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "wrong_bson_type:schema_version",
+          "rejected_by_server": true
+        },
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "unmodeled_field",
+          "rejected_by_server": true
+        }
+      ],
+      "validator_present": true
+    },
+    {
+      "collection": "invoices",
+      "probes": [
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "missing_required_fields",
+          "rejected_by_server": true
+        },
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "wrong_bson_type:total_amt",
+          "rejected_by_server": true
+        },
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "unmodeled_field",
+          "rejected_by_server": true
+        }
+      ],
+      "validator_present": true
+    },
+    {
+      "collection": "invoices_quarantine",
+      "probes": [
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "missing_required_fields",
+          "rejected_by_server": true
+        },
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "wrong_bson_type:amount",
+          "rejected_by_server": true
+        },
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "unmodeled_field",
+          "rejected_by_server": true
+        }
+      ],
+      "validator_present": true
+    },
+    {
+      "collection": "documents",
+      "probes": [
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "missing_required_fields",
+          "rejected_by_server": true
+        },
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "wrong_bson_type:is_deleted",
+          "rejected_by_server": true
+        },
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "unmodeled_field",
+          "rejected_by_server": true
+        }
+      ],
+      "validator_present": true
+    },
+    {
+      "collection": "document_snapshots",
+      "probes": [
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "missing_required_fields",
+          "rejected_by_server": true
+        },
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "wrong_bson_type:created_at",
+          "rejected_by_server": true
+        },
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "unmodeled_field",
+          "rejected_by_server": true
+        }
+      ],
+      "validator_present": true
+    },
+    {
+      "collection": "documents_quarantine",
+      "probes": [
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "missing_required_fields",
+          "rejected_by_server": true
+        }
+      ],
+      "validator_present": true
+    },
+    {
+      "collection": "files",
+      "probes": [
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "missing_required_fields",
+          "rejected_by_server": true
+        },
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "wrong_bson_type:size_bytes",
+          "rejected_by_server": true
+        },
+        {
+          "code": null,
+          "code_name": null,
+          "probe": "unmodeled_field",
+          "rejected_by_server": null
+        }
+      ],
+      "validator_present": true
+    },
+    {
+      "collection": "files_quarantine",
+      "probes": [
+        {
+          "code": 121,
+          "code_name": null,
+          "probe": "missing_required_fields",
+          "rejected_by_server": true
+        },
+        {
+          "code": null,
+          "code_name": null,
+          "probe": "unmodeled_field",
+          "rejected_by_server": null
+        }
+      ],
+      "validator_present": true
+    }
+  ],
+  "database": "ow_tp_demo",
+  "failures": [],
+  "namespace": "demo"
+}

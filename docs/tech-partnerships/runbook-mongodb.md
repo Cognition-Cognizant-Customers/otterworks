@@ -8,6 +8,11 @@ document model. We migrate to MongoDB Atlas on AWS with Devin fanning out one
 child session per workload, and prove the move with seed-manifest
 reconciliation.
 
+For the staged Atlas run with the delivered migrations, the extracted stored
+procedures, the platform showcase, and the recon-fails-Devin-fixes-it loop, see
+`runbook-mongodb-devin-showcase.md`; this runbook owns the legacy before-state
+tour it builds on.
+
 All numbers below are for namespace `demo` at `SCALE=demo` — they are
 deterministic (seeded RNG derived from the namespace), so what you see on
 screen will match this runbook byte-for-byte if you use `NS=demo`.
