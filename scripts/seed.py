@@ -380,7 +380,7 @@ def seed_audit_logs(cur) -> None:
     rng = random.Random(42)  # deterministic
 
     rows = []
-    for i in range(80):
+    for _ in range(80):
         user = rng.choice(db_users)
         actor_id, actor_email = user[0], user[1]
         action, resource_type = rng.choice(AUDIT_ACTIONS)

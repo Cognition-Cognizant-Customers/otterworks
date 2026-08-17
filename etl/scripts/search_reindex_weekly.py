@@ -32,7 +32,6 @@ def main():
 
     documents_index = "documents"
     files_index = "files"
-    bulk_batch_size = 500
     api_page_size = 100
 
     meili_headers = {"Content-Type": "application/json"}
