@@ -59,7 +59,7 @@ export function CollaborativeEditor({ documentId, initialContent, onUpdate }: Co
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("otter_access_token") : null;
+    const token = typeof window === "undefined" ? null : localStorage.getItem("otter_access_token");
     const wsProvider = new WebsocketProvider(
       COLLAB_WS_URL,
       `document-${documentId}`,

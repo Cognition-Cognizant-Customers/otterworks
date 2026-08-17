@@ -23,9 +23,9 @@ const config = loadConfig();
 const logger = pino({
   level: config.logLevel,
   transport:
-    process.env.NODE_ENV !== 'production'
-      ? { target: 'pino-pretty', options: { colorize: true } }
-      : undefined,
+    process.env.NODE_ENV === 'production'
+      ? undefined
+      : { target: 'pino-pretty', options: { colorize: true } },
   base: { service: 'collab-service' },
 });
 
