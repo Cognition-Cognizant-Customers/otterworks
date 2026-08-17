@@ -180,10 +180,6 @@ def cmd_replay(args):
 
     checks = one_pass()
     rerun_checks = one_pass()
-    passed = sum(1 for c in checks if c["result"] == "pass")
-    rerun_passed = sum(1 for c in rerun_checks if c["result"] == "pass")
-    rerun_ok = passed == len(checks) and rerun_passed == len(rerun_checks)
-    rerun_failures = [c for c in rerun_checks if c["result"] == "fail"]
 
     # Planted anomalies = the deliberately invalid requests in the spec (golden 4xx).
     anomaly_expected = [g["id"] for g in golden["steps"] if g["status"] >= 400]
@@ -192,6 +188,24 @@ def cmd_replay(args):
     anomaly_unexpected = [c["id"] for c in checks
                           if c["actual"]["status"] >= 400 and c["id"] not in anomaly_expected]
 
+    live_spec_sha = spec_fingerprint()
+    if golden["spec_sha"] != live_spec_sha:
+        checks.append({
+            "id": "spec-fingerprint",
+            "method": "META",
+            "path": os.path.basename(SPEC_PATH),
+            "assert_status_only": False,
+            "expected": golden["spec_sha"],
+            "actual": live_spec_sha,
+            "source_of_truth": source_of_truth,
+            "result": "fail",
+            "mismatches": ["golden was recorded from a different spec"],
+        })
+    passed = sum(1 for c in checks if c["result"] == "pass")
+    rerun_passed = sum(1 for c in rerun_checks if c["result"] == "pass")
+    rerun_ok = rerun_passed == len(rerun_checks)
+    rerun_failures = [c for c in rerun_checks if c["result"] == "fail"]
+
     report = {
         "kind": "recon-report",
         "unit": "legacy-portal-decomposition/http-parity",
@@ -199,7 +213,7 @@ def cmd_replay(args):
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "golden_source": golden["source_base_url"],
         "golden_spec_sha": golden["spec_sha"],
-        "live_spec_sha": spec_fingerprint(),
+        "live_spec_sha": live_spec_sha,
         "replay_base_url": args.base_url,
         "run_mode": args.run_mode,
         "steps_total": len(checks),
@@ -221,15 +235,6 @@ def cmd_replay(args):
         "unverified_paths": args.unverified,
         "checks": checks,
     }
-    if golden["spec_sha"] != report["live_spec_sha"]:
-        report["checks"].append({
-            "id": "spec-fingerprint",
-            "expected": golden["spec_sha"],
-            "actual": report["live_spec_sha"],
-            "source_of_truth": source_of_truth,
-            "result": "fail",
-            "mismatches": ["golden was recorded from a different spec"],
-        })
     with open(args.out, "w") as f:
         json.dump(report, f, indent=2)
     failed = [c for c in report["checks"] if c["result"] == "fail"]
