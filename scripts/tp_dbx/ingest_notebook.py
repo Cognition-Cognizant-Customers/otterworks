@@ -42,11 +42,6 @@ spark.sql(
 )
 
 
-def sql_str(value: str) -> str:
-    """Escape a Python string for embedding in a single-quoted Spark SQL literal."""
-    return value.replace("\\", "\\\\").replace("'", "\\'")
-
-
 def split_records(data: bytes) -> list:
     r"""Split opaque bytes into records on real newlines only (\n, with optional \r).
 
@@ -91,17 +86,29 @@ for name in sorted(os.listdir(DROP)):
 
     # byte transparency: latin-1 is a lossless 1:1 byte->codepoint mapping
     lines = split_records(data)
+    # untrusted values (file names/paths) are bound as named parameters, never
+    # interpolated into the SQL text; table identifiers are ns-validated above
     spark.sql(
         f"""MERGE INTO {FILES_TBL} t USING (SELECT
-              '{NS}' AS ns, '{sql_str(name)}' AS file_name, '{sha}' AS sha256,
-              {len(data)}L AS bytes, {len(lines)}L AS line_count,
-              '{sql_str(staged_path)}' AS staged_path, '{sql_str(archive_path)}' AS archive_path
+              :ns AS ns, :file_name AS file_name, :sha256 AS sha256,
+              CAST(:bytes AS BIGINT) AS bytes, CAST(:line_count AS BIGINT) AS line_count,
+              :staged_path AS staged_path, :archive_path AS archive_path
             ) s
             ON t.ns = s.ns AND t.file_name = s.file_name AND t.sha256 = s.sha256
-            WHEN NOT MATCHED THEN INSERT *"""
+            WHEN NOT MATCHED THEN INSERT *""",
+        args={
+            "ns": NS,
+            "file_name": name,
+            "sha256": sha,
+            "bytes": len(data),
+            "line_count": len(lines),
+            "staged_path": staged_path,
+            "archive_path": archive_path,
+        },
     )
     spark.sql(
-        f"DELETE FROM {RAW_TBL} WHERE ns = '{NS}' AND file_name = '{sql_str(name)}' AND sha256 = '{sha}'"
+        f"DELETE FROM {RAW_TBL} WHERE ns = :ns AND file_name = :file_name AND sha256 = :sha256",
+        args={"ns": NS, "file_name": name, "sha256": sha},
     )
     df = spark.createDataFrame(
         [(NS, name, sha, i + 1, line) for i, line in enumerate(lines)],
