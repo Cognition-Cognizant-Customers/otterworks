@@ -127,10 +127,16 @@ parsed_dir = f"{landing}/{input_subdir}"
 
 # COMMAND ----------
 # Silver load: replace this namespace's slice from the landed .psv files.
+# Only a missing input directory is the legal empty-input case (legacy wrote a
+# header-only report). Any other listing failure must abort before the
+# destructive slice DELETE below, like the legacy `opendir(...) || die`.
 try:
     psv_files = [f for f in dbutils.fs.ls(parsed_dir) if f.name.endswith(".psv")]
-except Exception:
-    psv_files = []  # empty input is legal: legacy writes a header-only report
+except Exception as e:
+    if "FileNotFoundException" in str(e) or "NOT_FOUND" in str(e).upper():
+        psv_files = []
+    else:
+        raise
 
 spark.sql(f"DELETE FROM {silver} WHERE ns = '{ns}'")
 rows_loaded = rows_skipped = rows_attributed = 0
@@ -208,8 +214,11 @@ digest = hashlib.sha256(csv_text.encode()).hexdigest()
 status = ("VOLUME_VERIFIED; MAIL=NO_TRANSPORT_CONFIGURED"
           if hashlib.sha256(written.encode()).hexdigest() == digest
           else "VERIFICATION_FAILED")
+# Record only whether a managed distribution list exists — never its value.
+# The secret must not reach SQL text, the audit table, or query history.
 try:
-    recipients = dbutils.secrets.get("ow_tp", "finance_distribution_list")
+    dbutils.secrets.get("ow_tp", "finance_distribution_list")
+    recipients = "configured (managed list in secret scope ow_tp; value not recorded)"
 except Exception:
     recipients = "unconfigured (managed list absent from secret scope ow_tp)"
 
@@ -217,7 +226,7 @@ spark.sql(f"DELETE FROM {delivery} WHERE ns = '{ns}' AND report_date = DATE'{rep
 spark.sql(f"""
     INSERT INTO {delivery} VALUES (
         '{ns}', DATE'{report_date}', '{artifact_path}', '{digest}',
-        '{recipients.replace("'", "")}', '{status}',
+        '{recipients}', '{status}',
         {rows_loaded}, {rows_skipped}, {rows_attributed}, current_timestamp()
     )
 """)
@@ -237,6 +246,7 @@ def cmd_provision(dbx: Databricks, args) -> int:
 
 def cmd_land(dbx: Databricks, args) -> int:
     n = names(args.ns)
+    require_ident(args.subdir, "subdir")
     source = Path(args.source)
     files = sorted(source.glob("*.psv"))
     if not files and not args.allow_empty:
@@ -359,11 +369,13 @@ def cmd_recon(dbx: Databricks, args) -> int:
         WITH s AS (SELECT currency, record_type_code, count(*) c,
                           CAST(sum(amount) AS DECIMAL(18,2)) t
                    FROM {n['silver']} WHERE ns = '{n['ns']}'
-                   GROUP BY currency, record_type_code)
-        SELECT count(*) FROM {n['summary']} g
+                   GROUP BY currency, record_type_code),
+             g AS (SELECT currency, record_type_code, record_count, total_amount
+                   FROM {n['summary']}
+                   WHERE ns = '{n['ns']}' AND report_date = DATE'{args.report_date}')
+        SELECT count(*) FROM g
         FULL OUTER JOIN s ON g.currency = s.currency AND g.record_type_code = s.record_type_code
-        WHERE g.ns = '{n['ns']}' AND g.report_date = DATE'{args.report_date}'
-          AND (g.record_count IS DISTINCT FROM s.c OR g.total_amount IS DISTINCT FROM s.t)
+        WHERE g.record_count IS DISTINCT FROM s.c OR g.total_amount IS DISTINCT FROM s.t
     """).scalar()
     check("crossfoot/gold-vs-silver", 0, int(crossfoot), f"{n['summary']} vs re-aggregated {n['silver']}")
     total_count = dbx.sql_ok(
@@ -406,9 +418,14 @@ def cmd_recon(dbx: Databricks, args) -> int:
 
     # Idempotency: actually rerun the job, then compare the summary grid.
     before = grid
+    rerun_performed = False
     rerun_ok = False
     job = dbx.find_job(n["job"])
-    if job:
+    if not job:
+        check("idempotency/job-exists", n["job"], "absent",
+              "jobs API find by name; rerun could not be performed")
+    else:
+        rerun_performed = True
         run_id = dbx.run_job(int(job["job_id"]),
                              {"report_date": args.report_date, "input_subdir": args.subdir})
         run = dbx.wait_run(run_id)
@@ -429,7 +446,7 @@ def cmd_recon(dbx: Databricks, args) -> int:
         "run_mode": "live",
         "checks": checks,
         "values_recomputed_from_target": True,
-        "idempotency_rerun": {"performed": True, "result": "pass" if rerun_ok else "fail",
+        "idempotency_rerun": {"performed": rerun_performed, "result": "pass" if rerun_ok else "fail",
                               "evidence": "jobs run-now rerun of ow_tp_finance_%s, summary grid compared before/after" % n["ns"]},
         "planted_anomaly_detections": {"expected_set": [], "actual_set": [], "missing": [], "unexpected": []},
         "unverified_paths": [
@@ -441,6 +458,8 @@ def cmd_recon(dbx: Databricks, args) -> int:
     out = Path(args.out)
     out.write_text(json.dumps(report, indent=2) + "\n")
     failed = [c["id"] for c in checks if c["result"] != "pass"]
+    if not rerun_ok:
+        failed.append("idempotency/rerun-succeeded")
     print(f"recon: {len(checks)} checks, {len(failed)} failed -> {out}")
     for cid in failed:
         print(f"  FAIL {cid}")
