@@ -1,0 +1,43 @@
+{
+  "unit": "parse_custbill_fixedwidth",
+  "source_artifact_path": "etl/legacy-extra/jobs/parse_custbill_fixedwidth.sh",
+  "target_objects": [
+    "ow_tp.bronze.custbill_parse_raw_cnvparse",
+    "ow_tp.silver.custbill_parsed_cnvparse",
+    "ow_tp.silver.custbill_parse_quarantine_cnvparse",
+    "ow_tp.ops.parse_expectations_cnvparse",
+    "ow_tp.ops.parse_recon_runs_cnvparse",
+    "job:ow_tp_parse_cnvparse"
+  ],
+  "golden_baseline_location": "docs/tech-partnerships/baselines/parse_custbill_fixedwidth-cnvparse.baseline.json",
+  "acceptance_checks": [
+    {"id": "input_sha256/<file>", "description": "sha256 of each landed input file recomputed from bronze raw lines matches the byte hash of the file the legacy script actually consumed"},
+    {"id": "file_valid_rows/<file>", "description": "per-file count of schema-valid silver rows matches the count of legacy PSV rows minus rows the legacy script silently mishandled (planted anomalies)"},
+    {"id": "file_valid_sha256/<file>", "description": "sha256 over the sorted set of pipe-delimited silver rows re-rendered in legacy PSV format (trailing-space trim, %.2f amount, YYYY-MM-DD slice) is byte-identical to the same hash over the legacy script's valid output rows"},
+    {"id": "totals/<ccy>/<rt>", "description": "count and amount-in-cents totals per currency and record type recomputed from ow_tp.silver.custbill_parsed_cnvparse match totals computed from legacy valid PSV output, to the cent"},
+    {"id": "grand_total", "description": "overall valid row count and grand total cents match legacy valid output to the cent"},
+    {"id": "files_ingested", "description": "distinct source files in bronze equals the number of files the legacy run consumed"},
+    {"id": "quarantine_rows", "description": "quarantine row count equals the number of planted anomalies (one row-level defect per bad record, one file-level trailer mismatch row)"}
+  ],
+  "planted_anomalies": [
+    {"id": "invalid_calendar_date", "description": "CUSTBILL_CNVPARSE_001.dat body row 7 carries bill_date 20241131 (Nov 31 does not exist); legacy emits 2024-11-31 silently. Converted job must quarantine it with reason invalid_calendar_date and exclude it from silver.", "status": "must-detect"},
+    {"id": "nonnumeric_amount", "description": "CUSTBILL_CNVPARSE_002.dat body row 13 carries amount 0000012X4567; legacy awk coerces it to 0.12 silently. Converted job must quarantine it with reason nonnumeric_amount and exclude it from silver.", "status": "must-detect"},
+    {"id": "trailer_count_mismatch", "description": "CUSTBILL_CNVPARSE_003.dat trailer claims 53 records vs 50 body rows; legacy only logs the discrepancy. Converted job must emit a file-level quarantine row with reason trailer_count_mismatch (valid body rows still load to silver, matching legacy output).", "status": "must-detect"}
+  ],
+  "encoding_policy": {
+    "input_encoding": "ASCII (generator emits ASCII-only fixed-width records); files are landed and hashed as raw bytes",
+    "byte_transparency": "transport is byte-transparent end-to-end: Files API PUT of the exact bytes the legacy script consumed, verified by input_sha256 checks recomputed from the platform; parsing slices fixed columns and never decodes-then-re-encodes",
+    "invalid_bytes": "a non-ASCII or otherwise invalid byte cannot make the job fail or silently drop data: the line still lands in bronze byte-for-byte and, if it breaks field validation, is attributed to quarantine with a reason rather than lost"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "tolerate-and-attribute",
+    "details": "Input is fixed-width, so a stray '|' inside a field is data, not a delimiter; it flows through to silver exactly as the legacy cut/paste chain emitted it. NULL or missing source values never fail open into a plausible-looking row: silver admits a row only when every field passes its explicit predicate (10-char id, 12-digit amount, real calendar date, ccy in USD/EUR/GBP, rt in 01/02); anything else becomes a quarantine row with an explicit reason. Short lines yield empty/NULL slices which fail those predicates and are quarantined, never defaulted."
+  },
+  "empty_input_semantics": {
+    "action": "write-empty-result",
+    "details": "A run with no landed input rewrites bronze/silver/quarantine for the namespace as empty (INSERT OVERWRITE of an empty scan), mirroring the legacy behaviour that a batch with no CUSTBILL*.dat files produces no PSV output; prior output does not survive into the next batch's result set."
+  },
+  "trigger_granularity": "per-batch",
+  "notes": "Legacy loop processes every CUSTBILL*.dat present in incoming/ in one cron pass and reports once per batch; the converted job is a single manual-trigger batch job over the namespace landing dir (/Volumes/ow_tp/bronze/landing/cnvparse/parse), and the golden comparison is per-batch with per-file checks inside it. Unknown currency or record type values are additionally quarantined (unknown_currency / unknown_record_type) to make the silver schema contract explicit; the deterministic generator never emits them, so they appear in no baseline check."
+}
