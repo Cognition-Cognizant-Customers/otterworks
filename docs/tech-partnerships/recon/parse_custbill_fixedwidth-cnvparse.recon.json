@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "parse_custbill_fixedwidth",
   "namespace": "cnvparse",
-  "generated_at": "2026-08-18T00:12:15Z",
+  "generated_at": "2026-08-18T00:27:12Z",
   "run_mode": "live",
   "checks": [
     {

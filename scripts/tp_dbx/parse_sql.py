@@ -17,8 +17,9 @@ Legacy parse semantics preserved byte-for-byte on valid records:
   - date rendered YYYY-MM-DD by digit insertion
 
 Records the legacy parser silently mishandled become explicit quarantine
-rows instead: nonnumeric_amount, invalid_calendar_date, unknown_currency,
-unknown_record_type (row-level) and trailer_count_mismatch (file-level).
+rows instead: invalid_cust_id, nonnumeric_amount, invalid_calendar_date,
+unknown_currency, unknown_record_type (row-level) and
+trailer_count_mismatch (file-level).
 """
 from __future__ import annotations
 
@@ -85,7 +86,7 @@ def provision(n: Names) -> list[str]:
             COMMENT 'Silver: schema-validated CUSTBILL records (quarantined rows excluded)'""",
         f"""CREATE TABLE IF NOT EXISTS {n.quarantine} (
               source_file STRING, cust_id STRING, raw_line STRING,
-              reason STRING COMMENT 'nonnumeric_amount | invalid_calendar_date | unknown_currency | unknown_record_type | trailer_count_mismatch',
+              reason STRING COMMENT 'invalid_cust_id | nonnumeric_amount | invalid_calendar_date | unknown_currency | unknown_record_type | trailer_count_mismatch',
               detected_at TIMESTAMP)
             USING DELTA
             COMMENT 'Silver: records the legacy parser passed through or ignored silently'""",
@@ -132,7 +133,8 @@ def _body_projection(n: Names) -> str:
       WHERE record_kind = 'BODY'"""
 
 
-_VALID = """amount_raw RLIKE '^[0-9]{12}$'
+_VALID = """length(cust_id) = 10
+      AND amount_raw RLIKE '^[0-9]{12}$'
       AND try_to_date(bill_date_raw, 'yyyyMMdd') IS NOT NULL
       AND currency IN ('USD', 'EUR', 'GBP')
       AND record_type IN ('01', '02')"""
@@ -154,7 +156,8 @@ def build_quarantine(n: Names) -> str:
     WITH parsed AS ({_body_projection(n)}),
     row_defects AS (
       SELECT source_file, cust_id, raw_line,
-             CASE WHEN NOT amount_raw RLIKE '^[0-9]{{12}}$' THEN 'nonnumeric_amount'
+             CASE WHEN length(cust_id) <> 10 THEN 'invalid_cust_id'
+                  WHEN NOT amount_raw RLIKE '^[0-9]{{12}}$' THEN 'nonnumeric_amount'
                   WHEN try_to_date(bill_date_raw, 'yyyyMMdd') IS NULL THEN 'invalid_calendar_date'
                   WHEN currency NOT IN ('USD', 'EUR', 'GBP') THEN 'unknown_currency'
                   ELSE 'unknown_record_type' END AS reason
