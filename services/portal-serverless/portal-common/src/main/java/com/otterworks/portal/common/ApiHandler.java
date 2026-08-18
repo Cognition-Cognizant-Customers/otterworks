@@ -26,6 +26,7 @@ public abstract class ApiHandler implements RequestHandler<APIGatewayV2HTTPEvent
 
     @Override
     public APIGatewayV2HTTPResponse handleRequest(APIGatewayV2HTTPEvent event, Context context) {
+        failIfChaosConfigured(System.getenv("CHAOS_FAULT"));
         try {
             String method = event.getRequestContext().getHttp().getMethod();
             String path = decodePath(event.getRawPath());
@@ -48,6 +49,17 @@ public abstract class ApiHandler implements RequestHandler<APIGatewayV2HTTPEvent
         // Unexpected exceptions propagate so the invocation is recorded as a failure:
         // that is what increments the AWS/Lambda Errors metric and trips the per-context
         // CloudWatch alarm. API Gateway converts the failed invocation into a plain 500.
+    }
+
+    /**
+     * Deterministic fault injection for deploy-safety rehearsals: a Lambda version
+     * published with CHAOS_FAULT=invoke-error fails every invocation as a genuine
+     * invocation error (AWS/Lambda Errors increments, alarms and traces fire).
+     */
+    static void failIfChaosConfigured(String chaosFault) {
+        if ("invoke-error".equals(chaosFault)) {
+            throw new IllegalStateException("CHAOS_FAULT=invoke-error: injected invocation fault");
+        }
     }
 
     /**

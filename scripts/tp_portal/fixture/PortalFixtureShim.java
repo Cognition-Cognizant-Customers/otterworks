@@ -25,6 +25,10 @@ import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
  *
  * Env: FIXTURE_PORT (default 9095), DYNAMO_ENDPOINT (default http://localhost:4566),
  *      TABLE_PREFIX (default ow-tp-portal-fixture).
+ *      Optional front door: PORTAL_API_TOKEN closes every route except GET /health,
+ *      mirroring the deployed gateway + Lambda authorizer semantics (missing
+ *      Authorization header -> 401, wrong bearer token -> 403). The decision
+ *      logic matches services/portal-serverless/terraform/authorizer/authorizer.py.
  *      Optional async fixture: EVENT_BUS_NAME + EVENT_ENDPOINT wire the feedback
  *      handler's write-then-publish path to a LocalStack EventBridge bus; when
  *      unset the publisher is the no-op and behavior is identical to before.
@@ -69,9 +73,22 @@ public final class PortalFixtureShim {
                                 client, prefix + "-feedback"),
                         publisher));
 
+        String apiToken = System.getenv("PORTAL_API_TOKEN");
+
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/", exchange -> {
             String path = exchange.getRequestURI().getRawPath();
+            if (apiToken != null && !apiToken.isBlank() && !path.equals("/health")) {
+                String supplied = exchange.getRequestHeaders().getFirst("Authorization");
+                if (supplied == null || supplied.isBlank()) {
+                    reply(exchange, 401, "{\"message\":\"Unauthorized\"}");
+                    return;
+                }
+                if (!supplied.equals("Bearer " + apiToken)) {
+                    reply(exchange, 403, "{\"message\":\"Forbidden\"}");
+                    return;
+                }
+            }
             var handler = path.startsWith("/api/preferences") ? preferences
                     : path.startsWith("/api/feedback") ? feedback
                     : announcements; // /api/announcements and /health (shared health route)

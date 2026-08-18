@@ -177,6 +177,171 @@ Fixture rehearsal of the same script (LocalStack, `run_mode: fixture`, never
 live proof) is committed at
 `docs/tech-partnerships/recon/portal-events-async-fixture.recon.json`.
 
-## Beat G — Platform showcase wrap-up
+## Beat G — Platform showcase (unit: portal showcase)
 
-_Skeleton — filled by the showcase unit (`!tp_aws_4_showcase`)._
+What the serverless platform gives you that the VM-hosted monolith cannot:
+a closed front door, deploys that roll themselves back, an alarm that pages
+Devin instead of a human, and a bill that goes to ~$0 when nobody is using it.
+Contract: `docs/tech-partnerships/contracts/portal-showcase.json`. All beats
+below run in the parent's live window; the child's fixture evidence is
+`docs/tech-partnerships/recon/portal-showcase-frontdoor-fixture.recon.json`
+(auth-enabled 20/20 replay + 401/403 probes, `run_mode: fixture`).
+
+Grab the outputs once (the token is a sensitive output — never echo it):
+
+```bash
+cd services/portal-serverless/terraform
+API=$(terraform output -raw api_base_url)
+export PORTAL_API_TOKEN=$(terraform output -raw demo_api_token)
+CDN=$(terraform output -raw demo_site_cdn_url)
+```
+
+### G1 — Front door: the API is closed (401 / 403 / 200 on screen)
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' "$API/api/announcements"
+# → 401   (no credential: the Authorization header is the authorizer's
+#          identity source, so the gateway rejects before invoking anything)
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H 'Authorization: Bearer wrong-token' "$API/api/announcements"
+# → 403   (wrong credential: authorizer denies)
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H "Authorization: Bearer $PORTAL_API_TOKEN" "$API/api/announcements"
+# → 200
+curl -s "$API/health"    # → 200 — the only route left open (health probe)
+```
+
+Demo page: open `$CDN` (CloudFront, WAF-attached, HTTPS), paste the API URL
+and the token into the header fields, Connect. The token lives in
+localStorage (`otterPortalApiToken`) next to the base URL — reset both when
+switching acts. Parity with auth (expect 20/20 twice):
+
+```bash
+python3 scripts/tp_portal/transcript.py replay \
+  --base-url "$API" \
+  --golden scripts/tp_portal/golden/portal-golden-transcript.json \
+  --unit legacy-portal-showcase/platform-capabilities \
+  --reset-cmd 'python3 scripts/tp_portal/reset_tables.py --prefix ow-tp-portal-<ns>' \
+  --out docs/tech-partnerships/recon/portal-showcase-frontdoor-live.recon.json
+```
+
+Burst shed (WAF rate-based rule, default 300 req/5min/IP, `waf_rate_limit`):
+
+```bash
+for i in $(seq 1 400); do curl -s -o /dev/null -w '%{http_code}\n' "$CDN"; done | sort | uniq -c
+# → mostly 200, then 403s once the rate rule trips (evaluation lags ~30s)
+```
+
+### G2 — Deploy safety: canary that rolls itself back
+
+Good canary → auto-promote (bake 120s; gates = per-context errors + api-5xx):
+
+```bash
+python3 scripts/tp_portal/canary.py deploy \
+  --function ow-tp-portal-<ns>-feedback \
+  --jar services/portal-serverless/feedback-service/target/feedback-service.jar \
+  --weight 0.1 --bake-seconds 120
+# → "published canary version: N" … gate polls … "PROMOTED: … alias 'live' now 100% vN"
+```
+
+Bad canary → auto-rollback (CHAOS_FAULT makes every invocation a real
+invocation error — the Errors metric increments; a caught 500 would not).
+Publish first, drive traffic, and the alarm does the rollback — the operator
+does nothing:
+
+```bash
+python3 scripts/tp_portal/canary.py deploy \
+  --function ow-tp-portal-<ns>-feedback \
+  --env CHAOS_FAULT=invoke-error --weight 0.1 --bake-seconds 180 &
+sleep 90   # canary Active + weights applied (SnapStart readiness ~45-60s)
+for i in $(seq 1 60); do curl -s -o /dev/null \
+  -H "Authorization: Bearer $PORTAL_API_TOKEN" "$API/api/feedback/average-rating"; done
+wait
+# → "ROLLED BACK: ['ow-tp-portal-<ns>-feedback-errors'] in ALARM -> alias 'live'
+#    restored to 100% vSTABLE; canary vN received no further traffic" (exit 2)
+python3 scripts/tp_portal/canary.py status --function ow-tp-portal-<ns>-feedback
+# → stable version at 100%, no additional weights
+# cleanup: clear the fault from $LATEST before the next good deploy
+python3 scripts/tp_portal/canary.py deploy --function ow-tp-portal-<ns>-feedback \
+  --env CHAOS_FAULT= --weight 0.1 --bake-seconds 120   # promotes clean
+```
+
+Alarm evaluation is 60s/1-period: give the rollback beat two minutes of
+stage time (alarm, then the alias restore). Terraform ignores alias
+routing drift, so canary shifts never fight `terraform apply`.
+
+### G3 — Incident loop: alarm → Devin → audit PR
+
+Apply with the automation webhook (values supplied by the parent; the auth
+header is sensitive and lives only in the EventBridge connection):
+
+```bash
+terraform apply -var devin_webhook_url=https://api.devin.ai/... \
+  -var devin_webhook_auth_header='Bearer <automation-secret>'
+```
+
+Every estate alarm (per-context errors, api-5xx, DLQ depth, projection
+errors, queue age) is matched by rule `ow-tp-portal-<ns>-alarm-to-devin` on
+`CloudWatch Alarm State Change` with `state=ALARM` only — one webhook POST
+per OK→ALARM transition, nothing on OK or INSUFFICIENT_DATA. Stage the
+incident with the same CHAOS_FAULT canary as G2 (without the rollback
+narration), then show:
+
+```bash
+aws cloudwatch describe-alarm-history \
+  --alarm-name ow-tp-portal-<ns>-feedback-errors --max-records 3
+aws events list-rule-names-by-target \
+  --target-arn $(aws events list-api-destinations \
+    --name-prefix ow-tp-portal-<ns>-devin-webhook \
+    --query 'ApiDestinations[0].ApiDestinationArn' --output text)
+```
+
+Record the alarm-history entry, the rule invocation, the spawned Devin
+session URL, and its audit PR URL. **Do not remediate the incident in this
+session** — the spawned session fixes it and leaves the audit PR; that is
+the beat.
+
+### G4 — Load and cost: the same profile, both estates
+
+Pinned profile `portal-load-v1` (5-request read mix, 32 workers, 60s) —
+never compare numbers taken under different profiles, and never quote a
+number that was not measured in this run:
+
+```bash
+# after-state: through the closed gateway (token via env)
+python3 scripts/tp_portal/load_test.py --base-url "$API" \
+  --workers 32 --duration 60 --out load-aws.json
+# before-state: the legacy monolith (load it LAST — saturating it reddens
+# the before-state page, fine as a beat, confusing mid-parity-demo)
+cd services/legacy-portal && ./scripts/run-onprem.sh &   # port 8095
+python3 scripts/tp_portal/load_test.py --base-url http://localhost:8095 \
+  --workers 32 --duration 60 --out load-monolith.json
+```
+
+Each report carries p50/p95/p99, error rate, and throughput. The narrative
+is the curve shape: the monolith's single process climbs and errors past its
+thread pool; the estate scales out flat (confirm with Lambda
+ConcurrentExecutions / Duration and gateway Count / Latency for the window).
+
+**Cost math (rates as configured, us-east-1):** idle cost ≈ $0 — every
+component is per-request: PAY_PER_REQUEST tables, no provisioned
+concurrency, no EC2/RDS/NAT/ALB anywhere in the estate. Per-1k-request
+order of magnitude at 1024 MB / ~100 ms average: ~0.1 GB-s × 1k ≈ $0.0017
+compute + $0.0002 requests + ~$0.00125 DynamoDB writes-equivalent + $0.001
+gateway ≈ **well under a cent per 1k requests**; fill in the measured
+GB-seconds and request counts from the run's CloudWatch metrics next to the
+always-on monthly cost of the VM the monolith needed. Budget guardrail
+(“the platform tells you before the bill does” — the monolith estate had no
+equivalent): AWS Budgets on `Project=otterworks-tp`, $25/month default,
+80%-actual and 100%-forecast notifications to the estate SNS topic. If the
+applying principal lacks `budgets:*`, set `-var enable_budget_guardrail=false`
+and declare the gap in the live recon's `unverified_paths`.
+
+### G5 — Hand-off checklist (parent)
+
+- alias `live` at the healthy version, 100%, no additional weights
+  (`canary.py status` per context);
+- every alarm OK, DLQ and quarantine empty, replay green **with
+  credentials**, `terraform plan` clean;
+- no CHAOS_FAULT left on any function's `$LATEST`;
+- rehearsal namespaces destroyed and proven absent by tag + prefix scan.

@@ -1,0 +1,692 @@
+{
+  "kind": "recon-report",
+  "unit": "legacy-portal-showcase/platform-capabilities",
+  "namespace": "fixture",
+  "generated_at": "2026-08-18T03:06:45.108100+00:00",
+  "golden_source": "http://localhost:8095",
+  "golden_spec_sha": "6064f4d3031b7a84258e17e1c152183bb5abd9e0950820d258f9ee97c61c0c2f",
+  "live_spec_sha": "6064f4d3031b7a84258e17e1c152183bb5abd9e0950820d258f9ee97c61c0c2f",
+  "replay_base_url": "http://localhost:9095",
+  "run_mode": "fixture",
+  "steps_total": 24,
+  "steps_passed": 24,
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "transcript replayed twice, each pass after `python3 scripts/tp_portal/reset_tables.py --prefix ow-tp-portal-fixture --endpoint-url http://localhost:4566`: first 20/20, rerun 20/20",
+    "rerun_failures": []
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      "ann-get-missing",
+      "fb-submit-invalid-rating"
+    ],
+    "actual_set": [
+      "ann-get-missing",
+      "fb-submit-invalid-rating"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "WAF rule evaluation, CloudFront serving, and rate-limit shedding (live-only; parent proves in the validation window)",
+    "real API Gateway authorizer invocation and 300s decision caching (fixture shim mirrors the 401/403 semantics; parent proves live)",
+    "canary weighted-alias shifts, alarm-gated promotion/rollback against live CloudWatch (canary.py exercised live by the parent)",
+    "EventBridge alarm->Devin API-destination delivery and auth header (live-only)",
+    "AWS Budgets guardrail evaluation and SNS notification (live-only; toggleable via enable_budget_guardrail)",
+    "load_test.py latency/cost figures (must be measured under the pinned profile in the live window; no numbers published from fixture)"
+  ],
+  "checks": [
+    {
+      "id": "front-door-401-missing-credential",
+      "method": "GET",
+      "path": "/api/announcements",
+      "assert_status_only": true,
+      "expected": {
+        "status": 401
+      },
+      "actual": {
+        "status": 401
+      },
+      "source_of_truth": "portal-showcase.json front-door acceptance checks (gateway+authorizer semantics mirrored by the fixture shim's PORTAL_API_TOKEN front door)",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "front-door-403-wrong-credential",
+      "method": "GET",
+      "path": "/api/announcements",
+      "assert_status_only": true,
+      "expected": {
+        "status": 403
+      },
+      "actual": {
+        "status": 403
+      },
+      "source_of_truth": "portal-showcase.json front-door acceptance checks (gateway+authorizer semantics mirrored by the fixture shim's PORTAL_API_TOKEN front door)",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "front-door-403-prefix-of-real-token",
+      "method": "GET",
+      "path": "/api/announcements",
+      "assert_status_only": true,
+      "expected": {
+        "status": 403
+      },
+      "actual": {
+        "status": 403
+      },
+      "source_of_truth": "portal-showcase.json front-door acceptance checks (gateway+authorizer semantics mirrored by the fixture shim's PORTAL_API_TOKEN front door)",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "front-door-200-correct-credential",
+      "method": "GET",
+      "path": "/api/announcements",
+      "assert_status_only": true,
+      "expected": {
+        "status": 200
+      },
+      "actual": {
+        "status": 200
+      },
+      "source_of_truth": "portal-showcase.json front-door acceptance checks (gateway+authorizer semantics mirrored by the fixture shim's PORTAL_API_TOKEN front door)",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "health",
+      "method": "GET",
+      "path": "/health",
+      "assert_status_only": false,
+      "expected": {
+        "status": 200,
+        "body": {
+          "status": "UP",
+          "service": "legacy-portal"
+        }
+      },
+      "actual": {
+        "status": 200,
+        "body": {
+          "status": "UP",
+          "service": "legacy-portal"
+        }
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "ann-list-empty",
+      "method": "GET",
+      "path": "/api/announcements",
+      "assert_status_only": false,
+      "expected": {
+        "status": 200,
+        "body": []
+      },
+      "actual": {
+        "status": 200,
+        "body": []
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "ann-create-published",
+      "method": "POST",
+      "path": "/api/announcements",
+      "assert_status_only": false,
+      "expected": {
+        "status": 201,
+        "body": {
+          "id": 1,
+          "title": "Welcome to OtterWorks",
+          "body": "The portal is live.",
+          "published": true,
+          "createdAt": "<instant>"
+        }
+      },
+      "actual": {
+        "status": 201,
+        "body": {
+          "id": 1,
+          "title": "Welcome to OtterWorks",
+          "body": "The portal is live.",
+          "published": true,
+          "createdAt": "<instant>"
+        }
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "ann-create-draft",
+      "method": "POST",
+      "path": "/api/announcements",
+      "assert_status_only": false,
+      "expected": {
+        "status": 201,
+        "body": {
+          "id": 2,
+          "title": "Scheduled maintenance",
+          "body": "Maintenance window Saturday 02:00 UTC.",
+          "published": false,
+          "createdAt": "<instant>"
+        }
+      },
+      "actual": {
+        "status": 201,
+        "body": {
+          "id": 2,
+          "title": "Scheduled maintenance",
+          "body": "Maintenance window Saturday 02:00 UTC.",
+          "published": false,
+          "createdAt": "<instant>"
+        }
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "ann-list-published-only",
+      "method": "GET",
+      "path": "/api/announcements",
+      "assert_status_only": false,
+      "expected": {
+        "status": 200,
+        "body": [
+          {
+            "id": 1,
+            "title": "Welcome to OtterWorks",
+            "body": "The portal is live.",
+            "published": true,
+            "createdAt": "<instant>"
+          }
+        ]
+      },
+      "actual": {
+        "status": 200,
+        "body": [
+          {
+            "id": 1,
+            "title": "Welcome to OtterWorks",
+            "body": "The portal is live.",
+            "published": true,
+            "createdAt": "<instant>"
+          }
+        ]
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "ann-list-all",
+      "method": "GET",
+      "path": "/api/announcements?publishedOnly=false",
+      "assert_status_only": false,
+      "expected": {
+        "status": 200,
+        "body": [
+          {
+            "id": 1,
+            "title": "Welcome to OtterWorks",
+            "body": "The portal is live.",
+            "published": true,
+            "createdAt": "<instant>"
+          },
+          {
+            "id": 2,
+            "title": "Scheduled maintenance",
+            "body": "Maintenance window Saturday 02:00 UTC.",
+            "published": false,
+            "createdAt": "<instant>"
+          }
+        ]
+      },
+      "actual": {
+        "status": 200,
+        "body": [
+          {
+            "id": 1,
+            "title": "Welcome to OtterWorks",
+            "body": "The portal is live.",
+            "published": true,
+            "createdAt": "<instant>"
+          },
+          {
+            "id": 2,
+            "title": "Scheduled maintenance",
+            "body": "Maintenance window Saturday 02:00 UTC.",
+            "published": false,
+            "createdAt": "<instant>"
+          }
+        ]
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "ann-get-draft",
+      "method": "GET",
+      "path": "/api/announcements/2",
+      "assert_status_only": false,
+      "expected": {
+        "status": 200,
+        "body": {
+          "id": 2,
+          "title": "Scheduled maintenance",
+          "body": "Maintenance window Saturday 02:00 UTC.",
+          "published": false,
+          "createdAt": "<instant>"
+        }
+      },
+      "actual": {
+        "status": 200,
+        "body": {
+          "id": 2,
+          "title": "Scheduled maintenance",
+          "body": "Maintenance window Saturday 02:00 UTC.",
+          "published": false,
+          "createdAt": "<instant>"
+        }
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "ann-publish-draft",
+      "method": "POST",
+      "path": "/api/announcements/2/publish",
+      "assert_status_only": false,
+      "expected": {
+        "status": 200,
+        "body": {
+          "id": 2,
+          "title": "Scheduled maintenance",
+          "body": "Maintenance window Saturday 02:00 UTC.",
+          "published": true,
+          "createdAt": "<instant>"
+        }
+      },
+      "actual": {
+        "status": 200,
+        "body": {
+          "id": 2,
+          "title": "Scheduled maintenance",
+          "body": "Maintenance window Saturday 02:00 UTC.",
+          "published": true,
+          "createdAt": "<instant>"
+        }
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "ann-list-after-publish",
+      "method": "GET",
+      "path": "/api/announcements",
+      "assert_status_only": false,
+      "expected": {
+        "status": 200,
+        "body": [
+          {
+            "id": 2,
+            "title": "Scheduled maintenance",
+            "body": "Maintenance window Saturday 02:00 UTC.",
+            "published": true,
+            "createdAt": "<instant>"
+          },
+          {
+            "id": 1,
+            "title": "Welcome to OtterWorks",
+            "body": "The portal is live.",
+            "published": true,
+            "createdAt": "<instant>"
+          }
+        ]
+      },
+      "actual": {
+        "status": 200,
+        "body": [
+          {
+            "id": 2,
+            "title": "Scheduled maintenance",
+            "body": "Maintenance window Saturday 02:00 UTC.",
+            "published": true,
+            "createdAt": "<instant>"
+          },
+          {
+            "id": 1,
+            "title": "Welcome to OtterWorks",
+            "body": "The portal is live.",
+            "published": true,
+            "createdAt": "<instant>"
+          }
+        ]
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "ann-get-missing",
+      "method": "GET",
+      "path": "/api/announcements/999",
+      "assert_status_only": false,
+      "expected": {
+        "status": 404,
+        "body": {
+          "error": "Not Found",
+          "message": "announcement 999 not found"
+        }
+      },
+      "actual": {
+        "status": 404,
+        "body": {
+          "error": "Not Found",
+          "message": "announcement 999 not found"
+        }
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "pref-get-default",
+      "method": "GET",
+      "path": "/api/preferences/alice",
+      "assert_status_only": false,
+      "expected": {
+        "status": 200,
+        "body": {
+          "userId": "alice",
+          "theme": "light",
+          "locale": "en-US",
+          "emailNotifications": true
+        }
+      },
+      "actual": {
+        "status": 200,
+        "body": {
+          "userId": "alice",
+          "theme": "light",
+          "locale": "en-US",
+          "emailNotifications": true
+        }
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "pref-update",
+      "method": "PUT",
+      "path": "/api/preferences/alice",
+      "assert_status_only": false,
+      "expected": {
+        "status": 200,
+        "body": {
+          "userId": "alice",
+          "theme": "dark",
+          "locale": "fr-FR",
+          "emailNotifications": false
+        }
+      },
+      "actual": {
+        "status": 200,
+        "body": {
+          "userId": "alice",
+          "theme": "dark",
+          "locale": "fr-FR",
+          "emailNotifications": false
+        }
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "pref-get-updated",
+      "method": "GET",
+      "path": "/api/preferences/alice",
+      "assert_status_only": false,
+      "expected": {
+        "status": 200,
+        "body": {
+          "userId": "alice",
+          "theme": "dark",
+          "locale": "fr-FR",
+          "emailNotifications": false
+        }
+      },
+      "actual": {
+        "status": 200,
+        "body": {
+          "userId": "alice",
+          "theme": "dark",
+          "locale": "fr-FR",
+          "emailNotifications": false
+        }
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "fb-average-empty",
+      "method": "GET",
+      "path": "/api/feedback/average-rating",
+      "assert_status_only": false,
+      "expected": {
+        "status": 200,
+        "body": {
+          "averageRating": 0.0
+        }
+      },
+      "actual": {
+        "status": 200,
+        "body": {
+          "averageRating": 0.0
+        }
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "fb-submit-alice-1",
+      "method": "POST",
+      "path": "/api/feedback",
+      "assert_status_only": false,
+      "expected": {
+        "status": 201,
+        "body": {
+          "id": 1,
+          "userId": "alice",
+          "rating": 5,
+          "message": "Love the new portal.",
+          "createdAt": "<instant>"
+        }
+      },
+      "actual": {
+        "status": 201,
+        "body": {
+          "id": 1,
+          "userId": "alice",
+          "rating": 5,
+          "message": "Love the new portal.",
+          "createdAt": "<instant>"
+        }
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "fb-submit-bob",
+      "method": "POST",
+      "path": "/api/feedback",
+      "assert_status_only": false,
+      "expected": {
+        "status": 201,
+        "body": {
+          "id": 2,
+          "userId": "bob",
+          "rating": 3,
+          "message": "It works.",
+          "createdAt": "<instant>"
+        }
+      },
+      "actual": {
+        "status": 201,
+        "body": {
+          "id": 2,
+          "userId": "bob",
+          "rating": 3,
+          "message": "It works.",
+          "createdAt": "<instant>"
+        }
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "fb-submit-alice-2",
+      "method": "POST",
+      "path": "/api/feedback",
+      "assert_status_only": false,
+      "expected": {
+        "status": 201,
+        "body": {
+          "id": 3,
+          "userId": "alice",
+          "rating": 4,
+          "message": "Even better after the update.",
+          "createdAt": "<instant>"
+        }
+      },
+      "actual": {
+        "status": 201,
+        "body": {
+          "id": 3,
+          "userId": "alice",
+          "rating": 4,
+          "message": "Even better after the update.",
+          "createdAt": "<instant>"
+        }
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "fb-list-alice",
+      "method": "GET",
+      "path": "/api/feedback?userId=alice",
+      "assert_status_only": false,
+      "expected": {
+        "status": 200,
+        "body": [
+          {
+            "id": 3,
+            "userId": "alice",
+            "rating": 4,
+            "message": "Even better after the update.",
+            "createdAt": "<instant>"
+          },
+          {
+            "id": 1,
+            "userId": "alice",
+            "rating": 5,
+            "message": "Love the new portal.",
+            "createdAt": "<instant>"
+          }
+        ]
+      },
+      "actual": {
+        "status": 200,
+        "body": [
+          {
+            "id": 3,
+            "userId": "alice",
+            "rating": 4,
+            "message": "Even better after the update.",
+            "createdAt": "<instant>"
+          },
+          {
+            "id": 1,
+            "userId": "alice",
+            "rating": 5,
+            "message": "Love the new portal.",
+            "createdAt": "<instant>"
+          }
+        ]
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "fb-average",
+      "method": "GET",
+      "path": "/api/feedback/average-rating",
+      "assert_status_only": false,
+      "expected": {
+        "status": 200,
+        "body": {
+          "averageRating": 4.0
+        }
+      },
+      "actual": {
+        "status": 200,
+        "body": {
+          "averageRating": 4.0
+        }
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "fb-submit-invalid-rating",
+      "method": "POST",
+      "path": "/api/feedback",
+      "assert_status_only": true,
+      "expected": {
+        "status": 400
+      },
+      "actual": {
+        "status": 400
+      },
+      "source_of_truth": "golden transcript portal-golden-transcript.json recorded from http://localhost:8095",
+      "result": "pass",
+      "mismatches": []
+    }
+  ],
+  "pre_pr_self_check": {
+    "skill": "tp-pre-pr-self-check",
+    "null_missing_attribution_rejected": "verified: missing/empty/scheme-less/wrong-scheme Authorization denied (test_authorizer.py, 6 tests); credentials never fail open; token comparison constant-time exact equality",
+    "parity_tolerances_from_contract": "verified: replay compares parsed JSON with timestamp normalization per portal-showcase.json (unchanged from decompose); 401/403 asserted by status per contract",
+    "idempotency_by_actual_rerun": "verified: see idempotency_rerun (two reset-and-replay passes, both 20/20 with auth)",
+    "recon_recomputed": "verified: all statuses/bodies and front-door probes read back from the running fixture at generated_at",
+    "namespace_scoped_prefixed": "verified: all new Terraform resources use ow-tp-portal-<namespace>-*; fixture tables ow-tp-portal-fixture-*",
+    "no_shared_table_ddl": "verified: DDL only against DynamoDB Local fixture tables; no live AWS calls made by this run",
+    "rerun_safe_cleanup": "verified: reset_tables.py scoped to the fixture prefix; recon artifacts written outside cleanup paths",
+    "no_secrets_or_real_addresses": "verified: fixture token is a throwaway literal; the live token is Terraform-generated and surfaced only as the sensitive output demo_api_token; no real addresses in evidence",
+    "capability_preflight": "inherited: parent-verified lambda/eventbridge/dynamodb/s3/iam paths; no live paths exercised here"
+  }
+}

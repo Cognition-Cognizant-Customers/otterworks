@@ -19,9 +19,15 @@ Parity contract (declared in transcript_spec.json):
   "<instant>";
 - steps marked assert_status_only compare only the status code.
 
+Credentials: --token (or env PORTAL_API_TOKEN) attaches "Authorization:
+Bearer <token>" to every request, so the same golden transcript replays
+against the closed (authorizer-guarded) front door — parity is judged with
+auth, never via an exemption.
+
 Usage:
   transcript.py record --base-url http://localhost:8095 --out golden.json
   transcript.py replay --base-url https://<api> --golden golden.json \
+      --token "$(terraform output -raw demo_api_token)" \
       --reset-cmd 'python3 reset_tables.py' --out replay.recon.json
 """
 from __future__ import annotations
@@ -40,6 +46,7 @@ from datetime import datetime, timezone
 
 SPEC_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "transcript_spec.json")
 INSTANT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?Z$")
+TOKEN = None  # set from --token / PORTAL_API_TOKEN in main()
 
 
 def load_spec():
@@ -53,6 +60,8 @@ def execute(base_url, step):
     url = base_url.rstrip("/") + step["path"]
     data = None
     headers = {"Accept": "application/json"}
+    if TOKEN:
+        headers["Authorization"] = f"Bearer {TOKEN}"
     if "body" in step:
         data = json.dumps(step["body"]).encode()
         headers["Content-Type"] = "application/json"
@@ -208,7 +217,7 @@ def cmd_replay(args):
 
     report = {
         "kind": "recon-report",
-        "unit": "legacy-portal-decomposition/http-parity",
+        "unit": args.unit,
         "namespace": args.namespace,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "golden_source": golden["source_base_url"],
@@ -259,6 +268,8 @@ def main():
     pp.add_argument("--golden", required=True)
     pp.add_argument("--out", required=True)
     pp.add_argument("--run-mode", default="live", choices=["live", "fixture"])
+    pp.add_argument("--unit", default="legacy-portal-decomposition/http-parity",
+                    help="Contract unit this recon reports against")
     pp.add_argument("--namespace", default="demo")
     pp.add_argument("--reset-cmd", required=True,
                     help="Shell command restoring the target to a fresh state; run before "
@@ -267,7 +278,13 @@ def main():
                     help="Path/behavior intentionally outside this replay's coverage "
                          "(listed verbatim in the recon report)")
     pp.set_defaults(fn=cmd_replay)
+    for sp in (pr, pp):
+        sp.add_argument("--token", default=os.environ.get("PORTAL_API_TOKEN"),
+                        help="Bearer token attached to every request "
+                             "(default: env PORTAL_API_TOKEN)")
     args = p.parse_args()
+    global TOKEN
+    TOKEN = args.token
     sys.exit(args.fn(args))
 
 

@@ -25,4 +25,13 @@ class ApiHandlerTest {
     void decodePathDecodesSegmentsAndKeepsPlusLiteral() {
         assertEquals("/api/preferences/a b+c", ApiHandler.decodePath("/api/preferences/a%20b+c"));
     }
+
+    @Test
+    void chaosFaultThrowsOnlyForInvokeError() {
+        ApiHandler.failIfChaosConfigured(null);
+        ApiHandler.failIfChaosConfigured("");
+        ApiHandler.failIfChaosConfigured("off");
+        assertThrows(IllegalStateException.class,
+                () -> ApiHandler.failIfChaosConfigured("invoke-error"));
+    }
 }

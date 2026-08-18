@@ -48,6 +48,32 @@ output "feedback_triage_state_machine_arn" {
   value       = aws_sfn_state_machine.feedback_triage.arn
 }
 
+output "demo_api_token" {
+  description = "Bearer token for the closed front door (paste into the demo page's token field; transcript/load tooling reads PORTAL_API_TOKEN)."
+  value       = random_password.demo_api_token.result
+  sensitive   = true
+}
+
+output "authorizer_function" {
+  description = "Lambda authorizer guarding every non-health route."
+  value       = aws_lambda_function.authorizer.function_name
+}
+
+output "budget_alerts_topic_arn" {
+  description = "SNS topic receiving budget guardrail notifications (empty when enable_budget_guardrail=false)."
+  value       = var.enable_budget_guardrail ? aws_sns_topic.budget_alerts[0].arn : ""
+}
+
+output "demo_site_cdn_url" {
+  description = "CloudFront (WAF-protected) URL of the demo page (empty when enable_demo_site=false)."
+  value       = var.enable_demo_site ? "https://${aws_cloudfront_distribution.demo_site[0].domain_name}" : ""
+}
+
+output "demo_site_waf_arn" {
+  description = "WAFv2 web ACL attached to the demo page CDN (empty when enable_demo_site=false)."
+  value       = var.enable_demo_site ? aws_wafv2_web_acl.demo_site[0].arn : ""
+}
+
 output "error_alarms" {
   description = "CloudWatch alarm name per bounded context."
   value       = { for name, a in aws_cloudwatch_metric_alarm.lambda_errors : name => a.alarm_name }

@@ -107,12 +107,19 @@ resource "aws_lambda_function" "service" {
 }
 
 # SnapStart only applies to published versions, so traffic goes through an alias.
+# The alias is also the canary seam: scripts/tp_portal/canary_deploy.py publishes
+# new versions and shifts weighted routing on it, so Terraform must not fight the
+# deploy tooling over the alias pointer.
 resource "aws_lambda_alias" "live" {
   for_each = local.services
 
   name             = "live"
   function_name    = aws_lambda_function.service[each.key].function_name
   function_version = aws_lambda_function.service[each.key].version
+
+  lifecycle {
+    ignore_changes = [function_version, routing_config]
+  }
 }
 
 resource "aws_apigatewayv2_integration" "service" {
@@ -130,6 +137,11 @@ resource "aws_apigatewayv2_route" "service" {
   api_id    = aws_apigatewayv2_api.portal.id
   route_key = each.value.route_key
   target    = "integrations/${aws_apigatewayv2_integration.service[each.value.service].id}"
+
+  # Every route is closed by the token authorizer except the unauthenticated
+  # GET /health liveness probe (no data, same body as the monolith's probe).
+  authorization_type = each.value.route_key == "GET /health" ? "NONE" : "CUSTOM"
+  authorizer_id      = each.value.route_key == "GET /health" ? null : aws_apigatewayv2_authorizer.token.id
 }
 
 resource "aws_lambda_permission" "apigw" {

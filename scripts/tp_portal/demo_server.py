@@ -5,8 +5,12 @@ Serves services/portal-serverless/demo-ui/ and proxies /api/* and /health to the
 legacy monolith, so the before-state act needs no CORS changes to legacy code:
 the page and the API share one origin.
 
+When the target is the closed (authorizer-guarded) API, --token (or env
+PORTAL_API_TOKEN) attaches "Authorization: Bearer <token>" to proxied
+requests that do not already carry one.
+
 Usage:
-  demo_server.py [--port 8000] [--target http://localhost:8095]
+  demo_server.py [--port 8000] [--target http://localhost:8095] [--token ...]
 """
 from __future__ import annotations
 
@@ -24,7 +28,7 @@ PROXY_PREFIXES = ("/api/", "/health")
 HOP_BY_HOP = {"connection", "keep-alive", "transfer-encoding", "content-length", "host"}
 
 
-def make_handler(target: str):
+def make_handler(target: str, token: str | None = None):
     class Handler(http.server.SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=UI_DIR, **kwargs)
@@ -41,6 +45,8 @@ def make_handler(target: str):
             for k, v in self.headers.items():
                 if k.lower() not in HOP_BY_HOP:
                     req.add_header(k, v)
+            if token and not req.has_header("Authorization"):
+                req.add_header("Authorization", f"Bearer {token}")
             try:
                 with urllib.request.urlopen(req, timeout=15) as resp:
                     payload = resp.read()
@@ -92,8 +98,12 @@ def main():
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--target", default="http://localhost:8095",
                         help="Monolith base URL to proxy /api/* and /health to")
+    parser.add_argument("--token", default=os.environ.get("PORTAL_API_TOKEN"),
+                        help="Bearer token attached to proxied requests "
+                             "(default: env PORTAL_API_TOKEN)")
     args = parser.parse_args()
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(args.target))
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", args.port),
+                                             make_handler(args.target, args.token))
     print(f"Otter Portal demo page: http://localhost:{args.port} (proxying API to {args.target})")
     server.serve_forever()
 

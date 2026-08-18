@@ -64,10 +64,20 @@ resource "aws_apigatewayv2_api" "portal" {
   name          = "${local.prefix}-api"
   protocol_type = "HTTP"
 
+  # Closed CORS: only the demo page's origins (local demo_server.py and the
+  # S3-hosted page), never the wildcard. Authorization is allowed through so
+  # the page can attach the demo bearer token.
   cors_configuration {
-    allow_origins = ["*"]
+    allow_origins = concat(
+      ["http://localhost:8000"],
+      var.enable_demo_site ? [
+        "http://${aws_s3_bucket_website_configuration.demo_site[0].website_endpoint}",
+        "https://${aws_cloudfront_distribution.demo_site[0].domain_name}",
+      ] : [],
+      var.extra_cors_origins,
+    )
     allow_methods = ["GET", "POST", "PUT", "OPTIONS"]
-    allow_headers = ["content-type"]
+    allow_headers = ["content-type", "authorization"]
     max_age       = 3600
   }
 }

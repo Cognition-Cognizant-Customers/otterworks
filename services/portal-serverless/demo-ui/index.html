@@ -80,6 +80,9 @@
     <label for="base-url">API</label>
     <input id="base-url" type="text" spellcheck="false"
            placeholder="http://localhost:8000 (local monolith) or https://…execute-api…">
+    <label for="api-token">Token</label>
+    <input id="api-token" type="password" spellcheck="false" style="width:180px"
+           placeholder="bearer token (AWS only)">
     <button id="apply-url">Connect</button>
     <span class="pill" id="health-pill">health: ?</span>
   </div>
@@ -148,7 +151,9 @@
   var $ = function (id) { return document.getElementById(id); };
 
   var baseUrl = localStorage.getItem("otterPortalBaseUrl") || window.location.origin;
+  var apiToken = localStorage.getItem("otterPortalApiToken") || "";
   $("base-url").value = baseUrl;
+  $("api-token").value = apiToken;
 
   function modeLabel() {
     var isAws = /execute-api/.test(baseUrl);
@@ -157,9 +162,12 @@
   }
 
   function api(method, path, body) {
+    var headers = {};
+    if (body) { headers["Content-Type"] = "application/json"; }
+    if (apiToken) { headers["Authorization"] = "Bearer " + apiToken; }
     return fetch(baseUrl.replace(/\/+$/, "") + path, {
       method: method,
-      headers: body ? { "Content-Type": "application/json" } : {},
+      headers: headers,
       body: body ? JSON.stringify(body) : undefined
     }).then(function (res) {
       if (!res.ok) {
@@ -296,7 +304,9 @@
 
   $("apply-url").onclick = function () {
     baseUrl = $("base-url").value.trim();
+    apiToken = $("api-token").value.trim();
     localStorage.setItem("otterPortalBaseUrl", baseUrl);
+    localStorage.setItem("otterPortalApiToken", apiToken);
     refreshAll();
   };
 
