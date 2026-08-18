@@ -81,7 +81,8 @@ def event_id(feedback_id):
 def message_identity(body):
     """eventId when the body parses as a FeedbackSubmitted envelope, else a body hash."""
     try:
-        detail = json.loads(body).get("detail", {})
+        parsed = json.loads(body)
+        detail = parsed.get("detail", {}) if isinstance(parsed, dict) else {}
         if isinstance(detail, dict) and detail.get("eventId"):
             return f"eventId:{detail['eventId']}"
     except ValueError:
@@ -397,6 +398,10 @@ def build_and_start_processes(queue_url, pump_stats_file, outage_file):
 
 def run_green_and_idempotency(checks, api_base_url, sqs, dynamo, queue_url, dlq_url,
                               stats_table):
+    # Baseline before submitting: a live estate is long-lived, so all counts
+    # are compared as deltas rather than absolute values.
+    baseline_markers = count_event_markers(dynamo, stats_table)
+    baseline_cnt = read_stats(dynamo, stats_table)["cnt"]
     submitted = []
     for user_id, rating, message in GREEN_SUBMISSIONS:
         status, body = http_json(
@@ -410,15 +415,16 @@ def run_green_and_idempotency(checks, api_base_url, sqs, dynamo, queue_url, dlq_
     wait_for(
         "green path: queue drained and projection caught up",
         lambda: queue_depth(sqs, queue_url) == 0
-        and read_stats(dynamo, stats_table)["cnt"] >= len(submitted),
+        and read_stats(dynamo, stats_table)["cnt"] >= baseline_cnt + len(submitted),
     )
     check(checks, "green-queue-drained", 0, queue_depth(sqs, queue_url),
           "sqs GetQueueAttributes on the main queue after submissions")
     check(checks, "green-dlq-empty", 0, queue_depth(sqs, dlq_url),
           "sqs GetQueueAttributes on the DLQ after the green path")
     check(checks, "events-published-equals-submissions", len(submitted),
-          count_event_markers(dynamo, stats_table),
-          "evt#<eventId> dedupe markers scanned from the projection table")
+          count_event_markers(dynamo, stats_table) - baseline_markers,
+          "evt#<eventId> dedupe markers scanned from the projection table "
+          "(delta over the pre-submission baseline)")
 
     _, average_body = http_json("GET", f"{api_base_url}/api/feedback/average-rating")
     stats = read_stats(dynamo, stats_table)

@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "legacy-portal-events/async-pipeline",
   "namespace": "asyncfixture",
-  "generated_at": "2026-08-18T01:04:51.195597+00:00",
+  "generated_at": "2026-08-18T01:11:37.315351+00:00",
   "run_mode": "fixture",
   "replay_base_url": "http://localhost:9096",
   "steps_total": 15,
@@ -68,7 +68,7 @@
       "id": "events-published-equals-submissions",
       "expected": 3,
       "actual": 3,
-      "source_of_truth": "evt#<eventId> dedupe markers scanned from the projection table",
+      "source_of_truth": "evt#<eventId> dedupe markers scanned from the projection table (delta over the pre-submission baseline)",
       "result": "pass",
       "mismatches": []
     },
