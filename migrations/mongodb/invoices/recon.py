@@ -21,6 +21,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -85,6 +86,8 @@ def main() -> int:
     ap.add_argument("--idempotency-evidence", default="")
     args = ap.parse_args()
     ns = args.ns
+    if not re.fullmatch(r"[A-Za-z0-9_]{1,11}", ns):
+        ap.error("--ns must match [A-Za-z0-9_]{1,11} (seeder valid_ns rule)")
 
     client = MongoClient(args.mongo_uri)
     core = recompute(client, ns)

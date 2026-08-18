@@ -32,6 +32,7 @@ Run under scripts/tp-run-deterministic.sh conventions (TZ=UTC LC_ALL=C LANG=C):
 import argparse
 import hashlib
 import os
+import re
 import sys
 from decimal import Decimal
 
@@ -90,6 +91,8 @@ def main() -> int:
     ap.add_argument("--service", default=os.environ.get("DB_SERVICE", "FREEPDB1"))
     args = ap.parse_args()
     ns = args.ns
+    if not re.fullmatch(r"[A-Za-z0-9_]{1,11}", ns):
+        ap.error("--ns must match [A-Za-z0-9_]{1,11} (seeder valid_ns rule)")
 
     # Exact numerics: fetch every NUMBER as decimal.Decimal, never float.
     oracledb.defaults.fetch_decimals = True
