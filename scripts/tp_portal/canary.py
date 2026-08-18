@@ -104,23 +104,38 @@ def cmd_deploy(args) -> int:
     print(f"published canary version: {canary}")
     wait_version_active(lam, args.function, canary)
 
+    # Prove the gates exist and are quiet BEFORE any traffic moves.
     gates = gate_alarm_names(args.function)
+    pre = alarm_states(cloudwatch, gates)
+    already_firing = sorted(n for n, s in pre.items() if s == "ALARM")
+    if already_firing:
+        raise SystemExit(f"gate alarms already in ALARM, refusing to deploy: {already_firing}")
+
     set_alias(lam, args.function, stable, canary, args.weight)
     print(f"alias '{ALIAS}': {int((1 - args.weight) * 100)}% v{stable} / "
           f"{int(args.weight * 100)}% v{canary}; gates: {gates}")
 
-    deadline = time.time() + args.bake_seconds
-    while time.time() < deadline:
-        time.sleep(POLL_SECONDS)
-        states = alarm_states(cloudwatch, gates)
-        firing = sorted(n for n, s in states.items() if s == "ALARM")
-        remaining = int(deadline - time.time())
-        print(f"  gates: {states} ({max(remaining, 0)}s left)")
-        if firing:
-            set_alias(lam, args.function, stable, None, 0)
-            print(f"ROLLED BACK: {firing} in ALARM -> alias '{ALIAS}' restored "
-                  f"to 100% v{stable}; canary v{canary} received no further traffic")
-            return 2
+    # Any failure during the bake (gate lookup error, throttle, Ctrl-C) must
+    # not strand the canary with live traffic: restore stable, then re-raise.
+    try:
+        deadline = time.time() + args.bake_seconds
+        while True:
+            states = alarm_states(cloudwatch, gates)
+            firing = sorted(n for n, s in states.items() if s == "ALARM")
+            remaining = int(deadline - time.time())
+            print(f"  gates: {states} ({max(remaining, 0)}s left)")
+            if firing:
+                set_alias(lam, args.function, stable, None, 0)
+                print(f"ROLLED BACK: {firing} in ALARM -> alias '{ALIAS}' restored "
+                      f"to 100% v{stable}; canary v{canary} received no further traffic")
+                return 2
+            if time.time() >= deadline:
+                break
+            time.sleep(min(POLL_SECONDS, max(1, remaining)))
+    except BaseException:
+        set_alias(lam, args.function, stable, None, 0)
+        print(f"bake aborted -> alias '{ALIAS}' restored to 100% v{stable}")
+        raise
 
     set_alias(lam, args.function, canary, None, 0)
     print(f"PROMOTED: gates stayed OK for {args.bake_seconds}s -> "
