@@ -1,0 +1,46 @@
+{
+  "unit": "legacy-portal-decomposition/events-async",
+  "source_artifact_path": "services/portal-serverless",
+  "target_objects": [
+    "ow-tp-portal-<ns>-bus (EventBridge custom event bus)",
+    "ow-tp-portal-<ns>-feedback-submitted (EventBridge rule: detail-type FeedbackSubmitted -> queue + triage workflow)",
+    "ow-tp-portal-<ns>-feedback-events (SQS queue, visibility 10s, redrive maxReceiveCount=3)",
+    "ow-tp-portal-<ns>-feedback-events-dlq (SQS DLQ, alarmed on ApproximateNumberOfMessagesVisible >= 1)",
+    "ow-tp-portal-<ns>-feedback-projection (Lambda java17, SQS event source mapping, batch 5, ReportBatchItemFailures)",
+    "ow-tp-portal-<ns>-feedback-stats (DynamoDB, PAY_PER_REQUEST, PITR; stats item + evt#/triage# idempotency markers)",
+    "ow-tp-portal-<ns>-feedback-triage (Step Functions Standard state machine: validate -> record triage -> quarantine on failure)",
+    "ow-tp-portal-<ns>-feedback-events-dlq-depth / -feedback-projection-errors / -feedback-events-age (CloudWatch alarms, wired into the alarm->Devin rule)"
+  ],
+  "golden_baseline_location": "scripts/tp_portal/golden/portal-golden-transcript.json (unchanged: the async path is additive; every one of the 20 steps keeps its exact status and body)",
+  "acceptance_checks": [
+    {"id": "sync-contract-unchanged", "description": "POST /api/feedback keeps write-then-publish semantics: the 201 body reflects the committed DynamoDB write exactly as today (golden transcript step passes unchanged). The FeedbackSubmitted event is published to the custom bus only after the write commits; a publish failure is logged and never fails the committed request — the events-published==submissions recon check is the detector for a silent publish gap. The async result becomes visible through the existing GET /api/feedback/average-rating route's value being reproduced by the projection (new derived read model), not by changing any golden response."},
+    {"id": "events-published", "description": "Events published equals feedback submissions accepted (201) during the window, recomputed from the target (projection dedupe markers + queue counters), never from producer memory."},
+    {"id": "projection-converged", "description": "The feedback-stats projection (count, ratingSum) converges to exactly the value the synchronous GET /api/feedback/average-rating computes from the feedback table; equality of the two averages is the parity check."},
+    {"id": "queues-drained", "description": "Main queue depth 0 and DLQ depth 0 on the green path after processing; consumer errors 0."},
+    {"id": "idempotent-consumption", "description": "Replaying an already-processed event (same deterministic event id) is a provable no-op: dedupe marker evt#<eventId> conditional put fails, stats unchanged. Proven by an actual rerun/redelivery, not inferred."},
+    {"id": "poison-dlq-replay", "description": "Red path: N poison messages exhaust maxReceiveCount=3 and land in the DLQ with full payload; DLQ depth == N (set comparison, missing and unexpected); after the operator fix + scripts/tp_portal/replay_dlq.py redrive, DLQ depth 0 and the projection converged again; other contexts unaffected."},
+    {"id": "workflow-visible-retries", "description": "The feedback-triage Standard state machine records one triage marker per event with an explicit Retry (backoff on States.TaskFailed) and Catch -> Quarantine (SQS SendMessage to the DLQ); green path executions succeed with zero failures, red path shows a visible retry in execution history."},
+    {"id": "least-privilege", "description": "Producer role adds only events:PutEvents on the custom bus; consumer role reads exactly one queue and writes exactly one table; queue policy and workflow role carry source-ARN conditions."}
+  ],
+  "planted_anomalies": [
+    {"id": "fb-evt-poison-infra", "description": "Retryable-class failure exhausted: with the projection store broken (missing stats table), a valid event fails 3 receives and must be captured in the DLQ with full payload; after the operator restores the store and runs replay_dlq.py the message must process and the projection converge.", "status": "must-detect"},
+    {"id": "fb-evt-malformed-detail", "description": "Non-retryable schema violation (malformed JSON detail / missing eventId / rating outside 1-5) must be classified poison by the consumer (batch item failure every receive) and reach the DLQ; proven by consumer unit tests in fixture runs.", "status": "must-detect"},
+    {"id": "live-dlq-alarm-transition", "description": "DLQ-depth alarm OK->ALARM->OK and alarm->Devin webhook delivery on the live estate; live-only, owned by the parent's validation window.", "status": "coverage_gap", "reason": "Child runs are fixture-only (LocalStack); CloudWatch alarm state transitions cannot be exercised there."}
+  ],
+  "encoding_policy": {
+    "input_encoding": "UTF-8 JSON throughout: the EventBridge event detail is the UTF-8 JSON FeedbackSubmitted payload; SQS delivers the full EventBridge envelope as a UTF-8 JSON body. Payloads are a few hundred bytes, far under the 256KB EventBridge/SQS limit (message field capped at 2000 chars by the synchronous contract).",
+    "byte_transparency": "Not byte-transparent: events are compared as parsed JSON values; the deterministic eventId (UUIDv5 over 'feedback:<feedbackId>') is the identity, not the serialized bytes.",
+    "invalid_bytes": "A body that does not decode as UTF-8 JSON is a non-retryable poison message: classified as a batch item failure on every receive until redrive delivers it to the DLQ intact."
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "fail",
+    "details": "Unknown JSON fields in the event detail are ignored (non-strict binding). Non-retryable poison = malformed JSON, missing/empty eventId, feedbackId, or userId, rating outside 1-5, oversized detail. Retryable = DynamoDB throttle/transient SDK failure. Both classes surface as SQS batch item failures; retryables usually succeed within maxReceiveCount=3, poisons exhaust it and land in the DLQ with full payload. NULLs never fail open into the projection."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "An idle estate is silent: no submissions means no events, no executions, no phantom consumer invocations, and no alarms (treat_missing_data=notBreaching on every async alarm). An SQS delivery with zero parseable records returns an empty batch response. The projection over an empty window reports averageRating 0.0, matching the synchronous route."
+  },
+  "trigger_granularity": "per-batch",
+  "trigger_granularity_note": "SQS event source mapping with batch_size=5, no batching window (portal-scale volume), function_response_types=ReportBatchItemFailures: a partial batch failure retries only the failed messages, and idempotent consumption makes any redelivery of a succeeded message a no-op. Queue visibility timeout (10s) >= consumer timeout (10s) so the platform accepts the mapping and a poison message reaches the DLQ within a demo beat (~30s). The triage workflow is per-event (one execution per FeedbackSubmitted). No SnapStart on the consumer (event-source-mapping-driven; the pending-optimization window would fake code faults)."
+}

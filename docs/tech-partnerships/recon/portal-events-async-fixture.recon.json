@@ -1,0 +1,190 @@
+{
+  "kind": "recon-report",
+  "unit": "legacy-portal-events/async-pipeline",
+  "namespace": "asyncfixture",
+  "generated_at": "2026-08-18T00:57:03.529187+00:00",
+  "run_mode": "fixture",
+  "replay_base_url": "http://localhost:9096",
+  "steps_total": 15,
+  "steps_passed": 15,
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "event 599c000c-c3f3-5c46-bf20-054e793ad223 re-delivered to the main queue after being applied; cnt/ratingSum unchanged and the DLQ stayed empty",
+    "rerun_failures": []
+  },
+  "pre_pr_self_check": {
+    "skill": "tp-pre-pr-self-check",
+    "null_missing_attribution_rejected": "verified: events with missing/blank eventId, feedbackId, or userId and ratings outside 1-5 are classified poison and land in the DLQ, never applied (HandlerTest; red path here)",
+    "namespace_scoped_prefixed": "verified: all Terraform names ow-tp-portal-<namespace>-*; fixture resources ow-tp-portal-asyncfixture-*",
+    "no_shared_table_ddl": "verified: DDL only against LocalStack fixture tables; no live AWS calls made by this run",
+    "rerun_safe_cleanup": "verified: fixture estate is recreated per run from its own prefix; recon artifacts written outside cleanup paths",
+    "no_secrets_or_real_addresses": "verified: fixture uses test/test static credentials only; no tokens or addresses in sources or evidence",
+    "parity_tolerances_from_contract": "verified: exact equality on cnt/ratingSum vs GET /api/feedback/average-rating per portal-events.json",
+    "idempotency_by_actual_rerun": "verified: see idempotency_rerun",
+    "recon_recomputed": "verified: values_recomputed_from_target=true; queue depths, markers, and stats read back from the estate at generated_at",
+    "capability_preflight": "inherited: parent-supplied manifest .tp-preflight/aws-capabilities.json; no live paths exercised here"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      "eventId:34d671a6-b453-59be-8fa3-6e7f6ec348f7",
+      "eventId:685a09d0-ac0b-539b-8611-31fe6edb4528",
+      "sha256:dd028dba2dd52cf0"
+    ],
+    "actual_set": [
+      "eventId:34d671a6-b453-59be-8fa3-6e7f6ec348f7",
+      "eventId:685a09d0-ac0b-539b-8611-31fe6edb4528",
+      "sha256:dd028dba2dd52cf0"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "live EventBridge bus/rule -> SQS delivery and queue policy conditions (fixture wires the same pattern in LocalStack; parent proves live)",
+    "live Lambda event-source mapping (batch size 5, ReportBatchItemFailures) \u2014 the fixture pump reproduces its delete-on-success semantics in-process",
+    "Step Functions feedback-triage workflow execution history and retries (no state machine in the fixture; parent proves live)",
+    "CloudWatch alarms (DLQ depth, projection errors, queue age) and the alarm->Devin rule (not exercised in fixture)",
+    "DynamoDB point-in-time recovery flags (Terraform-declared; live-only)"
+  ],
+  "checks": [
+    {
+      "id": "green-queue-drained",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "sqs GetQueueAttributes on the main queue after submissions",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "green-dlq-empty",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "sqs GetQueueAttributes on the DLQ after the green path",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "events-published-equals-submissions",
+      "expected": 3,
+      "actual": 3,
+      "source_of_truth": "evt#<eventId> dedupe markers scanned from the projection table",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "projection-converged-to-synchronous-value",
+      "expected": 4.0,
+      "actual": 4.0,
+      "source_of_truth": "GET /api/feedback/average-rating vs ratingSum/cnt read from the projection table",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "idempotency-duplicate-is-noop",
+      "expected": {
+        "cnt": 3,
+        "ratingSum": 12
+      },
+      "actual": {
+        "cnt": 3,
+        "ratingSum": 12
+      },
+      "source_of_truth": "stats row compared before/after re-delivering an applied event to the queue",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "red-dlq-depth-captured",
+      "expected": 3,
+      "actual": 3,
+      "source_of_truth": "sqs GetQueueAttributes on the DLQ after maxReceiveCount redrives",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "red-dlq-poison-set",
+      "expected": [
+        "eventId:34d671a6-b453-59be-8fa3-6e7f6ec348f7",
+        "eventId:685a09d0-ac0b-539b-8611-31fe6edb4528",
+        "sha256:dd028dba2dd52cf0"
+      ],
+      "actual": [
+        "eventId:34d671a6-b453-59be-8fa3-6e7f6ec348f7",
+        "eventId:685a09d0-ac0b-539b-8611-31fe6edb4528",
+        "sha256:dd028dba2dd52cf0"
+      ],
+      "source_of_truth": "DLQ bodies peeked (visibility restored) and identified by eventId/body hash",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "red-replay-redriven",
+      "expected": 3,
+      "actual": 3,
+      "source_of_truth": "replay_dlq.replay() return value (DLQ -> main queue)",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "red-post-replay-dlq-set",
+      "expected": [
+        "sha256:dd028dba2dd52cf0"
+      ],
+      "actual": [
+        "sha256:dd028dba2dd52cf0"
+      ],
+      "source_of_truth": "DLQ bodies peeked after replay: only the still-malformed poison remains",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "red-poison-discarded-after-inspection",
+      "expected": true,
+      "actual": true,
+      "source_of_truth": "operator delete of the inspected malformed message from the DLQ",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "red-final-dlq-drained",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "sqs GetQueueAttributes on the DLQ after operator discard",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "red-final-queue-drained",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "sqs GetQueueAttributes on the main queue at the end of the red path",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "red-projection-reconverged",
+      "expected": 3.8,
+      "actual": 3.8,
+      "source_of_truth": "GET /api/feedback/average-rating vs ratingSum/cnt after outage+replay",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "red-nothing-lost",
+      "expected": 5,
+      "actual": 5,
+      "source_of_truth": "evt# markers equal all submissions across green path, outage, and replay",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "consumer-crashed-invocations-zero",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "fixture pump counters: a reported batch-item failure is retry mechanics, an uncaught crash is a consumer error",
+      "result": "pass",
+      "mismatches": []
+    }
+  ]
+}

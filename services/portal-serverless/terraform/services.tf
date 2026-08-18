@@ -99,9 +99,10 @@ resource "aws_lambda_function" "service" {
   }
 
   environment {
-    variables = {
-      TABLE_NAME = aws_dynamodb_table.context[each.key].name
-    }
+    variables = merge(
+      { TABLE_NAME = aws_dynamodb_table.context[each.key].name },
+      each.key == "feedback" ? { EVENT_BUS_NAME = aws_cloudwatch_event_bus.portal.name } : {},
+    )
   }
 }
 

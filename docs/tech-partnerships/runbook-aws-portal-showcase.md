@@ -81,9 +81,87 @@ _Skeleton — owned by the parent/showcase unit:_ deliberate infrastructure
 fault in a throwaway namespace → `AWS/Lambda Errors ≥ 1` → context alarm
 OK→ALARM→OK → X-Ray fault trace → (optional) EventBridge → Devin webhook.
 
-## Beat F — Async / event-driven follow-on
+## Beat F — Async / event-driven follow-on (unit: portal events)
 
-_Skeleton — filled by the events unit (`!tp_aws_3_events`)._
+Narration: in the monolith, downstream processing happened inside the request
+or not at all — a downstream failure lost the submission. Here the submission
+is durable in a queue, a failure is a visible DLQ depth, and recovery is one
+operator command. `POST /api/feedback` keeps its exact golden response
+(write-then-publish): the sync write commits first, then a `FeedbackSubmitted`
+event goes to the custom EventBridge bus → rule → SQS → projection Lambda →
+`feedback-stats` DynamoDB projection.
+
+All commands below run in the parent's live window against the applied
+namespace (`NS=demo` shown). Grab the Terraform outputs once:
+
+```bash
+cd services/portal-serverless/terraform
+API=$(terraform output -raw api_base_url)
+QUEUE=$(terraform output -raw feedback_events_queue_url)
+DLQ=$(terraform output -raw feedback_events_dlq_url)
+STATS=$(terraform output -raw feedback_stats_table)
+SFN=$(terraform output -raw feedback_triage_state_machine_arn)
+```
+
+1. **Green path — event chain end to end.** Submit feedback through the
+   gateway and watch the projection converge to the synchronous value:
+
+   ```bash
+   curl -s -X POST "$API/api/feedback" -H 'content-type: application/json' \
+     -d '{"userId":"demo-user","rating":5,"message":"async demo"}'
+   # → 201 and the same body as before this unit (golden transcript unchanged)
+   aws dynamodb get-item --table-name "$STATS" \
+     --key '{"pk":{"S":"stats"}}'          # cnt / ratingSum grow within seconds
+   curl -s "$API/api/feedback/average-rating"   # equals ratingSum/cnt above
+   ```
+
+2. **Red path — poison → DLQ → alarm.** Send a malformed event straight onto
+   the bus (rating 99 fails validation; max receive count 3, 10s visibility,
+   so capture takes ~30–60s — give the beat a minute):
+
+   ```bash
+   aws events put-events --entries '[{"EventBusName":"ow-tp-portal-demo-portal",
+     "Source":"otterworks.portal.feedback","DetailType":"FeedbackSubmitted",
+     "Detail":"{\"eventId\":\"poison-demo-1\",\"feedbackId\":\"999\",\"userId\":\"demo\",\"rating\":99}"}]'
+   aws sqs get-queue-attributes --queue-url "$DLQ" \
+     --attribute-names ApproximateNumberOfMessages   # → "1"
+   # CloudWatch alarm ow-tp-portal-demo-feedback-dlq-depth flips to ALARM
+   # (→ existing alarm→Devin EventBridge rule, same incident path as Beat E)
+   ```
+
+3. **Operator replay — nothing lost.** After "fixing" the cause, drain the
+   DLQ back onto the main queue with the first-class command:
+
+   ```bash
+   python3 scripts/tp_portal/replay_dlq.py --dlq-url "$DLQ" --queue-url "$QUEUE"
+   # → {"redriven": 1, "dlq_depth_after": 0}
+   ```
+
+   A still-poison message returns to the DLQ after 3 receives — inspect it
+   with `aws sqs receive-message --queue-url "$DLQ"`, then delete it once
+   triaged; genuine transients are consumed and the projection converges.
+
+4. **Orchestrated workflow — visible retries.** Start a triage execution and
+   show the execution history (Standard workflow, browsable in the console):
+
+   ```bash
+   aws stepfunctions start-execution --state-machine-arn "$SFN" \
+     --input '{"eventId":"demo-1","feedbackId":"1","userId":"demo-user","rating":5}'
+   aws stepfunctions list-executions --state-machine-arn "$SFN" --max-results 5
+   aws stepfunctions get-execution-history --execution-arn <arn>   # retries/catch visible
+   ```
+
+5. **Async recon (live).** Recompute everything from the estate and gate it:
+
+   ```bash
+   python3 scripts/tp_portal/async_recon.py --run-mode live \
+     --out docs/tech-partnerships/recon/portal-events-async-live.recon.json
+   make tp-validate-recon
+   ```
+
+Fixture rehearsal of the same script (LocalStack, `run_mode: fixture`, never
+live proof) is committed at
+`docs/tech-partnerships/recon/portal-events-async-fixture.recon.json`.
 
 ## Beat G — Platform showcase wrap-up
 

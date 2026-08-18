@@ -13,9 +13,15 @@ public class FeedbackService {
     static final int MAX_RATING = 5;
 
     private final FeedbackStore store;
+    private final EventPublisher publisher;
 
     public FeedbackService(FeedbackStore store) {
+        this(store, EventPublisher.NONE);
+    }
+
+    public FeedbackService(FeedbackStore store, EventPublisher publisher) {
         this.store = store;
+        this.publisher = publisher;
     }
 
     public Feedback submit(String userId, int rating, String message) {
@@ -25,6 +31,14 @@ public class FeedbackService {
         }
         Feedback feedback = new Feedback(store.nextId(), userId, rating, message, Instant.now());
         store.put(feedback);
+        try {
+            publisher.publishSubmitted(feedback);
+        } catch (RuntimeException e) {
+            // Write-then-publish: a publish failure never fails the committed request;
+            // the async recon's events-published==submissions check detects the gap.
+            System.err.println("feedback event publish failed for id "
+                    + feedback.getId() + ": " + e);
+        }
         return feedback;
     }
 
