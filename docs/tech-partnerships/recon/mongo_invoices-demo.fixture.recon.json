@@ -12,7 +12,7 @@
       "expected": 149963,
       "id": "lines-embedded",
       "result": "pass",
-      "source_of_truth": "manifest INVOICE_LINE.rows minus quarantined lines recomputed from the target (all contract-sanctioned quarantine kinds); actual recomputed by unwinding embedded lines from the target"
+      "source_of_truth": "manifest INVOICE_LINE.rows minus manifest planted orphaned_rows count (contract acceptance check); actual recomputed by unwinding embedded lines from the target"
     },
     {
       "actual": "88a66751f0b08b476b492105a2efc537",
@@ -36,7 +36,7 @@
       "source_of_truth": "manifest INVOICE_LINE.rows; actual embedded + quarantined recomputed from the target"
     }
   ],
-  "generated_at": "2026-08-18T00:39:27Z",
+  "generated_at": "2026-08-18T00:46:01Z",
   "idempotency_rerun": {
     "evidence": "second migrate run for ns=demo reproduced identical target-recomputed core (sha256 prefix 7cd95e3a17e1ecd3)",
     "performed": true,

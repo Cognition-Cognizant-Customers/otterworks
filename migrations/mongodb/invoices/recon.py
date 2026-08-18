@@ -118,11 +118,11 @@ def main() -> int:
               f"manifest {manifest_path.name} targets.oracle.OW_BILLING."
               "INVOICE_HEADER.rows; actual recomputed from target "
               f"ow_tp_mongodb_{ns}.invoices"),
-        check("lines-embedded", lines["rows"] - core["quarantined_lines"],
+        check("lines-embedded", lines["rows"] - n_expected_orphans,
               core["embedded_lines"],
-              "manifest INVOICE_LINE.rows minus quarantined lines recomputed "
-              "from the target (all contract-sanctioned quarantine kinds); "
-              "actual recomputed by unwinding embedded lines from the target"),
+              "manifest INVOICE_LINE.rows minus manifest planted orphaned_rows "
+              "count (contract acceptance check); actual recomputed by "
+              "unwinding embedded lines from the target"),
         check("lines-checksum", lines["checksum"], core["line_checksum"],
               "manifest INVOICE_LINE.checksum; actual recomputed from the "
               "target as ordered md5 of sorted (line_id, amount) pairs over "
