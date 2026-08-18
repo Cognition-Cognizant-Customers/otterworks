@@ -131,14 +131,18 @@ class Databricks:
                 return self._warehouse_id
         raise DbxError("no serverless SQL warehouse available; refusing to create clusters")
 
-    def sql(self, statement: str, wait: str = "50s", tries: int = 40) -> SqlResult:
-        status, payload = self.call("POST", "/api/2.0/sql/statements", {
+    def sql(self, statement: str, wait: str = "50s", tries: int = 40,
+            parameters: dict | None = None) -> SqlResult:
+        body = {
             "statement": statement,
             "warehouse_id": self.warehouse_id,
             "wait_timeout": wait,
             "format": "JSON_ARRAY",
             "disposition": "INLINE",
-        })
+        }
+        if parameters:
+            body["parameters"] = [{"name": k, "value": str(v)} for k, v in parameters.items()]
+        status, payload = self.call("POST", "/api/2.0/sql/statements", body)
         if not 200 <= status < 300:
             return SqlResult("HTTP_ERROR", [], [], f"HTTP {status}: {json.dumps(payload)[:400]}")
         statement_id = payload.get("statement_id")
@@ -156,8 +160,8 @@ class Databricks:
         rows = payload.get("result", {}).get("data_array") or []
         return SqlResult(state, columns, rows, message)
 
-    def sql_ok(self, statement: str) -> SqlResult:
-        result = self.sql(statement)
+    def sql_ok(self, statement: str, parameters: dict | None = None) -> SqlResult:
+        result = self.sql(statement, parameters=parameters)
         if not result.ok:
             raise DbxError(f"SQL failed ({result.state}): {result.error}\n  statement: {statement[:300]}")
         return result

@@ -17,7 +17,8 @@ NS = dbutils.widgets.get("ns")
 if not re.fullmatch(r"[a-z0-9_]{1,24}", NS):
     raise ValueError(f"ns must match [a-z0-9_]{{1,24}}: {NS!r}")
 
-BASE = f"/Volumes/ow_tp/bronze/landing/{NS}"
+# per-unit segment under the namespace, per the shared <ns>/<unit>/... layout rule
+BASE = f"/Volumes/ow_tp/bronze/landing/{NS}/sftp_ingest_poll"
 DROP = f"{BASE}/drop"
 INCOMING = f"{BASE}/incoming"
 ARCHIVE = f"{BASE}/archive"
@@ -81,6 +82,10 @@ for name in sorted(os.listdir(DROP)):
 
     staged_path = os.path.join(INCOMING, name)
     archive_path = os.path.join(ARCHIVE, f"{name}.{sha[:16]}")
+    stat_publish = os.stat(src)
+    if (stat_publish.st_size, stat_publish.st_mtime) != (stat_after.st_size, stat_after.st_mtime):
+        print(f"skipping {name}: source changed before publish; leaving in drop for the next poll")
+        continue
     atomic_write(staged_path, data, sha)
     atomic_write(archive_path, data, sha)
 
@@ -118,7 +123,20 @@ for name in sorted(os.listdir(DROP)):
 
     stat_final = os.stat(src)
     if (stat_final.st_size, stat_final.st_mtime) != (stat_after.st_size, stat_after.st_mtime):
-        print(f"not deleting {name}: source changed after read; staged copy is content-addressed, next poll re-ingests")
+        # roll back everything published for the torn read: staged + archive
+        # copies and both bronze registrations, then leave the source in drop
+        # for the next poll so no partial content stays visible anywhere
+        os.remove(staged_path)
+        os.remove(archive_path)
+        spark.sql(
+            f"DELETE FROM {FILES_TBL} WHERE ns = :ns AND file_name = :file_name AND sha256 = :sha256",
+            args={"ns": NS, "file_name": name, "sha256": sha},
+        )
+        spark.sql(
+            f"DELETE FROM {RAW_TBL} WHERE ns = :ns AND file_name = :file_name AND sha256 = :sha256",
+            args={"ns": NS, "file_name": name, "sha256": sha},
+        )
+        print(f"rolled back {name}: source changed after read; left in drop for the next poll")
         continue
     os.remove(src)  # delete from drop only after stage+archive+registration
     ingested.append({"file_name": name, "sha256": sha, "bytes": len(data)})

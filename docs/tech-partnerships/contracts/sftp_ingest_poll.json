@@ -3,7 +3,7 @@
   "source_artifact_path": "etl/legacy-extra/jobs/sftp_ingest_poll.ksh",
   "target_objects": [
     "job ow_tp_ingest_cnvingest (serverless notebook task, manual trigger, max_concurrent_runs=1)",
-    "/Volumes/ow_tp/bronze/landing/cnvingest/{drop,incoming,archive}",
+    "/Volumes/ow_tp/bronze/landing/cnvingest/sftp_ingest_poll/{drop,incoming,archive}",
     "ow_tp.bronze.custbill_ingest_files_cnvingest",
     "ow_tp.bronze.custbill_raw_cnvingest"
   ],

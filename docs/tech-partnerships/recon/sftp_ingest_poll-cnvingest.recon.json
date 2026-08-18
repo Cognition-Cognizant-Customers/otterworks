@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "sftp_ingest_poll",
   "namespace": "cnvingest",
-  "generated_at": "2026-08-18T00:36:24Z",
+  "generated_at": "2026-08-18T00:45:43Z",
   "run_mode": "live",
   "checks": [
     {

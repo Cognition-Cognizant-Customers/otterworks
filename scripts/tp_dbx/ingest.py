@@ -33,12 +33,8 @@ LANDING = "/Volumes/ow_tp/bronze/landing"
 
 
 def base(ns: str) -> str:
-    return f"{LANDING}/{ns}"
-
-
-def esc(value: str) -> str:
-    """Escape a Python string for embedding in a single-quoted Spark SQL literal."""
-    return value.replace("\\", "\\\\").replace("'", "\\'")
+    # per-unit segment under the namespace, per the shared <ns>/<unit>/... layout rule
+    return f"{LANDING}/{ns}/sftp_ingest_poll"
 
 
 def split_records(data: bytes) -> list:
@@ -157,7 +153,8 @@ def collect_state(dbx: Databricks, ns: str, golden: dict, source_dir: Path) -> l
         line_count = len(split_records(local.read_bytes()))
         row = dbx.sql_ok(
             f"SELECT sha256, bytes, line_count FROM ow_tp.bronze.custbill_ingest_files_{ns} "
-            f"WHERE ns = '{ns}' AND file_name = '{esc(name)}' AND sha256 = '{esc(sha)}'"
+            "WHERE ns = :ns AND file_name = :file_name AND sha256 = :sha256",
+            parameters={"ns": ns, "file_name": name, "sha256": sha},
         ).rows
         expected_reg = f"{sha}|{item['bytes']}|{line_count}|1row"
         actual_reg = f"{row[0][0]}|{row[0][1]}|{row[0][2]}|{len(row)}row" if row else "MISSING"
@@ -170,7 +167,8 @@ def collect_state(dbx: Databricks, ns: str, golden: dict, source_dir: Path) -> l
         })
         raw = dbx.sql_ok(
             f"SELECT COUNT(*) FROM ow_tp.bronze.custbill_raw_{ns} "
-            f"WHERE ns = '{ns}' AND file_name = '{esc(name)}' AND sha256 = '{esc(sha)}'"
+            "WHERE ns = :ns AND file_name = :file_name AND sha256 = :sha256",
+            parameters={"ns": ns, "file_name": name, "sha256": sha},
         ).scalar()
         checks.append({
             "id": f"bronze_raw_count/{name}",
