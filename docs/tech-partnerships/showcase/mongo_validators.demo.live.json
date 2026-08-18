@@ -1,0 +1,130 @@
+{
+  "collections": {
+    "customers": {
+      "additional_properties": false,
+      "required": [
+        "_id",
+        "ns",
+        "tenant_id",
+        "cust_no",
+        "name",
+        "legal_name",
+        "email",
+        "address",
+        "phones",
+        "status",
+        "flags",
+        "balances",
+        "lineage",
+        "last_activity_dt"
+      ],
+      "validation_action": "error",
+      "validation_level": "strict"
+    },
+    "invoices": {
+      "additional_properties": false,
+      "required": [
+        "_id",
+        "ns",
+        "tenant_id",
+        "cust_id",
+        "invoice_no",
+        "invoice_dt",
+        "due_dt",
+        "status_cd",
+        "total_amt",
+        "batch_no",
+        "lines"
+      ],
+      "validation_action": "error",
+      "validation_level": "strict"
+    }
+  },
+  "generated_at": "2026-08-18T03:58:20Z",
+  "kind": "validator-demo",
+  "namespace": "demo",
+  "probe_residue_documents": 0,
+  "probes": [
+    {
+      "_id": "demo:showcase-probe:customer",
+      "collection": "customers",
+      "expected": "accept",
+      "ok": true,
+      "probe": "conforming customer document",
+      "result": "accepted"
+    },
+    {
+      "_id": "demo:showcase-probe:customer",
+      "code": 121,
+      "collection": "customers",
+      "error": "Document failed validation",
+      "expected": "reject",
+      "ok": true,
+      "probe": "legacy DD-MON-YY string where a BSON date is required",
+      "result": "rejected",
+      "rule_violations": [
+        "properties"
+      ]
+    },
+    {
+      "_id": "demo:showcase-probe:customer",
+      "code": 121,
+      "collection": "customers",
+      "error": "Document failed validation",
+      "expected": "reject",
+      "ok": true,
+      "probe": "a 156th ad-hoc field (the legacy table would have taken it)",
+      "result": "rejected",
+      "rule_violations": [
+        "additionalProperties"
+      ]
+    },
+    {
+      "_id": "demo:showcase-probe:customer",
+      "code": 121,
+      "collection": "customers",
+      "error": "Document failed validation",
+      "expected": "reject",
+      "ok": true,
+      "probe": "CSV blob where the contract demands an array",
+      "result": "rejected",
+      "rule_violations": [
+        "properties"
+      ]
+    },
+    {
+      "_id": "demo:showcase-probe:invoice",
+      "collection": "invoices",
+      "expected": "accept",
+      "ok": true,
+      "probe": "conforming invoice with embedded lines",
+      "result": "accepted"
+    },
+    {
+      "_id": "demo:showcase-probe:invoice",
+      "code": 121,
+      "collection": "invoices",
+      "error": "Document failed validation",
+      "expected": "reject",
+      "ok": true,
+      "probe": "invoice date breaking the pinned legacy format",
+      "result": "rejected",
+      "rule_violations": [
+        "properties"
+      ]
+    },
+    {
+      "_id": "demo:showcase-probe:invoice",
+      "code": 121,
+      "collection": "invoices",
+      "error": "Document failed validation",
+      "expected": "reject",
+      "ok": true,
+      "probe": "embedded line resurrecting the GL_ACCT_CSV column",
+      "result": "rejected",
+      "rule_violations": [
+        "properties"
+      ]
+    }
+  ]
+}

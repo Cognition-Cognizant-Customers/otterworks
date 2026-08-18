@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-etl-gen-history legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean dbx-showcase dbx-showcase-help
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed seed-legacy seed-legacy-validate dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test legacy-etl-list legacy-etl-run legacy-etl-gen-data legacy-etl-gen-history legacy-sftp-up legacy-sftp-down oracle-billing-up oracle-billing-down oracle-billing-seed oracle-record oracle-parity tp-smoke tp-run-branch tp-preflight tp-preflight-databricks tp-preflight-atlas tp-preflight-aws tp-validate-schemas tp-validate-contracts tp-validate-recon tp-fixture-land tp-fixture-verify tp-fixture-clean dbx-showcase dbx-showcase-help mongo-showcase mongo-showcase-help
 
 SHELL := /bin/bash
 
@@ -48,6 +48,15 @@ dbx-showcase: ## Run a showcase step (CMD=<provision|land|expectations|backfill|
 
 dbx-showcase-help: ## List the Databricks billing-history showcase steps
 	python3 scripts/tp_dbx/showcase.py --help
+
+# Live MongoDB migration showcase (needs MONGODB_ATLAS_URI). DDL (collMod)
+# only ever touches the named namespace's own collections.
+mongo-showcase: ## Run a MongoDB showcase step (CMD=<validators|validate-demo> NS=<ns>)
+	@test -n "$(CMD)" || { echo "usage: make mongo-showcase CMD=<step> [NS=<ns>] [ARGS=...]"; exit 2; }
+	uv run --no-project scripts/tp_mongo/showcase.py --ns $${NS:-demo} $(CMD) $(ARGS)
+
+mongo-showcase-help: ## List the MongoDB migration showcase steps
+	uv run --no-project scripts/tp_mongo/showcase.py --help
 
 PROCS_COMPOSE = docker compose -f docker-compose.procs.yml -p otterworks-procs-$(NS)
 PROCS_UV = uv run --with psycopg[binary]==3.2.9 --with pyyaml==6.0.2
