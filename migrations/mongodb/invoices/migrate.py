@@ -49,10 +49,11 @@ LINE_COLS = ["line_id", "invoice_no", "invoice_id", "cust_id", "cust_no",
              "qty", "unit_price", "amount", "tax_amt", "invoice_dt",
              "service_period", "posted_yn", "gl_acct_csv", "batch_no",
              "src_system"]
-# Denormalized per-line copies of customer identity (always identical to the
-# header's customer for non-orphaned lines) are not embedded; orphans keep
-# every source column in quarantine.
-EMBED_DROP = {"invoice_no", "invoice_id", "cust_id", "cust_no", "cust_name",
+# Denormalized per-line copies of identifiers that the header document
+# already carries are not embedded; cust_no/cust_name are kept because the
+# header has no such columns. Orphans keep every source column in
+# quarantine.
+EMBED_DROP = {"invoice_no", "invoice_id", "cust_id",
               "tenant_id", "batch_no"}
 
 

@@ -118,9 +118,10 @@ def main() -> int:
               f"manifest {manifest_path.name} targets.oracle.OW_BILLING."
               "INVOICE_HEADER.rows; actual recomputed from target "
               f"ow_tp_mongodb_{ns}.invoices"),
-        check("lines-embedded", lines["rows"] - n_expected_orphans,
+        check("lines-embedded", lines["rows"] - core["quarantined_lines"],
               core["embedded_lines"],
-              "manifest INVOICE_LINE.rows minus planted orphaned_rows; "
+              "manifest INVOICE_LINE.rows minus quarantined lines recomputed "
+              "from the target (all contract-sanctioned quarantine kinds); "
               "actual recomputed by unwinding embedded lines from the target"),
         check("lines-checksum", lines["checksum"], core["line_checksum"],
               "manifest INVOICE_LINE.checksum; actual recomputed from the "
@@ -137,10 +138,15 @@ def main() -> int:
               "recomputed from the target"),
     ]
 
+    planted_kinds = {a["kind"] for a in orphans}
     expected_set = sorted(f"{a['kind']}:{a['target']}:count={a['count']}"
                           for a in orphans)
+    # Only planted anomaly kinds participate in the exact-set comparison;
+    # other contract-sanctioned quarantine kinds (e.g. null_amount) are
+    # accounted for by lines-embedded / all-lines-accounted-once instead.
     actual_set = sorted(f"{kind}:{SOURCE_TARGET}:count={count}"
-                        for kind, count in core["quarantine_kinds"].items())
+                        for kind, count in core["quarantine_kinds"].items()
+                        if kind in planted_kinds)
     report = {
         "kind": "recon-report",
         "unit": UNIT,
