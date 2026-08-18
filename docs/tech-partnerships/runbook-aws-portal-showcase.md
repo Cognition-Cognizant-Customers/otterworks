@@ -308,8 +308,10 @@ never compare numbers taken under different profiles, and never quote a
 number that was not measured in this run:
 
 ```bash
-# after-state: through the closed gateway (token via env)
+# after-state: through the closed gateway (token passed explicitly — the
+# tool has no env default, so the monolith run below can never receive it)
 python3 scripts/tp_portal/load_test.py --base-url "$API" \
+  --token "$PORTAL_API_TOKEN" \
   --workers 32 --duration 60 --out load-aws.json
 # before-state: the legacy monolith (load it LAST — saturating it reddens
 # the before-state page, fine as a beat, confusing mid-parity-demo)

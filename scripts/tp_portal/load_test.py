@@ -8,12 +8,12 @@ against the monolith (port 8095) and the deployed gateway so the two result
 sets are comparable; never quote numbers from a run with a different profile.
 
 Usage:
-  # after-state (closed front door: token required)
+  # after-state (closed front door: token required, passed explicitly)
   python3 load_test.py --base-url https://<api-id>.execute-api.us-east-1.amazonaws.com \\
       --token "$(terraform output -raw demo_api_token)" \\
       --workers 32 --duration 60 --out load-aws.json
 
-  # before-state (legacy monolith)
+  # before-state (legacy monolith: no token — it must never receive one)
   python3 load_test.py --base-url http://localhost:8095 \\
       --workers 32 --duration 60 --out load-monolith.json
 """
@@ -22,7 +22,6 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import json
-import os
 import threading
 import time
 import urllib.error
@@ -90,9 +89,9 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--base-url", required=True)
-    p.add_argument("--token", default=os.environ.get("PORTAL_API_TOKEN"),
-                   help="Bearer token for the closed front door "
-                        "(default: env PORTAL_API_TOKEN; omit for the monolith)")
+    p.add_argument("--token",
+                   help="Bearer token for the closed front door (explicit only, "
+                        "so an exported token never leaks to the monolith run)")
     p.add_argument("--workers", type=int, default=32,
                    help="concurrent workers (default 32)")
     p.add_argument("--duration", type=int, default=60,
