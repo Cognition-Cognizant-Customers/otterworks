@@ -91,12 +91,13 @@ def parse_csv_list(raw: str, token_re: re.Pattern) -> list[str] | None:
     return None
 
 
-def quarantine_doc(ns: str, cust_id: str, field: str, raw, reason: str, kind: str) -> dict:
+def quarantine_doc(ns: str, cust_id: str, field: str, raw, reason: str, kind: str,
+                   source_table: str = "OW_BILLING.CUSTOMER_MASTER") -> dict:
     qid = str(uuid.uuid5(QUARANTINE_NAMESPACE, f"{ns}:{cust_id}:{field}"))
     return {
         "_id": qid,
         "ns": ns,
-        "source_table": "OW_BILLING.CUSTOMER_MASTER",
+        "source_table": source_table,
         "source_pk": cust_id,
         "field": field,
         "raw_value": raw,
@@ -226,7 +227,10 @@ def transform_row(ns: str, row: dict, eav: dict[str, list]) -> tuple[dict, list[
         if created is not None:
             entry["recorded_dt"] = created
         elif created_raw:
-            entry["recorded_dt_raw"] = created_raw
+            quarantine.append(quarantine_doc(
+                ns, cust_id, f"CREATED_DT[{attr_name}]", created_raw,
+                f"not a valid DD-MON-YY date: {created_raw!r}", "dirty_dates",
+                source_table="OW_BILLING.ENTITY_ATTR_VALUE"))
         attributes.setdefault(attr_name, []).append(entry)
     if attributes:
         doc["attributes"] = attributes
@@ -308,7 +312,7 @@ def main() -> int:
             quar_ops = []
 
     customers.create_index("tenant_id")
-    customers.create_index("cust_no", unique=True)
+    customers.create_index("cust_no", unique=True, sparse=True)
     quarantine.create_index([("ns", 1), ("anomaly_kind", 1)])
 
     print(f"[migrate] ns={ns} customers={n_docs} eav_rows={n_eav} quarantined={n_quar}")
