@@ -234,20 +234,8 @@ class MongoInvoicesRepository:
         self.collection.update_one(
             {"_id": document_id, "ns": self.ns, "origin": ORIGIN},
             {
-                "$set": {"status": invoice.status},
-                "$setOnInsert": {
-                    "invoice_id": str(invoice.invoice_id),
-                    "tenant_id": str(invoice.tenant_id),
-                    "period_id": str(invoice.period_id),
-                    "issued_at": _at_midnight(invoice.issued_at),
-                },
-            },
-            upsert=True,
-        )
-        self.collection.update_one(
-            {"_id": document_id, "ns": self.ns, "origin": ORIGIN},
-            {
                 "$set": {
+                    "status": invoice.status,
                     "subtotal": Decimal128(invoice.subtotal),
                     "tax": Decimal128(invoice.tax),
                     "total": Decimal128(invoice.total),
@@ -261,8 +249,15 @@ class MongoInvoicesRepository:
                         }
                         for line in invoice.lines
                     ],
-                }
+                },
+                "$setOnInsert": {
+                    "invoice_id": str(invoice.invoice_id),
+                    "tenant_id": str(invoice.tenant_id),
+                    "period_id": str(invoice.period_id),
+                    "issued_at": _at_midnight(invoice.issued_at),
+                },
             },
+            upsert=True,
         )
 
     def find_state(self, invoice_id: UUID) -> dict | None:

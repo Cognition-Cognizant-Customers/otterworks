@@ -312,6 +312,8 @@ def issue_tenant_invoice(
         subscriptions = customers.find_subscriptions(tenant_id)
         events = customers.find_usage_events(tenant_id)
         history = customers.find_rating_history(tenant_id)
+        credit_notes = customers.find_credit_notes(tenant_id)
+        tax_exempt = customers.find_tax_exempt(tenant_id)
         finalized = finalize_rating(
             tenant_id,
             subscriptions,
@@ -320,24 +322,22 @@ def issue_tenant_invoice(
             request.period_start,
             request.period_end,
         )
-        customers.upsert_rating_result(tenant_id, finalized)
         preview = invoice_preview(
             tenant_id,
             subscriptions,
             events,
-            customers.find_rating_history(tenant_id),
-            customers.find_credit_notes(tenant_id),
-            customers.find_tax_exempt(tenant_id),
+            history,
+            credit_notes,
+            tax_exempt,
             request.period_start,
             request.period_end,
         )
         invoice = issue_invoice(
             tenant_id, preview, request.period_start, request.period_end
         )
+        consumptions = consume_credits(credit_notes, invoice.credit_applied)
+        customers.upsert_rating_result(tenant_id, finalized)
         invoices.upsert_issued(invoice)
-        consumptions = consume_credits(
-            customers.find_credit_notes(tenant_id), invoice.credit_applied
-        )
         customers.apply_credit_consumptions(tenant_id, consumptions)
     except (CustomerNotFoundError, SubscriptionNotFoundError) as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
