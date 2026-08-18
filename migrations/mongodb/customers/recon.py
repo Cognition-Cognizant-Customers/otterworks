@@ -19,6 +19,7 @@ import datetime
 import hashlib
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -105,6 +106,9 @@ def main() -> int:
                          "required for a full report.")
     args = ap.parse_args()
     ns = args.ns
+    if not re.fullmatch(r"[A-Za-z0-9_]+", ns):
+        print("NS must match ^[A-Za-z0-9_]+$", file=sys.stderr)
+        return 2
 
     root = Path(__file__).resolve().parents[3]
     manifest_path = Path(args.manifest) if args.manifest else \
