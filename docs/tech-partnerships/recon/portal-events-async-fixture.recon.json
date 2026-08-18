@@ -2,11 +2,11 @@
   "kind": "recon-report",
   "unit": "legacy-portal-events/async-pipeline",
   "namespace": "asyncfixture",
-  "generated_at": "2026-08-18T01:21:20.598886+00:00",
+  "generated_at": "2026-08-18T01:32:07.801298+00:00",
   "run_mode": "fixture",
   "replay_base_url": "http://localhost:9096",
-  "steps_total": 15,
-  "steps_passed": 15,
+  "steps_total": 16,
+  "steps_passed": 16,
   "values_recomputed_from_target": true,
   "idempotency_rerun": {
     "performed": true,
@@ -77,6 +77,14 @@
       "expected": 4.0,
       "actual": 4.0,
       "source_of_truth": "GET /api/feedback/average-rating vs ratingSum/cnt read from the projection table",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "idempotency-duplicate-delivered",
+      "expected": true,
+      "actual": true,
+      "source_of_truth": "consumer processed-counter advanced (fixture) or queue depth observed non-zero then zero (live) \u2014 the no-op claim is void without delivery",
       "result": "pass",
       "mismatches": []
     },

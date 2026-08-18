@@ -403,8 +403,37 @@ def build_and_start_processes(queue_url, pump_stats_file, outage_file):
 # --------------------------------------------------------------------------
 
 
+def observe_duplicate_delivery(sqs, queue_url, processed_counter, before_processed,
+                               timeout=90):
+    """Positive proof the re-sent duplicate was actually delivered to the consumer.
+
+    Queue-depth attributes are eventually consistent, so "depth is zero" right
+    after the send proves nothing. With a consumer-side counter (fixture pump),
+    wait for it to advance; otherwise (live) require the depth to be seen
+    non-zero first and then return to zero.
+    """
+    if processed_counter is not None:
+        return wait_for(
+            "duplicate processed by the consumer",
+            lambda: processed_counter() >= before_processed + 1,
+            timeout=timeout,
+        )
+    seen_in_flight = False
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        depth = queue_depth(sqs, queue_url)
+        if depth > 0:
+            seen_in_flight = True
+        elif seen_in_flight:
+            return True
+        time.sleep(0.5)
+    print("[recon] TIMEOUT: duplicate delivery never observed on the queue",
+          file=sys.stderr)
+    return False
+
+
 def run_green_and_idempotency(checks, api_base_url, sqs, dynamo, queue_url, dlq_url,
-                              stats_table):
+                              stats_table, processed_counter=None):
     # Baseline before submitting: a live estate is long-lived, so all counts
     # are compared as deltas rather than absolute values.
     baseline_markers = count_event_markers(dynamo, stats_table)
@@ -457,8 +486,14 @@ def run_green_and_idempotency(checks, api_base_url, sqs, dynamo, queue_url, dlq_
         }
     )
     before = read_stats(dynamo, stats_table)
+    before_processed = processed_counter() if processed_counter is not None else 0
     sqs.send_message(QueueUrl=queue_url, MessageBody=duplicate_body)
-    wait_for("duplicate consumed", lambda: queue_depth(sqs, queue_url) == 0)
+    delivered = observe_duplicate_delivery(
+        sqs, queue_url, processed_counter, before_processed
+    )
+    check(checks, "idempotency-duplicate-delivered", True, delivered,
+          "consumer processed-counter advanced (fixture) or queue depth observed "
+          "non-zero then zero (live) — the no-op claim is void without delivery")
     time.sleep(2)
     check(checks, "idempotency-duplicate-is-noop", before,
           read_stats(dynamo, stats_table),
@@ -644,9 +679,18 @@ def main():
             "run-of-show, not by this live green-path recon",
         ]
 
+    processed_counter = None
+    if pump_stats_file:
+        def processed_counter():
+            try:
+                return json.loads(Path(pump_stats_file).read_text())["processed"]
+            except (OSError, ValueError, KeyError):
+                return 0
+
     checks = []
     submitted, idempotency = run_green_and_idempotency(
-        checks, api_base_url, sqs, dynamo, queue_url, dlq_url, stats_table
+        checks, api_base_url, sqs, dynamo, queue_url, dlq_url, stats_table,
+        processed_counter=processed_counter,
     )
     poison_sets = {"expected_set": [], "actual_set": [], "missing": [], "unexpected": []}
     if args.run_mode == "fixture":
