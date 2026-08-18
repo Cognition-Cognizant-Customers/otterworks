@@ -94,8 +94,9 @@ def parse_csv_list(raw: str, token_re: re.Pattern) -> list[str] | None:
 
 
 def quarantine_doc(ns: str, cust_id: str, field: str, raw, reason: str, kind: str,
-                   source_table: str = "OW_BILLING.CUSTOMER_MASTER") -> dict:
-    qid = str(uuid.uuid5(QUARANTINE_NAMESPACE, f"{ns}:{cust_id}:{field}"))
+                   source_table: str = "OW_BILLING.CUSTOMER_MASTER",
+                   id_suffix: str = "") -> dict:
+    qid = str(uuid.uuid5(QUARANTINE_NAMESPACE, f"{ns}:{cust_id}:{field}{id_suffix}"))
     return {
         "_id": qid,
         "ns": ns,
@@ -224,7 +225,9 @@ def transform_row(ns: str, row: dict, eav: dict[str, list]) -> tuple[dict, list[
 
     attributes: dict[str, list] = {}
     for eav_id, attr_name, attr_value, attr_type, created_raw in eav.get(cust_id, []):
-        entry = {"type": attr_type}
+        entry: dict = {}
+        if attr_type is not None:
+            entry["type"] = attr_type
         if attr_value is not None:
             entry["value"] = attr_value
         created = parse_legacy_date(created_raw) if created_raw else None
@@ -232,9 +235,10 @@ def transform_row(ns: str, row: dict, eav: dict[str, list]) -> tuple[dict, list[
             entry["recorded_dt"] = created
         elif created_raw:
             quarantine.append(quarantine_doc(
-                ns, cust_id, f"CREATED_DT[{attr_name}#{eav_id}]", created_raw,
+                ns, cust_id, f"CREATED_DT[{attr_name}]", created_raw,
                 f"not a valid DD-MON-YY date: {created_raw!r}", "dirty_dates",
-                source_table="OW_BILLING.ENTITY_ATTR_VALUE"))
+                source_table="OW_BILLING.ENTITY_ATTR_VALUE",
+                id_suffix=f"#{eav_id}"))
         attributes.setdefault(attr_name, []).append(entry)
     if attributes:
         doc["attributes"] = attributes
