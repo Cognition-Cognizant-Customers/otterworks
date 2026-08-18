@@ -75,13 +75,19 @@ def worker(base_url: str, token: str | None, stop_at: float,
         elapsed_ms = (time.monotonic() - start) * 1000
         count += 1
         with lock:
-            latencies.append(elapsed_ms)
             if status == 429:
                 # Gateway/stage throttling is a distinct bucket: it caps the
-                # measurable throughput but is not a service failure.
+                # measurable throughput but is not a service failure, and its
+                # near-instant rejections must not deflate the latency curve.
                 throttled[0] += 1
-            elif status >= 400:
-                failures.append(f"{step['method']} {step['path']}: HTTP {status}")
+            elif status == 0:
+                # Never-connected requests carry no service latency either;
+                # they are already recorded as failures above.
+                pass
+            else:
+                latencies.append(elapsed_ms)
+                if status >= 400:
+                    failures.append(f"{step['method']} {step['path']}: HTTP {status}")
     return count
 
 
@@ -114,6 +120,7 @@ def main() -> None:
 
     wall = time.time() - started
     ordered = sorted(latencies)
+    served = len(ordered)
     error_count = len(failures)
     report = {
         "kind": "load-test-report",
@@ -123,7 +130,9 @@ def main() -> None:
         "duration_seconds": args.duration,
         "request_mix": [f"{s['method']} {s['path']}" for s in REQUEST_MIX],
         "requests": total,
-        "throughput_rps": round(total / wall, 2) if wall else 0,
+        "served_requests": served,
+        "throughput_rps": round(served / wall, 2) if wall else 0,
+        "attempted_rps": round(total / wall, 2) if wall else 0,
         "latency_ms": {
             "p50": round(percentile(ordered, 50), 1),
             "p95": round(percentile(ordered, 95), 1),

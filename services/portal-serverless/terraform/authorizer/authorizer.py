@@ -10,13 +10,16 @@ import os
 
 
 def handler(event, context):
-    expected = os.environ["PORTAL_API_TOKEN"]
+    # Fail closed: a missing/blank expected token (misapply, console edit)
+    # must deny every request, never crash into a 500 or match empty-vs-empty.
+    expected = os.environ.get("PORTAL_API_TOKEN", "")
     supplied = event.get("headers", {}).get("authorization", "")
     prefix, _, token = supplied.partition(" ")
     # Compare as bytes: compare_digest rejects non-ASCII str, and a client
     # header must yield a deny, never an authorizer crash (a 500 at the gate).
     authorized = (
-        prefix == "Bearer"
+        bool(expected)
+        and prefix == "Bearer"
         and bool(token)
         and hmac.compare_digest(token.encode("utf-8"), expected.encode("utf-8"))
     )
