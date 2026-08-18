@@ -11,7 +11,7 @@ DOC_ID = "11111111-1111-4111-8111-111111111111"
 
 @pytest.fixture
 def service():
-    return ShareLinkService(salt="test-salt")
+    return ShareLinkService(secret="test-secret")
 
 
 def test_minted_token_verifies(service):
