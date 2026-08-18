@@ -352,14 +352,24 @@ def utcnow() -> str:
     return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def get_volume_bytes(dbx: Databricks, volume_path: str) -> bytes:
+def get_volume_bytes(dbx: Databricks, volume_path: str) -> bytes | None:
+    """Fetch a volume file's bytes, or None when it does not exist (HTTP error).
+
+    A missing artifact must surface as a failing check in the emitted recon
+    report, never as an unhandled traceback that leaves no report at all.
+    """
+    import urllib.error
     import urllib.request
     quoted = urllib.parse.quote(volume_path, safe="/")
     req = urllib.request.Request(
         dbx.host + f"/api/2.0/fs/files{quoted}",
         headers={"Authorization": f"Bearer {dbx.token}"})
-    with urllib.request.urlopen(req, timeout=120) as response:
-        return response.read()
+    try:
+        with urllib.request.urlopen(req, timeout=120) as response:
+            return response.read()
+    except urllib.error.HTTPError as e:
+        print(f"volume read failed: {volume_path}: HTTP {e.code}", file=sys.stderr)
+        return None
 
 
 def summary_grid(dbx: Databricks, n: dict, report_date: str) -> list[list]:
@@ -435,9 +445,11 @@ def cmd_recon(dbx: Databricks, args) -> int:
         payload = get_volume_bytes(dbx, artifact_path)
         check("artifact/extension-truthful", ".csv", artifact_path[artifact_path.rfind("."):],
               "converted job must not reproduce the CSV-named-.xls defect")
-        check("artifact/sha256-matches-audit", drow[0][2], hashlib.sha256(payload).hexdigest(),
+        check("artifact/sha256-matches-audit", drow[0][2],
+              hashlib.sha256(payload).hexdigest() if payload is not None else "absent (volume read failed)",
               f"{artifact_path} vs {n['delivery']}.artifact_sha256")
-        check("artifact/bytes-equal-golden", golden_bytes.decode(), payload.decode(),
+        check("artifact/bytes-equal-golden", golden_bytes.decode(),
+              payload.decode() if payload is not None else "absent (volume read failed)",
               f"{args.golden} vs {artifact_path}")
         artifact_ok = True
 
@@ -449,7 +461,9 @@ def cmd_recon(dbx: Databricks, args) -> int:
         stamp = args.empty_report_date.replace("-", "")
         empty_path = f"{n['landing']}/reports/finance_billing_{stamp}.csv"
         payload = get_volume_bytes(dbx, empty_path)
-        check("empty-input/header-only-artifact", empty_golden_bytes.decode(), payload.decode(),
+        check("empty-input/header-only-artifact", empty_golden_bytes.decode(),
+              payload.decode() if payload is not None else
+              "absent (volume read failed; was the empty-input batch run?)",
               f"{args.empty_golden} vs {empty_path}")
 
     # Idempotency: actually rerun the job, then compare the summary grid.
