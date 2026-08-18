@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     schema_name: str = "billing_svc"
     database_url: str
     mongodb_uri: str = ""
-    mongodb_db: str = "ow_tp_mongodb_dev"
+    mongodb_db: str = "ow_tp_billing_svc_dev"
     mongodb_ns: str = "dev"
     cors_origins: list[str] = ["http://localhost:3000"]
     allow_internal_reset: bool = False

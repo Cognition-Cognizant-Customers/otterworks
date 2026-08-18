@@ -56,7 +56,7 @@ services:
     environment:
       BILLING_SVC_DATABASE_URL: postgresql://billing_svc:billing_svc@billing-service-db:5432/billing_svc_${NS:-dev}
       BILLING_SVC_MONGODB_URI: mongodb://billing-service-mongo:27017
-      BILLING_SVC_MONGODB_DB: ow_tp_mongodb_${NS:-dev}
+      BILLING_SVC_MONGODB_DB: ow_tp_billing_svc_${NS:-dev}
       BILLING_SVC_MONGODB_NS: ${NS:-dev}
       BILLING_SVC_ALLOW_INTERNAL_RESET: "true"
     ports:
