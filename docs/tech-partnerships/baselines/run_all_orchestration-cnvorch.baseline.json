@@ -1,0 +1,35 @@
+{
+  "unit": "run_all_orchestration",
+  "namespace": "cnvorch",
+  "generated_by": "scripts/tp_dbx/orchestrate.py baseline (deterministic legacy run_all.sh chain: make legacy-etl-gen-data NS=cnvorch; TP_FAKETIME pinned; RUN_ALL_SLEEP=0)",
+  "drop_files": [
+    {
+      "file_name": "CUSTBILL_CNVORCH_001.dat",
+      "bytes": 3430,
+      "sha256": "a34da23670422a441fdf5e3e6886141b689d0044db2ed8044096500874c26d16",
+      "line_count": 52
+    },
+    {
+      "file_name": "CUSTBILL_CNVORCH_002.dat",
+      "bytes": 3430,
+      "sha256": "15962953084acd937f4e9115f2e103f9e169611774a6e02f4f72c10625f52e3c",
+      "line_count": 52
+    }
+  ],
+  "psv_files": {
+    "CUSTBILL_CNVORCH_001.psv": {
+      "rows": 50,
+      "sha256_sorted": "5c82de104946deeb6b23a3dc91d73e5e97f044c4fc0c6988dc5add33d1b441ce"
+    },
+    "CUSTBILL_CNVORCH_002.psv": {
+      "rows": 50,
+      "sha256_sorted": "5293ff3974ca3a23fbc8a6bbdab0cea22e3cbcbfb7d6be3334c8ad5db2e7e507"
+    }
+  },
+  "report_date": "2026-01-15",
+  "report_csv": "Currency,RecordType,RecordCount,TotalAmount\nEUR,INVOICE,35,140667.85\nEUR,CREDIT,12,81064.38\nGBP,INVOICE,24,158882.51\nUSD,INVOICE,24,136691.49\nUSD,CREDIT,5,5160.05\n",
+  "report_csv_sha256": "3f96e78adedf14f3fd4e7aa6c7cac6ccf94d77828a8123a382f6fa5f0efd7ac2",
+  "empty_report_date": "2026-01-14",
+  "empty_report_csv": "Currency,RecordType,RecordCount,TotalAmount\n",
+  "empty_report_csv_sha256": "4cbc4f1506b7f1cc335237cc23573b18944f38c349f11a94d47157ee464671ea"
+}

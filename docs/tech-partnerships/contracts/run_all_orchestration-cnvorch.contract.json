@@ -1,0 +1,49 @@
+{
+  "unit": "run_all_orchestration",
+  "source_artifact_path": "etl/legacy-extra/crontab + etl/legacy-extra/run_all.sh",
+  "target_objects": [
+    "job ow_tp_orchestrate_cnvorch (single dependency-driven workflow: ingest -> parse -> publish_psv -> finance, each downstream task with explicit depends_on; serverless notebook tasks, max_concurrent_runs=1, queued, max_retries=0; weekly Sunday 06:00 UTC schedule modelled but PAUSED, manual run-now is the demo trigger)",
+    "/Volumes/ow_tp/bronze/landing/cnvorch/sftp_ingest_poll/{drop,incoming,archive}",
+    "ow_tp.bronze.custbill_ingest_files_cnvorch",
+    "ow_tp.bronze.custbill_raw_cnvorch",
+    "ow_tp.bronze.custbill_parse_raw_cnvorch",
+    "ow_tp.silver.custbill_parsed_cnvorch",
+    "ow_tp.silver.custbill_parse_quarantine_cnvorch",
+    "/Volumes/ow_tp/bronze/landing/cnvorch/finance_report/{parsed,reports}",
+    "ow_tp.silver.custbill_records_cnvorch",
+    "ow_tp.gold.finance_billing_summary_cnvorch",
+    "ow_tp.gold.finance_report_delivery_cnvorch",
+    "workspace notebooks /Shared/ow_tp/orchestrate_{ingest,parse,publish_psv,finance}_cnvorch"
+  ],
+  "golden_baseline_location": "docs/tech-partnerships/baselines/run_all_orchestration-cnvorch.baseline.json (captured from the deterministic legacy end-to-end chain: make legacy-etl-gen-data NS=cnvorch, then TP_FAKETIME='2026-01-15 00:00:00' RUN_ALL_SLEEP=0 make legacy-etl-run JOB=run_all; empty-input baseline from the same chain on a fresh empty root with TP_FAKETIME='2026-01-14 00:00:00')",
+  "acceptance_checks": [
+    {"id": "orch-01-explicit-dependencies", "description": "The workflow encodes the chain as explicit depends_on edges (ingest -> parse -> publish_psv -> finance). This is the stated replacement for the legacy cron time offsets (*/15 ingest, 5-59/15 parse, 02:10 finance), which encoded an implicit 'hope 5 minutes is enough' dependency: downstream now starts if and only if its upstream task succeeded, never on a clock guess."},
+    {"id": "orch-02-failure-blocks-downstream", "description": "A failed upstream task fails the run and blocks every downstream task with no partial silent progress: run_all.sh's `2>/dev/null || true` per stage and unconditional `exit 0` are retired. Proven live by a chaos-injected parse failure: parse FAILED, publish_psv and finance blocked, silver/gold state byte-identical before and after, run result not SUCCESS."},
+    {"id": "orch-03-no-silent-retries", "description": "Tasks declare max_retries=0 and the job max_concurrent_runs=1 with queueing: a failure surfaces immediately in the run state (the legacy chain had no retry either - it just hid the failure), and overlapping triggers queue instead of racing the way overlapping cron fires did."},
+    {"id": "orch-04-end-to-end-parity", "description": "A full run on the deterministic NS=cnvorch input reproduces the legacy run_all.sh observable end state entirely within the cnvorch slice: staged files byte-identical (sha256), silver reproduces each legacy parsed/*.psv record set (sorted-set sha256 of the reconstructed PSV lines), the published .psv handoff artifacts match the legacy parsed output, and the gold finance grid and emitted CSV artifact equal the legacy report to the cent and byte."},
+    {"id": "orch-05-explicit-handoff", "description": "The publish_psv task is the explicit, verified replacement for the legacy filesystem handoff (parse wrote parsed/*.psv, finance read them 5 cron-minutes later): it renders silver rows back into the exact legacy record bytes and replaces the finance input directory's artifact set, removing stale files so a rerun cannot feed finance dead data."},
+    {"id": "orch-06-idempotent-rerun", "description": "An actual full-workflow rerun over the already-processed state (empty drop) succeeds and leaves every recomputed state check byte-identical: re-poll is a no-op, bronze/silver/quarantine rebuild to the same content, the finance (ns, report_date) slice is replaced not duplicated."},
+    {"id": "orch-07-paused-schedule", "description": "The legacy weekly full-chain cadence (crontab: 0 6 * * 0 run_all.sh) is modelled as a PAUSED quartz schedule (0 0 6 ? * SUN UTC); the demo trigger path is manual run-now. No schedule for the retired per-stage cron offsets exists at all."},
+    {"id": "orch-08-namespace-isolation", "description": "Every object the workflow reads or writes is suffixed/pathed with cnvorch; the sibling units' slices (cnvingest, cnvparse, cnvfinance, demo) and unprefixed shared objects are never touched, and no shared DDL is run."}
+  ],
+  "planted_anomalies": [
+    {"id": "chaos-parse-failure", "description": "A deliberate parse-task failure injected via the chaos job parameter (fails before any write) must fail the run, block publish_psv and finance (UPSTREAM_FAILED/blocked, never run), and leave the end state unchanged - proving the dependency semantics that replace run_all.sh's silent `|| true` progression.", "status": "must-detect"},
+    {"id": "content-level-anomalies", "description": "Invalid calendar dates, non-numeric amounts, trailer count mismatches inside CUSTBILL files.", "status": "coverage_gap", "reason": "Owned by the parse unit's contract (parse_custbill_fixedwidth-cnvparse), whose quarantine SQL this workflow runs verbatim. This unit's deterministic generator input is clean; the recon asserts quarantine_rows=0 so an unexpected content anomaly would surface, but the detection parity itself is the parse unit's evidence."},
+    {"id": "transport-level-anomalies", "description": "Non-matching files and in-flight *.filepart artifacts in the drop area.", "status": "coverage_gap", "reason": "Owned by the ingest unit's contract (sftp_ingest_poll), whose notebook this workflow runs verbatim; this unit plants none and its recon verifies the staged-byte and registration parity of the clean deterministic input."}
+  ],
+  "encoding_policy": {
+    "input_encoding": "unknown mainframe extract, treated as opaque bytes at ingest; parser output and finance input are the 7-bit ASCII the deterministic chain produces",
+    "byte_transparency": "ingest is byte-transparent end-to-end (staged and archived as raw bytes, sha256-verified; raw lines stored as latin-1); parse preserves valid records byte-for-byte (proven via PSV_LINE reconstruction against the legacy .psv); the publish_psv handoff and the finance CSV artifact are byte-compared against the legacy baseline",
+    "invalid_bytes": "cannot fail ingest (latin-1 maps every byte); a genuinely invalid record downstream becomes an explicit quarantine row (parse) or an attributed excluded row (finance), never a silent coercion"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "tolerate-and-attribute",
+    "details": "Record-level policy is inherited unchanged from the composed units, whose code this workflow runs verbatim on the cnvorch slice: ingest is transport-only and attributes raw lines verbatim; parse quarantines invalid fixed-width records with an explicit reason instead of failing open; finance skips-and-counts empty customer ids and attributes-and-excludes malformed amounts/currencies/record types (fields beyond the sixth pipe are ignored, matching the legacy split). NULL or missing values never fail open into a plausible row at any stage."
+  },
+  "empty_input_semantics": {
+    "action": "write-empty-result",
+    "details": "A run over an empty estate (no CUSTBILL*.dat anywhere in the chain) must succeed end-to-end and end in a header-only finance CSV, matching the legacy chain where every glob matched nothing and run_all still 'completed': ingest re-poll is a no-op, parse rewrites the cnvorch bronze/silver/quarantine slice empty (read_files cannot plan over zero files, so the parse task branches explicitly instead of failing), publish_psv clears stale handoff artifacts and leaves the input directory present, and finance writes a header-only .csv artifact byte-identical to the empty-input legacy baseline with zero summary rows for that report date. Verified live on the fresh namespace before any file was landed."
+  },
+  "trigger_granularity": "per-batch"
+}
