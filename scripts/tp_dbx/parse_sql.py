@@ -19,7 +19,7 @@ Legacy parse semantics preserved byte-for-byte on valid records:
 Records the legacy parser silently mishandled become explicit quarantine
 rows instead: invalid_cust_id, nonnumeric_amount, invalid_calendar_date,
 unknown_currency, unknown_record_type (row-level) and
-trailer_count_mismatch (file-level).
+trailer_count_mismatch / unparseable_trailer (file-level).
 """
 from __future__ import annotations
 
@@ -113,8 +113,7 @@ def load_bronze(n: Names) -> str:
       value AS raw_line,
       _metadata.file_modification_time AS file_modification_time,
       current_timestamp() AS ingested_at
-    FROM read_files('{n.drop_dir}', format => 'text', recursiveFileLookup => true)
-    WHERE length(trim(value)) > 0"""
+    FROM read_files('{n.drop_dir}', format => 'text', recursiveFileLookup => true)"""
 
 
 def _body_projection(n: Names) -> str:
@@ -217,7 +216,7 @@ def recon_checks(n: Names) -> str:
       UNION ALL
       SELECT concat('input_sha256/', source_file),
              sha2(concat_ws(char(10), sort_array(collect_list(raw_line))), 256)
-      FROM {n.bronze} GROUP BY source_file
+      FROM {n.bronze} WHERE length(trim(raw_line)) > 0 GROUP BY source_file
       UNION ALL
       SELECT concat('totals/', currency, '/', record_type),
              concat(CAST(count(*) AS STRING), '|', CAST(sum(amount_cents) AS STRING))

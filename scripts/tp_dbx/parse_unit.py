@@ -95,6 +95,11 @@ def cmd_plant(args) -> int:
         raise SystemExit(f"need at least 3 generated drops in {drop}; run make legacy-etl-gen-data NS={n.ns} (NFILES>=3)")
     planted = []
 
+    def _physical(lines: list[str]) -> list[str]:
+        # drop the trailing '' artifact of split('\n') on a newline-terminated
+        # file; every remaining element is a physical line, blank or not
+        return lines[:-1] if lines and lines[-1] == "" else lines
+
     def rewrite(path: Path, mutate) -> None:
         lines = path.read_text().split("\n")
         mutate(lines)
@@ -102,8 +107,8 @@ def cmd_plant(args) -> int:
 
     def body_line_index(lines: list[str], body_row: int) -> int:
         row = 0
-        for i, line in enumerate(lines):
-            if not line or line.startswith(("HDR", "TRL")):
+        for i, line in enumerate(_physical(lines)):
+            if line.startswith(("HDR", "TRL")):
                 continue
             row += 1
             if row == body_row:
@@ -125,7 +130,7 @@ def cmd_plant(args) -> int:
         lines[i] = lines[i][:48] + BAD_AMOUNT_VALUE + lines[i][60:]
 
     def plant_trailer_mismatch(lines: list[str]) -> None:
-        body = sum(1 for l in lines if l and not l.startswith(("HDR", "TRL")))
+        body = sum(1 for l in _physical(lines) if not l.startswith(("HDR", "TRL")))
         for i, line in enumerate(lines):
             if line.startswith("TRL"):
                 lines[i] = "TRL" + f"{body + TRAILER_DELTA:010d}" + line[13:]
@@ -160,8 +165,10 @@ def _is_valid(f: dict) -> bool:
         return False
     if not (len(f["amount_raw"]) == 12 and f["amount_raw"].isdigit()):
         return False
+    d = f["date_raw"]
+    if len(d) != 8 or not d.isdigit():
+        return False
     try:
-        d = f["date_raw"]
         date(int(d[0:4]), int(d[4:6]), int(d[6:8]))
     except ValueError:
         return False
@@ -188,8 +195,11 @@ def cmd_baseline(args) -> int:
 
     for path in done:
         fname = path.name[: -len(".done")]
-        input_lines = [l for l in path.read_text().split("\n") if l.strip()]
-        body = [l for l in input_lines if not l.startswith(("HDR", "TRL"))]
+        raw_lines = path.read_text().split("\n")
+        if raw_lines and raw_lines[-1] == "":
+            raw_lines.pop()
+        input_lines = [l for l in raw_lines if l.strip(" ")]
+        body = [l for l in raw_lines if not l.startswith(("HDR", "TRL"))]
         psv = [l for l in (root / "parsed" / (Path(fname).stem + ".psv")).read_text().split("\n") if l]
         if len(psv) != len(body):
             raise SystemExit(f"{fname}: psv rows {len(psv)} != body rows {len(body)}")
