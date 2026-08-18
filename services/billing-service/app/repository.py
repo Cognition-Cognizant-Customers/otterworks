@@ -92,42 +92,67 @@ class MongoCustomersRepository:
 
     def upsert_rating_result(self, tenant_id: UUID, finalized: FinalizedRating) -> list[dict]:
         document = self._document(tenant_id)
-        history = list(document.get("rating_history", []))
-        period_id = str(finalized.period_id)
-        result_id = str(finalized.result_id)
+        period_start = _at_midnight(finalized.period_start)
         period_end = _at_midnight(finalized.period_end)
-        for entry in history:
-            if entry["period_id"] == period_id:
-                entry["period_end"] = period_end
-        existing = next((entry for entry in history if entry["result_id"] == result_id), None)
-        if existing is not None:
-            existing["used_units"] = finalized.used_units
-            existing["rollover_units"] = finalized.rollover_units
-            existing["billable_units"] = finalized.billable_units
-            existing["overage_amount"] = Decimal128(finalized.overage_amount)
-        else:
-            history.append(
-                {
-                    "result_id": result_id,
-                    "period_id": period_id,
-                    "period_start": _at_midnight(finalized.period_start),
-                    "period_end": period_end,
-                    "subscription_id": str(finalized.subscription_id),
-                    "used_units": finalized.used_units,
-                    "quota_units": finalized.quota_units,
-                    "rollover_units": finalized.rollover_units,
-                    "billable_units": finalized.billable_units,
-                    "overage_amount": Decimal128(finalized.overage_amount),
-                    "created_at": period_end,
-                }
+        for _ in range(2):
+            history = document.get("rating_history", [])
+            existing = next(
+                (
+                    entry
+                    for entry in history
+                    if entry["period_start"].date() == finalized.period_start
+                ),
+                None,
             )
-        self.collection.update_one(
-            {"_id": document["_id"], "ns": self.ns},
-            {"$set": {"rating_history": history}},
-        )
+            if existing is not None:
+                self.collection.update_one(
+                    {"_id": document["_id"], "ns": self.ns},
+                    {
+                        "$set": {
+                            "rating_history.$[entry].period_end": period_end,
+                            "rating_history.$[entry].used_units": finalized.used_units,
+                            "rating_history.$[entry].rollover_units": finalized.rollover_units,
+                            "rating_history.$[entry].billable_units": finalized.billable_units,
+                            "rating_history.$[entry].overage_amount": Decimal128(
+                                finalized.overage_amount
+                            ),
+                        }
+                    },
+                    array_filters=[{"entry.result_id": existing["result_id"]}],
+                )
+                break
+            inserted = self.collection.update_one(
+                {
+                    "_id": document["_id"],
+                    "ns": self.ns,
+                    "rating_history": {
+                        "$not": {"$elemMatch": {"period_start": period_start}}
+                    },
+                },
+                {
+                    "$push": {
+                        "rating_history": {
+                            "result_id": str(finalized.result_id),
+                            "period_id": str(finalized.period_id),
+                            "period_start": period_start,
+                            "period_end": period_end,
+                            "subscription_id": str(finalized.subscription_id),
+                            "used_units": finalized.used_units,
+                            "quota_units": finalized.quota_units,
+                            "rollover_units": finalized.rollover_units,
+                            "billable_units": finalized.billable_units,
+                            "overage_amount": Decimal128(finalized.overage_amount),
+                            "created_at": period_end,
+                        }
+                    }
+                },
+            )
+            if inserted.modified_count == 1:
+                break
+            document = self._document(tenant_id)
         return [
             entry
-            for entry in history
+            for entry in self._document(tenant_id).get("rating_history", [])
             if entry["period_start"].date() == finalized.period_start
         ]
 
