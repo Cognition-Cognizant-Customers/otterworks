@@ -39,7 +39,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import boto3
@@ -419,13 +419,16 @@ def read_pump_stats(path, retries=10, interval=0.2):
 
 
 def observe_duplicate_delivery(sqs, queue_url, processed_counter, before_processed,
-                               timeout=90):
+                               deleted_counter=None, before_deleted=0, timeout=90):
     """Positive proof the re-sent duplicate was actually delivered to the consumer.
 
     Queue-depth attributes are eventually consistent, so "depth is zero" right
     after the send proves nothing. With a consumer-side counter (fixture pump),
-    wait for it to advance; otherwise (live) require the depth to be seen
-    non-zero first and then return to zero.
+    wait for it to advance. Live primary signal is durable — the CloudWatch
+    NumberOfMessagesDeleted sum for the queue advancing past its pre-send
+    baseline (a live event-source mapping consumes within milliseconds, so a
+    sampled instantaneous depth can miss the transient non-zero); the
+    non-zero-then-zero depth transition is kept only as a fast secondary path.
     """
     if processed_counter is not None:
         return wait_for(
@@ -436,19 +439,22 @@ def observe_duplicate_delivery(sqs, queue_url, processed_counter, before_process
     seen_in_flight = False
     deadline = time.time() + timeout
     while time.time() < deadline:
+        if deleted_counter is not None and deleted_counter() >= before_deleted + 1:
+            return True
         depth = queue_depth(sqs, queue_url)
         if depth > 0:
             seen_in_flight = True
         elif seen_in_flight:
             return True
-        time.sleep(0.5)
+        time.sleep(2.0 if deleted_counter is not None else 0.5)
     print("[recon] TIMEOUT: duplicate delivery never observed on the queue",
           file=sys.stderr)
     return False
 
 
 def run_green_and_idempotency(checks, api_base_url, sqs, dynamo, queue_url, dlq_url,
-                              stats_table, processed_counter=None):
+                              stats_table, processed_counter=None,
+                              deleted_counter=None):
     # Baseline before submitting: a live estate is long-lived, so all counts
     # are compared as deltas rather than absolute values.
     baseline_markers = count_event_markers(dynamo, stats_table)
@@ -502,13 +508,20 @@ def run_green_and_idempotency(checks, api_base_url, sqs, dynamo, queue_url, dlq_
     )
     before = read_stats(dynamo, stats_table)
     before_processed = processed_counter() if processed_counter is not None else 0
+    before_deleted = deleted_counter() if deleted_counter is not None else 0
     sqs.send_message(QueueUrl=queue_url, MessageBody=duplicate_body)
     delivered = observe_duplicate_delivery(
-        sqs, queue_url, processed_counter, before_processed
+        sqs, queue_url, processed_counter, before_processed,
+        deleted_counter=deleted_counter, before_deleted=before_deleted,
+        # CloudWatch SQS metrics can lag by ~a minute, so the live window is
+        # wider than the fixture one.
+        timeout=240 if deleted_counter is not None else 90,
     )
     check(checks, "idempotency-duplicate-delivered", True, delivered,
-          "consumer processed-counter advanced (fixture) or queue depth observed "
-          "non-zero then zero (live) — the no-op claim is void without delivery")
+          "consumer processed-counter advanced (fixture) or CloudWatch "
+          "NumberOfMessagesDeleted advanced past its pre-send baseline (live; "
+          "depth transition kept as a fast secondary signal) — the no-op claim "
+          "is void without delivery")
     time.sleep(2)
     check(checks, "idempotency-duplicate-is-noop", before,
           read_stats(dynamo, stats_table),
@@ -701,14 +714,34 @@ def main():
         ]
 
     processed_counter = None
+    deleted_counter = None
     if pump_stats_file:
         def processed_counter():
             return read_pump_stats(pump_stats_file)["processed"]
+    else:
+        # Durable live delivery signal: CloudWatch NumberOfMessagesDeleted for
+        # the main queue over a fixed window; compared as a delta over the
+        # pre-send baseline (both readings use the same window start).
+        cloudwatch = boto3.client("cloudwatch", region_name="us-east-1")
+        queue_name = queue_url.rstrip("/").rsplit("/", 1)[-1]
+        window_start = datetime.now(timezone.utc) - timedelta(minutes=5)
+
+        def deleted_counter():
+            datapoints = cloudwatch.get_metric_statistics(
+                Namespace="AWS/SQS",
+                MetricName="NumberOfMessagesDeleted",
+                Dimensions=[{"Name": "QueueName", "Value": queue_name}],
+                StartTime=window_start,
+                EndTime=datetime.now(timezone.utc),
+                Period=60,
+                Statistics=["Sum"],
+            )["Datapoints"]
+            return int(sum(point["Sum"] for point in datapoints))
 
     checks = []
     submitted, idempotency = run_green_and_idempotency(
         checks, api_base_url, sqs, dynamo, queue_url, dlq_url, stats_table,
-        processed_counter=processed_counter,
+        processed_counter=processed_counter, deleted_counter=deleted_counter,
     )
     poison_sets = {"expected_set": [], "actual_set": [], "missing": [], "unexpected": []}
     if args.run_mode == "fixture":
