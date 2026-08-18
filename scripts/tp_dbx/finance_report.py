@@ -33,6 +33,7 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import re
 import sys
 import urllib.parse
 from decimal import Decimal
@@ -131,7 +132,9 @@ parsed_dir = f"{landing}/{input_subdir}"
 # header-only report). Any other listing failure must abort before the
 # destructive slice DELETE below, like the legacy `opendir(...) || die`.
 try:
-    psv_files = [f for f in dbutils.fs.ls(parsed_dir) if f.name.endswith(".psv")]
+    # Legacy input selection: grep { /^CUSTBILL.*\.psv$/ } readdir(D)
+    psv_files = [f for f in dbutils.fs.ls(parsed_dir)
+                 if f.name.startswith("CUSTBILL") and f.name.endswith(".psv")]
 except Exception as e:
     if "FileNotFoundException" in str(e) or "NOT_FOUND" in str(e).upper():
         psv_files = []
@@ -147,19 +150,24 @@ if psv_files:
            .option("sep", "|").option("header", "false")
            .option("mode", "PERMISSIVE")
            .schema(schema)
-           .load(f"{parsed_dir}/*.psv"))
+           .load(f"{parsed_dir}/CUSTBILL*.psv"))
     raw = raw.selectExpr("*", "_metadata.file_name AS source_file")
     raw.createOrReplaceTempView(f"finance_raw_{ns}")
     # Legacy parity: skip rows with an empty customer id (perl: next if $cust eq "").
-    # Malformed amounts must not fail open into a plausible row: they are counted
-    # and excluded, never coerced to 0 the way perl += would.
+    # Malformed rows must not fail open into a plausible row: rows with an
+    # uncastable amount or a missing/empty currency or record type (truncated
+    # lines) are counted and excluded, never coerced.
     rows_skipped = spark.sql(
         f"SELECT count(*) FROM finance_raw_{ns} WHERE cust_id IS NULL OR cust_id = ''"
     ).collect()[0][0]
+    valid_pred = ("cust_id IS NOT NULL AND cust_id <> '' "
+                  "AND try_cast(amount AS DECIMAL(18,2)) IS NOT NULL "
+                  "AND currency IS NOT NULL AND currency <> '' "
+                  "AND record_type IS NOT NULL AND record_type <> ''")
     rows_attributed = spark.sql(
         f"""SELECT count(*) FROM finance_raw_{ns}
             WHERE cust_id IS NOT NULL AND cust_id <> ''
-              AND try_cast(amount AS DECIMAL(18,2)) IS NULL"""
+              AND NOT ({valid_pred})"""
     ).collect()[0][0]
     spark.sql(f"""
         INSERT INTO {silver}
@@ -168,8 +176,7 @@ if psv_files:
                try_cast(amount AS DECIMAL(18,2)),
                currency, record_type
         FROM finance_raw_{ns}
-        WHERE cust_id IS NOT NULL AND cust_id <> ''
-          AND try_cast(amount AS DECIMAL(18,2)) IS NOT NULL
+        WHERE {valid_pred}
     """)
     rows_loaded = spark.sql(
         f"SELECT count(*) FROM {silver} WHERE ns = '{ns}'"
@@ -298,6 +305,8 @@ def cmd_deploy_job(dbx: Databricks, args) -> int:
 
 def cmd_run_job(dbx: Databricks, args) -> int:
     n = names(args.ns)
+    require_date(args.report_date, "report-date")
+    require_ident(args.subdir, "subdir")
     job = dbx.find_job(n["job"])
     if not job:
         raise SystemExit(f"job {n['job']} not found; run deploy-job first")
@@ -319,6 +328,12 @@ def parse_golden(path: Path) -> dict[str, tuple[int, str]]:
         ccy, rt, cnt, tot = line.split(",")
         out[f"{ccy}/{rt}"] = (int(cnt), tot)
     return out
+
+
+def require_date(value: str, label: str) -> str:
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise SystemExit(f"{label} must be YYYY-MM-DD: {value!r}")
+    return value
 
 
 def utcnow() -> str:
@@ -344,6 +359,10 @@ def summary_grid(dbx: Databricks, n: dict, report_date: str) -> list[list]:
 
 def cmd_recon(dbx: Databricks, args) -> int:
     n = names(args.ns)
+    require_date(args.report_date, "report-date")
+    if args.empty_report_date:
+        require_date(args.empty_report_date, "empty-report-date")
+    require_ident(args.subdir, "subdir")
     golden = parse_golden(Path(args.golden))
     golden_bytes = Path(args.golden).read_bytes()
     empty_golden_bytes = Path(args.empty_golden).read_bytes() if args.empty_golden else None
@@ -418,25 +437,22 @@ def cmd_recon(dbx: Databricks, args) -> int:
 
     # Idempotency: actually rerun the job, then compare the summary grid.
     before = grid
-    rerun_performed = False
-    rerun_ok = False
     job = dbx.find_job(n["job"])
     if not job:
-        check("idempotency/job-exists", n["job"], "absent",
-              "jobs API find by name; rerun could not be performed")
-    else:
-        rerun_performed = True
-        run_id = dbx.run_job(int(job["job_id"]),
-                             {"report_date": args.report_date, "input_subdir": args.subdir})
-        run = dbx.wait_run(run_id)
-        rerun_ok = run.get("state", {}).get("result_state") == "SUCCESS"
-        after = summary_grid(dbx, n, args.report_date)
-        check("idempotency/rerun-grid-identical", before, after,
-              f"jobs run {run_id} rerun then re-read {n['summary']}")
-        dup = dbx.sql_ok(
-            f"SELECT count(*) FROM {n['summary']} WHERE ns='{n['ns']}' "
-            f"AND report_date=DATE'{args.report_date}'").scalar()
-        check("idempotency/no-duplicate-rows", len(golden), int(dup), n["summary"])
+        # The recon schema pins idempotency_rerun.performed to true, so there is
+        # no honest way to emit a report without an actual rerun: fail loudly.
+        raise SystemExit(f"job {n['job']} not found; cannot perform idempotency rerun")
+    run_id = dbx.run_job(int(job["job_id"]),
+                         {"report_date": args.report_date, "input_subdir": args.subdir})
+    run = dbx.wait_run(run_id)
+    rerun_ok = run.get("state", {}).get("result_state") == "SUCCESS"
+    after = summary_grid(dbx, n, args.report_date)
+    check("idempotency/rerun-grid-identical", before, after,
+          f"jobs run {run_id} rerun then re-read {n['summary']}")
+    dup = dbx.sql_ok(
+        f"SELECT count(*) FROM {n['summary']} WHERE ns='{n['ns']}' "
+        f"AND report_date=DATE'{args.report_date}'").scalar()
+    check("idempotency/no-duplicate-rows", len(golden), int(dup), n["summary"])
 
     report = {
         "kind": "recon-report",
@@ -446,7 +462,7 @@ def cmd_recon(dbx: Databricks, args) -> int:
         "run_mode": "live",
         "checks": checks,
         "values_recomputed_from_target": True,
-        "idempotency_rerun": {"performed": rerun_performed, "result": "pass" if rerun_ok else "fail",
+        "idempotency_rerun": {"performed": True, "result": "pass" if rerun_ok else "fail",
                               "evidence": "jobs run-now rerun of ow_tp_finance_%s, summary grid compared before/after" % n["ns"]},
         "planted_anomaly_detections": {"expected_set": [], "actual_set": [], "missing": [], "unexpected": []},
         "unverified_paths": [
@@ -470,7 +486,7 @@ def legacy_aggregate(psv_dir: Path) -> dict[str, tuple[int, str]]:
     """Reference implementation of the legacy aggregation (Decimal, not float)."""
     tot: dict[str, Decimal] = {}
     cnt: dict[str, int] = {}
-    for f in sorted(psv_dir.glob("*.psv")):
+    for f in sorted(psv_dir.glob("CUSTBILL*.psv")):
         for line in f.read_text().splitlines():
             fields = line.split("|")
             if not fields or fields[0] == "":

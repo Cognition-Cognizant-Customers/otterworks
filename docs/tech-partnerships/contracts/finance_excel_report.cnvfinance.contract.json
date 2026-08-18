@@ -29,7 +29,7 @@
   "malformed_record_policy": {
     "extra_delimited_fields": "tolerate-and-attribute",
     "null_attribution": "tolerate-and-attribute",
-    "details": "matching perl's list-assignment from split(/|/), fields beyond the sixth are ignored; rows with an empty/NULL customer id are skipped and counted in the delivery audit (legacy: next if $cust eq '') ; non-numeric amounts are excluded and counted rather than coerced to 0 the way perl += would - NULL or missing values never fail open into a plausible row."
+    "details": "matching perl's list-assignment from split(/|/), fields beyond the sixth are ignored; rows with an empty/NULL customer id are skipped and counted in the delivery audit (legacy: next if $cust eq '') ; non-numeric amounts and truncated lines with a missing/empty currency or record type are excluded and counted in rows_attributed_malformed rather than coerced or grouped under an empty key - NULL or missing values never fail open into a plausible row; input files are selected by the legacy CUSTBILL*.psv filename filter."
   },
   "empty_input_semantics": {
     "action": "write-empty-result",
