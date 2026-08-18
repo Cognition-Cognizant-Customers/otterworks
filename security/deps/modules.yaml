@@ -1,0 +1,80 @@
+# Every JVM module the dependency gate measures.
+#
+# Discovery cross-checks this registry against the build files on disk: a JVM
+# build file that is neither registered here nor listed under `exempt` fails the
+# gate, so a new service cannot be silently left out of a blast-radius report.
+#
+# `java_home` is a candidate list: the first path that exists wins (env vars are
+# expanded, so a CI runner's setup-java export is tried before the image path). If
+# none exist the module is reported unmeasured rather than measured on the wrong
+# JDK. Modules without the key build on the ambient JDK.
+#
+# `tool` is a candidate list too, most-pinned first: a module's checked-in wrapper
+# (which pins the version it is built with everywhere else) before the tool on PATH.
+# The first candidate that can actually start wins, both for the suite and for the
+# dependency tree, and the report names it. A module whose candidates all fail is
+# reported unmeasured. `test` is the arguments appended to the resolved tool.
+modules:
+  # Both Maven modules pin JDK 11: their recorded transcripts include the
+  # ${script:javascript:...} lookup, which only resolves while the JVM still ships
+  # Nashorn (JDK <= 14). Measured on a newer JDK the script case would report a
+  # behavior change that never happened, so an absent JDK 11 must read as unmeasured.
+  - id: report-service
+    path: services/report-service
+    build: maven
+    java_home:
+      - $JAVA_HOME_11_X64
+      - /usr/lib/jvm/java-11-openjdk-amd64
+    # No wrapper in this module; the `mvn` on PATH is what ci.yml uses for it too.
+    test: -B test
+    cases: cases/report-service.json
+
+  - id: legacy-portal
+    path: services/legacy-portal
+    build: maven
+    java_home:
+      - $JAVA_HOME_11_X64
+      - /usr/lib/jvm/java-11-openjdk-amd64
+    # Spring Boot 2.x, and it pins its own Maven (3.9.9) via the wrapper — the same
+    # tool ci.yml builds it with. `mvn` is the fallback for a machine that cannot
+    # reach the wrapper's distribution.
+    tool:
+      - ./mvnw
+      - mvn
+    test: -B test
+    cases: cases/legacy-portal.json
+
+  - id: notification-service
+    path: services/notification-service
+    build: gradle
+    java_home:
+      - $JAVA_HOME_17_X64
+      - /usr/lib/jvm/java-17-openjdk-amd64
+    # No wrapper in this module, so the `gradle` on PATH — which both ci.yml and the
+    # dependency workflow pin to 8.6 with setup-gradle. `--rerun-tasks` because the
+    # suite counts are the evidence: an UP-TO-DATE `:test` would let the harness read
+    # the previous run's XML and present it as a fresh measurement.
+    test: test --rerun-tasks --no-daemon
+    cases: cases/notification-service.json
+
+  - id: auth-service
+    path: services/auth-service
+    build: gradle
+    java_home:
+      - $JAVA_HOME_17_X64
+      - /usr/lib/jvm/java-17-openjdk-amd64
+    # The wrapper pins 8.6 but ships no gradle-wrapper.jar, so it only resolves where
+    # one has been generated; otherwise the pinned `gradle` on PATH measures it.
+    tool:
+      - ./gradlew
+      - gradle
+    test: test --rerun-tasks --no-daemon
+    # No interpolation call path: measured for the dependency tree only. A tree
+    # hit here would still be reported, which is the point of measuring it.
+    cases: null
+
+exempt:
+  - path: frontend/client-app/mobile/android
+    reason: >
+      Capacitor Android shell. Ships no server-side JVM dependencies and needs the
+      Android SDK to resolve, which the build image does not carry.

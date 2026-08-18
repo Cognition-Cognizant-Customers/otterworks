@@ -23,6 +23,7 @@ val coroutinesVersion = "1.8.0"
 val serializationVersion = "1.6.3"
 val koinVersion = "3.5.3"
 val micrometerVersion = "1.12.4"
+val commonsTextVersion = "1.9"
 val logbackVersion = "1.5.3"
 val logstashEncoderVersion = "7.4"
 val kotlinLoggingVersion = "3.0.5"
@@ -53,6 +54,9 @@ dependencies {
     implementation("aws.sdk.kotlin:sns:$awsSdkVersion")
     implementation("aws.sdk.kotlin:ses:$awsSdkVersion")
     implementation("aws.sdk.kotlin:dynamodb:$awsSdkVersion")
+
+    // Notification template interpolation
+    implementation("org.apache.commons:commons-text:$commonsTextVersion")
 
     // Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
@@ -92,4 +96,9 @@ kotlin {
 
 tasks.withType<Test> {
     useJUnit()
+    // Passthrough for the dependency transcript harness (security/deps); without these
+    // properties the emitter test skips itself.
+    listOf("ow.deps.cases", "ow.deps.observed").forEach { key ->
+        System.getProperty(key)?.let { systemProperty(key, it) }
+    }
 }

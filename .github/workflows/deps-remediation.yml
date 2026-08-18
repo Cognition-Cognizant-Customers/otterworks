@@ -1,0 +1,78 @@
+name: Dependency remediation gate
+
+on:
+  push:
+    paths:
+      - "security/deps/**"
+      - "services/report-service/**"
+      - "services/legacy-portal/**"
+      - "services/notification-service/**"
+      - "services/auth-service/**"
+      - "Makefile"
+  pull_request:
+    paths:
+      - "security/deps/**"
+      - "services/report-service/**"
+      - "services/legacy-portal/**"
+      - "services/notification-service/**"
+      - "services/auth-service/**"
+      - "Makefile"
+
+jobs:
+  deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          version: latest
+      # 17 first so $JAVA_HOME_17_X64 exists for the Gradle modules, then 11 as the
+      # ambient JDK the Maven modules build on.
+      - uses: actions/setup-java@8df1039502a15bceb9433410b1a100fbe190c53b # v4
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            11
+      # notification-service ships no Gradle wrapper, so the harness invokes the
+      # `gradle` on PATH — the runner image does not carry one.
+      - uses: gradle/actions/setup-gradle@da187c8e6ffbd3802e00f2477aa5a822b25f2dda # v4.4.4
+        with:
+          # 8.6, matching ci.yml and auth-service's wrapper: the suite counts this job
+          # reports have to come from the toolchain the services are built with.
+          gradle-version: "8.6"
+      - run: uv run --with ruff==0.9.10 ruff check security/deps/harness
+      - run: make deps-inventory
+      - run: make deps-tests
+      # The advisory gate decides which behavioral contract applies, so neither
+      # branch can be skipped: while the vulnerable version is still present the
+      # recorded before-state must reproduce exactly; once it is gone the recorded
+      # contract cases must be unchanged *and* the attack cases must be neutralized.
+      - name: Gate on the advisory, then grade behavior for that state
+        run: |
+          # Invoked through the harness directly, not `make deps-gate`: make reports
+          # any recipe failure as its own exit 2, which would erase the difference
+          # between "vulnerable" (1) and "no verdict reached" (2).
+          deps=$(make -s deps-command)
+          set +e
+          $deps gate
+          gate=$?
+          set -e
+          if [ "$gate" -eq 0 ]; then
+            echo "::notice::no vulnerable version reachable — grading the remediated contract"
+            make deps-transcript
+          elif [ "$gate" -eq 1 ]; then
+            echo "::notice::the vulnerable version is still present (this is the documented" \
+                 "before-state) — grading the recorded baseline transcript instead"
+            make deps-transcript-baseline
+          else
+            # Exit 2 is "no verdict reached" (a tree failed to resolve), never a pass:
+            # grading either contract off an unmeasured estate would invent confidence.
+            echo "::error::the advisory gate was inconclusive (exit $gate); refusing to grade"
+            exit "$gate"
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: dependency-remediation-reports
+          path: security/deps/reports/*.json

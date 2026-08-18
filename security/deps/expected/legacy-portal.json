@@ -1,0 +1,45 @@
+{
+  "module": "legacy-portal",
+  "advisory": "CVE-2022-42889",
+  "artifact": "org.apache.commons:commons-text",
+  "cases_sha256": "ecde5a24ace4f1501d955b9a959d2ba05d07ba3f79095f66900b21fb106cd8ef",
+  "recorded_at": "2026-08-17T22:51:49.397577+00:00",
+  "reason": "baseline: commons-text 1.9 behavior before CVE-2022-42889 remediation",
+  "cases": [
+    {
+      "id": "settings-banner-resolves-keys",
+      "outcome": "ok",
+      "value": "OtterWorks Portal (on-prem) - contact portal-support@otterworks.example"
+    },
+    {
+      "id": "settings-support-contact",
+      "outcome": "ok",
+      "value": "portal-support@otterworks.example"
+    },
+    {
+      "id": "configured-base64",
+      "outcome": "ok",
+      "value": "INTERNAL"
+    },
+    {
+      "id": "configured-sys-property",
+      "outcome": "ok",
+      "value": "sep=/"
+    },
+    {
+      "id": "configured-file-lookup",
+      "outcome": "ok",
+      "value": "portal-banner-from-file"
+    },
+    {
+      "id": "script-lookup-stays-unresolved",
+      "outcome": "ok",
+      "value": "${script:javascript:3+4}"
+    },
+    {
+      "id": "url-lookup-stays-unresolved",
+      "outcome": "ok",
+      "value": "${url:UTF-8:http://127.0.0.1:1/otterworks}"
+    }
+  ]
+}

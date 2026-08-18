@@ -1,0 +1,57 @@
+{
+  "module": "legacy-portal",
+  "notes": [
+    "Commons Text reaches this module transitively, through Commons Configuration's",
+    "interpolator. The cases therefore go through the settings file / interpolator",
+    "rather than a StringSubstitutor the service constructs itself.",
+    "Commons Configuration already dropped script:/dns:/url: from its default lookup",
+    "set (CVE-2022-33980, fixed in 2.8.0), so those are recorded as contract cases:",
+    "they must stay unresolved, which catches a regression in either dependency.",
+    "policy=contract: byte-identical before and after remediation."
+  ],
+  "cases": [
+    {
+      "id": "settings-banner-resolves-keys",
+      "policy": "contract",
+      "kind": "settings-key",
+      "key": "portal.banner"
+    },
+    {
+      "id": "settings-support-contact",
+      "policy": "contract",
+      "kind": "settings-key",
+      "key": "portal.support"
+    },
+    {
+      "id": "configured-base64",
+      "policy": "contract",
+      "kind": "configured",
+      "template": "${base64Decoder:SU5URVJOQUw=}"
+    },
+    {
+      "id": "configured-sys-property",
+      "policy": "contract",
+      "kind": "configured",
+      "template": "sep=${sys:file.separator}"
+    },
+    {
+      "id": "configured-file-lookup",
+      "policy": "contract",
+      "kind": "configured",
+      "template": "${file:UTF-8:@FIXTURE_PATH@}",
+      "fixture_content": "portal-banner-from-file"
+    },
+    {
+      "id": "script-lookup-stays-unresolved",
+      "policy": "contract",
+      "kind": "configured",
+      "template": "${script:javascript:3+4}"
+    },
+    {
+      "id": "url-lookup-stays-unresolved",
+      "policy": "contract",
+      "kind": "configured",
+      "template": "${url:UTF-8:http://127.0.0.1:1/otterworks}"
+    }
+  ]
+}

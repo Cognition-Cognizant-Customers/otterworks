@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test
+.PHONY: help infra-up infra-down up down build test test-coverage test-api-flows test-api-flows-collect lint deploy-dev teardown-dev seed wait-for-db security-scan test-report build-report testdata-validate testdata-clean testdata-setup-schema batch-usage-rollup batch-usage-rollup-seed dev-backend dev-web dev-admin dev-android dev-electron dast-list dast-scan dast-verify dast-baseline dast-zap procs-validate procs-up procs-down procs-record procs-list procs-parity procs-rules-gate insurance-up insurance-down insurance-test deps-inventory deps-gate deps-command deps-transcript deps-transcript-baseline deps-tests deps-record
 
 SHELL := /bin/bash
 
@@ -334,6 +334,37 @@ dast-zap: ## Run the OWASP ZAP baseline sweep and merge it into the DAST report
 		     "missing from this run. Running the probe suite on its own."; \
 		$(DAST) --target $(DAST_TARGET); \
 	fi
+
+# --- Dependency CVE remediation ---
+#
+# The advisory (security/deps/advisory.yaml) names the artifact and its vulnerable
+# range; modules.yaml registers every JVM module so the blast radius cannot be
+# partial. Reports land in security/deps/reports/ (git-ignored: collect them as CI
+# artifacts and paste the summary into the PR).
+
+DEPS := uv run --with pyyaml==6.0.2 --with tabulate==0.10.0 security/deps/harness/deps_check.py
+
+deps-inventory: ## Report the blast radius of the advisory across every JVM module
+	$(DEPS) inventory
+
+deps-gate: ## Fail if the vulnerable version is still reachable from any dependency tree
+	$(DEPS) gate
+
+deps-command: ## Print the harness invocation, for callers that need its exact exit code
+	@echo '$(DEPS)'
+
+deps-tests: ## Build and run every affected module's own suite (MODULE=<id> optional)
+	$(DEPS) tests $(if $(MODULE),--module $(MODULE),)
+
+deps-transcript: ## Grade interpolation behavior after remediation (MODULE=<id> optional)
+	$(DEPS) transcript --stage remediated $(if $(MODULE),--module $(MODULE),)
+
+deps-transcript-baseline: ## Prove the recorded before-state still reproduces (MODULE=<id> optional)
+	$(DEPS) transcript --stage baseline $(if $(MODULE),--module $(MODULE),)
+
+deps-record: ## Record the transcripts as the reference evidence (REASON="..." required)
+	@test -n "$(REASON)" || (echo 'REASON is required, e.g. make deps-record REASON="baseline on commons-text 1.9"' >&2; exit 2)
+	$(DEPS) transcript --record --reason "$(REASON)" $(if $(MODULE),--module $(MODULE),) $(if $(ALLOW_RERECORD),--allow-rerecord,)
 
 test-report: ## Run report-service tests only
 	cd services/report-service && mvn test

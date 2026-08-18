@@ -27,6 +27,8 @@
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- Commons Configuration 2.8.0 — portal settings file with interpolation -->
+        <commons-configuration2.version>2.8.0</commons-configuration2.version>
     </properties>
 
     <dependencies>
@@ -45,6 +47,19 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- Portal branding/settings file with interpolation -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-configuration2</artifactId>
+            <version>${commons-configuration2.version}</version>
+        </dependency>
+        <!-- Required at runtime by the Commons Configuration builder API -->
+        <dependency>
+            <groupId>commons-beanutils</groupId>
+            <artifactId>commons-beanutils</artifactId>
+            <version>1.11.0</version>
         </dependency>
 
         <!-- Embedded DB used by the default profile, run-onprem.sh, and tests. -->

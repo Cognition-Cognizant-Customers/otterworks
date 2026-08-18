@@ -1,0 +1,86 @@
+{
+  "module": "report-service",
+  "notes": [
+    "policy=contract: the value must be byte-identical before and after remediation.",
+    "policy=attack: the lookup must stop resolving after remediation, and the",
+    "template text named by attack_marker must survive literally in the output.",
+    "Every case is reproducible from this file alone: fixture_content materialises",
+    "the only file a case touches, so no per-case setup exists outside the replay."
+  ],
+  "cases": [
+    {
+      "id": "banner-title",
+      "policy": "contract",
+      "kind": "banner",
+      "template": "# OtterWorks Report: ${reportName}",
+      "vars": { "reportName": "Quarterly Usage" }
+    },
+    {
+      "id": "banner-period",
+      "policy": "contract",
+      "kind": "banner",
+      "template": "# Period: ${periodFrom} to ${periodTo}",
+      "vars": { "periodFrom": "2026-01-01", "periodTo": "2026-03-31" }
+    },
+    {
+      "id": "banner-rows",
+      "policy": "contract",
+      "kind": "banner",
+      "template": "# Rows: ${rows}",
+      "vars": { "rows": "42" }
+    },
+    {
+      "id": "banner-undefined-variable-rejected",
+      "policy": "contract",
+      "kind": "banner",
+      "template": "# ${notProvided}",
+      "vars": {}
+    },
+    {
+      "id": "footer-base64-and-const",
+      "policy": "contract",
+      "kind": "configured",
+      "template": "# ${base64Decoder:R2VuZXJhdGVkIGJ5IE90dGVyV29ya3MgUmVwb3J0aW5n} | ${const:com.otterworks.report.service.ReportHeaderRenderer.CLASSIFICATION}"
+    },
+    {
+      "id": "configured-sys-property",
+      "policy": "contract",
+      "kind": "configured",
+      "template": "sep=${sys:file.separator}"
+    },
+    {
+      "id": "configured-url-decoder",
+      "policy": "contract",
+      "kind": "configured",
+      "template": "${urlDecoder:report%20name}"
+    },
+    {
+      "id": "configured-file-lookup",
+      "policy": "contract",
+      "kind": "configured",
+      "template": "${file:UTF-8:@FIXTURE_PATH@}",
+      "fixture_content": "banner-from-file"
+    },
+    {
+      "id": "attack-script-lookup",
+      "policy": "attack",
+      "kind": "configured",
+      "template": "${script:javascript:3+4}",
+      "attack_marker": "${script:javascript:3+4}"
+    },
+    {
+      "id": "attack-dns-lookup",
+      "policy": "attack",
+      "kind": "configured",
+      "template": "${dns:address|127.0.0.1}",
+      "attack_marker": "${dns:address|127.0.0.1}"
+    },
+    {
+      "id": "attack-url-lookup",
+      "policy": "attack",
+      "kind": "configured",
+      "template": "${url:UTF-8:http://127.0.0.1:1/otterworks}",
+      "attack_marker": "${url:UTF-8:http://127.0.0.1:1/otterworks}"
+    }
+  ]
+}
