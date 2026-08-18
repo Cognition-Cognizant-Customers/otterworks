@@ -6,6 +6,7 @@ Exports are rendered to disk by the export worker under ``EXPORT_ARCHIVE_DIR``
 
 from __future__ import annotations
 
+import errno
 import os
 
 import structlog
@@ -27,9 +28,15 @@ class ExportArchive:
         """Return the contents of the named export.
 
         ``name`` may include a subdirectory (``"reports/q3.md"``). Raises
-        ``FileNotFoundError`` when the export does not exist.
+        ``FileNotFoundError`` when the export does not exist or when the name
+        resolves outside the archive root.
         """
         path = os.path.join(self.base_dir, name)
+        root = os.path.realpath(self.base_dir)
+        resolved = os.path.realpath(path)
+        if resolved != root and not resolved.startswith(root + os.sep):
+            logger.warning("export_read_outside_archive", name=name)
+            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), path)
         logger.debug("export_read", name=name)
         with open(path, encoding="utf-8") as handle:
             return handle.read()
