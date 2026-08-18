@@ -27,12 +27,21 @@ resource "aws_sns_topic_policy" "budget_alerts" {
       Principal = { Service = "budgets.amazonaws.com" }
       Action    = "SNS:Publish"
       Resource  = aws_sns_topic.budget_alerts[0].arn
+      Condition = {
+        StringEquals = {
+          "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+        }
+      }
     }]
   })
 }
 
 resource "aws_budgets_budget" "estate" {
   count = var.enable_budget_guardrail ? 1 : 0
+
+  # Budgets validates SNS publish permission when the notification subscriber
+  # is created, so the topic policy must exist first.
+  depends_on = [aws_sns_topic_policy.budget_alerts]
 
   name         = "${local.prefix}-monthly"
   budget_type  = "COST"
