@@ -21,7 +21,8 @@ val awsSdkVersion = "1.0.70"
 val coroutinesVersion = "1.8.0"
 val koinVersion = "3.5.3"
 val micrometerVersion = "1.12.4"
-val commonsTextVersion = "1.9"
+// Nearest release outside the CVE-2022-42889 range [1.5, 1.10.0).
+val commonsTextVersion = "1.10.0"
 
 dependencies {
     // Ktor Server

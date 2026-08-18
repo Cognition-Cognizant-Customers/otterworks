@@ -55,6 +55,16 @@
             <artifactId>commons-configuration2</artifactId>
             <version>${commons-configuration2.version}</version>
         </dependency>
+        <!-- Explicit pin over the transitive commons-text 1.9 that
+             commons-configuration2 2.8.0 pulls in: 1.10.0 is the nearest release
+             outside the CVE-2022-42889 range [1.5, 1.10.0). Remove this pin once
+             commons-configuration2 is moved to >= 2.9.0, which depends on a fixed
+             commons-text itself. -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-text</artifactId>
+            <version>1.10.0</version>
+        </dependency>
         <!-- Required at runtime by the Commons Configuration builder API -->
         <dependency>
             <groupId>commons-beanutils</groupId>
