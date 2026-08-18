@@ -2,16 +2,16 @@
   "kind": "recon-report",
   "unit": "legacy-portal-events/async-pipeline",
   "namespace": "asyncfixture",
-  "generated_at": "2026-08-18T01:54:10.559616+00:00",
+  "generated_at": "2026-08-18T02:03:56.307749+00:00",
   "run_mode": "fixture",
   "replay_base_url": "http://localhost:9096",
-  "steps_total": 16,
-  "steps_passed": 16,
+  "steps_total": 17,
+  "steps_passed": 17,
   "values_recomputed_from_target": true,
   "idempotency_rerun": {
     "performed": true,
     "result": "pass",
-    "evidence": "event 599c000c-c3f3-5c46-bf20-054e793ad223 re-delivered to the main queue after being applied; cnt/ratingSum unchanged and the DLQ stayed empty",
+    "evidence": "event 599c000c-c3f3-5c46-bf20-054e793ad223 re-delivered to the main queue after being applied; delivery positively observed, cnt/ratingSum unchanged, DLQ depth 0 after re-delivery",
     "rerun_failures": []
   },
   "pre_pr_self_check": {
@@ -99,6 +99,14 @@
         "ratingSum": 12
       },
       "source_of_truth": "stats row compared before/after re-delivering an applied event to the queue",
+      "result": "pass",
+      "mismatches": []
+    },
+    {
+      "id": "idempotency-dlq-still-empty",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "sqs GetQueueAttributes on the DLQ after the duplicate re-delivery",
       "result": "pass",
       "mismatches": []
     },

@@ -513,12 +513,18 @@ def run_green_and_idempotency(checks, api_base_url, sqs, dynamo, queue_url, dlq_
     check(checks, "idempotency-duplicate-is-noop", before,
           read_stats(dynamo, stats_table),
           "stats row compared before/after re-delivering an applied event to the queue")
+    dlq_after = queue_depth(sqs, dlq_url)
+    check(checks, "idempotency-dlq-still-empty", 0, dlq_after,
+          "sqs GetQueueAttributes on the DLQ after the duplicate re-delivery")
+    idempotency_checks = [c for c in checks if c["id"].startswith("idempotency-")]
     idempotency = {
         "performed": True,
-        "result": checks[-1]["result"],
+        "result": "pass" if all(c["result"] == "pass" for c in idempotency_checks)
+        else "fail",
         "evidence": f"event {event_id(first['id'])} re-delivered to the main queue after "
-        "being applied; cnt/ratingSum unchanged and the DLQ stayed empty",
-        "rerun_failures": checks[-1]["mismatches"],
+        "being applied; delivery positively observed, cnt/ratingSum unchanged, "
+        f"DLQ depth {dlq_after} after re-delivery",
+        "rerun_failures": [m for c in idempotency_checks for m in c["mismatches"]],
     }
     return submitted, idempotency
 
