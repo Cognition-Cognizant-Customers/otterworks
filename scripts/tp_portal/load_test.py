@@ -49,7 +49,8 @@ def percentile(sorted_values: list[float], pct: float) -> float:
 
 
 def worker(base_url: str, token: str | None, stop_at: float,
-           latencies: list[float], failures: list[str], lock: threading.Lock) -> int:
+           latencies: list[float], failures: list[str], throttled: list[int],
+           lock: threading.Lock) -> int:
     count = 0
     i = 0
     while time.monotonic() < stop_at:
@@ -76,7 +77,11 @@ def worker(base_url: str, token: str | None, stop_at: float,
         count += 1
         with lock:
             latencies.append(elapsed_ms)
-            if status >= 400:
+            if status == 429:
+                # Gateway/stage throttling is a distinct bucket: it caps the
+                # measurable throughput but is not a service failure.
+                throttled[0] += 1
+            elif status >= 400:
                 failures.append(f"{step['method']} {step['path']}: HTTP {status}")
     return count
 
@@ -97,13 +102,14 @@ def main() -> None:
 
     latencies: list[float] = []
     failures: list[str] = []
+    throttled = [0]
     lock = threading.Lock()
     started = time.time()
     stop_at = time.monotonic() + args.duration
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
         futures = [pool.submit(worker, args.base_url, args.token, stop_at,
-                               latencies, failures, lock)
+                               latencies, failures, throttled, lock)
                    for _ in range(args.workers)]
         total = sum(f.result() for f in futures)
 
@@ -127,6 +133,8 @@ def main() -> None:
         },
         "errors": error_count,
         "error_rate": round(error_count / total, 4) if total else 0,
+        "throttled_429": throttled[0],
+        "throttled_rate": round(throttled[0] / total, 4) if total else 0,
         "error_sample": sorted(set(failures))[:10],
     }
     body = json.dumps(report, indent=2)

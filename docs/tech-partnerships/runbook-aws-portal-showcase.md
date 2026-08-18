@@ -318,7 +318,15 @@ python3 scripts/tp_portal/load_test.py --base-url http://localhost:8095 \
   --workers 32 --duration 60 --out load-monolith.json
 ```
 
-Each report carries p50/p95/p99, error rate, and throughput. The narrative
+The gateway stage throttles at 100 req/s steady / 50 burst by default —
+below what 32 workers generate — so either raise it for the load window
+(`-var stage_throttling_rate_limit=1000 -var stage_throttling_burst_limit=500`,
+restore after) or read the report's separate `throttled_429` bucket honestly:
+429s are the stage cap, not service errors, and they bound the measured
+throughput.
+
+Each report carries p50/p95/p99, error rate, throttled-429 count, and
+throughput. The narrative
 is the curve shape: the monolith's single process climbs and errors past its
 thread pool; the estate scales out flat (confirm with Lambda
 ConcurrentExecutions / Duration and gateway Count / Latency for the window).

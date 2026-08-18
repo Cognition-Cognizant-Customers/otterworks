@@ -59,6 +59,18 @@ variable "waf_rate_limit" {
   default     = 300
 }
 
+variable "stage_throttling_rate_limit" {
+  description = "API Gateway stage steady-state throttle (requests/second). Raise for the load-proof beat so the pinned profile measures the services, not the stage cap; excess traffic returns 429 (reported as its own bucket by load_test.py)."
+  type        = number
+  default     = 100
+}
+
+variable "stage_throttling_burst_limit" {
+  description = "API Gateway stage burst throttle."
+  type        = number
+  default     = 50
+}
+
 variable "lambda_memory_mb" {
   description = "Memory size for the portal Lambdas."
   type        = number

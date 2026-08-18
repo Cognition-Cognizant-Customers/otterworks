@@ -5,9 +5,10 @@ Serves services/portal-serverless/demo-ui/ and proxies /api/* and /health to the
 legacy monolith, so the before-state act needs no CORS changes to legacy code:
 the page and the API share one origin.
 
-When the target is the closed (authorizer-guarded) API, --token (or env
-PORTAL_API_TOKEN) attaches "Authorization: Bearer <token>" to proxied
-requests that do not already carry one.
+When the target is the closed (authorizer-guarded) API, an explicit --token
+attaches "Authorization: Bearer <token>" to proxied requests that do not
+already carry one. There is deliberately no env-var default: an exported
+PORTAL_API_TOKEN must never leak to a non-API --target (e.g. the monolith).
 
 Usage:
   demo_server.py [--port 8000] [--target http://localhost:8095] [--token ...]
@@ -98,9 +99,9 @@ def main():
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--target", default="http://localhost:8095",
                         help="Monolith base URL to proxy /api/* and /health to")
-    parser.add_argument("--token", default=os.environ.get("PORTAL_API_TOKEN"),
+    parser.add_argument("--token",
                         help="Bearer token attached to proxied requests "
-                             "(default: env PORTAL_API_TOKEN)")
+                             "(explicit only; pass it when --target is the closed API)")
     args = parser.parse_args()
     server = http.server.ThreadingHTTPServer(("127.0.0.1", args.port),
                                              make_handler(args.target, args.token))

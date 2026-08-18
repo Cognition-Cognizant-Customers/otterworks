@@ -365,6 +365,9 @@ def build_and_start_processes(queue_url, pump_stats_file, outage_file):
         ["java", "-cp", classpath, "PortalFixtureShim"],
         env={
             **os.environ,
+            # The shim's front door activates on PORTAL_API_TOKEN; this recon
+            # issues unauthenticated requests, so neutralize any exported token.
+            "PORTAL_API_TOKEN": "",
             "FIXTURE_PORT": str(FIXTURE_PORT),
             "DYNAMO_ENDPOINT": FIXTURE_ENDPOINT,
             "TABLE_PREFIX": FIXTURE_PREFIX,
