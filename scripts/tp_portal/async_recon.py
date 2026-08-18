@@ -159,20 +159,18 @@ def discard_dlq_message(sqs, dlq_url, identity, timeout=60):
     """Operator discard of an inspected poison message (recorded in the report).
 
     Bounded: non-matching messages are made visible again, so an absent target
-    would otherwise be re-received forever; stop after a full pass with nothing
-    new (by MessageId) or when the deadline lapses, and report failure.
+    would otherwise be re-received forever; stop after several consecutive
+    polls that yield nothing new (by MessageId — a single receive only samples
+    a subset of SQS servers) or when the deadline lapses, and report failure.
     """
     seen_ids = set()
+    unproductive_polls = 0
     deadline = time.time() + timeout
     while time.time() < deadline:
         response = sqs.receive_message(
             QueueUrl=dlq_url, MaxNumberOfMessages=10, WaitTimeSeconds=1
         )
         messages = response.get("Messages", [])
-        if not messages:
-            # Empty receives are only a sample; keep polling until the deadline
-            # or until a full pass shows nothing new.
-            continue
         new_ids = {m["MessageId"] for m in messages} - seen_ids
         for message in messages:
             if message_identity(message["Body"]) == identity:
@@ -186,7 +184,8 @@ def discard_dlq_message(sqs, dlq_url, identity, timeout=60):
                 ReceiptHandle=message["ReceiptHandle"],
                 VisibilityTimeout=0,
             )
-        if not new_ids:
+        unproductive_polls = 0 if new_ids else unproductive_polls + 1
+        if unproductive_polls >= 3:
             return False
     print(f"[recon] TIMEOUT discarding DLQ message {identity}", file=sys.stderr)
     return False
