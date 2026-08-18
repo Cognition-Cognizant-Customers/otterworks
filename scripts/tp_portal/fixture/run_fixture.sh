@@ -52,10 +52,8 @@ for context, (key, key_type) in tables.items():
     print(f"created {name}")
 EOF
 
-if [ ! -f "${SERVERLESS_DIR}/announcements-service/target/announcements-service.jar" ]; then
-  echo "[fixture] building Lambda jars..."
-  (cd "${SERVERLESS_DIR}" && mvn -B -q package)
-fi
+echo "[fixture] building Lambda jars..."
+(cd "${SERVERLESS_DIR}" && mvn -B -q package)
 
 CLASSPATH="${SERVERLESS_DIR}/announcements-service/target/announcements-service.jar"
 CLASSPATH="${CLASSPATH}:${SERVERLESS_DIR}/preferences-service/target/preferences-service.jar"
