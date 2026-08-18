@@ -94,8 +94,54 @@ modules:
             rating_result:
               json_path: "$.rating_result"
   invoicing:
-    status: pending
-    entrypoints: {}
+    status: extracted
+    entrypoints:
+      billing.fn_invoice_preview:
+        method: GET
+        path: /api/tenants/{tenant_id}/invoice-preview
+        inputs:
+          path:
+            tenant_id: tenant_id
+          query:
+            period_start: period_start
+            period_end: period_end
+        response:
+          business_fields:
+            line_numbers: {json_path: "$[*].line_no", type: integer, collect: true}
+            line_types: {json_path: "$[*].line_type", type: text, collect: true}
+            amounts: {json_path: "$[*].amount", type: decimal, collect: true}
+            tax_amount: {json_path: "$[*].tax_amount", type: decimal, collect: true}
+            totals: {json_path: "$[*].total", type: decimal, collect: true}
+      billing.sp_issue_invoice:
+        method: POST
+        path: /api/tenants/{tenant_id}/invoice-issuance
+        inputs:
+          path:
+            tenant_id: tenant_id
+          body:
+            period_start: period_start
+            period_end: period_end
+        response:
+          business_fields:
+            status: {json_path: "$.status", type: text}
+            tax: {json_path: "$.tax", type: decimal}
+            total: {json_path: "$.total", type: decimal}
+            credit_ids: {json_path: "$.credit_notes[*].credit_note_id", type: text, collect: true}
+            issued_on: {json_path: "$.credit_notes[*].issued_on", type: date, collect: true}
+            remaining: {json_path: "$.credit_notes[*].remaining_amount", type: decimal, collect: true}
+          probes:
+            invoice_state:
+              json_path: "$.invoice_state"
+      billing.fn_invoice_lines:
+        method: GET
+        path: /api/invoices/{invoice_id}/lines
+        inputs:
+          path:
+            invoice_id: invoice_id
+        response:
+          business_fields:
+            line_types: {json_path: "$[*].line_type", type: text, collect: true}
+            amounts: {json_path: "$[*].amount", type: decimal, collect: true}
   dunning:
     status: pending
     entrypoints: {}

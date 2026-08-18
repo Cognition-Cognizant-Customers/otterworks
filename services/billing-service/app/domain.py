@@ -15,12 +15,18 @@ SECOND_TIER_MULTIPLIER = Decimal("1.5")
 ROLLOVER_WINDOW_MONTHS = 3
 ROLLOVER_CAP_MULTIPLIER = 2
 
+TAX_RATE = Decimal("0.0825")
+
 TWO_PLACES = Decimal("0.01")
 WHOLE = Decimal("1")
 
 
 class NullUsageUnitsError(ValueError):
     """A usage event has no units value; rating must fail closed."""
+
+
+class NullAmountError(ValueError):
+    """A stored money amount is missing; invoicing must fail closed."""
 
 
 class SubscriptionNotFoundError(LookupError):
@@ -134,6 +140,8 @@ def change_plan(
 class RatedPlan:
     included_units: int
     overage_rate: Decimal
+    code: str = ""
+    monthly_fee: Decimal = Decimal("0")
 
 
 @dataclass(frozen=True)
@@ -305,6 +313,173 @@ def usage_summary(
 
 def _md5_uuid(value: str) -> UUID:
     return UUID(hex=hashlib.md5(value.encode()).hexdigest())
+
+
+@dataclass(frozen=True)
+class CreditNote:
+    credit_note_id: UUID
+    issued_on: date | None
+    remaining_amount: Decimal | None
+
+
+def credit_note_order(note: CreditNote) -> tuple[bool, date, UUID]:
+    return (note.issued_on is None, note.issued_on or date.min, note.credit_note_id)
+
+
+@dataclass(frozen=True)
+class InvoicePreviewLine:
+    line_no: int
+    line_type: str
+    description: str
+    amount: Decimal
+    tax_amount: Decimal
+    credit_applied: Decimal
+    total: Decimal
+
+
+@dataclass(frozen=True)
+class InvoiceLineRecord:
+    line_id: UUID
+    line_no: int
+    line_type: str
+    description: str
+    amount: Decimal
+
+
+@dataclass(frozen=True)
+class CreditConsumption:
+    credit_note_id: UUID
+    remaining_amount: Decimal
+
+
+@dataclass(frozen=True)
+class IssuedInvoice:
+    invoice_id: UUID
+    period_id: UUID
+    tenant_id: UUID
+    issued_at: date
+    subtotal: Decimal
+    tax: Decimal
+    total: Decimal
+    status: str
+    lines: list[InvoiceLineRecord]
+    credit_applied: Decimal
+
+
+def _available_credit(credit_notes: list[CreditNote]) -> Decimal:
+    total = Decimal("0")
+    for note in credit_notes:
+        if note.remaining_amount is None:
+            raise NullAmountError(
+                f"credit note {note.credit_note_id} has no remaining amount"
+            )
+        if note.remaining_amount > 0:
+            total += note.remaining_amount
+    return total
+
+
+def invoice_preview(
+    tenant_id: UUID,
+    subscriptions: list[RatedSubscription],
+    events: list[UsageEvent],
+    history: list[RatingHistoryEntry],
+    credit_notes: list[CreditNote],
+    tax_exempt: bool,
+    period_start: date,
+    period_end: date,
+) -> list[InvoicePreviewLine]:
+    subscription = current_subscription(subscriptions, period_start, period_end)
+    plan = subscription.plan
+    rating = usage_rating(
+        tenant_id, subscriptions, events, history, period_start, period_end
+    )
+    credit = _available_credit(credit_notes)
+    tax = (
+        Decimal("0")
+        if tax_exempt
+        else (plan.monthly_fee + rating.overage_amount) * TAX_RATE
+    )
+    fee = _round_half_up(plan.monthly_fee, TWO_PLACES)
+    overage = _round_half_up(rating.overage_amount, TWO_PLACES)
+    applied = min(
+        credit,
+        _round_half_up(plan.monthly_fee + rating.overage_amount + tax, TWO_PLACES),
+    )
+    zero = Decimal("0")
+    return [
+        InvoicePreviewLine(1, "plan", plan.code, fee, zero, zero, fee),
+        InvoicePreviewLine(2, "usage", "usage overage", overage, zero, zero, overage),
+        InvoicePreviewLine(3, "tax", "regional tax", tax / 2, zero, zero, tax / 2),
+        InvoicePreviewLine(4, "tax", "local tax", tax / 2, zero, zero, tax / 2),
+        InvoicePreviewLine(5, "credit", "credit notes", zero, zero, applied, -applied),
+    ]
+
+
+def issue_invoice(
+    tenant_id: UUID,
+    preview: list[InvoicePreviewLine],
+    period_start: date,
+    period_end: date,
+) -> IssuedInvoice:
+    period_id = _md5_uuid(f"{tenant_id}{period_start.isoformat()}")
+    invoice_id = _md5_uuid(f"{period_id}invoice")
+    subtotal = Decimal("0")
+    tax = Decimal("0")
+    credit = Decimal("0")
+    lines = []
+    for line in preview:
+        stored_amount = line.total if line.line_type == "credit" else line.amount
+        lines.append(
+            InvoiceLineRecord(
+                line_id=_md5_uuid(f"{invoice_id}{line.line_no}"),
+                line_no=line.line_no,
+                line_type=line.line_type,
+                description=line.description,
+                amount=stored_amount,
+            )
+        )
+        if line.line_type in ("plan", "usage"):
+            subtotal += _round_half_up(line.amount, TWO_PLACES)
+        elif line.line_type == "tax":
+            tax += _round_half_up(line.amount, TWO_PLACES)
+        elif line.line_type == "credit":
+            credit = line.credit_applied
+    total = _round_half_up(subtotal + tax - credit, TWO_PLACES)
+    return IssuedInvoice(
+        invoice_id=invoice_id,
+        period_id=period_id,
+        tenant_id=tenant_id,
+        issued_at=period_end,
+        subtotal=_round_half_up(subtotal, TWO_PLACES),
+        tax=_round_half_up(tax, TWO_PLACES),
+        total=total,
+        status="issued",
+        lines=lines,
+        credit_applied=credit,
+    )
+
+
+def consume_credits(
+    credit_notes: list[CreditNote], credit_applied: Decimal
+) -> list[CreditConsumption]:
+    remaining_credit = credit_applied
+    consumptions = []
+    open_notes = [
+        note
+        for note in credit_notes
+        if note.remaining_amount is not None and note.remaining_amount > 0
+    ]
+    for note in sorted(open_notes, key=credit_note_order):
+        if remaining_credit <= 0:
+            break
+        consumptions.append(
+            CreditConsumption(
+                credit_note_id=note.credit_note_id,
+                remaining_amount=max(note.remaining_amount - remaining_credit, Decimal("0")),
+            )
+        )
+        remaining_credit = max(remaining_credit - note.remaining_amount, Decimal("0"))
+    return consumptions
 
 
 def finalize_rating(
