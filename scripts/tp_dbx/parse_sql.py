@@ -133,7 +133,7 @@ def _body_projection(n: Names) -> str:
       WHERE record_kind = 'BODY'"""
 
 
-_VALID = """length(cust_id) = 10
+_VALID = """length(cust_id) BETWEEN 1 AND 10
       AND amount_raw RLIKE '^[0-9]{12}$'
       AND try_to_date(bill_date_raw, 'yyyyMMdd') IS NOT NULL
       AND currency IN ('USD', 'EUR', 'GBP')
@@ -156,7 +156,7 @@ def build_quarantine(n: Names) -> str:
     WITH parsed AS ({_body_projection(n)}),
     row_defects AS (
       SELECT source_file, cust_id, raw_line,
-             CASE WHEN length(cust_id) <> 10 THEN 'invalid_cust_id'
+             CASE WHEN length(cust_id) = 0 THEN 'invalid_cust_id'
                   WHEN NOT amount_raw RLIKE '^[0-9]{{12}}$' THEN 'nonnumeric_amount'
                   WHEN try_to_date(bill_date_raw, 'yyyyMMdd') IS NULL THEN 'invalid_calendar_date'
                   WHEN currency NOT IN ('USD', 'EUR', 'GBP') THEN 'unknown_currency'

@@ -156,7 +156,7 @@ def _parse_body(line: str) -> dict:
 
 
 def _is_valid(f: dict) -> bool:
-    if len(f["cust_id"]) != 10:
+    if not 1 <= len(f["cust_id"]) <= 10:
         return False
     if not (len(f["amount_raw"]) == 12 and f["amount_raw"].isdigit()):
         return False
