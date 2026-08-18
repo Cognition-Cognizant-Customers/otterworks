@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_customers",
   "namespace": "demo",
-  "generated_at": "2026-08-18T00:33:40Z",
+  "generated_at": "2026-08-18T00:41:16Z",
   "run_mode": "fixture",
   "checks": [
     {
@@ -45,7 +45,7 @@
   "idempotency_rerun": {
     "performed": true,
     "result": "pass",
-    "evidence": "rerun of migrate.py --ns demo after review round 4 fixes reproduced identical counts/checksum/anomaly sets (25000 customers, checksum 4f92feef2ad58dbab30e289957931928, 81 quarantined)"
+    "evidence": "rerun of migrate.py --ns demo after review round 5 fixes reproduced identical counts/checksum/anomaly sets (25000 customers, checksum 4f92feef2ad58dbab30e289957931928, 81 quarantined)"
   },
   "planted_anomaly_detections": {
     "expected_set": [

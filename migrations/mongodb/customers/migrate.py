@@ -43,8 +43,10 @@ MONS = {m: i + 1 for i, m in enumerate(
 DATE_RE = re.compile(r"^(\d{2})-([A-Z]{3})-(\d{2})$")
 INT_LIST_RE = re.compile(r"^\d+$")
 
-# Populated CUSTOMER_MASTER columns (the other ~116 legacy columns are NULL
-# in the estate and are omitted from documents per the NULL policy).
+# Populated CUSTOMER_MASTER columns; the remaining legacy columns are NULL in
+# the estate and are omitted from documents per the NULL policy, except
+# CUST_NAME_UPPER, which is intentionally dropped (trigger-derived
+# UPPER(cust_name), reproducible from `name`).
 COLUMNS = [
     "CUST_ID", "TENANT_ID", "CUST_NO", "CUST_NAME", "LEGAL_NAME",
     "ADDR_LINE_1", "ADDR_LINE_2", "ADDR_LINE_3", "CITY", "STATE_CD", "ZIP",
@@ -55,7 +57,7 @@ COLUMNS = [
     "YTD_BILLED_AMT", "CREDIT_LIMIT_AMT", "RELATED_ACCT_IDS",
     "PROMO_CODES_CSV", "LEGACY_SYS_KEY", "MAINFRAME_ACCT_NO",
     "CONVERSION_BATCH_NO", "CREATED_BY", "CREATED_DT", "UPDATED_BY",
-    "UPDATED_DT",
+    "UPDATED_DT", "CUST_SEQ_NO", "ROW_VERSION_NO",
 ]
 
 
@@ -213,6 +215,8 @@ def transform_row(ns: str, row: dict, eav: dict[str, list]) -> tuple[dict, list[
         "legacy_sys_key": row["LEGACY_SYS_KEY"],
         "mainframe_acct_no": row["MAINFRAME_ACCT_NO"],
         "conversion_batch_no": int(row["CONVERSION_BATCH_NO"]),
+        "cust_seq_no": int(row["CUST_SEQ_NO"]) if row["CUST_SEQ_NO"] is not None else None,
+        "row_version_no": int(row["ROW_VERSION_NO"]) if row["ROW_VERSION_NO"] is not None else None,
         "created_by": row["CREATED_BY"], "created_dt": row["CREATED_DT"],
         "updated_by": row["UPDATED_BY"], "updated_dt": row["UPDATED_DT"],
     }.items() if v is not None}
