@@ -185,8 +185,9 @@ def main() -> int:
             "unexpected": unexpected,
         },
         "unverified_paths": [
-            "live Atlas run (run_mode=live): this unit self-verifies against a local "
-            "fixture only; the parent runs the single live validation window",
+            *(["live Atlas run (run_mode=live): this unit self-verifies against a local "
+               "fixture only; the parent runs the single live validation window"]
+              if args.run_mode != "live" else []),
             "invalid-UTF-8 quarantine path (invalid_encoding): no invalid bytes are "
             "planted in the estate and the Oracle driver decodes AL32UTF8 before the "
             "migration sees values, so this guard is untested end-to-end",
