@@ -21,7 +21,9 @@ Policies (per contract):
 - an empty/absent source namespace is a no-op: nothing is written and prior
   target output is left untouched;
 - writes are per-batch bulk upserts keyed on deterministic source PKs, so a
-  rerun for the same namespace reproduces identical recon numbers.
+  rerun for the same namespace reproduces identical recon numbers. Headers
+  are assembled in memory before flushing (bounded at SCALE=demo: 18,750
+  headers / 150,000 lines); SCALE=full would want a streaming merge-join.
 
 Run under scripts/tp-run-deterministic.sh conventions (TZ=UTC LC_ALL=C LANG=C):
   uv run migrations/mongodb/invoices/migrate.py --ns demo
