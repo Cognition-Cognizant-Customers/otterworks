@@ -149,26 +149,39 @@ def peek_dlq_identities(sqs, dlq_url):
     return sorted(message_identity(body) for body in seen.values())
 
 
-def discard_dlq_message(sqs, dlq_url, identity):
-    """Operator discard of an inspected poison message (recorded in the report)."""
-    while True:
+def discard_dlq_message(sqs, dlq_url, identity, timeout=60):
+    """Operator discard of an inspected poison message (recorded in the report).
+
+    Bounded: non-matching messages are made visible again, so an absent target
+    would otherwise be re-received forever; stop after a full pass with nothing
+    new (by MessageId) or when the deadline lapses, and report failure.
+    """
+    seen_ids = set()
+    deadline = time.time() + timeout
+    while time.time() < deadline:
         response = sqs.receive_message(
             QueueUrl=dlq_url, MaxNumberOfMessages=10, WaitTimeSeconds=1
         )
         messages = response.get("Messages", [])
         if not messages:
             return False
+        new_ids = {m["MessageId"] for m in messages} - seen_ids
         for message in messages:
             if message_identity(message["Body"]) == identity:
                 sqs.delete_message(
                     QueueUrl=dlq_url, ReceiptHandle=message["ReceiptHandle"]
                 )
                 return True
+            seen_ids.add(message["MessageId"])
             sqs.change_message_visibility(
                 QueueUrl=dlq_url,
                 ReceiptHandle=message["ReceiptHandle"],
                 VisibilityTimeout=0,
             )
+        if not new_ids:
+            return False
+    print(f"[recon] TIMEOUT discarding DLQ message {identity}", file=sys.stderr)
+    return False
 
 
 def read_stats(dynamo, stats_table):

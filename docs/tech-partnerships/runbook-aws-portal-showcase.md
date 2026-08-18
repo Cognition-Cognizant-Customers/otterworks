@@ -97,6 +97,7 @@ namespace (`NS=demo` shown). Grab the Terraform outputs once:
 ```bash
 cd services/portal-serverless/terraform
 API=$(terraform output -raw api_base_url)
+BUS=$(terraform output -raw event_bus_name)
 QUEUE=$(terraform output -raw feedback_events_queue_url)
 DLQ=$(terraform output -raw feedback_events_dlq_url)
 STATS=$(terraform output -raw feedback_stats_table)
@@ -120,12 +121,12 @@ SFN=$(terraform output -raw feedback_triage_state_machine_arn)
    so capture takes ~30–60s — give the beat a minute):
 
    ```bash
-   aws events put-events --entries '[{"EventBusName":"ow-tp-portal-demo-portal",
-     "Source":"otterworks.portal.feedback","DetailType":"FeedbackSubmitted",
-     "Detail":"{\"eventId\":\"poison-demo-1\",\"feedbackId\":\"999\",\"userId\":\"demo\",\"rating\":99}"}]'
+   aws events put-events --entries "[{\"EventBusName\":\"$BUS\",
+     \"Source\":\"otterworks.portal.feedback\",\"DetailType\":\"FeedbackSubmitted\",
+     \"Detail\":\"{\\\"eventId\\\":\\\"poison-demo-1\\\",\\\"feedbackId\\\":\\\"999\\\",\\\"userId\\\":\\\"demo\\\",\\\"rating\\\":99}\"}]"
    aws sqs get-queue-attributes --queue-url "$DLQ" \
      --attribute-names ApproximateNumberOfMessages   # → "1"
-   # CloudWatch alarm ow-tp-portal-demo-feedback-dlq-depth flips to ALARM
+   # CloudWatch alarm ow-tp-portal-demo-feedback-events-dlq-depth flips to ALARM
    # (→ existing alarm→Devin EventBridge rule, same incident path as Beat E)
    ```
 
@@ -146,7 +147,7 @@ SFN=$(terraform output -raw feedback_triage_state_machine_arn)
 
    ```bash
    aws stepfunctions start-execution --state-machine-arn "$SFN" \
-     --input '{"eventId":"demo-1","feedbackId":"1","userId":"demo-user","rating":5}'
+     --input '{"detail":{"eventId":"demo-1","feedbackId":"1","userId":"demo-user","rating":5}}'
    aws stepfunctions list-executions --state-machine-arn "$SFN" --max-results 5
    aws stepfunctions get-execution-history --execution-arn <arn>   # retries/catch visible
    ```
