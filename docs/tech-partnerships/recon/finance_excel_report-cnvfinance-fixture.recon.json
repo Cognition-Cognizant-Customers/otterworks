@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "finance_excel_report",
   "namespace": "cnvfinance",
-  "generated_at": "2026-08-18T00:25:23Z",
+  "generated_at": "2026-08-18T00:34:01Z",
   "run_mode": "fixture",
   "checks": [
     {

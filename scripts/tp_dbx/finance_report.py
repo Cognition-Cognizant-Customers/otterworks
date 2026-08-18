@@ -36,7 +36,7 @@ import json
 import re
 import sys
 import urllib.parse
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -68,7 +68,8 @@ PROVISION = [
         bill_date DATE,
         amount DECIMAL(18,2),
         currency STRING,
-        record_type_code STRING
+        record_type_code STRING,
+        report_date DATE NOT NULL
     ) COMMENT 'Parsed CUSTBILL records for the finance-report unit (ns-suffixed slice)'""",
     """CREATE TABLE IF NOT EXISTS {summary} (
         ns STRING NOT NULL,
@@ -141,7 +142,8 @@ except Exception as e:
     else:
         raise
 
-spark.sql(f"DELETE FROM {silver} WHERE ns = '{ns}'")
+spark.sql(f"DELETE FROM {silver} WHERE ns = '{ns}' "
+          f"AND (report_date = DATE'{report_date}' OR report_date IS NULL)")
 rows_loaded = rows_skipped = rows_attributed = 0
 if psv_files:
     schema = ("cust_id STRING, cust_name STRING, bill_date STRING, "
@@ -174,12 +176,12 @@ if psv_files:
         SELECT '{ns}', source_file, cust_id, cust_name,
                try_cast(bill_date AS DATE),
                try_cast(amount AS DECIMAL(18,2)),
-               currency, record_type
+               currency, record_type, DATE'{report_date}'
         FROM finance_raw_{ns}
         WHERE {valid_pred}
     """)
     rows_loaded = spark.sql(
-        f"SELECT count(*) FROM {silver} WHERE ns = '{ns}'"
+        f"SELECT count(*) FROM {silver} WHERE ns = '{ns}' AND report_date = DATE'{report_date}'"
     ).collect()[0][0]
 
 # COMMAND ----------
@@ -194,7 +196,7 @@ spark.sql(f"""
            count(*), CAST(sum(amount) AS DECIMAL(18,2)),
            DATE'{report_date}', current_timestamp()
     FROM {silver}
-    WHERE ns = '{ns}'
+    WHERE ns = '{ns}' AND report_date = DATE'{report_date}'
     GROUP BY currency, record_type_code
 """)
 
@@ -247,6 +249,13 @@ def cmd_provision(dbx: Databricks, args) -> int:
     n = names(args.ns)
     for stmt in PROVISION:
         dbx.sql_ok(stmt.format(**n))
+    # Evolve this unit's own silver slice in place if it predates report_date
+    # scoping (additive column only; never a drop/replace).
+    try:
+        dbx.sql_ok(f"ALTER TABLE {n['silver']} ADD COLUMNS (report_date DATE)")
+    except DbxError as e:
+        if "already exists" not in str(e).lower() and "FIELDS_ALREADY_EXISTS" not in str(e):
+            raise
     print(f"provisioned {n['silver']}, {n['summary']}, {n['delivery']}")
     return 0
 
@@ -387,7 +396,8 @@ def cmd_recon(dbx: Databricks, args) -> int:
     crossfoot = dbx.sql_ok(f"""
         WITH s AS (SELECT currency, record_type_code, count(*) c,
                           CAST(sum(amount) AS DECIMAL(18,2)) t
-                   FROM {n['silver']} WHERE ns = '{n['ns']}'
+                   FROM {n['silver']}
+                   WHERE ns = '{n['ns']}' AND report_date = DATE'{args.report_date}'
                    GROUP BY currency, record_type_code),
              g AS (SELECT currency, record_type_code, record_count, total_amount
                    FROM {n['summary']}
@@ -492,8 +502,17 @@ def legacy_aggregate(psv_dir: Path) -> dict[str, tuple[int, str]]:
             if not fields or fields[0] == "":
                 continue
             _, _, _, amt, ccy, rt = (fields + [""] * 6)[:6]
+            # Mirror the notebook's malformed-row policy: rows with an
+            # uncastable amount or a missing currency/record type are
+            # attributed and excluded, never coerced or crashed on.
+            try:
+                amount = Decimal(amt)
+            except InvalidOperation:
+                continue
+            if ccy == "" or rt == "":
+                continue
             key = f"{ccy}|{rt}"
-            tot[key] = tot.get(key, Decimal(0)) + Decimal(amt)
+            tot[key] = tot.get(key, Decimal(0)) + amount
             cnt[key] = cnt.get(key, 0) + 1
     out = {}
     for key in sorted(tot):
