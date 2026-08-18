@@ -5,6 +5,7 @@ from pathlib import Path
 import psycopg
 from psycopg.rows import dict_row
 
+from app import documents
 from app.config import settings
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,3 +33,5 @@ def reset() -> None:
             """
         )
         connection.execute(SEED.read_text())
+    if documents.configured():
+        documents.reset_documents()
