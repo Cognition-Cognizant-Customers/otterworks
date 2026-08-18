@@ -23,7 +23,7 @@ class ShareLinkService:
 
     def __init__(self, salt: str | None = None):
         self.salt = salt or os.environ.get("SHARE_LINK_SALT", "otterworks-share")
-        self._secret = os.environ.get("SHARE_LINK_SECRET") or self.salt
+        self._secret = salt or os.environ.get("SHARE_LINK_SECRET") or self.salt
 
     def mint_token(self, document_id: str) -> str:
         """Return the share token for a document."""
@@ -32,7 +32,7 @@ class ShareLinkService:
 
     def verify_token(self, document_id: str, token: str) -> bool:
         """Return True when the token is a valid share token for the document."""
-        ok = hmac.compare_digest(self.mint_token(document_id), token)
+        ok = hmac.compare_digest(self.mint_token(document_id).encode(), token.encode())
         if not ok:
             logger.info("share_token_rejected", document_id=document_id)
         return ok
