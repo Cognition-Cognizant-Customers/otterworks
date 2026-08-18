@@ -35,13 +35,20 @@ def make_client(endpoint_url):
 
 def replay(sqs, dlq_url, queue_url, max_messages):
     redriven = 0
+    empty_polls = 0
     while max_messages is None or redriven < max_messages:
         response = sqs.receive_message(
             QueueUrl=dlq_url, MaxNumberOfMessages=10, WaitTimeSeconds=1
         )
         messages = response.get("Messages", [])
         if not messages:
-            break
+            # A single empty receive only samples a subset of SQS servers;
+            # require a few in a row before declaring the DLQ drained.
+            empty_polls += 1
+            if empty_polls >= 3:
+                break
+            continue
+        empty_polls = 0
         for message in messages:
             if max_messages is not None and redriven >= max_messages:
                 break

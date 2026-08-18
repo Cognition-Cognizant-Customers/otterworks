@@ -100,6 +100,7 @@ API=$(terraform output -raw api_base_url)
 BUS=$(terraform output -raw event_bus_name)
 QUEUE=$(terraform output -raw feedback_events_queue_url)
 DLQ=$(terraform output -raw feedback_events_dlq_url)
+QUAR=$(terraform output -raw feedback_triage_quarantine_url)
 STATS=$(terraform output -raw feedback_stats_table)
 SFN=$(terraform output -raw feedback_triage_state_machine_arn)
 ```
@@ -126,6 +127,8 @@ SFN=$(terraform output -raw feedback_triage_state_machine_arn)
      \"Detail\":\"{\\\"eventId\\\":\\\"poison-demo-1\\\",\\\"feedbackId\\\":\\\"999\\\",\\\"userId\\\":\\\"demo\\\",\\\"rating\\\":99}\"}]"
    aws sqs get-queue-attributes --queue-url "$DLQ" \
      --attribute-names ApproximateNumberOfMessages   # → "1"
+   # The triage workflow independently rejects the same event into its own
+   # quarantine queue ($QUAR) — the consumer DLQ counts redrive captures only.
    # CloudWatch alarm ow-tp-portal-demo-feedback-events-dlq-depth flips to ALARM
    # (→ existing alarm→Devin EventBridge rule, same incident path as Beat E)
    ```
@@ -152,10 +155,20 @@ SFN=$(terraform output -raw feedback_triage_state_machine_arn)
    aws stepfunctions get-execution-history --execution-arn <arn>   # retries/catch visible
    ```
 
+   Rejected/failed triage events land in the dedicated quarantine queue —
+   inspect and clear it before hand-off so nothing is left stranded:
+
+   ```bash
+   aws sqs receive-message --queue-url "$QUAR"    # full quarantined payload
+   aws sqs purge-queue --queue-url "$QUAR"        # reset to clean green
+   ```
+
 5. **Async recon (live).** Recompute everything from the estate and gate it:
 
    ```bash
    python3 scripts/tp_portal/async_recon.py --run-mode live \
+     --api-base-url "$API" --queue-url "$QUEUE" --dlq-url "$DLQ" \
+     --stats-table "$STATS" --namespace demo \
      --out docs/tech-partnerships/recon/portal-events-async-live.recon.json
    make tp-validate-recon
    ```

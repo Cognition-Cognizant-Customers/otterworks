@@ -38,6 +38,11 @@ output "feedback_stats_table" {
   value       = aws_dynamodb_table.feedback_stats.name
 }
 
+output "feedback_triage_quarantine_url" {
+  description = "Quarantine queue receiving events the triage workflow rejects (kept separate from the consumer DLQ)."
+  value       = aws_sqs_queue.feedback_triage_quarantine.url
+}
+
 output "feedback_triage_state_machine_arn" {
   description = "Standard Step Functions workflow triaging each FeedbackSubmitted event."
   value       = aws_sfn_state_machine.feedback_triage.arn

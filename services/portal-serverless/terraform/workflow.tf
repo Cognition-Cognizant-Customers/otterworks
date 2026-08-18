@@ -3,6 +3,14 @@
 # workflow (not Express) so every execution's history — including retries and
 # the quarantine path — is browsable in the console during the demo.
 
+# Quarantine queue dedicated to the workflow: the consumer's DLQ carries
+# redrive-captured poison only, so one bad event never lands on it twice and
+# replay_dlq.py never re-injects a triage-generated payload.
+resource "aws_sqs_queue" "feedback_triage_quarantine" {
+  name                      = "${local.prefix}-feedback-triage-quarantine"
+  message_retention_seconds = 1209600
+}
+
 resource "aws_sfn_state_machine" "feedback_triage" {
   name     = "${local.prefix}-feedback-triage"
   role_arn = aws_iam_role.triage.arn
@@ -58,7 +66,7 @@ resource "aws_sfn_state_machine" "feedback_triage" {
         Type     = "Task"
         Resource = "arn:aws:states:::sqs:sendMessage"
         Parameters = {
-          QueueUrl        = aws_sqs_queue.feedback_events_dlq.url
+          QueueUrl        = aws_sqs_queue.feedback_triage_quarantine.url
           "MessageBody.$" = "States.JsonToString($)"
         }
         Next = "TriageFailed"
@@ -66,7 +74,7 @@ resource "aws_sfn_state_machine" "feedback_triage" {
       TriageFailed = {
         Type  = "Fail"
         Error = "FeedbackTriageFailed"
-        Cause = "Validation or persistence failed after retries; event quarantined to the DLQ."
+        Cause = "Validation or persistence failed after retries; event quarantined to the triage quarantine queue."
       }
     }
   })
@@ -92,9 +100,9 @@ data "aws_iam_policy_document" "triage" {
   }
 
   statement {
-    sid       = "QuarantineToDlqOnly"
+    sid       = "QuarantineQueueOnly"
     actions   = ["sqs:SendMessage"]
-    resources = [aws_sqs_queue.feedback_events_dlq.arn]
+    resources = [aws_sqs_queue.feedback_triage_quarantine.arn]
   }
 }
 
