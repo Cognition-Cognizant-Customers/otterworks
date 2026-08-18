@@ -7,6 +7,8 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import java.io.UncheckedIOException;
 import java.net.URLDecoder;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -31,7 +33,7 @@ public abstract class ApiHandler implements RequestHandler<APIGatewayV2HTTPEvent
                     ? Map.of() : event.getQueryStringParameters();
             String body = event.getBody();
             if (body != null && Boolean.TRUE.equals(event.getIsBase64Encoded())) {
-                body = new String(Base64.getDecoder().decode(body), StandardCharsets.UTF_8);
+                body = decodeUtf8Strict(Base64.getDecoder().decode(body));
             }
             Result result = "GET".equals(method) && "/health".equals(path)
                     ? health()
@@ -66,6 +68,18 @@ public abstract class ApiHandler implements RequestHandler<APIGatewayV2HTTPEvent
             return String.join("/", segments);
         } catch (IllegalArgumentException | UncheckedIOException e) {
             throw ApiException.badRequest("malformed path: " + rawPath);
+        }
+    }
+
+    /**
+     * Strict UTF-8 decode: invalid byte sequences are a malformed body (400), per
+     * the unit contract's encoding policy, never silently replaced with U+FFFD.
+     */
+    static String decodeUtf8Strict(byte[] bytes) {
+        try {
+            return StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(bytes)).toString();
+        } catch (CharacterCodingException e) {
+            throw ApiException.badRequest("malformed request body");
         }
     }
 
