@@ -114,11 +114,20 @@ def build_report(ns: str, run_mode: str, current: dict, prior: dict) -> dict:
     manifest = json.loads(
         (REPO / "testdata/legacy/manifests" / f"{ns}.json").read_text()
     )
-    want = manifest["targets"][MANIFEST_TARGET]
+    want = manifest.get("targets", {}).get(MANIFEST_TARGET)
     anomalies = [
-        a for a in manifest["planted_anomalies"]
+        a for a in manifest.get("planted_anomalies", [])
         if a["target"] == MANIFEST_TARGET or a["kind"] in COVERAGE_GAPS
     ]
+    orphan_expected = next(
+        (a["count"] for a in anomalies if a["kind"] == "orphaned_metadata"), None
+    )
+    if want is None or orphan_expected is None:
+        raise SystemExit(
+            f"[recon-files] manifest for ns={ns} has no {MANIFEST_TARGET} target "
+            "and/or no orphaned_metadata anomaly — seed the dynamodb store first "
+            f"(make seed-legacy NS={ns})"
+        )
 
     checks = [
         {
@@ -140,9 +149,7 @@ def build_report(ns: str, run_mode: str, current: dict, prior: dict) -> dict:
         },
         {
             "id": "orphaned-metadata-reported",
-            "expected": next(
-                a["count"] for a in anomalies if a["kind"] == "orphaned_metadata"
-            ),
+            "expected": orphan_expected,
             "actual": {
                 "flagged_in_files": current["flagged"],
                 "quarantined": current["quarantined"],
@@ -151,9 +158,7 @@ def build_report(ns: str, run_mode: str, current: dict, prior: dict) -> dict:
                                f"flags recomputed from ow_tp_mongodb_{ns}.files and "
                                f"ow_tp_mongodb_{ns}_quarantine.files_quarantine",
             "result": "pass"
-            if current["flagged"]
-            == current["quarantined"]
-            == next(a["count"] for a in anomalies if a["kind"] == "orphaned_metadata")
+            if current["flagged"] == current["quarantined"] == orphan_expected
             else "fail",
         },
     ]
