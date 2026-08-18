@@ -21,6 +21,10 @@ Design notes, keyed to the legacy horrors each rule retires:
   - invoice_dt / due_dt stay byte-transparent legacy DD-MON-YY strings per
     the mongo_invoices contract (checksum transparency), but the validator
     pins the format so nothing new and worse can creep in.
+  - required lists cover only what the migrations guarantee. Per the unit
+    contracts, NULL/missing source values are omitted fields (never
+    fabricated defaults), so every migration-omittable field is typed but
+    optional; only identifiers and always-written fields are required.
 """
 
 from __future__ import annotations
@@ -30,11 +34,7 @@ DD_MON_YY = "^[0-9]{2}-[A-Z]{3}-[0-9]{2}$"
 CUSTOMERS_SCHEMA: dict = {
     "bsonType": "object",
     "additionalProperties": False,
-    "required": [
-        "_id", "ns", "tenant_id", "cust_no", "name", "legal_name", "email",
-        "address", "phones", "status", "flags", "balances", "lineage",
-        "last_activity_dt",
-    ],
+    "required": ["_id", "ns", "lineage"],
     "properties": {
         "_id": {"bsonType": "string"},
         "ns": {"bsonType": "string"},
@@ -74,11 +74,7 @@ CUSTOMERS_SCHEMA: dict = {
 INVOICE_LINE_SCHEMA: dict = {
     "bsonType": "object",
     "additionalProperties": False,
-    "required": [
-        "line_id", "line_no", "line_type_cd", "item_desc", "qty",
-        "unit_price", "amount", "tax_amt", "invoice_dt", "service_period",
-        "src_system", "gl_accts", "cust_no", "cust_name",
-    ],
+    "required": ["line_id", "amount"],
     "properties": {
         "line_id": {"bsonType": "string"},
         "line_no": {"bsonType": "decimal"},
@@ -105,10 +101,7 @@ INVOICE_LINE_SCHEMA: dict = {
 INVOICES_SCHEMA: dict = {
     "bsonType": "object",
     "additionalProperties": False,
-    "required": [
-        "_id", "ns", "tenant_id", "cust_id", "invoice_no", "invoice_dt",
-        "due_dt", "status_cd", "total_amt", "batch_no", "lines",
-    ],
+    "required": ["_id", "ns", "lines"],
     "properties": {
         "_id": {"bsonType": "string"},
         "ns": {"bsonType": "string"},

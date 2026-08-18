@@ -5,18 +5,7 @@
       "required": [
         "_id",
         "ns",
-        "tenant_id",
-        "cust_no",
-        "name",
-        "legal_name",
-        "email",
-        "address",
-        "phones",
-        "status",
-        "flags",
-        "balances",
-        "lineage",
-        "last_activity_dt"
+        "lineage"
       ],
       "validation_action": "error",
       "validation_level": "strict"
@@ -26,21 +15,13 @@
       "required": [
         "_id",
         "ns",
-        "tenant_id",
-        "cust_id",
-        "invoice_no",
-        "invoice_dt",
-        "due_dt",
-        "status_cd",
-        "total_amt",
-        "batch_no",
         "lines"
       ],
       "validation_action": "error",
       "validation_level": "strict"
     }
   },
-  "generated_at": "2026-08-18T03:58:20Z",
+  "generated_at": "2026-08-18T04:14:45Z",
   "kind": "validator-demo",
   "namespace": "demo",
   "probe_residue_documents": 0,

@@ -174,7 +174,8 @@ def probe_insert(collection, doc: dict, expect: str) -> dict:
         ]
         outcome["error"] = str((exc.details or {}).get("errmsg", exc))
     finally:
-        collection.delete_many({"_id": doc["_id"]})
+        if outcome.get("result") == "accepted":
+            collection.delete_many({"_id": doc["_id"]})
     outcome["ok"] = (
         outcome["result"] == "accepted" if expect == "accept" else outcome["result"] == "rejected"
     )
