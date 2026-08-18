@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Otter Portal</title>
+<style>
+  :root {
+    --bg: #0f1420; --card: #1a2233; --ink: #e8edf7; --muted: #8fa0bd;
+    --accent: #4fc3f7; --ok: #37d67a; --err: #ff5c5c; --line: #2a3650;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--ink); min-height: 100vh;
+  }
+  header {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 18px 28px; border-bottom: 1px solid var(--line); background: #121a2b;
+  }
+  header h1 { font-size: 20px; margin: 0; }
+  header .otter { font-size: 26px; }
+  .conn { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+  .conn input {
+    width: 340px; max-width: 60vw; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink); font-size: 13px;
+  }
+  .conn button { cursor: pointer; }
+  .pill {
+    padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    background: #24314d; color: var(--muted);
+  }
+  .pill.up { background: rgba(55, 214, 122, .15); color: var(--ok); }
+  .pill.down { background: rgba(255, 92, 92, .15); color: var(--err); }
+  main {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 20px; padding: 24px 28px; max-width: 1400px; margin: 0 auto;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; min-height: 320px;
+  }
+  .card.errored { border-color: var(--err); box-shadow: 0 0 0 1px var(--err); }
+  .card h2 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+  .card h2 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .card.ok h2 .dot { background: var(--ok); }
+  .card.errored h2 .dot { background: var(--err); }
+  .card .error-msg { color: var(--err); font-size: 13px; display: none; }
+  .card.errored .error-msg { display: block; }
+  .list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; max-height: 260px; }
+  .item { background: #141c2e; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .item .t { font-weight: 600; font-size: 14px; }
+  .item .b { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .item .meta { color: var(--muted); font-size: 11px; margin-top: 6px; }
+  label { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  input[type=text], textarea, select {
+    width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--ink); font-size: 13px; font-family: inherit;
+  }
+  button {
+    padding: 8px 14px; border-radius: 8px; border: 1px solid var(--accent);
+    background: transparent; color: var(--accent); font-weight: 600; font-size: 13px; cursor: pointer;
+  }
+  button:hover { background: rgba(79, 195, 247, .12); }
+  .stars { display: flex; gap: 4px; font-size: 22px; cursor: pointer; user-select: none; }
+  .stars span { color: #38466b; }
+  .stars span.on { color: #ffd166; }
+  .avg { font-size: 28px; font-weight: 700; }
+  .avg small { font-size: 13px; color: var(--muted); font-weight: 400; }
+  .row { display: flex; gap: 10px; align-items: center; }
+  .grow { flex: 1; }
+</style>
+</head>
+<body>
+<header>
+  <span class="otter">🦦</span>
+  <h1>Otter Portal</h1>
+  <span class="pill" id="mode-pill">…</span>
+  <div class="conn">
+    <label for="base-url">API</label>
+    <input id="base-url" type="text" spellcheck="false"
+           placeholder="http://localhost:8000 (local monolith) or https://…execute-api…">
+    <button id="apply-url">Connect</button>
+    <span class="pill" id="health-pill">health: ?</span>
+  </div>
+</header>
+
+<main>
+  <section class="card" id="card-announcements">
+    <h2><span class="dot"></span>Announcements</h2>
+    <div class="error-msg" id="err-announcements"></div>
+    <div class="list" id="announcement-list"></div>
+    <div class="row">
+      <input type="text" id="ann-title" class="grow" placeholder="Title">
+    </div>
+    <div class="row">
+      <input type="text" id="ann-body" class="grow" placeholder="Body">
+      <button id="ann-post">Post</button>
+    </div>
+  </section>
+
+  <section class="card" id="card-preferences">
+    <h2><span class="dot"></span>My Preferences</h2>
+    <div class="error-msg" id="err-preferences"></div>
+    <label>User
+      <input type="text" id="pref-user" value="alice" style="width:120px">
+    </label>
+    <label>Theme
+      <select id="pref-theme">
+        <option value="light">light</option>
+        <option value="dark">dark</option>
+      </select>
+    </label>
+    <label>Locale
+      <select id="pref-locale">
+        <option value="en-US">en-US</option>
+        <option value="fr-FR">fr-FR</option>
+        <option value="de-DE">de-DE</option>
+        <option value="ja-JP">ja-JP</option>
+      </select>
+    </label>
+    <label>
+      <input type="checkbox" id="pref-email"> Email notifications
+    </label>
+    <div class="row">
+      <button id="pref-load">Load</button>
+      <button id="pref-save">Save</button>
+    </div>
+  </section>
+
+  <section class="card" id="card-feedback">
+    <h2><span class="dot"></span>Feedback</h2>
+    <div class="error-msg" id="err-feedback"></div>
+    <div class="avg" id="fb-avg">–<small> avg rating</small></div>
+    <div class="stars" id="fb-stars"></div>
+    <textarea id="fb-message" rows="2" placeholder="Tell us what you think…"></textarea>
+    <div class="row">
+      <input type="text" id="fb-user" value="alice" style="width:120px">
+      <button id="fb-submit" class="grow">Submit feedback</button>
+    </div>
+    <div class="list" id="fb-list"></div>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+
+  var baseUrl = localStorage.getItem("otterPortalBaseUrl") || window.location.origin;
+  $("base-url").value = baseUrl;
+
+  function modeLabel() {
+    var isAws = /execute-api/.test(baseUrl);
+    $("mode-pill").textContent = isAws ? "AWS · API Gateway + Lambda" : "On-prem · legacy monolith";
+    $("mode-pill").className = "pill " + (isAws ? "up" : "");
+  }
+
+  function api(method, path, body) {
+    return fetch(baseUrl.replace(/\/+$/, "") + path, {
+      method: method,
+      headers: body ? { "Content-Type": "application/json" } : {},
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (res) {
+      if (!res.ok) {
+        return res.text().then(function (t) {
+          throw new Error(method + " " + path + " -> " + res.status + " " + t.slice(0, 120));
+        });
+      }
+      return res.status === 204 ? null : res.json();
+    });
+  }
+
+  function setPanel(name, ok, message) {
+    var card = $("card-" + name);
+    card.classList.toggle("ok", ok);
+    card.classList.toggle("errored", !ok);
+    $("err-" + name).textContent = ok ? "" : (message || "unreachable");
+  }
+
+  // --- health ---
+  function refreshHealth() {
+    api("GET", "/health").then(function (h) {
+      $("health-pill").textContent = "health: " + h.status;
+      $("health-pill").className = "pill up";
+    }).catch(function () {
+      $("health-pill").textContent = "health: DOWN";
+      $("health-pill").className = "pill down";
+    });
+  }
+
+  // --- announcements ---
+  function refreshAnnouncements() {
+    api("GET", "/api/announcements").then(function (list) {
+      var el = $("announcement-list");
+      el.innerHTML = "";
+      if (!list.length) { el.innerHTML = "<div class='item'><div class='b'>No announcements yet.</div></div>"; }
+      list.forEach(function (a) {
+        var d = document.createElement("div");
+        d.className = "item";
+        d.innerHTML = "<div class='t'></div><div class='b'></div><div class='meta'></div>";
+        d.querySelector(".t").textContent = a.title;
+        d.querySelector(".b").textContent = a.body;
+        d.querySelector(".meta").textContent = "#" + a.id + " · " + a.createdAt;
+        el.appendChild(d);
+      });
+      setPanel("announcements", true);
+    }).catch(function (e) { setPanel("announcements", false, e.message); });
+  }
+  $("ann-post").onclick = function () {
+    api("POST", "/api/announcements", {
+      title: $("ann-title").value, body: $("ann-body").value, published: true
+    }).then(function () {
+      $("ann-title").value = ""; $("ann-body").value = "";
+      refreshAnnouncements();
+    }).catch(function (e) { setPanel("announcements", false, e.message); });
+  };
+
+  // --- preferences ---
+  function loadPrefs() {
+    api("GET", "/api/preferences/" + encodeURIComponent($("pref-user").value)).then(function (p) {
+      $("pref-theme").value = p.theme;
+      $("pref-locale").value = p.locale;
+      $("pref-email").checked = p.emailNotifications;
+      setPanel("preferences", true);
+    }).catch(function (e) { setPanel("preferences", false, e.message); });
+  }
+  $("pref-load").onclick = loadPrefs;
+  // Health-only probe for the periodic poll: updates the panel's up/down state
+  // without overwriting form fields the user may be editing.
+  function checkPrefsHealth() {
+    api("GET", "/api/preferences/" + encodeURIComponent($("pref-user").value))
+      .then(function () { setPanel("preferences", true); })
+      .catch(function (e) { setPanel("preferences", false, e.message); });
+  }
+  $("pref-save").onclick = function () {
+    api("PUT", "/api/preferences/" + encodeURIComponent($("pref-user").value), {
+      theme: $("pref-theme").value,
+      locale: $("pref-locale").value,
+      emailNotifications: $("pref-email").checked
+    }).then(function () { setPanel("preferences", true); })
+      .catch(function (e) { setPanel("preferences", false, e.message); });
+  };
+
+  // --- feedback ---
+  var rating = 5;
+  var starsEl = $("fb-stars");
+  for (var i = 1; i <= 5; i++) {
+    var s = document.createElement("span");
+    s.textContent = "★";
+    s.dataset.value = i;
+    s.onclick = function () { rating = +this.dataset.value; paintStars(); };
+    starsEl.appendChild(s);
+  }
+  function paintStars() {
+    Array.prototype.forEach.call(starsEl.children, function (s) {
+      s.classList.toggle("on", +s.dataset.value <= rating);
+    });
+  }
+  paintStars();
+
+  function refreshFeedback() {
+    api("GET", "/api/feedback/average-rating").then(function (r) {
+      $("fb-avg").innerHTML = r.averageRating.toFixed(1) + "<small> avg rating</small>";
+      setPanel("feedback", true);
+    }).catch(function (e) { setPanel("feedback", false, e.message); });
+    api("GET", "/api/feedback?userId=" + encodeURIComponent($("fb-user").value)).then(function (list) {
+      var el = $("fb-list");
+      el.innerHTML = "";
+      list.slice(0, 5).forEach(function (f) {
+        var d = document.createElement("div");
+        d.className = "item";
+        d.innerHTML = "<div class='t'></div><div class='b'></div>";
+        d.querySelector(".t").textContent = "★".repeat(f.rating) + " — " + f.userId;
+        d.querySelector(".b").textContent = f.message;
+        el.appendChild(d);
+      });
+    }).catch(function () { /* surfaced via average-rating panel state */ });
+  }
+  $("fb-submit").onclick = function () {
+    api("POST", "/api/feedback", {
+      userId: $("fb-user").value, rating: rating, message: $("fb-message").value
+    }).then(function () {
+      $("fb-message").value = "";
+      refreshFeedback();
+    }).catch(function (e) { setPanel("feedback", false, e.message); });
+  };
+
+  function refreshAll() {
+    modeLabel();
+    refreshHealth();
+    refreshAnnouncements();
+    loadPrefs();
+    refreshFeedback();
+  }
+
+  $("apply-url").onclick = function () {
+    baseUrl = $("base-url").value.trim();
+    localStorage.setItem("otterPortalBaseUrl", baseUrl);
+    refreshAll();
+  };
+
+  refreshAll();
+  setInterval(function () { refreshHealth(); refreshAnnouncements(); checkPrefsHealth(); refreshFeedback(); }, 5000);
+})();
+</script>
+</body>
+</html>
