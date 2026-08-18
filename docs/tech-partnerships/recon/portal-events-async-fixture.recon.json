@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "legacy-portal-events/async-pipeline",
   "namespace": "asyncfixture",
-  "generated_at": "2026-08-18T02:15:43.496963+00:00",
+  "generated_at": "2026-08-18T02:25:35.157273+00:00",
   "run_mode": "fixture",
   "replay_base_url": "http://localhost:9096",
   "steps_total": 17,
@@ -84,7 +84,7 @@
       "id": "idempotency-duplicate-delivered",
       "expected": true,
       "actual": true,
-      "source_of_truth": "consumer processed-counter advanced (fixture) or CloudWatch NumberOfMessagesDeleted advanced past its pre-send baseline (live; depth transition kept as a fast secondary signal) \u2014 the no-op claim is void without delivery",
+      "source_of_truth": "consumer processed-counter advanced (fixture) or CloudWatch NumberOfMessagesDeleted datapoints timestamped at/after the minute-aligned send (live; depth transition kept as a fast secondary signal) \u2014 the no-op claim is void without delivery",
       "result": "pass",
       "mismatches": []
     },

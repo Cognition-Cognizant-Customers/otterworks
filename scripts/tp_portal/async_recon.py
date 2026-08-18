@@ -419,16 +419,17 @@ def read_pump_stats(path, retries=10, interval=0.2):
 
 
 def observe_duplicate_delivery(sqs, queue_url, processed_counter, before_processed,
-                               deleted_counter=None, before_deleted=0, timeout=90):
+                               deleted_since=None, send_minute=None, timeout=90):
     """Positive proof the re-sent duplicate was actually delivered to the consumer.
 
     Queue-depth attributes are eventually consistent, so "depth is zero" right
     after the send proves nothing. With a consumer-side counter (fixture pump),
-    wait for it to advance. Live primary signal is durable — the CloudWatch
-    NumberOfMessagesDeleted sum for the queue advancing past its pre-send
-    baseline (a live event-source mapping consumes within milliseconds, so a
-    sampled instantaneous depth can miss the transient non-zero); the
-    non-zero-then-zero depth transition is kept only as a fast secondary path.
+    wait for it to advance. Live primary signal is durable AND attributable —
+    the CloudWatch NumberOfMessagesDeleted sum over datapoints timestamped at
+    or after the send's minute boundary; the caller aligns the send to a fresh
+    minute so lag-published deletions of earlier (pre-send) messages land in
+    earlier datapoints and can never satisfy this. The non-zero-then-zero
+    depth transition is kept only as a fast secondary path.
     """
     if processed_counter is not None:
         return wait_for(
@@ -439,14 +440,14 @@ def observe_duplicate_delivery(sqs, queue_url, processed_counter, before_process
     seen_in_flight = False
     deadline = time.time() + timeout
     while time.time() < deadline:
-        if deleted_counter is not None and deleted_counter() >= before_deleted + 1:
+        if deleted_since is not None and deleted_since(send_minute) >= 1:
             return True
         depth = queue_depth(sqs, queue_url)
         if depth > 0:
             seen_in_flight = True
         elif seen_in_flight:
             return True
-        time.sleep(2.0 if deleted_counter is not None else 0.5)
+        time.sleep(2.0 if deleted_since is not None else 0.5)
     print("[recon] TIMEOUT: duplicate delivery never observed on the queue",
           file=sys.stderr)
     return False
@@ -454,7 +455,7 @@ def observe_duplicate_delivery(sqs, queue_url, processed_counter, before_process
 
 def run_green_and_idempotency(checks, api_base_url, sqs, dynamo, queue_url, dlq_url,
                               stats_table, processed_counter=None,
-                              deleted_counter=None):
+                              deleted_since=None):
     # Baseline before submitting: a live estate is long-lived, so all counts
     # are compared as deltas rather than absolute values.
     baseline_markers = count_event_markers(dynamo, stats_table)
@@ -508,20 +509,29 @@ def run_green_and_idempotency(checks, api_base_url, sqs, dynamo, queue_url, dlq_
     )
     before = read_stats(dynamo, stats_table)
     before_processed = processed_counter() if processed_counter is not None else 0
-    before_deleted = deleted_counter() if deleted_counter is not None else 0
+    send_minute = None
+    if deleted_since is not None:
+        # Attribution: only metric datapoints timestamped at/after the send's
+        # minute count as the duplicate's delivery, so wait for a fresh minute
+        # boundary before sending — the green path's deletions all happened
+        # before it and land in earlier datapoints even if CloudWatch publishes
+        # them late.
+        now = datetime.now(timezone.utc)
+        send_minute = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
+        time.sleep((send_minute - now).total_seconds())
     sqs.send_message(QueueUrl=queue_url, MessageBody=duplicate_body)
     delivered = observe_duplicate_delivery(
         sqs, queue_url, processed_counter, before_processed,
-        deleted_counter=deleted_counter, before_deleted=before_deleted,
+        deleted_since=deleted_since, send_minute=send_minute,
         # CloudWatch SQS metrics can lag by ~a minute, so the live window is
         # wider than the fixture one.
-        timeout=240 if deleted_counter is not None else 90,
+        timeout=240 if deleted_since is not None else 90,
     )
     check(checks, "idempotency-duplicate-delivered", True, delivered,
           "consumer processed-counter advanced (fixture) or CloudWatch "
-          "NumberOfMessagesDeleted advanced past its pre-send baseline (live; "
-          "depth transition kept as a fast secondary signal) — the no-op claim "
-          "is void without delivery")
+          "NumberOfMessagesDeleted datapoints timestamped at/after the "
+          "minute-aligned send (live; depth transition kept as a fast secondary "
+          "signal) — the no-op claim is void without delivery")
     time.sleep(2)
     check(checks, "idempotency-duplicate-is-noop", before,
           read_stats(dynamo, stats_table),
@@ -714,34 +724,37 @@ def main():
         ]
 
     processed_counter = None
-    deleted_counter = None
+    deleted_since = None
     if pump_stats_file:
         def processed_counter():
             return read_pump_stats(pump_stats_file)["processed"]
     else:
         # Durable live delivery signal: CloudWatch NumberOfMessagesDeleted for
-        # the main queue over a fixed window; compared as a delta over the
-        # pre-send baseline (both readings use the same window start).
+        # the main queue, counting only datapoints timestamped at/after the
+        # caller-supplied minute boundary (the duplicate's minute-aligned send)
+        # so late-published deletions of earlier messages cannot count.
         cloudwatch = boto3.client("cloudwatch", region_name="us-east-1")
         queue_name = queue_url.rstrip("/").rsplit("/", 1)[-1]
-        window_start = datetime.now(timezone.utc) - timedelta(minutes=5)
 
-        def deleted_counter():
+        def deleted_since(since):
             datapoints = cloudwatch.get_metric_statistics(
                 Namespace="AWS/SQS",
                 MetricName="NumberOfMessagesDeleted",
                 Dimensions=[{"Name": "QueueName", "Value": queue_name}],
-                StartTime=window_start,
+                StartTime=since,
                 EndTime=datetime.now(timezone.utc),
                 Period=60,
                 Statistics=["Sum"],
             )["Datapoints"]
-            return int(sum(point["Sum"] for point in datapoints))
+            return int(sum(
+                point["Sum"] for point in datapoints
+                if point["Timestamp"] >= since
+            ))
 
     checks = []
     submitted, idempotency = run_green_and_idempotency(
         checks, api_base_url, sqs, dynamo, queue_url, dlq_url, stats_table,
-        processed_counter=processed_counter, deleted_counter=deleted_counter,
+        processed_counter=processed_counter, deleted_since=deleted_since,
     )
     poison_sets = {"expected_set": [], "actual_set": [], "missing": [], "unexpected": []}
     if args.run_mode == "fixture":
