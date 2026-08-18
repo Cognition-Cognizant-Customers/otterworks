@@ -44,6 +44,25 @@ services:
     read_only: true
     tmpfs:
     - /tmp
+  mongodb:
+    image: mongo:7
+    container_name: otterworks-mongodb
+    ports:
+    - 127.0.0.1:27017:27017
+    volumes:
+    - mongodb_data:/data/db
+    healthcheck:
+      test:
+      - CMD
+      - mongosh
+      - --quiet
+      - --eval
+      - db.adminCommand('ping').ok
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    security_opt:
+    - no-new-privileges:true
   localstack: # nosemgrep: yaml.docker-compose.security.writable-filesystem-service.writable-filesystem-service
     image: localstack/localstack:3.8
     container_name: otterworks-localstack
@@ -259,6 +278,7 @@ networks:
     name: otterworks-network
 volumes:
   postgres_data: null
+  mongodb_data: null
   localstack_data: null
   meilisearch_data: null
   prometheus_data: null

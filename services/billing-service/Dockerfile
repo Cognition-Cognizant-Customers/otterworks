@@ -7,7 +7,8 @@ RUN pip install --no-cache-dir \
     "uvicorn[standard]>=0.29,<1" \
     "pydantic>=2.6,<3" \
     "pydantic-settings>=2.2,<3" \
-    "psycopg[binary]>=3.2,<4"
+    "psycopg[binary]>=3.2,<4" \
+    "pymongo>=4.6,<5"
 COPY app ./app
 COPY db ./db
 COPY scripts ./scripts
