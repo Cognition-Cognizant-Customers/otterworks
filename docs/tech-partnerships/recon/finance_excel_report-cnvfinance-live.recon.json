@@ -1,0 +1,219 @@
+{
+  "kind": "recon-report",
+  "unit": "finance_excel_report",
+  "namespace": "cnvfinance",
+  "generated_at": "2026-08-18T01:28:35Z",
+  "run_mode": "live",
+  "checks": [
+    {
+      "id": "summary/EUR/CREDIT",
+      "expected": "8|43269.62",
+      "actual": "8|43269.62",
+      "source_of_truth": "golden legacy CSV /home/ubuntu/tp-golden/cnvfinance/reports/finance_billing_20260115.csv vs ow_tp.gold.finance_billing_summary_cnvfinance (recomputed via SQL)",
+      "result": "pass"
+    },
+    {
+      "id": "summary/EUR/INVOICE",
+      "expected": "23|146588.31",
+      "actual": "23|146588.31",
+      "source_of_truth": "golden legacy CSV /home/ubuntu/tp-golden/cnvfinance/reports/finance_billing_20260115.csv vs ow_tp.gold.finance_billing_summary_cnvfinance (recomputed via SQL)",
+      "result": "pass"
+    },
+    {
+      "id": "summary/GBP/CREDIT",
+      "expected": "10|37930.19",
+      "actual": "10|37930.19",
+      "source_of_truth": "golden legacy CSV /home/ubuntu/tp-golden/cnvfinance/reports/finance_billing_20260115.csv vs ow_tp.gold.finance_billing_summary_cnvfinance (recomputed via SQL)",
+      "result": "pass"
+    },
+    {
+      "id": "summary/GBP/INVOICE",
+      "expected": "31|162322.68",
+      "actual": "31|162322.68",
+      "source_of_truth": "golden legacy CSV /home/ubuntu/tp-golden/cnvfinance/reports/finance_billing_20260115.csv vs ow_tp.gold.finance_billing_summary_cnvfinance (recomputed via SQL)",
+      "result": "pass"
+    },
+    {
+      "id": "summary/USD/CREDIT",
+      "expected": "8|54737.57",
+      "actual": "8|54737.57",
+      "source_of_truth": "golden legacy CSV /home/ubuntu/tp-golden/cnvfinance/reports/finance_billing_20260115.csv vs ow_tp.gold.finance_billing_summary_cnvfinance (recomputed via SQL)",
+      "result": "pass"
+    },
+    {
+      "id": "summary/USD/INVOICE",
+      "expected": "20|94945.18",
+      "actual": "20|94945.18",
+      "source_of_truth": "golden legacy CSV /home/ubuntu/tp-golden/cnvfinance/reports/finance_billing_20260115.csv vs ow_tp.gold.finance_billing_summary_cnvfinance (recomputed via SQL)",
+      "result": "pass"
+    },
+    {
+      "id": "crossfoot/gold-vs-silver",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "ow_tp.gold.finance_billing_summary_cnvfinance vs re-aggregated ow_tp.silver.custbill_records_cnvfinance",
+      "result": "pass"
+    },
+    {
+      "id": "crossfoot/total-record-count",
+      "expected": 100,
+      "actual": 100,
+      "source_of_truth": "golden legacy CSV vs sum(record_count) in ow_tp.gold.finance_billing_summary_cnvfinance",
+      "result": "pass"
+    },
+    {
+      "id": "delivery/audit-row-count",
+      "expected": 1,
+      "actual": 1,
+      "source_of_truth": "ow_tp.gold.finance_report_delivery_cnvfinance",
+      "result": "pass"
+    },
+    {
+      "id": "delivery/status-explicit-no-transport",
+      "expected": "VOLUME_VERIFIED; MAIL=NO_TRANSPORT_CONFIGURED",
+      "actual": "VOLUME_VERIFIED; MAIL=NO_TRANSPORT_CONFIGURED",
+      "source_of_truth": "ow_tp.gold.finance_report_delivery_cnvfinance",
+      "result": "pass"
+    },
+    {
+      "id": "artifact/extension-truthful",
+      "expected": ".csv",
+      "actual": ".csv",
+      "source_of_truth": "converted job must not reproduce the CSV-named-.xls defect",
+      "result": "pass"
+    },
+    {
+      "id": "artifact/sha256-matches-audit",
+      "expected": "ef1ad83223ebf1e902d57b15126f63fed91510b3228e8883d3c1bb6f03cadde0",
+      "actual": "ef1ad83223ebf1e902d57b15126f63fed91510b3228e8883d3c1bb6f03cadde0",
+      "source_of_truth": "/Volumes/ow_tp/bronze/landing/cnvfinance/finance_report/reports/finance_billing_20260115.csv vs ow_tp.gold.finance_report_delivery_cnvfinance.artifact_sha256",
+      "result": "pass"
+    },
+    {
+      "id": "artifact/bytes-equal-golden",
+      "expected": "Currency,RecordType,RecordCount,TotalAmount\nEUR,INVOICE,23,146588.31\nEUR,CREDIT,8,43269.62\nGBP,INVOICE,31,162322.68\nGBP,CREDIT,10,37930.19\nUSD,INVOICE,20,94945.18\nUSD,CREDIT,8,54737.57\n",
+      "actual": "Currency,RecordType,RecordCount,TotalAmount\nEUR,INVOICE,23,146588.31\nEUR,CREDIT,8,43269.62\nGBP,INVOICE,31,162322.68\nGBP,CREDIT,10,37930.19\nUSD,INVOICE,20,94945.18\nUSD,CREDIT,8,54737.57\n",
+      "source_of_truth": "/home/ubuntu/tp-golden/cnvfinance/reports/finance_billing_20260115.csv vs /Volumes/ow_tp/bronze/landing/cnvfinance/finance_report/reports/finance_billing_20260115.csv",
+      "result": "pass"
+    },
+    {
+      "id": "empty-input/zero-summary-rows",
+      "expected": 0,
+      "actual": 0,
+      "source_of_truth": "ow_tp.gold.finance_billing_summary_cnvfinance",
+      "result": "pass"
+    },
+    {
+      "id": "empty-input/header-only-artifact",
+      "expected": "Currency,RecordType,RecordCount,TotalAmount\n",
+      "actual": "Currency,RecordType,RecordCount,TotalAmount\n",
+      "source_of_truth": "/home/ubuntu/tp-golden/cnvfinance-empty/reports/finance_billing_20260115.csv vs /Volumes/ow_tp/bronze/landing/cnvfinance/finance_report/reports/finance_billing_20260116.csv",
+      "result": "pass"
+    },
+    {
+      "id": "idempotency/rerun-grid-identical",
+      "expected": [
+        [
+          "EUR",
+          "INVOICE",
+          "23",
+          "146588.31"
+        ],
+        [
+          "EUR",
+          "CREDIT",
+          "8",
+          "43269.62"
+        ],
+        [
+          "GBP",
+          "INVOICE",
+          "31",
+          "162322.68"
+        ],
+        [
+          "GBP",
+          "CREDIT",
+          "10",
+          "37930.19"
+        ],
+        [
+          "USD",
+          "INVOICE",
+          "20",
+          "94945.18"
+        ],
+        [
+          "USD",
+          "CREDIT",
+          "8",
+          "54737.57"
+        ]
+      ],
+      "actual": [
+        [
+          "EUR",
+          "INVOICE",
+          "23",
+          "146588.31"
+        ],
+        [
+          "EUR",
+          "CREDIT",
+          "8",
+          "43269.62"
+        ],
+        [
+          "GBP",
+          "INVOICE",
+          "31",
+          "162322.68"
+        ],
+        [
+          "GBP",
+          "CREDIT",
+          "10",
+          "37930.19"
+        ],
+        [
+          "USD",
+          "INVOICE",
+          "20",
+          "94945.18"
+        ],
+        [
+          "USD",
+          "CREDIT",
+          "8",
+          "54737.57"
+        ]
+      ],
+      "source_of_truth": "jobs run 1058858922489394 rerun then re-read ow_tp.gold.finance_billing_summary_cnvfinance",
+      "result": "pass"
+    },
+    {
+      "id": "idempotency/no-duplicate-rows",
+      "expected": 6,
+      "actual": 6,
+      "source_of_truth": "ow_tp.gold.finance_billing_summary_cnvfinance",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "jobs run-now rerun of ow_tp_finance_cnvfinance, summary grid compared before/after"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [],
+    "actual_set": [],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "mail transport: no SMTP exists in the demo workspace; delivery is volume-verified and the non-delivery is recorded explicitly",
+    "UNKNOWN(record_type) mapping: generator emits only 01/02 for this namespace (declared coverage_gap in the contract)",
+    "empty-customer-id skip and malformed-amount attribution: generator plants no such rows (declared coverage_gap in the contract)"
+  ]
+}
