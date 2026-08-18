@@ -54,6 +54,11 @@ KNOWN_ATTRIBUTES = {
     "owner_id", "version", "is_trashed", "created_at", "updated_at",
 }
 
+# Fields the migration itself owns on the output document; a source attribute
+# with one of these names is carried under attributed.reserved_name_collisions
+# instead of overwriting or being clobbered by the migration's own values.
+RESERVED_FIELDS = {"_id", "tenant", "attributed", "flags"}
+
 NS_PATTERN = re.compile(r"[A-Za-z0-9_]+")
 
 
@@ -81,12 +86,16 @@ def transform(item: dict, ns: str) -> tuple[dict, dict | None]:
     doc: dict = {"_id": item["id"], "tenant": ns}
     null_attributes: list[str] = []
     unknown_attributes: list[str] = []
+    reserved_collisions: dict = {}
 
     for key, value in item.items():
         if key in ("id", "ns"):
             continue
         if value is None:
             null_attributes.append(key)  # omitted, attributed — never fails open
+            continue
+        if key in RESERVED_FIELDS:
+            reserved_collisions[key] = to_bson(value)  # carried, never overwrites
             continue
         if key not in KNOWN_ATTRIBUTES:
             unknown_attributes.append(key)
@@ -97,6 +106,8 @@ def transform(item: dict, ns: str) -> tuple[dict, dict | None]:
         attributed["null_attributes"] = sorted(null_attributes)
     if unknown_attributes:
         attributed["unknown_attributes"] = sorted(unknown_attributes)
+    if reserved_collisions:
+        attributed["reserved_name_collisions"] = dict(sorted(reserved_collisions.items()))
     if attributed:
         doc["attributed"] = attributed
 

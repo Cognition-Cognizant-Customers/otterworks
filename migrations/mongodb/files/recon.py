@@ -88,7 +88,10 @@ def recompute(mongo_uri: str, ns: str) -> dict:
     for doc in files.find(
         {"tenant": ns}, {"_id": 1, "size_bytes": 1, "s3_key": 1, "flags": 1}
     ):
-        ck.add(f"{doc['_id']}|{doc['size_bytes']}|{doc['s3_key']}")
+        # .get(): documents may legitimately omit NULL source attributes per the
+        # contract's omit-and-attribute policy; a mismatch must surface as a
+        # failed checksum check, not abort the report.
+        ck.add(f"{doc['_id']}|{doc.get('size_bytes')}|{doc.get('s3_key')}")
         if "orphaned_metadata" in doc.get("flags", []):
             flagged += 1
 
