@@ -21,9 +21,12 @@ resource "aws_cloudwatch_event_rule" "feedback_submitted" {
   })
 }
 
-# Visibility timeout must be >= the consumer's function timeout or the event
-# source mapping is refused. Both stay small so a poison message exhausts
-# maxReceiveCount and lands in the DLQ within a demo beat (~30s).
+# Visibility timeout must exceed the consumer's function timeout with real
+# headroom (10s vs 5s here): if they were equal, a batch running to the wire
+# would reappear on the queue before its delete, be double-processed, and
+# after maxReceiveCount rounds park healthy events in the DLQ. Both stay
+# small so a genuine poison message still exhausts maxReceiveCount and lands
+# in the DLQ within a demo beat (~30s).
 resource "aws_sqs_queue" "feedback_events" {
   name                       = "${local.prefix}-feedback-events"
   visibility_timeout_seconds = 10
@@ -171,7 +174,7 @@ resource "aws_lambda_function" "projection" {
   filename         = "${path.module}/../feedback-projection-service/target/feedback-projection-service.jar"
   source_code_hash = filebase64sha256("${path.module}/../feedback-projection-service/target/feedback-projection-service.jar")
   memory_size      = var.lambda_memory_mb
-  timeout          = 10
+  timeout          = 5
 
   tracing_config {
     mode = "Active"

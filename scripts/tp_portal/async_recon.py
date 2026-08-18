@@ -402,6 +402,22 @@ def build_and_start_processes(queue_url, pump_stats_file, outage_file):
 # --------------------------------------------------------------------------
 
 
+def read_pump_stats(path, retries=10, interval=0.2):
+    """Read the pump's counter file, retrying rather than substituting zeros.
+
+    The pump replaces the file atomically, so a failed read means it has not
+    been written yet (or was caught mid-replace on a non-atomic filesystem);
+    a made-up baseline of 0 would let the delivery proof pass vacuously.
+    """
+    for attempt in range(retries):
+        try:
+            return json.loads(Path(path).read_text())
+        except (OSError, ValueError):
+            if attempt == retries - 1:
+                raise
+            time.sleep(interval)
+
+
 def observe_duplicate_delivery(sqs, queue_url, processed_counter, before_processed,
                                timeout=90):
     """Positive proof the re-sent duplicate was actually delivered to the consumer.
@@ -681,10 +697,7 @@ def main():
     processed_counter = None
     if pump_stats_file:
         def processed_counter():
-            try:
-                return json.loads(Path(pump_stats_file).read_text())["processed"]
-            except (OSError, ValueError, KeyError):
-                return 0
+            return read_pump_stats(pump_stats_file)["processed"]
 
     checks = []
     submitted, idempotency = run_green_and_idempotency(
@@ -698,7 +711,7 @@ def main():
             outage_file,
         )
         time.sleep(2)
-        pump_stats = json.loads(Path(pump_stats_file).read_text())
+        pump_stats = read_pump_stats(pump_stats_file)
         check(checks, "consumer-crashed-invocations-zero", 0,
               pump_stats["crashed_invocations"],
               "fixture pump counters: a reported batch-item failure is retry mechanics, "

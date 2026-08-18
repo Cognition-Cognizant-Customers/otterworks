@@ -27,6 +27,7 @@ resource "aws_sfn_state_machine" "feedback_triage" {
             { Variable = "$.detail.eventId", IsPresent = true },
             { Variable = "$.detail.eventId", IsString = true },
             { Variable = "$.detail.rating", IsPresent = true },
+            { Variable = "$.detail.rating", IsNumeric = true },
             { Variable = "$.detail.rating", NumericGreaterThanEquals = 1 },
             { Variable = "$.detail.rating", NumericLessThanEquals = 5 },
           ]
@@ -80,6 +81,10 @@ resource "aws_sfn_state_machine" "feedback_triage" {
   })
 }
 
+data "aws_caller_identity" "current" {}
+
+# Trust is confined to state machines in this account (aws:SourceArn would be
+# circular here: the state machine references this role).
 resource "aws_iam_role" "triage" {
   name = "${local.prefix}-feedback-triage-role"
   assume_role_policy = jsonencode({
@@ -88,6 +93,11 @@ resource "aws_iam_role" "triage" {
       Effect    = "Allow"
       Action    = "sts:AssumeRole"
       Principal = { Service = "states.amazonaws.com" }
+      Condition = {
+        StringEquals = {
+          "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+        }
+      }
     }]
   })
 }
@@ -122,6 +132,14 @@ resource "aws_iam_role" "events_to_triage" {
       Effect    = "Allow"
       Action    = "sts:AssumeRole"
       Principal = { Service = "events.amazonaws.com" }
+      Condition = {
+        ArnEquals = {
+          "aws:SourceArn" = aws_cloudwatch_event_rule.feedback_submitted.arn
+        }
+        StringEquals = {
+          "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+        }
+      }
     }]
   })
 }

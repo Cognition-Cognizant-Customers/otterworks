@@ -4,6 +4,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -137,7 +138,13 @@ public final class AsyncFixturePump {
         String json = "{\"invocations\":" + invocations + ",\"processed\":" + processed
                 + ",\"reported_failures\":" + reportedFailures
                 + ",\"crashed_invocations\":" + crashes + "}";
-        Files.write(Path.of(file), json.getBytes(StandardCharsets.UTF_8));
+        // Atomic: the recon script reads this file concurrently and must never
+        // observe a truncated half-write.
+        Path target = Path.of(file);
+        Path temp = target.resolveSibling(target.getFileName() + ".tmp");
+        Files.write(temp, json.getBytes(StandardCharsets.UTF_8));
+        Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING);
     }
 
     private static String env(String name, String fallback) {
