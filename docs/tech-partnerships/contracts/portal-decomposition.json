@@ -1,0 +1,42 @@
+{
+  "unit": "legacy-portal-decomposition/http-parity",
+  "source_artifact_path": "services/legacy-portal",
+  "target_objects": [
+    "ow-tp-portal-<ns>-api (API Gateway HTTP API, $default stage)",
+    "ow-tp-portal-<ns>-announcements (Lambda java17 SnapStart, live alias)",
+    "ow-tp-portal-<ns>-preferences (Lambda java17 SnapStart, live alias)",
+    "ow-tp-portal-<ns>-feedback (Lambda java17 SnapStart, live alias)",
+    "ow-tp-portal-<ns>-announcements (DynamoDB, PAY_PER_REQUEST, PITR)",
+    "ow-tp-portal-<ns>-preferences (DynamoDB, PAY_PER_REQUEST, PITR)",
+    "ow-tp-portal-<ns>-feedback (DynamoDB, PAY_PER_REQUEST, PITR)",
+    "ow-tp-portal-<ns>-<context>-errors + ow-tp-portal-<ns>-api-5xx (CloudWatch alarms)"
+  ],
+  "golden_baseline_location": "scripts/tp_portal/golden/portal-golden-transcript.json (recorded from a fresh local monolith per scripts/tp_portal/transcript_spec.json)",
+  "acceptance_checks": [
+    {"id": "http-parity-20-steps", "description": "Replay of the 20-step golden transcript against the decomposed estate on fresh tables passes 20/20: status codes exact; bodies compared as parsed JSON; createdAt validated as ISO-8601 then normalized; assert_status_only steps compare status only."},
+    {"id": "idempotency-rerun", "description": "A second reset-and-replay pass is also 20/20 (rerun evidence carried in the recon report)."},
+    {"id": "fault-classification", "description": "Declared ApiException maps to its 4xx body (parity); unexpected/infrastructure exceptions propagate so AWS/Lambda Errors increments and the per-context alarm plus the gateway 5xx alarm can fire."},
+    {"id": "namespacing", "description": "Every resource carries the ow-tp-portal-<ns>- prefix and Project=otterworks-tp tag; nothing with hourly idle cost."}
+  ],
+  "planted_anomalies": [
+    {"id": "ann-get-missing", "description": "GET /api/announcements/999 on a store with 2 rows must return the monolith's 404 error body.", "status": "must-detect"},
+    {"id": "fb-submit-invalid-rating", "description": "POST /api/feedback with rating=6 must be rejected with a 400 (framework validation body is status-only per the transcript spec).", "status": "must-detect"},
+    {"id": "infrastructure-fault-path", "description": "Deliberate infrastructure fault (missing table) driving Errors metric >= 1 and alarm OK->ALARM->OK; live-only, owned by the parent's validation window.", "status": "coverage_gap", "reason": "Fixture (child) runs never touch live AWS; the parent proves the fault path once in a throwaway namespace."}
+  ],
+  "encoding_policy": {
+    "input_encoding": "UTF-8 JSON request/response bodies; base64-encoded API Gateway payloads are decoded as UTF-8 explicitly; percent-encoded path segments are decoded per segment ('+' stays literal) to match Spring @PathVariable decoding.",
+    "byte_transparency": "Not byte-transparent: bodies are compared as parsed JSON values (serializer whitespace/key order are out of contract); timestamp fields are validated as ISO-8601 instants then normalized to '<instant>'.",
+    "invalid_bytes": "Malformed percent-escapes in a path segment are rejected with 400; invalid UTF-8 in a JSON body is rejected as a malformed body (400)."
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "fail",
+    "details": "Unknown JSON fields in request bodies are ignored (Jackson non-strict binding, matching the monolith). Missing/blank required fields (title, body, userId, message) and out-of-range ratings (outside 1-5) are rejected with 400; NULLs never fail open into stored records."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "Empty stores are a served state, not an error: GET /api/announcements returns [], GET /api/feedback/average-rating returns 0.0, and unknown users get default preferences (light/en-US/email-on) without creating a row. Empty or missing request bodies on POST/PUT are rejected with 400."
+  },
+  "trigger_granularity": "per-file",
+  "trigger_granularity_note": "Synchronous request/response: one API Gateway event per HTTP request invokes exactly one Lambda ('per-file' is the schema's closest enum value to per-request); no batching. Async/event-driven flows belong to the events unit, not this one."
+}

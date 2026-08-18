@@ -1,0 +1,6 @@
+target/
+terraform/.terraform/
+terraform/terraform.tfstate*
+terraform/tfplan
+terraform/.terraform.lock.hcl
+terraform/backend_override.tf
