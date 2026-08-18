@@ -143,8 +143,10 @@ rows_loaded = rows_skipped = rows_attributed = 0
 if psv_files:
     schema = ("cust_id STRING, cust_name STRING, bill_date STRING, "
               "amount STRING, currency STRING, record_type STRING")
+    # Literal pipe split like the legacy split(/\|/): no quote/escape semantics.
     raw = (spark.read.format("csv")
            .option("sep", "|").option("header", "false")
+           .option("quote", "\u0000").option("escape", "\u0000")
            .option("mode", "PERMISSIVE")
            .schema(schema)
            .load(f"{parsed_dir}/CUSTBILL*.psv"))
