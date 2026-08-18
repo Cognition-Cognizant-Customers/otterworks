@@ -36,6 +36,21 @@ def base(ns: str) -> str:
     return f"{LANDING}/{ns}"
 
 
+def esc(value: str) -> str:
+    """Escape a Python string for embedding in a single-quoted Spark SQL literal."""
+    return value.replace("\\", "\\\\").replace("'", "\\'")
+
+
+def split_records(data: bytes) -> list:
+    """Split opaque bytes into records on real newlines only (same as the notebook)."""
+    if not data:
+        return []
+    recs = data.split(b"\n")
+    if recs and recs[-1] == b"":
+        recs.pop()
+    return [(r[:-1] if r.endswith(b"\r") else r).decode("latin-1") for r in recs]
+
+
 def job_settings(ns: str, notebook_path: str) -> dict:
     return {
         "name": f"ow_tp_ingest_{ns}",
@@ -139,10 +154,10 @@ def collect_state(dbx: Databricks, ns: str, golden: dict, source_dir: Path) -> l
             "result": "pass" if arc in archive_names else "fail",
         })
         local = source_dir / name
-        line_count = len(local.read_bytes().decode("latin-1").splitlines())
+        line_count = len(split_records(local.read_bytes()))
         row = dbx.sql_ok(
             f"SELECT sha256, bytes, line_count FROM ow_tp.bronze.custbill_ingest_files_{ns} "
-            f"WHERE ns = '{ns}' AND file_name = '{name}'"
+            f"WHERE ns = '{ns}' AND file_name = '{esc(name)}'"
         ).rows
         expected_reg = f"{sha}|{item['bytes']}|{line_count}|1row"
         actual_reg = f"{row[0][0]}|{row[0][1]}|{row[0][2]}|{len(row)}row" if row else "MISSING"
@@ -155,7 +170,7 @@ def collect_state(dbx: Databricks, ns: str, golden: dict, source_dir: Path) -> l
         })
         raw = dbx.sql_ok(
             f"SELECT COUNT(*) FROM ow_tp.bronze.custbill_raw_{ns} "
-            f"WHERE ns = '{ns}' AND file_name = '{name}' AND sha256 = '{sha}'"
+            f"WHERE ns = '{ns}' AND file_name = '{esc(name)}' AND sha256 = '{sha}'"
         ).scalar()
         checks.append({
             "id": f"bronze_raw_count/{name}",
@@ -229,9 +244,9 @@ def cmd_recon(dbx: Databricks, args) -> int:
     }
     Path(args.out).write_text(json.dumps(report, indent=2) + "\n")
     failed = [c["id"] for c in checks if c["result"] != "pass"]
-    print(f"recon: {len(checks) - len(failed)}/{len(checks)} checks pass; anomalies missing={missing} unexpected={unexpected}")
+    print(f"recon: {len(checks) - len(failed)}/{len(checks)} checks pass; idempotency={idempotency['result']}; anomalies missing={missing} unexpected={unexpected}")
     print(f"report: {args.out}")
-    return 1 if failed or missing or unexpected else 0
+    return 1 if failed or missing or unexpected or idempotency["result"] == "fail" else 0
 
 
 def main() -> int:

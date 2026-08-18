@@ -47,6 +47,20 @@ def sql_str(value: str) -> str:
     return value.replace("\\", "\\\\").replace("'", "\\'")
 
 
+def split_records(data: bytes) -> list:
+    r"""Split opaque bytes into records on real newlines only (\n, with optional \r).
+
+    str.splitlines() would also break on \v, \f, 0x1c-0x1e and NEL once latin-1
+    decodes them, which is wrong for an opaque mainframe extract.
+    """
+    if not data:
+        return []
+    recs = data.split(b"\n")
+    if recs and recs[-1] == b"":
+        recs.pop()
+    return [(r[:-1] if r.endswith(b"\r") else r).decode("latin-1") for r in recs]
+
+
 def atomic_write(path: str, data: bytes, sha: str) -> None:
     tmp = os.path.join(STAGING, f"{os.path.basename(path)}.{sha[:16]}.tmp")
     with open(tmp, "wb") as fh:
@@ -71,7 +85,7 @@ for name in sorted(os.listdir(DROP)):
     atomic_write(archive_path, data, sha)
 
     # byte transparency: latin-1 is a lossless 1:1 byte->codepoint mapping
-    lines = data.decode("latin-1").splitlines()
+    lines = split_records(data)
     spark.sql(
         f"""MERGE INTO {FILES_TBL} t USING (SELECT
               '{NS}' AS ns, '{sql_str(name)}' AS file_name, '{sha}' AS sha256,
