@@ -125,13 +125,13 @@ def cmd_plant(args) -> int:
         lines[i] = lines[i][:48] + BAD_AMOUNT_VALUE + lines[i][60:]
 
     def plant_trailer_mismatch(lines: list[str]) -> None:
+        body = sum(1 for l in lines if l and not l.startswith(("HDR", "TRL")))
         for i, line in enumerate(lines):
             if line.startswith("TRL"):
-                count = int(line[3:13])
-                lines[i] = "TRL" + f"{count + TRAILER_DELTA:010d}" + line[13:]
+                lines[i] = "TRL" + f"{body + TRAILER_DELTA:010d}" + line[13:]
                 planted.append({"file": files[2].name, "kind": "trailer_count_mismatch",
                                 "cust_id": "", "body_row": None,
-                                "detail": f"trailer={count + TRAILER_DELTA} body={count}"})
+                                "detail": f"trailer={body + TRAILER_DELTA} body={body}"})
                 return
         raise SystemExit("no TRL line found")
 
