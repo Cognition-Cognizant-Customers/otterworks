@@ -41,6 +41,59 @@ resource "aws_cloudwatch_metric_alarm" "api_5xx" {
   }
 }
 
+# Async estate alarms. treat_missing_data = notBreaching everywhere: an idle
+# estate emits no queue/consumer datapoints and must stay silent overnight.
+resource "aws_cloudwatch_metric_alarm" "feedback_dlq_depth" {
+  alarm_name          = "${local.prefix}-feedback-events-dlq-depth"
+  alarm_description   = "Poison feedback events captured in the DLQ awaiting operator replay."
+  namespace           = "AWS/SQS"
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  statistic           = "Maximum"
+  period              = 60
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    QueueName = aws_sqs_queue.feedback_events_dlq.name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "projection_errors" {
+  alarm_name          = "${local.prefix}-feedback-projection-errors"
+  alarm_description   = "Errors in the feedback projection consumer."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  statistic           = "Sum"
+  period              = 60
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.projection.function_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "feedback_queue_age" {
+  alarm_name          = "${local.prefix}-feedback-events-age"
+  alarm_description   = "Feedback events stuck on the main queue (consumer stalled)."
+  namespace           = "AWS/SQS"
+  metric_name         = "ApproximateAgeOfOldestMessage"
+  statistic           = "Maximum"
+  period              = 60
+  evaluation_periods  = 5
+  threshold           = 300
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    QueueName = aws_sqs_queue.feedback_events.name
+  }
+}
+
 resource "aws_cloudwatch_event_rule" "alarm_to_devin" {
   name        = "${local.prefix}-alarm-to-devin"
   description = "Route portal Lambda alarm state changes to the Devin incident webhook."
@@ -50,7 +103,12 @@ resource "aws_cloudwatch_event_rule" "alarm_to_devin" {
     detail-type = ["CloudWatch Alarm State Change"]
     resources = concat(
       [for a in aws_cloudwatch_metric_alarm.lambda_errors : a.arn],
-      [aws_cloudwatch_metric_alarm.api_5xx.arn],
+      [
+        aws_cloudwatch_metric_alarm.api_5xx.arn,
+        aws_cloudwatch_metric_alarm.feedback_dlq_depth.arn,
+        aws_cloudwatch_metric_alarm.projection_errors.arn,
+        aws_cloudwatch_metric_alarm.feedback_queue_age.arn,
+      ],
     )
     detail = {
       state = { value = ["ALARM"] }

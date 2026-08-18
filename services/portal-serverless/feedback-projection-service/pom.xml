@@ -9,9 +9,9 @@
     <version>1.0.0</version>
   </parent>
 
-  <artifactId>feedback-service</artifactId>
-  <name>feedback-service</name>
-  <description>Feedback bounded context of the legacy portal as a Lambda backed by DynamoDB.</description>
+  <artifactId>feedback-projection-service</artifactId>
+  <name>feedback-projection-service</name>
+  <description>SQS consumer maintaining the derived feedback-stats projection from FeedbackSubmitted events.</description>
 
   <dependencies>
     <dependency>
@@ -19,8 +19,10 @@
       <artifactId>portal-common</artifactId>
     </dependency>
     <dependency>
+      <!-- Not used by the handler itself (the event-source mapping delivers
+           batches); carried so the fixture pump can drive the same jar. -->
       <groupId>software.amazon.awssdk</groupId>
-      <artifactId>eventbridge</artifactId>
+      <artifactId>sqs</artifactId>
     </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
@@ -29,7 +31,7 @@
   </dependencies>
 
   <build>
-    <finalName>feedback-service</finalName>
+    <finalName>feedback-projection-service</finalName>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

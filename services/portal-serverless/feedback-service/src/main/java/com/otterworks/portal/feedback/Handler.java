@@ -5,6 +5,7 @@ import com.otterworks.portal.common.ApiHandler;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 
 /**
  * Lambda entry point for the feedback bounded context.
@@ -21,8 +22,18 @@ public class Handler extends ApiHandler {
     private final FeedbackService service;
 
     public Handler() {
-        this(new FeedbackService(new DynamoFeedbackStore(
-                DynamoDbClient.create(), System.getenv("TABLE_NAME"))));
+        this(new FeedbackService(
+                new DynamoFeedbackStore(DynamoDbClient.create(), System.getenv("TABLE_NAME")),
+                publisherFromEnv()));
+    }
+
+    /** Bus-less estates (unit tests, plain fixture) fall back to the no-op publisher. */
+    private static EventPublisher publisherFromEnv() {
+        String busName = System.getenv("EVENT_BUS_NAME");
+        if (busName == null || busName.isBlank()) {
+            return EventPublisher.NONE;
+        }
+        return new EventBridgePublisher(EventBridgeClient.create(), busName);
     }
 
     public Handler(FeedbackService service) {

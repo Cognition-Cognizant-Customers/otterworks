@@ -15,6 +15,7 @@ import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 
 /**
  * Local fixture harness for the portal Lambdas: serves the golden transcript's
@@ -24,6 +25,9 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
  *
  * Env: FIXTURE_PORT (default 9095), DYNAMO_ENDPOINT (default http://localhost:4566),
  *      TABLE_PREFIX (default ow-tp-portal-fixture).
+ *      Optional async fixture: EVENT_BUS_NAME + EVENT_ENDPOINT wire the feedback
+ *      handler's write-then-publish path to a LocalStack EventBridge bus; when
+ *      unset the publisher is the no-op and behavior is identical to before.
  */
 public final class PortalFixtureShim {
 
@@ -47,10 +51,23 @@ public final class PortalFixtureShim {
                 new com.otterworks.portal.preferences.PreferenceService(
                         new com.otterworks.portal.preferences.DynamoPreferenceStore(
                                 client, prefix + "-preferences")));
+        com.otterworks.portal.feedback.EventPublisher publisher =
+                com.otterworks.portal.feedback.EventPublisher.NONE;
+        String busName = System.getenv("EVENT_BUS_NAME");
+        if (busName != null && !busName.isBlank()) {
+            EventBridgeClient events = EventBridgeClient.builder()
+                    .endpointOverride(URI.create(env("EVENT_ENDPOINT", endpoint)))
+                    .region(Region.US_EAST_1)
+                    .credentialsProvider(StaticCredentialsProvider.create(
+                            AwsBasicCredentials.create("test", "test")))
+                    .build();
+            publisher = new com.otterworks.portal.feedback.EventBridgePublisher(events, busName);
+        }
         var feedback = new com.otterworks.portal.feedback.Handler(
                 new com.otterworks.portal.feedback.FeedbackService(
                         new com.otterworks.portal.feedback.DynamoFeedbackStore(
-                                client, prefix + "-feedback")));
+                                client, prefix + "-feedback"),
+                        publisher));
 
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/", exchange -> {

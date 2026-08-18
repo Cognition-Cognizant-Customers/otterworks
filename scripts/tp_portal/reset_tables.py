@@ -18,6 +18,10 @@ TABLE_KEYS = {
     "announcements": "pk",
     "preferences": "userId",
     "feedback": "pk",
+    # Derived async projection: must be cleared with the feedback table, or the
+    # stale evt#<eventId> dedupe markers left behind make post-reset submissions
+    # (whose ids restart at 1) look like duplicates and the projection stalls.
+    "feedback-stats": "pk",
 }
 
 
@@ -37,7 +41,13 @@ def main():
     for context, key in TABLE_KEYS.items():
         table = dynamodb.Table(f"{args.prefix}-{context}")
         deleted = 0
-        scan = table.scan(ProjectionExpression="#k", ExpressionAttributeNames={"#k": key})
+        try:
+            scan = table.scan(
+                ProjectionExpression="#k", ExpressionAttributeNames={"#k": key}
+            )
+        except dynamodb.meta.client.exceptions.ResourceNotFoundException:
+            print(f"{table.name}: not found, skipped")
+            continue
         while True:
             with table.batch_writer() as batch:
                 for item in scan["Items"]:
