@@ -11,7 +11,10 @@ Usage:
   python3 scripts/tp_dbx/ingest.py land   --ns cnvingest --source-dir <dir> [--plant-anomalies]
   python3 scripts/tp_dbx/ingest.py run    --ns cnvingest
   python3 scripts/tp_dbx/ingest.py recon  --ns cnvingest --golden <golden.json> \
-      --source-dir <dir> --out <report.recon.json> [--rerun]
+      --source-dir <dir> --out <report.recon.json>
+
+The recon always performs the idempotency rerun: the report is audit evidence and
+the recon-report schema pins idempotency_rerun.performed to true.
 """
 from __future__ import annotations
 
@@ -187,17 +190,17 @@ def cmd_recon(dbx: Databricks, args) -> int:
     source_dir = Path(args.source_dir)
     checks = collect_state(dbx, args.ns, golden, source_dir)
 
-    idempotency = {"performed": False}
-    if args.rerun:
-        run_job(dbx, args.ns)
-        rerun_checks = collect_state(dbx, args.ns, golden, source_dir)
-        identical = [(c["id"], c["actual"]) for c in checks] == [(c["id"], c["actual"]) for c in rerun_checks]
-        rerun_green = all(c["result"] == "pass" for c in rerun_checks)
-        idempotency = {
-            "performed": True,
-            "result": "pass" if identical and rerun_green else "fail",
-            "evidence": f"job re-run with empty drop; all {len(rerun_checks)} checks recomputed from the platform and byte-identical to the first pass" if identical else "rerun state diverged from first pass",
-        }
+    # The rerun is not optional: the recon-report schema pins
+    # idempotency_rerun.performed to true and requires a result.
+    run_job(dbx, args.ns)
+    rerun_checks = collect_state(dbx, args.ns, golden, source_dir)
+    identical = [(c["id"], c["actual"]) for c in checks] == [(c["id"], c["actual"]) for c in rerun_checks]
+    rerun_green = all(c["result"] == "pass" for c in rerun_checks)
+    idempotency = {
+        "performed": True,
+        "result": "pass" if identical and rerun_green else "fail",
+        "evidence": f"job re-run with empty drop; all {len(rerun_checks)} checks recomputed from the platform and byte-identical to the first pass" if identical else "rerun state diverged from first pass",
+    }
 
     expected_set = [[p, "not_staged"] for p in ("NOTCUSTBILL_x.txt", "CUSTBILL_PARTIAL_999.dat.filepart")]
     actual_set = [[c["id"].split("/", 1)[1], "not_staged"] for c in checks if c["id"].startswith("non_matching_ignored/") and c["result"] == "pass"]
@@ -239,7 +242,6 @@ def main() -> int:
     p.add_argument("--plant-anomalies", action="store_true")
     p.add_argument("--golden")
     p.add_argument("--out")
-    p.add_argument("--rerun", action="store_true")
     p.add_argument("--run-mode", default="live", choices=["live", "fixture"])
     args = p.parse_args()
     require_ns(args.ns)

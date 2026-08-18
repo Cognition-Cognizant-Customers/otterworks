@@ -24,7 +24,7 @@ ARCHIVE = f"{BASE}/archive"
 STAGING = f"{BASE}/.staging"
 FILES_TBL = f"ow_tp.bronze.custbill_ingest_files_{NS}"
 RAW_TBL = f"ow_tp.bronze.custbill_raw_{NS}"
-FILE_RE = re.compile(r"CUSTBILL[A-Za-z0-9_]*\.dat")
+FILE_RE = re.compile(r"CUSTBILL[^/]*\.dat")  # same match set as the legacy ksh glob CUSTBILL*.dat
 
 for d in (DROP, INCOMING, ARCHIVE, STAGING):
     os.makedirs(d, exist_ok=True)
@@ -40,6 +40,11 @@ spark.sql(
         ns STRING, file_name STRING, sha256 STRING, line_no BIGINT, line STRING
     ) USING DELTA"""
 )
+
+
+def sql_str(value: str) -> str:
+    """Escape a Python string for embedding in a single-quoted Spark SQL literal."""
+    return value.replace("\\", "\\\\").replace("'", "\\'")
 
 
 def atomic_write(path: str, data: bytes, sha: str) -> None:
@@ -69,15 +74,15 @@ for name in sorted(os.listdir(DROP)):
     lines = data.decode("latin-1").splitlines()
     spark.sql(
         f"""MERGE INTO {FILES_TBL} t USING (SELECT
-              '{NS}' AS ns, '{name}' AS file_name, '{sha}' AS sha256,
+              '{NS}' AS ns, '{sql_str(name)}' AS file_name, '{sha}' AS sha256,
               {len(data)}L AS bytes, {len(lines)}L AS line_count,
-              '{staged_path}' AS staged_path, '{archive_path}' AS archive_path
+              '{sql_str(staged_path)}' AS staged_path, '{sql_str(archive_path)}' AS archive_path
             ) s
             ON t.ns = s.ns AND t.file_name = s.file_name AND t.sha256 = s.sha256
             WHEN NOT MATCHED THEN INSERT *"""
     )
     spark.sql(
-        f"DELETE FROM {RAW_TBL} WHERE ns = '{NS}' AND file_name = '{name}' AND sha256 = '{sha}'"
+        f"DELETE FROM {RAW_TBL} WHERE ns = '{NS}' AND file_name = '{sql_str(name)}' AND sha256 = '{sha}'"
     )
     df = spark.createDataFrame(
         [(NS, name, sha, i + 1, line) for i, line in enumerate(lines)],
