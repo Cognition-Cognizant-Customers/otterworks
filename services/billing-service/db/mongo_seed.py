@@ -233,9 +233,10 @@ def customer_documents(ns: str) -> list[dict]:
         ]
         documents.append(
             {
-                "_id": tenant_id,
+                "_id": f"{ns}:{ORIGIN}:{tenant_id}",
                 "ns": ns,
                 "origin": ORIGIN,
+                "tenant_id": tenant_id,
                 "name": name,
                 "tax_exempt": tax_exempt,
                 "status": status,
@@ -251,9 +252,10 @@ def customer_documents(ns: str) -> list[dict]:
 def invoice_documents(ns: str) -> list[dict]:
     return [
         {
-            "_id": invoice_id,
+            "_id": f"{ns}:{ORIGIN}:{invoice_id}",
             "ns": ns,
             "origin": ORIGIN,
+            "invoice_id": invoice_id,
             "tenant_id": tenant_id,
             "period_id": period_id,
             "issued_at": _dt(issued_at),
@@ -272,8 +274,9 @@ def seed(database: Database, ns: str) -> None:
     """Reset the fixture-managed slice of the document store for one namespace.
 
     Removes only documents this service wrote (`origin == "billing_svc"`,
-    matching `ns`), then reinserts the deterministic seed. Documents from the
-    wave-1 data migration are never matched and never touched.
+    matching `ns`), then reinserts the deterministic seed. `_id` values are
+    prefixed with `<ns>:<origin>:` so namespaces sharing a database can never
+    collide with each other or with wave-1 migrated documents.
     """
     for collection_name, documents in (
         (CUSTOMERS_COLLECTION, customer_documents(ns)),

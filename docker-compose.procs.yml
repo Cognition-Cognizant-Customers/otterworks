@@ -85,6 +85,11 @@ services:
 
   billing-service-mongo:
     image: mongo:7
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
     ports:
       - "127.0.0.1:${PROCS_MONGO_PORT:-58432}:27017"
     volumes:
