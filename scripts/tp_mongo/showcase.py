@@ -42,7 +42,7 @@ PROBE_PREFIX = "showcase-probe"
 
 
 def require_ns(ns: str) -> str:
-    if not ns or not ns.replace("_", "").isalnum() or not ns.islower():
+    if not ns or not ns.replace("_", "").isalnum() or ns != ns.lower():
         raise SystemExit(f"--ns must be a lowercase identifier, got {ns!r}")
     return ns
 
@@ -74,10 +74,12 @@ def apply_validators(client: MongoClient, ns: str) -> None:
         )
         if nonconforming:
             sample = db[name].find_one({"$nor": [{"$jsonSchema": schema}]}, {"_id": 1})
+            sample_id = sample["_id"] if sample else "?"
             raise SystemExit(
                 f"{name}: existing documents do not satisfy the proposed validator "
-                f"(e.g. _id={sample['_id']!r}); refusing to collMod"
+                f"(e.g. _id={sample_id!r}); refusing to collMod"
             )
+    for name, schema in VALIDATORS.items():
         db.command(
             "collMod",
             name,
