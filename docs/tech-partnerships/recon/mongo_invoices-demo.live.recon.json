@@ -36,9 +36,9 @@
       "source_of_truth": "manifest INVOICE_LINE.rows; actual embedded + quarantined recomputed from the target"
     }
   ],
-  "generated_at": "2026-08-18T01:29:53Z",
+  "generated_at": "2026-08-18T01:36:55Z",
   "idempotency_rerun": {
-    "evidence": "",
+    "evidence": "run 1 vs rerun recomputed from target: invoices 18750==18750, embedded lines 149963==149963, line checksum 88a66751f0b08b476b492105a2efc537==88a66751f0b08b476b492105a2efc537, quarantined orphans 37==37",
     "performed": true,
     "result": "pass"
   },
@@ -57,7 +57,6 @@
   "run_mode": "live",
   "unit": "mongo_invoices",
   "unverified_paths": [
-    "live Atlas run (run_mode=fixture only; parent owns the live validation window)",
     "invalid-UTF-8 byte quarantine path (unexercised: the seeded namespace contains no undecodable rows and the AL32UTF8 driver decode raises before any row-level quarantine could run)",
     "NULL-amount quarantine path (seeded namespace contains no NULL amounts; policy implemented but unexercised)"
   ],

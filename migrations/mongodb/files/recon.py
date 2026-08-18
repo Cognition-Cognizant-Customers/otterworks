@@ -48,10 +48,6 @@ UNVERIFIED_PATHS = [
         "detector testdata/legacy/validate.py uses"
     ),
     (
-        "live Atlas run: this phase is fixture-only per the isolation rules; the "
-        "parent recomputes recon in the live validation window"
-    ),
-    (
         "DynamoDB Binary/NULL/unknown-attribute handling: policy implemented per the "
         "contract but the seeded estate plants none, so those branches are untested"
     ),
@@ -230,7 +226,10 @@ def build_report(ns: str, run_mode: str, current: dict, prior: dict) -> dict:
             "collection": f"ow_tp_mongodb_{ns}_quarantine.files_quarantine",
             "ids": current["quarantined_ids"],
         },
-        "unverified_paths": UNVERIFIED_PATHS,
+        "unverified_paths": ([
+            "live Atlas run: this phase is fixture-only per the isolation "
+            "rules; the parent recomputes recon in the live validation window"
+        ] if run_mode != "live" else []) + UNVERIFIED_PATHS,
     }
 
 

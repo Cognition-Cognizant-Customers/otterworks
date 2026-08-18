@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_files",
   "namespace": "demo",
-  "generated_at": "2026-08-18T01:30:06Z",
+  "generated_at": "2026-08-18T01:36:59Z",
   "run_mode": "live",
   "checks": [
     {
@@ -124,7 +124,6 @@
   },
   "unverified_paths": [
     "per-key S3 HeadObject existence probe: the estate seeds file metadata only (no file binaries in s3://otterworks-data-lake), so orphaned_metadata is detected by the estate's orphan marker (a /missing/ path segment), the same detector testdata/legacy/validate.py uses",
-    "live Atlas run: this phase is fixture-only per the isolation rules; the parent recomputes recon in the live validation window",
     "DynamoDB Binary/NULL/unknown-attribute handling: policy implemented per the contract but the seeded estate plants none, so those branches are untested",
     "s3.data-lake events prefix (missing_hours anomaly): contractual coverage_gap \u2014 no unit in this track ingests the events prefix"
   ]

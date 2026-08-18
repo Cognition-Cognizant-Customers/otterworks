@@ -170,7 +170,6 @@
   "run_mode": "live",
   "unit": "mongo_documents",
   "unverified_paths": [
-    "live Atlas run (run_mode=live) \u2014 parent-owned validation window",
     "invalid-UTF-8 quarantine path \u2014 Postgres UTF-8 source cannot produce it; not exercised",
     "SCALE=full volumes \u2014 only SCALE=demo exercised"
   ],
