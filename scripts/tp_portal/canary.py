@@ -41,8 +41,14 @@ def gate_alarm_names(function_name: str) -> list[str]:
 
 
 def alarm_states(cloudwatch, names: list[str]) -> dict[str, str]:
+    # DescribeAlarms silently omits unknown alarm names; a missing gate must be
+    # a hard failure, never an ungated bake.
     resp = cloudwatch.describe_alarms(AlarmNames=names)
-    return {a["AlarmName"]: a["StateValue"] for a in resp["MetricAlarms"]}
+    states = {a["AlarmName"]: a["StateValue"] for a in resp["MetricAlarms"]}
+    missing = [n for n in names if n not in states]
+    if missing:
+        raise SystemExit(f"gate alarms not found (refusing to bake ungated): {missing}")
+    return states
 
 
 def wait_version_active(lam, function_name: str, version: str, timeout: int = 300) -> None:

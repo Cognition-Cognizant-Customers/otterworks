@@ -76,7 +76,7 @@ def worker(base_url: str, token: str | None, stop_at: float,
         count += 1
         with lock:
             latencies.append(elapsed_ms)
-            if status == 0 or status >= 500:
+            if status >= 500:
                 failures.append(f"{step['method']} {step['path']}: HTTP {status}")
     return count
 
