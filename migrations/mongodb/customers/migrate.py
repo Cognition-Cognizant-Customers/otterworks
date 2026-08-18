@@ -219,11 +219,13 @@ def transform_row(ns: str, row: dict, eav: dict[str, list]) -> tuple[dict, list[
 
     attributes: dict[str, list] = {}
     for attr_name, attr_value, attr_type, created_raw in eav.get(cust_id, []):
-        entry = {"value": attr_value, "type": attr_type}
+        entry = {"type": attr_type}
+        if attr_value is not None:
+            entry["value"] = attr_value
         created = parse_legacy_date(created_raw) if created_raw else None
         if created is not None:
             entry["recorded_dt"] = created
-        else:
+        elif created_raw:
             entry["recorded_dt_raw"] = created_raw
         attributes.setdefault(attr_name, []).append(entry)
     if attributes:

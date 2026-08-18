@@ -43,7 +43,8 @@ def recompute(client: MongoClient, ns: str) -> dict:
     n_nondate_signup = 0
     for doc in customers.find({"ns": ns}, sort=[("_id", 1)]):
         bal = doc.get("balances", {}).get("current")
-        ck.update(f"{doc['_id']}:{bal:.2f}\n".encode())
+        bal_s = f"{bal:.2f}" if bal is not None else ""
+        ck.update(f"{doc['_id']}:{bal_s}\n".encode())
         for entries in doc.get("attributes", {}).values():
             n_eav += len(entries)
         for field in ("related_acct_ids", "promo_codes"):
@@ -60,9 +61,12 @@ def recompute(client: MongoClient, ns: str) -> dict:
         {"$sort": {"_id": 1}},
     ]):
         kind = group["_id"]["kind"]
-        entry = detections.setdefault(kind, {"kind": kind, "count": 0, "fields": set()})
+        field = group["_id"]["field"]
+        planted_field = ANOMALY_KINDS.get(kind, "").rsplit(".", 1)[-1]
+        key = kind if field == planted_field else f"{kind}[{field}]"
+        entry = detections.setdefault(key, {"kind": kind, "count": 0, "fields": set()})
         entry["count"] += group["count"]
-        entry["fields"].add(group["_id"]["field"])
+        entry["fields"].add(field)
 
     return {
         "customers": n_customers,
