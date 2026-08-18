@@ -179,7 +179,9 @@ def main() -> int:
     invoices.delete_many({"ns": ns, "_id": {"$nin": list(headers)}})
     quarantine.delete_many({"ns": ns, "_id": {"$nin": quarantined_ids}})
 
-    invoices.create_index([("ns", 1), ("invoice_no", 1)], unique=True)
+    # Non-unique: the legacy source only guarantees uniqueness on invoice_id
+    # (invoice_no is nullable and unconstrained in invoice_header).
+    invoices.create_index([("ns", 1), ("invoice_no", 1)])
     invoices.create_index([("ns", 1), ("cust_id", 1)])
     quarantine.create_index([("ns", 1), ("quarantine.kind", 1)])
 
