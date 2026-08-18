@@ -9,8 +9,12 @@ from bson.decimal128 import Decimal128
 from pymongo.database import Database
 
 from app.domain import (
+    CreditConsumption,
+    CreditNote,
     EntitlementRow,
     FinalizedRating,
+    InvoiceLineRecord,
+    IssuedInvoice,
     PlanRow,
     RatedPlan,
     RatedSubscription,
@@ -18,6 +22,8 @@ from app.domain import (
     SubscriptionRow,
     UsageEvent,
 )
+
+ORIGIN = "billing_svc"
 
 
 class CustomerNotFoundError(LookupError):
@@ -62,6 +68,8 @@ class MongoCustomersRepository:
                 plan=RatedPlan(
                     included_units=item["plan"]["included_units"],
                     overage_rate=_as_decimal(item["plan"]["overage_rate"]),
+                    code=item["plan"]["code"],
+                    monthly_fee=_as_decimal(item["plan"]["monthly_fee"]),
                 ),
                 starts_on=item["starts_on"].date(),
                 ends_on=_as_date(item.get("ends_on")),
@@ -89,6 +97,41 @@ class MongoCustomersRepository:
             )
             for item in self._document(tenant_id).get("rating_history", [])
         ]
+
+    def find_tax_exempt(self, tenant_id: UUID) -> bool:
+        return self._document(tenant_id)["tax_exempt"]
+
+    def find_credit_notes(self, tenant_id: UUID) -> list[CreditNote]:
+        notes = [
+            CreditNote(
+                credit_note_id=UUID(item["credit_note_id"]),
+                issued_on=item["issued_on"].date(),
+                remaining_amount=(
+                    _as_decimal(item["remaining_amount"])
+                    if item.get("remaining_amount") is not None
+                    else None
+                ),
+            )
+            for item in self._document(tenant_id).get("credit_notes", [])
+        ]
+        return sorted(notes, key=lambda note: (note.issued_on, note.credit_note_id))
+
+    def apply_credit_consumptions(
+        self, tenant_id: UUID, consumptions: list[CreditConsumption]
+    ) -> None:
+        document = self._document(tenant_id)
+        for consumption in consumptions:
+            self.collection.update_one(
+                {"_id": document["_id"], "ns": self.ns},
+                {
+                    "$set": {
+                        "credit_notes.$[note].remaining_amount": Decimal128(
+                            consumption.remaining_amount
+                        )
+                    }
+                },
+                array_filters=[{"note.credit_note_id": str(consumption.credit_note_id)}],
+            )
 
     def upsert_rating_result(self, tenant_id: UUID, finalized: FinalizedRating) -> list[dict]:
         document = self._document(tenant_id)
@@ -155,6 +198,85 @@ class MongoCustomersRepository:
             for entry in self._document(tenant_id).get("rating_history", [])
             if entry["period_start"].date() == finalized.period_start
         ]
+
+
+class MongoInvoicesRepository:
+    """Reads and writes the migrated `invoices` documents for one namespace.
+
+    Invoice lines are embedded in the invoice document, so reads and
+    writes each touch exactly one namespace/origin-scoped document.
+    """
+
+    def __init__(self, database: Database, ns: str) -> None:
+        self.collection = database["invoices"]
+        self.ns = ns
+
+    def find_lines(self, invoice_id: UUID) -> list[InvoiceLineRecord]:
+        document = self.collection.find_one(
+            {"ns": self.ns, "invoice_id": str(invoice_id)}
+        )
+        if document is None:
+            return []
+        lines = [
+            InvoiceLineRecord(
+                line_id=UUID(item["line_id"]),
+                line_no=item["line_no"],
+                line_type=item["line_type"],
+                description=item["description"],
+                amount=_as_decimal(item["amount"]),
+            )
+            for item in document.get("lines", [])
+        ]
+        return sorted(lines, key=lambda line: line.line_no)
+
+    def upsert_issued(self, invoice: IssuedInvoice) -> None:
+        document_id = f"{self.ns}:{ORIGIN}:{invoice.invoice_id}"
+        self.collection.update_one(
+            {"_id": document_id, "ns": self.ns, "origin": ORIGIN},
+            {
+                "$set": {"status": invoice.status},
+                "$setOnInsert": {
+                    "invoice_id": str(invoice.invoice_id),
+                    "tenant_id": str(invoice.tenant_id),
+                    "period_id": str(invoice.period_id),
+                    "issued_at": _at_midnight(invoice.issued_at),
+                },
+            },
+            upsert=True,
+        )
+        self.collection.update_one(
+            {"_id": document_id, "ns": self.ns, "origin": ORIGIN},
+            {
+                "$set": {
+                    "subtotal": Decimal128(invoice.subtotal),
+                    "tax": Decimal128(invoice.tax),
+                    "total": Decimal128(invoice.total),
+                    "lines": [
+                        {
+                            "line_id": str(line.line_id),
+                            "line_no": line.line_no,
+                            "line_type": line.line_type,
+                            "description": line.description,
+                            "amount": Decimal128(line.amount),
+                        }
+                        for line in invoice.lines
+                    ],
+                }
+            },
+        )
+
+    def find_state(self, invoice_id: UUID) -> dict | None:
+        document = self.collection.find_one(
+            {"ns": self.ns, "invoice_id": str(invoice_id)}
+        )
+        if document is None:
+            return None
+        return {
+            "status": document["status"],
+            "subtotal": _as_decimal(document["subtotal"]),
+            "tax": _as_decimal(document["tax"]),
+            "total": _as_decimal(document["total"]),
+        }
 
 
 class PostgresPlansRepository:

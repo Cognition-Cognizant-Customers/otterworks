@@ -1,0 +1,192 @@
+module: invoicing
+rules:
+  - id: INVOICE-PLAN-LINE
+    statement: >-
+      The invoice preview selects the latest subscription overlapping the
+      requested period (starts on or before the period end and not ended
+      before the period start) and emits line 1 as a plan line whose
+      description is the plan code and whose amount and total are the plan's
+      monthly fee rounded half-up to two decimals.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [23, 47]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [line_no, line_type, description, amount, total]
+    confidence: high
+    scenarios: [INVOICE-001, INVOICE-002]
+    question: >-
+      What happens when no subscription overlaps the requested period? The
+      legacy function propagates NULL plan fields through every line.
+    answer: >-
+      The extracted service fails closed with HTTP 404 instead of returning a
+      NULL-shaped preview; no recorded scenario exercises the missing
+      subscription path.
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-18"
+      note: Approved for the MongoDB cutover extraction.
+  - id: INVOICE-USAGE-LINE
+    statement: >-
+      Line 2 is a usage line described as "usage overage" whose amount and
+      total are the overage amount of the usage rating computed for the same
+      tenant and period, rounded half-up to two decimals; the rating logic is
+      the already-extracted rating module, reused unchanged.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [31, 32]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [line_no, line_type, description, amount, total]
+    confidence: high
+    scenarios: [INVOICE-001]
+    question: >-
+      How must a NULL usage-event units value be attributed inside the rated
+      period? SQL sum() skips NULL rows, which would let a NULL source amount
+      fail open into a valid-looking invoice line.
+    answer: >-
+      The reused rating logic fails closed: a NULL units value inside the
+      period rejects the request with HTTP 422 rather than pricing the usage
+      line as if the event were zero units.
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-18"
+      note: Approved for the MongoDB cutover extraction.
+  - id: INVOICE-TAX-SPLIT
+    statement: >-
+      Tax is zero when the tenant is tax-exempt, otherwise 8.25% of the plan
+      monthly fee plus the unrounded rating overage amount, and is emitted
+      unrounded as two equal halves: line 3 "regional tax" and line 4
+      "local tax".
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [39, 54]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [line_no, line_type, description, amount, total]
+    confidence: high
+    scenarios: [INVOICE-001, INVOICE-002]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-18"
+      note: Approved for the MongoDB cutover extraction.
+  - id: INVOICE-CREDIT-LINE
+    statement: >-
+      Available credit is the sum of the tenant's positive credit-note
+      remaining amounts; line 5 is a credit line with zero amount, credit
+      applied capped at the pre-credit invoice value (fee plus overage plus
+      tax, rounded half-up to two decimals), and a total equal to the negated
+      applied credit.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [34, 58]
+    inputs: [tenant_id]
+    outputs: [line_no, line_type, description, credit_applied, total]
+    confidence: high
+    scenarios: [INVOICE-001, INVOICE-002]
+    question: >-
+      How must a NULL credit-note remaining amount be attributed? SQL sum()
+      skips NULL rows, which would let a NULL source amount fail open into a
+      valid-looking credit line.
+    answer: >-
+      The extracted service fails closed: a NULL remaining amount on any of
+      the tenant's credit notes rejects the request with HTTP 422 rather than
+      treating the note as zero credit.
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-18"
+      note: Approved for the MongoDB cutover extraction.
+  - id: INVOICE-LINES-READ
+    statement: >-
+      Reading invoice lines returns the persisted lines of exactly that
+      invoice ordered by line number; in the target store the lines are
+      embedded in the single invoice document, and an unknown invoice yields
+      an empty result.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [62, 75]
+    inputs: [invoice_id]
+    outputs: [line_no, line_type, description, amount]
+    confidence: high
+    scenarios: [INVOICE-006]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-18"
+      note: Approved for the MongoDB cutover extraction.
+  - id: INVOICE-ISSUE-IDEMPOTENT
+    statement: >-
+      Issuing an invoice derives a deterministic period id from the tenant id
+      and period start (md5) and a deterministic invoice id from the period
+      id and the literal "invoice" (md5), finalizes the rating first, and
+      upserts the invoice with status "issued": re-issuing the same period
+      updates the existing invoice instead of creating a duplicate.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [85, 100]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [invoice_id, period_id, status]
+    confidence: high
+    scenarios: [INVOICE-003, INVOICE-004, INVOICE-005]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-18"
+      note: Approved for the MongoDB cutover extraction.
+  - id: INVOICE-ISSUE-LINES
+    statement: >-
+      Issuing replaces the invoice's persisted lines with the preview lines,
+      storing deterministic line ids (md5 of invoice id and line number) and
+      storing the credit line's total (the negated applied credit) as its
+      amount while every other line stores its preview amount.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [102, 113]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [line_no, line_type, description, amount]
+    confidence: high
+    scenarios: [INVOICE-005]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-18"
+      note: Approved for the MongoDB cutover extraction.
+  - id: INVOICE-ISSUE-TOTALS
+    statement: >-
+      The issued invoice's subtotal is the sum of the rounded plan and usage
+      line amounts, its tax is the sum of the rounded tax line amounts, and
+      its total is subtotal plus tax minus the applied credit, each rounded
+      half-up to two decimals.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [114, 125]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [subtotal, tax, total]
+    confidence: high
+    scenarios: [INVOICE-003, INVOICE-004, INVOICE-005]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-18"
+      note: Approved for the MongoDB cutover extraction.
+  - id: INVOICE-CREDIT-CONSUME
+    statement: >-
+      After issuing, the applied credit is consumed against the tenant's
+      positive credit notes oldest-first (ordered by issued-on date, then by
+      credit-note id for equal dates): each note's remaining amount is
+      reduced by the outstanding credit floored at zero, and the outstanding
+      credit is reduced by the note's prior remaining amount floored at zero,
+      stopping once the credit is exhausted.
+    source:
+      file: services/legacy-billing/db/procs/invoicing.sql
+      lines: [127, 138]
+    inputs: [tenant_id]
+    outputs: [remaining_amount]
+    confidence: high
+    scenarios: [INVOICE-003, INVOICE-004]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-18"
+      note: Approved for the MongoDB cutover extraction.

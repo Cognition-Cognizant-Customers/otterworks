@@ -14,18 +14,23 @@ from app import documents
 from app.config import settings
 from app.db import connect, migrate, reset
 from app.domain import (
+    NullAmountError,
     NullUsageUnitsError,
     SubscriptionNotFoundError,
     catalog,
     change_plan,
+    consume_credits,
     entitlement,
     finalize_rating,
+    invoice_preview,
+    issue_invoice,
     usage_rating,
     usage_summary,
 )
 from app.repository import (
     CustomerNotFoundError,
     MongoCustomersRepository,
+    MongoInvoicesRepository,
     PostgresPlansRepository,
 )
 
@@ -56,8 +61,17 @@ class RatingFinalization(BaseModel):
     period_end: date
 
 
+class InvoiceIssuance(BaseModel):
+    period_start: date
+    period_end: date
+
+
 def _customers_repository() -> MongoCustomersRepository:
     return MongoCustomersRepository(documents.database(), settings.mongodb_ns)
+
+
+def _invoices_repository() -> MongoInvoicesRepository:
+    return MongoInvoicesRepository(documents.database(), settings.mongodb_ns)
 
 
 def _money(value) -> str:
@@ -250,3 +264,124 @@ def finalize_tenant_rating(
         "overage_amount": _money(finalized.overage_amount),
         "rating_result": rows,
     }
+
+
+@app.get("/api/tenants/{tenant_id}/invoice-preview")
+def get_invoice_preview(
+    tenant_id: Annotated[UUID, Path()],
+    period_start: Annotated[date, Query()],
+    period_end: Annotated[date, Query()],
+) -> list[dict]:
+    repository = _customers_repository()
+    try:
+        lines = invoice_preview(
+            tenant_id,
+            repository.find_subscriptions(tenant_id),
+            repository.find_usage_events(tenant_id),
+            repository.find_rating_history(tenant_id),
+            repository.find_credit_notes(tenant_id),
+            repository.find_tax_exempt(tenant_id),
+            period_start,
+            period_end,
+        )
+    except (CustomerNotFoundError, SubscriptionNotFoundError) as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (NullUsageUnitsError, NullAmountError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return [
+        {
+            "line_no": line.line_no,
+            "line_type": line.line_type,
+            "description": line.description,
+            "amount": str(line.amount),
+            "tax_amount": str(line.tax_amount),
+            "credit_applied": str(line.credit_applied),
+            "total": str(line.total),
+        }
+        for line in lines
+    ]
+
+
+@app.post("/api/tenants/{tenant_id}/invoice-issuance")
+def issue_tenant_invoice(
+    tenant_id: Annotated[UUID, Path()], request: InvoiceIssuance
+) -> dict:
+    customers = _customers_repository()
+    invoices = _invoices_repository()
+    try:
+        subscriptions = customers.find_subscriptions(tenant_id)
+        events = customers.find_usage_events(tenant_id)
+        history = customers.find_rating_history(tenant_id)
+        finalized = finalize_rating(
+            tenant_id,
+            subscriptions,
+            events,
+            history,
+            request.period_start,
+            request.period_end,
+        )
+        customers.upsert_rating_result(tenant_id, finalized)
+        preview = invoice_preview(
+            tenant_id,
+            subscriptions,
+            events,
+            customers.find_rating_history(tenant_id),
+            customers.find_credit_notes(tenant_id),
+            customers.find_tax_exempt(tenant_id),
+            request.period_start,
+            request.period_end,
+        )
+        invoice = issue_invoice(
+            tenant_id, preview, request.period_start, request.period_end
+        )
+        invoices.upsert_issued(invoice)
+        consumptions = consume_credits(
+            customers.find_credit_notes(tenant_id), invoice.credit_applied
+        )
+        customers.apply_credit_consumptions(tenant_id, consumptions)
+    except (CustomerNotFoundError, SubscriptionNotFoundError) as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (NullUsageUnitsError, NullAmountError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    state = invoices.find_state(invoice.invoice_id)
+    notes = customers.find_credit_notes(tenant_id)
+    return {
+        "invoice_id": str(invoice.invoice_id),
+        "period_id": str(invoice.period_id),
+        "status": invoice.status,
+        "subtotal": _money(invoice.subtotal),
+        "tax": _money(invoice.tax),
+        "total": _money(invoice.total),
+        "credit_notes": [
+            {
+                "credit_note_id": str(note.credit_note_id),
+                "issued_on": note.issued_on.isoformat(),
+                "remaining_amount": _money(note.remaining_amount),
+            }
+            for note in notes
+        ],
+        "invoice_state": [
+            {
+                "status": state["status"],
+                "subtotal": _money(state["subtotal"]),
+                "tax": _money(state["tax"]),
+                "total": _money(state["total"]),
+            }
+        ]
+        if state is not None
+        else [],
+    }
+
+
+@app.get("/api/invoices/{invoice_id}/lines")
+def get_invoice_lines(invoice_id: Annotated[UUID, Path()]) -> list[dict]:
+    lines = _invoices_repository().find_lines(invoice_id)
+    return [
+        {
+            "line_no": line.line_no,
+            "line_type": line.line_type,
+            "description": line.description,
+            "amount": str(line.amount),
+        }
+        for line in lines
+    ]
