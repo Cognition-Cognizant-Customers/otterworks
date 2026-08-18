@@ -1,0 +1,131 @@
+{
+  "kind": "recon-report",
+  "unit": "mongo_files",
+  "namespace": "demo",
+  "generated_at": "2026-08-18T00:23:22Z",
+  "run_mode": "fixture",
+  "checks": [
+    {
+      "id": "files-count",
+      "expected": 10000,
+      "actual": 10000,
+      "source_of_truth": "manifest dynamodb.file-metadata.items vs count recomputed from ow_tp_mongodb_demo.files",
+      "result": "pass"
+    },
+    {
+      "id": "files-checksum",
+      "expected": "db614663b2c6d41141cae82261b416d5",
+      "actual": "db614663b2c6d41141cae82261b416d5",
+      "source_of_truth": "manifest dynamodb.file-metadata.checksum vs order-independent md5 over id|size_bytes|s3_key recomputed from ow_tp_mongodb_demo.files",
+      "result": "pass"
+    },
+    {
+      "id": "orphaned-metadata-reported",
+      "expected": 40,
+      "actual": {
+        "flagged_in_files": 40,
+        "quarantined": 40
+      },
+      "source_of_truth": "manifest planted_anomalies orphaned_metadata vs flags recomputed from ow_tp_mongodb_demo.files and ow_tp_mongodb_demo_quarantine.files_quarantine",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "run 1 vs rerun recomputed from target: count 10000==10000, checksum db614663b2c6d41141cae82261b416d5==db614663b2c6d41141cae82261b416d5, quarantined 40==40"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      [
+        "missing_hours",
+        "s3.data-lake/events/demo/",
+        1,
+        "coverage_gap"
+      ],
+      [
+        "orphaned_metadata",
+        "dynamodb.file-metadata",
+        40,
+        "must-detect"
+      ]
+    ],
+    "actual_set": [
+      [
+        "missing_hours",
+        "s3.data-lake/events/demo/",
+        1,
+        "coverage_gap"
+      ],
+      [
+        "orphaned_metadata",
+        "dynamodb.file-metadata",
+        40,
+        "must-detect"
+      ]
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "coverage_gaps": [
+    {
+      "kind": "missing_hours",
+      "target": "s3.data-lake/events/demo/",
+      "count": 1,
+      "reason": "S3 hourly event objects are not part of the MongoDB document model; no unit in this track ingests the events prefix (declared in the mongo_files contract)"
+    }
+  ],
+  "quarantine_enumeration": {
+    "reason": "orphaned_metadata",
+    "collection": "ow_tp_mongodb_demo_quarantine.files_quarantine",
+    "ids": [
+      "09469cfc-94b5-40b7-95cd-39d4f2d610f1",
+      "0bea2d95-5c0b-4905-a77f-cfe8fa8ef266",
+      "1537f253-8392-4835-960b-7745159186b9",
+      "193c5636-a5d3-4b27-80f3-9ad9cc0db8ad",
+      "1e94ec4c-daa3-4312-b9b0-a25a2e2dc5a4",
+      "22bbaccf-7d13-43b5-85b6-e39c24ba3010",
+      "2728be0a-4ea7-4193-9ea2-bf01730362e2",
+      "4fad10a0-6596-4702-82cf-0a3c61adbc88",
+      "5978a85e-d875-4c5e-8330-bd84d7185772",
+      "5eb7c396-1a06-4de5-b3b6-e40612983e07",
+      "5ee20541-ad1b-4719-b12f-2d1741cb7b50",
+      "638a536f-f10c-445b-9fad-dc2c46fe27cd",
+      "68ae546a-4ba4-4d74-aa97-8ffd318a7d39",
+      "69ebada0-9b3a-47f3-861f-8a9b004bdd01",
+      "75a55eff-9502-4d6b-8cb1-f08adc2f8757",
+      "7729c46f-ade2-4e77-9189-4f0d3e214951",
+      "7926f16a-a543-4281-ac1f-6c7a17c6b26e",
+      "7b95f7a6-7d63-4f5c-9ac4-f92e970fded4",
+      "7c6096ae-6dea-4ff9-af1d-c032b828f925",
+      "7c98ea5a-9b9b-4b3d-a1ad-4cabc54203e0",
+      "855830df-b727-4a3d-b3b4-5a28257bca15",
+      "87f85b2d-c10f-4684-b23e-2dbd47a1f403",
+      "94d2bd79-a773-4c49-9158-6a2da6d0dbcb",
+      "9becd831-0b0d-43c6-a037-8fac0dd9ff54",
+      "9d84308b-9d65-4d22-af39-17850fbd6b30",
+      "ab7c7723-1407-4509-a735-1e93430456a2",
+      "ae07a85c-019d-4a6f-bc8c-5ce34b8095fa",
+      "afef0026-1a90-4133-8d3a-307c9fbbaa8a",
+      "b461b24a-eb45-47a6-a71d-036a8deb3edc",
+      "b90c47cc-29b5-4dc2-b705-bb4db20a9ac5",
+      "caf96d17-eb4b-4ea9-b622-29940983926a",
+      "cbe7fb30-3b41-4d38-9cd4-ce5065306e04",
+      "daee66fc-51fb-432c-b522-8c858801b673",
+      "e1747410-571d-48b2-8243-34fece905486",
+      "e2cc82b9-f2b0-401d-8766-5869bf36d1d3",
+      "e5194447-f0a5-4bc3-9f57-d8bb5916cce6",
+      "fd0c5f0b-a57e-470e-afe4-ef1b461b859e",
+      "fdbe4ce4-e958-47e7-87cc-f9c88dbb9f96",
+      "fed95d77-150e-4587-a75b-2f2b23bb0e1c",
+      "ff00ab82-f830-4c99-97bf-710c23d16fe6"
+    ]
+  },
+  "unverified_paths": [
+    "per-key S3 HeadObject existence probe: the estate seeds file metadata only (no file binaries in s3://otterworks-data-lake), so orphaned_metadata is detected by the estate's orphan marker (a /missing/ path segment), the same detector testdata/legacy/validate.py uses",
+    "live Atlas run: this phase is fixture-only per the isolation rules; the parent recomputes recon in the live validation window",
+    "DynamoDB Binary/NULL/unknown-attribute handling: policy implemented per the contract but the seeded estate plants none, so those branches are untested",
+    "s3.data-lake events prefix (missing_hours anomaly): contractual coverage_gap \u2014 no unit in this track ingests the events prefix"
+  ]
+}
