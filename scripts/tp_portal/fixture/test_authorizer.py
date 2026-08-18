@@ -47,6 +47,10 @@ class AuthorizerTest(unittest.TestCase):
         self.assertFalse(authorizer.handler(event(f"Basic {TOKEN}"), None)["isAuthorized"])
         self.assertFalse(authorizer.handler(event(TOKEN), None)["isAuthorized"])
 
+    def test_non_ascii_credential_denied_not_crash(self):
+        self.assertFalse(authorizer.handler(event("Bearer töken"), None)["isAuthorized"])
+        self.assertFalse(authorizer.handler(event("Bearer \u00fftok"), None)["isAuthorized"])
+
     def test_token_is_not_a_prefix_match(self):
         self.assertFalse(authorizer.handler(event(f"Bearer {TOKEN}x"), None)["isAuthorized"])
         self.assertFalse(authorizer.handler(event(f"Bearer {TOKEN[:-1]}"), None)["isAuthorized"])

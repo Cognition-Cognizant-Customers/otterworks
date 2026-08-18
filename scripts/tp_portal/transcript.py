@@ -278,10 +278,15 @@ def main():
                     help="Path/behavior intentionally outside this replay's coverage "
                          "(listed verbatim in the recon report)")
     pp.set_defaults(fn=cmd_replay)
-    for sp in (pr, pp):
-        sp.add_argument("--token", default=os.environ.get("PORTAL_API_TOKEN"),
-                        help="Bearer token attached to every request "
-                             "(default: env PORTAL_API_TOKEN)")
+    # record targets the legacy monolith, which must never see the estate
+    # credential — so no env default there; replay targets the closed estate
+    # or the fixture shim, where the env default is the convenient path.
+    pr.add_argument("--token",
+                    help="Bearer token attached to every request (explicit only; "
+                         "the record target is normally the unauthenticated monolith)")
+    pp.add_argument("--token", default=os.environ.get("PORTAL_API_TOKEN"),
+                    help="Bearer token attached to every request "
+                         "(default: env PORTAL_API_TOKEN)")
     args = p.parse_args()
     global TOKEN
     TOKEN = args.token

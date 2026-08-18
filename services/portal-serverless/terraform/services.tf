@@ -108,10 +108,13 @@ resource "aws_lambda_function" "service" {
 
 # SnapStart only applies to published versions, so traffic goes through an alias.
 # The alias is also the canary seam: scripts/tp_portal/canary.py publishes new
-# versions and shifts weighted routing on it. Terraform still owns the stable
-# pointer (so an apply with new jars rolls code forward), but must never fight
-# the canary tool over mid-bake weights — hence only routing_config is ignored.
-# Do not apply during a bake: it would move the alias base under the canary.
+# versions, shifts weighted routing, and rewrites the pointer on promotion.
+# The canary tool owns the pointer after bootstrap: Terraform sets it once at
+# creation and then ignores it entirely, because a later apply with an
+# unchanged jar would otherwise re-pin the alias to Terraform's recorded
+# version and silently undo a promotion. Consequence (documented in the
+# runbook hand-off): `terraform apply` never moves live traffic to new code —
+# every code rollout on a live namespace goes through `canary.py deploy --jar`.
 resource "aws_lambda_alias" "live" {
   for_each = local.services
 
@@ -120,7 +123,7 @@ resource "aws_lambda_alias" "live" {
   function_version = aws_lambda_function.service[each.key].version
 
   lifecycle {
-    ignore_changes = [routing_config]
+    ignore_changes = [function_version, routing_config]
   }
 }
 

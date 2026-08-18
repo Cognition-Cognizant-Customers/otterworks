@@ -267,8 +267,13 @@ python3 scripts/tp_portal/canary.py deploy --function ow-tp-portal-<ns>-feedback
 ```
 
 Alarm evaluation is 60s/1-period: give the rollback beat two minutes of
-stage time (alarm, then the alias restore). Terraform ignores alias
-routing drift, so canary shifts never fight `terraform apply`.
+stage time (alarm, then the alias restore). Terraform sets each `live`
+alias once at creation and then ignores it entirely (`function_version`
+and `routing_config`), so canary shifts and promotions never fight
+`terraform apply` — and, symmetrically, `terraform apply` never moves
+live traffic to new code: every code rollout on a live namespace goes
+through `canary.py deploy --jar`. At hand-off, confirm each alias points
+at the intended stable version (`canary.py status`).
 
 ### G3 — Incident loop: alarm → Devin → audit PR
 
