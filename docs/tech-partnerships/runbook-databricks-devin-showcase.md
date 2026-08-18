@@ -149,6 +149,37 @@ idempotency checks, re-triggers the Databricks job to green, and opens one audit
 PR. Show the session transcript and the PR side by side: Databricks caught it,
 Devin fixed it, the PR proves it.
 
+## Last staged run (2026-08-18, branch `tp-run/databricks-20260817T233331Z`)
+
+Observed artifacts from the most recent full staging of this runbook:
+
+- Preflight: 11 probes, 0 denied. Parent-run live recon on `demo`:
+  `checks: 49, failed: 0, anomalies expected/actual: 30/30, missing: 0, unexpected: 0`,
+  idempotency proven by a full backfill rerun (counts unchanged: 3,024 / 2,856 / 30 / 36,
+  gold total 1,439,098,122 cents; report `recon/custbill_history_backfill-demo.recon.json`).
+- Unit PRs merged into the run branch: history backfill #1157, platform showcase #1159,
+  conversions #1160 (ingest, `cnvingest`), #1167 (parser, `cnvparse`),
+  #1165 (finance, `cnvfinance`), #1175 (orchestrator workflow, `cnvorch`).
+- Recon job (`demo`): job `139369716277099`, schedule PAUSED. Green run:
+  <https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/runs/504268028539447>
+  (`recon_check: SUCCESS`, `notify_devin: EXCLUDED`).
+- Failure beat, rehearsed live on throwaway ns `reh0818a` (since torn down, absence verified):
+  - Green baseline run: <https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/runs/986297909880194>
+  - Stale drift (2025 landed + expected, target not backfilled), red run:
+    <https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/runs/349636802873979>
+    (`recon_check: FAILED`, `notify_devin: SUCCESS`, overall `SUCCESS_WITH_FAILURES`).
+  - Webhook spawned the remediation session
+    <https://partner-workshops.devinenterprise.com/sessions/fe63b176ec3446c1b0155ad70a422a2b>,
+    which diagnosed the stale target, ran the catch-up backfill, proved recon 57/57 green
+    (anomalies 35/35, idempotency pass) and opened audit PR
+    [#1173](https://github.com/Cognition-Partner-Workshops/otterworks/pull/1173) into the run
+    branch (merged; incident note `incidents/20260818-custbill-recon-reh0818a.md`).
+  - Post-remediation green run: <https://dbc-8bc9474f-40ae.cloud.databricks.com/jobs/runs/677031518116903>
+- Cost safety at hand-off: no clusters; single serverless warehouse `565cd2fd713738c4`
+  (auto-stop 10 min); every `ow_tp` job schedule PAUSED or absent; pipeline
+  `ow_tp_custbill_history_dlt_demo` triggered/IDLE (not continuous); alert
+  `ow_tp_recon_failed_demo` PAUSED.
+
 ## Cost controls
 
 Leaving the demo staged is cheap; leaving it *scheduled* is what costs money.
