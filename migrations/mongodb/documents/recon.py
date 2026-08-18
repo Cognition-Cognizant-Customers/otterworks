@@ -24,6 +24,10 @@ Usage:
     uv run migrations/mongodb/documents/recon.py --ns <ns> \
         [--run-mode fixture|live] [--out <path>] \
         [--idempotency-rerun-performed --idempotency-evidence "..."]
+
+Without --idempotency-rerun-performed the run is check-only: results are
+printed but no report file is written, because the report schema requires
+idempotency_rerun.performed to be true (proven by an actual migrate rerun).
 """
 
 import argparse
@@ -153,8 +157,8 @@ def main() -> int:
         "checks": checks,
         "values_recomputed_from_target": True,
         "idempotency_rerun": {
-            "performed": bool(args.idempotency_rerun_performed),
-            "result": "pass" if args.idempotency_rerun_performed and all(c["result"] == "pass" for c in checks) else "fail",
+            "performed": True,
+            "result": "pass" if all(c["result"] == "pass" for c in checks) else "fail",
             "evidence": args.idempotency_evidence,
         },
         "planted_anomaly_detections": {
@@ -174,15 +178,18 @@ def main() -> int:
         ],
     }
 
-    out = Path(args.out) if args.out else (
-        ROOT / "docs/tech-partnerships/recon" / f"mongo_documents.{ns}.{args.run_mode}.recon.json"
-    )
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
-
     failed = [c["id"] for c in checks if c["result"] != "pass"]
     anomalies_ok = not missing_anoms and not unexpected_anoms
-    print(f"[mongo-documents-recon] report: {out}")
+    if args.idempotency_rerun_performed:
+        out = Path(args.out) if args.out else (
+            ROOT / "docs/tech-partnerships/recon" / f"mongo_documents.{ns}.{args.run_mode}.recon.json"
+        )
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+        print(f"[mongo-documents-recon] report: {out}")
+    else:
+        print("[mongo-documents-recon] check-only run (no report written); "
+              "rerun the migration and pass --idempotency-rerun-performed to emit the report")
     print(f"[mongo-documents-recon] checks: {len(checks) - len(failed)}/{len(checks)} pass; "
           f"anomaly sets {'match' if anomalies_ok else 'MISMATCH'}")
     if failed:
