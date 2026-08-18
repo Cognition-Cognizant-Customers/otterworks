@@ -1,0 +1,17 @@
+{
+  "kind": "golden-baseline",
+  "unit": "sftp_ingest_poll",
+  "namespace": "cnvingest",
+  "provenance": "Captured from a deterministic local run of the unmodified legacy job on the tp-run branch: OTTERWORKS_LEGACY_ROOT=<isolated root>; make legacy-etl-gen-data NS=cnvingest (deterministic seeded generator, byte-identical per NS); make legacy-etl-run JOB=sftp_ingest_poll (via scripts/tp-run-deterministic.sh).",
+  "drop_files": [
+    {"file_name": "CUSTBILL_CNVINGEST_001.dat", "sha256": "933f8e130c3f85554172d5cefb6162efa22e9238e1910f11d542ed26541e5052", "bytes": 3430, "records": 50},
+    {"file_name": "CUSTBILL_CNVINGEST_002.dat", "sha256": "7fce1f6fc95c851296443b1aa50605745b8a93ee81133cd202012bdcaaa64e7e", "bytes": 3430, "records": 50}
+  ],
+  "observed_legacy_behaviour": {
+    "incoming_after_run": "both files present, sha256 byte-identical to the drop originals",
+    "drop_after_run": "empty of CUSTBILL*.dat (source deleted once staged)",
+    "archive_after_run": "one timestamped copy per file",
+    "repoll_with_empty_drop": "no-op (incoming/archive unchanged)",
+    "non_matching_files": "NOTCUSTBILL_x.txt and CUSTBILL_CNVINGEST_003.dat.filepart left untouched in the drop dir"
+  }
+}

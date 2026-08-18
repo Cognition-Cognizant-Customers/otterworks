@@ -1,0 +1,120 @@
+{
+  "kind": "recon-report",
+  "unit": "sftp_ingest_poll",
+  "namespace": "cnvingest",
+  "generated_at": "2026-08-18T00:03:21Z",
+  "run_mode": "live",
+  "checks": [
+    {
+      "id": "staged_sha/CUSTBILL_CNVINGEST_001.dat",
+      "expected": "933f8e130c3f85554172d5cefb6162efa22e9238e1910f11d542ed26541e5052",
+      "actual": "933f8e130c3f85554172d5cefb6162efa22e9238e1910f11d542ed26541e5052",
+      "source_of_truth": "golden baseline from deterministic legacy sftp_ingest_poll.ksh run (NS=cnvingest); actual sha256 recomputed from Files API GET of the staged volume file",
+      "result": "pass"
+    },
+    {
+      "id": "archive_copy/CUSTBILL_CNVINGEST_001.dat",
+      "expected": "CUSTBILL_CNVINGEST_001.dat.933f8e130c3f8555",
+      "actual": "CUSTBILL_CNVINGEST_001.dat.933f8e130c3f8555",
+      "source_of_truth": "contract archive_copy check; actual from Files API directory listing of archive/",
+      "result": "pass"
+    },
+    {
+      "id": "bronze_files_row/CUSTBILL_CNVINGEST_001.dat",
+      "expected": "933f8e130c3f85554172d5cefb6162efa22e9238e1910f11d542ed26541e5052|3430|52|1row",
+      "actual": "933f8e130c3f85554172d5cefb6162efa22e9238e1910f11d542ed26541e5052|3430|52|1row",
+      "source_of_truth": "golden baseline bytes/sha + local golden line count; actual recomputed via SQL from ow_tp.bronze.custbill_ingest_files_cnvingest",
+      "result": "pass"
+    },
+    {
+      "id": "bronze_raw_count/CUSTBILL_CNVINGEST_001.dat",
+      "expected": "52",
+      "actual": "52",
+      "source_of_truth": "line count of the golden baseline file; actual recomputed via SQL COUNT(*) from ow_tp.bronze.custbill_raw_cnvingest",
+      "result": "pass"
+    },
+    {
+      "id": "staged_sha/CUSTBILL_CNVINGEST_002.dat",
+      "expected": "7fce1f6fc95c851296443b1aa50605745b8a93ee81133cd202012bdcaaa64e7e",
+      "actual": "7fce1f6fc95c851296443b1aa50605745b8a93ee81133cd202012bdcaaa64e7e",
+      "source_of_truth": "golden baseline from deterministic legacy sftp_ingest_poll.ksh run (NS=cnvingest); actual sha256 recomputed from Files API GET of the staged volume file",
+      "result": "pass"
+    },
+    {
+      "id": "archive_copy/CUSTBILL_CNVINGEST_002.dat",
+      "expected": "CUSTBILL_CNVINGEST_002.dat.7fce1f6fc95c8512",
+      "actual": "CUSTBILL_CNVINGEST_002.dat.7fce1f6fc95c8512",
+      "source_of_truth": "contract archive_copy check; actual from Files API directory listing of archive/",
+      "result": "pass"
+    },
+    {
+      "id": "bronze_files_row/CUSTBILL_CNVINGEST_002.dat",
+      "expected": "7fce1f6fc95c851296443b1aa50605745b8a93ee81133cd202012bdcaaa64e7e|3430|52|1row",
+      "actual": "7fce1f6fc95c851296443b1aa50605745b8a93ee81133cd202012bdcaaa64e7e|3430|52|1row",
+      "source_of_truth": "golden baseline bytes/sha + local golden line count; actual recomputed via SQL from ow_tp.bronze.custbill_ingest_files_cnvingest",
+      "result": "pass"
+    },
+    {
+      "id": "bronze_raw_count/CUSTBILL_CNVINGEST_002.dat",
+      "expected": "52",
+      "actual": "52",
+      "source_of_truth": "line count of the golden baseline file; actual recomputed via SQL COUNT(*) from ow_tp.bronze.custbill_raw_cnvingest",
+      "result": "pass"
+    },
+    {
+      "id": "drop_deleted_after_stage",
+      "expected": "no CUSTBILL*.dat remaining in drop",
+      "actual": "none",
+      "source_of_truth": "legacy behaviour (source deleted once staged); actual from Files API directory listing of drop/",
+      "result": "pass"
+    },
+    {
+      "id": "non_matching_ignored/NOTCUSTBILL_x.txt",
+      "expected": "left untouched in drop, not staged",
+      "actual": "left untouched in drop, not staged",
+      "source_of_truth": "legacy glob behaviour (CUSTBILL*.dat only); actual from Files API listings of drop/ and incoming/",
+      "result": "pass"
+    },
+    {
+      "id": "non_matching_ignored/CUSTBILL_PARTIAL_999.dat.filepart",
+      "expected": "left untouched in drop, not staged",
+      "actual": "left untouched in drop, not staged",
+      "source_of_truth": "legacy glob behaviour (CUSTBILL*.dat only); actual from Files API listings of drop/ and incoming/",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "job re-run with empty drop; all 11 checks recomputed from the platform and byte-identical to the first pass"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      [
+        "NOTCUSTBILL_x.txt",
+        "not_staged"
+      ],
+      [
+        "CUSTBILL_PARTIAL_999.dat.filepart",
+        "not_staged"
+      ]
+    ],
+    "actual_set": [
+      [
+        "NOTCUSTBILL_x.txt",
+        "not_staged"
+      ],
+      [
+        "CUSTBILL_PARTIAL_999.dat.filepart",
+        "not_staged"
+      ]
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "real mainframe SFTP transfer (demo estate lands files via the verified Files API transport instead)",
+    "crontab scheduling (converted job is manual-trigger only per demo rules; legacy ran every 15 min)"
+  ]
+}

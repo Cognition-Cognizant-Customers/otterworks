@@ -1,0 +1,41 @@
+{
+  "unit": "sftp_ingest_poll",
+  "source_artifact_path": "etl/legacy-extra/jobs/sftp_ingest_poll.ksh",
+  "target_objects": [
+    "job ow_tp_ingest_cnvingest (serverless notebook task, manual trigger, max_concurrent_runs=1)",
+    "/Volumes/ow_tp/bronze/landing/cnvingest/{drop,incoming,archive}",
+    "ow_tp.bronze.custbill_ingest_files_cnvingest",
+    "ow_tp.bronze.custbill_raw_cnvingest"
+  ],
+  "golden_baseline_location": "docs/tech-partnerships/recon/sftp_ingest_poll-cnvingest.golden.json (captured from a deterministic local run of the legacy ksh job: make legacy-etl-gen-data NS=cnvingest; make legacy-etl-run JOB=sftp_ingest_poll)",
+  "acceptance_checks": [
+    {"id": "staged_bytes_identical", "description": "Every CUSTBILL*.dat landed in the drop area is staged to incoming/ byte-identical (sha256 equal to the golden baseline for the deterministic NS=cnvingest seed)."},
+    {"id": "atomic_visibility", "description": "Files become visible in incoming/ only via rename-into-place from a hidden staging path; no half-written file is ever readable under incoming/. Retires the legacy 1s size-settle hack."},
+    {"id": "drop_deleted_after_stage", "description": "A source file is deleted from the drop area only after staging, archiving, and bronze registration succeed; on any failure the drop file is left in place and the run fails loudly (no 2>/dev/null || true suppression)."},
+    {"id": "archive_copy", "description": "Each staged file is archived under archive/<name>.<sha256[:16]> — deterministic id, no embedded timestamp, rerun-safe."},
+    {"id": "bronze_registration", "description": "Each staged file is registered in ow_tp.bronze.custbill_ingest_files_cnvingest (one row per (ns, file_name, sha256)) and its raw lines in ow_tp.bronze.custbill_raw_cnvingest, counts recomputed from the platform."},
+    {"id": "non_matching_ignored", "description": "Files not matching CUSTBILL*.dat (e.g. *.filepart, other names) are left untouched in the drop area, matching the legacy glob."},
+    {"id": "idempotent_repoll", "description": "Re-running with an empty drop is a no-op; re-landing a byte-identical file re-stages it without duplicating bronze rows (MERGE keyed on ns, file_name, sha256)."},
+    {"id": "no_hostname_branching", "description": "All paths are derived from the ns job parameter; no hostname if-blocks, no lock files (mutual exclusion via max_concurrent_runs=1)."}
+  ],
+  "encoding_policy": {
+    "input_encoding": "unknown mainframe extract, treated as opaque bytes",
+    "byte_transparency": "transport is byte-transparent end-to-end: files are staged and archived as raw bytes and sha256-verified; raw lines are stored decoded as latin-1 (a lossless 1:1 byte-to-codepoint mapping) so no input byte can cause a decode failure",
+    "invalid_bytes": "cannot occur: latin-1 maps every byte; no utf-8 decode is attempted anywhere in the chain"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "tolerate-and-attribute",
+    "details": "This unit is transport-only and byte-transparent, mirroring the legacy ksh job which never inspects file contents. Record-level validation (field slicing, dates, amounts, trailer reconciliation) is owned by the parse_custbill_fixedwidth unit. Raw lines are attributed verbatim to (ns, file_name, sha256, line_no); nothing is dropped and nothing can fail open into a plausible-looking parsed row because this unit produces no parsed rows."
+  },
+  "empty_input_semantics": {
+    "action": "no-op",
+    "details": "An empty drop directory leaves incoming/, archive/ and both bronze tables exactly as they were (verified by rerun); matches legacy behaviour where the glob simply matches nothing."
+  },
+  "trigger_granularity": "per-batch",
+  "planted_anomalies": [
+    {"id": "non_custbill_file_in_drop", "description": "A file not matching CUSTBILL*.dat planted in the drop area must NOT be staged, archived, registered, or deleted.", "status": "must-detect"},
+    {"id": "partial_transfer_suffix", "description": "An in-flight transfer artifact (CUSTBILL_*.dat.filepart) planted in the drop area must NOT be staged; atomic rename-into-place replaces the legacy size-settle heuristic.", "status": "must-detect"},
+    {"id": "content_level_anomalies", "description": "Invalid calendar dates, non-numeric amounts, and trailer count mismatches inside CUSTBILL files.", "status": "coverage_gap", "reason": "The legacy ingest job is byte-transparent and never inspects file contents; content anomalies are detected by the parse_custbill_fixedwidth unit downstream. This unit guarantees only byte-identical transport of those anomalies into bronze raw."}
+  ]
+}
