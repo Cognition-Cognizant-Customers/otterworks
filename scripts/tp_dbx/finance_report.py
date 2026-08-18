@@ -369,6 +369,9 @@ def summary_grid(dbx: Databricks, n: dict, report_date: str) -> list[list]:
 def cmd_recon(dbx: Databricks, args) -> int:
     n = names(args.ns)
     require_date(args.report_date, "report-date")
+    if bool(args.empty_report_date) != bool(args.empty_golden):
+        raise SystemExit("--empty-report-date and --empty-golden must be given together "
+                         "(or both omitted, which is recorded as unverified)")
     if args.empty_report_date:
         require_date(args.empty_report_date, "empty-report-date")
     require_ident(args.subdir, "subdir")
@@ -436,7 +439,8 @@ def cmd_recon(dbx: Databricks, args) -> int:
         artifact_ok = True
 
     # Empty-input case: header-only artifact and zero summary rows.
-    if args.empty_report_date and empty_golden_bytes is not None:
+    empty_input_verified = args.empty_report_date and empty_golden_bytes is not None
+    if empty_input_verified:
         empty_grid = summary_grid(dbx, n, args.empty_report_date)
         check("empty-input/zero-summary-rows", 0, len(empty_grid), n["summary"])
         stamp = args.empty_report_date.replace("-", "")
@@ -479,7 +483,9 @@ def cmd_recon(dbx: Databricks, args) -> int:
             "mail transport: no SMTP exists in the demo workspace; delivery is volume-verified and the non-delivery is recorded explicitly",
             "UNKNOWN(record_type) mapping: generator emits only 01/02 for this namespace (declared coverage_gap in the contract)",
             "empty-customer-id skip and malformed-amount attribution: generator plants no such rows (declared coverage_gap in the contract)",
-        ] + ([] if artifact_ok else ["artifact comparison skipped: no delivery row"]),
+        ] + ([] if artifact_ok else ["artifact comparison skipped: no delivery row"])
+          + ([] if empty_input_verified else
+             ["empty-input case not exercised: --empty-report-date/--empty-golden not supplied"]),
     }
     out = Path(args.out)
     out.write_text(json.dumps(report, indent=2) + "\n")
