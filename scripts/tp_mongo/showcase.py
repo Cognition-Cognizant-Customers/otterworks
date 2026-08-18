@@ -30,7 +30,7 @@ from pathlib import Path
 
 from bson.decimal128 import Decimal128
 from pymongo import MongoClient
-from pymongo.errors import WriteError
+from pymongo.errors import DuplicateKeyError, WriteError
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -158,6 +158,10 @@ def probe_insert(collection, doc: dict, expect: str) -> dict:
     try:
         collection.insert_one(doc)
         outcome["result"] = "accepted"
+    except DuplicateKeyError as exc:
+        outcome["result"] = "error"
+        outcome["code"] = exc.code
+        outcome["error"] = "probe _id already present (leftover residue); not a validator rejection"
     except WriteError as exc:
         outcome["result"] = "rejected"
         outcome["code"] = exc.code
