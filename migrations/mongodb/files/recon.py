@@ -27,6 +27,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,6 +36,7 @@ from pymongo import MongoClient
 
 REPO = Path(__file__).resolve().parents[3]
 UNIT = "mongo_files"
+NS_PATTERN = re.compile(r"[A-Za-z0-9_]+")  # same guard as migrate.py / seed.py
 MANIFEST_TARGET = "dynamodb.file-metadata"
 COVERAGE_GAPS = {"missing_hours"}  # declared in the contract, no unit ingests s3 events
 
@@ -239,6 +241,9 @@ def main() -> int:
     parser.add_argument("--run-mode", choices=["fixture", "live"], default="fixture")
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
+    if not NS_PATTERN.fullmatch(args.ns):
+        print("NS must match ^[A-Za-z0-9_]+$", file=sys.stderr)
+        return 2
 
     current = recompute(args.mongo_uri, args.ns)
     out = Path(args.out)

@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_files",
   "namespace": "demo",
-  "generated_at": "2026-08-18T00:13:41Z",
+  "generated_at": "2026-08-18T00:19:04Z",
   "run_mode": "fixture",
   "checks": [
     {
