@@ -235,6 +235,19 @@ def test_equal_credit_dates_break_ties_by_credit_note_id():
     ]
 
 
+@pytest.mark.rule("INVOICE-CREDIT-CONSUME")
+def test_credit_notes_without_issue_dates_are_consumed_last():
+    notes = [
+        note("70000000-0000-0000-0000-000000000002", None, "55.00"),
+        note("70000000-0000-0000-0000-000000000001", date(2026, 2, 1), "5.00"),
+    ]
+    consumptions = consume_credits(notes, Decimal("53.04"))
+    assert [str(item.credit_note_id) for item in consumptions] == [
+        "70000000-0000-0000-0000-000000000001",
+        "70000000-0000-0000-0000-000000000002",
+    ]
+
+
 @pytest.mark.rule("INVOICE-LINES-READ")
 def test_embedded_invoice_lines_are_returned_sorted_by_line_no():
     from app.repository import MongoInvoicesRepository

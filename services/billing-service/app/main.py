@@ -355,7 +355,9 @@ def issue_tenant_invoice(
         "credit_notes": [
             {
                 "credit_note_id": str(note.credit_note_id),
-                "issued_on": note.issued_on.isoformat(),
+                "issued_on": (
+                    note.issued_on.isoformat() if note.issued_on else None
+                ),
                 "remaining_amount": _money(note.remaining_amount),
             }
             for note in notes

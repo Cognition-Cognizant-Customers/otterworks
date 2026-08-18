@@ -318,8 +318,12 @@ def _md5_uuid(value: str) -> UUID:
 @dataclass(frozen=True)
 class CreditNote:
     credit_note_id: UUID
-    issued_on: date
+    issued_on: date | None
     remaining_amount: Decimal | None
+
+
+def credit_note_order(note: CreditNote) -> tuple[bool, date, UUID]:
+    return (note.issued_on is None, note.issued_on or date.min, note.credit_note_id)
 
 
 @dataclass(frozen=True)
@@ -465,7 +469,7 @@ def consume_credits(
         for note in credit_notes
         if note.remaining_amount is not None and note.remaining_amount > 0
     ]
-    for note in sorted(open_notes, key=lambda item: (item.issued_on, item.credit_note_id)):
+    for note in sorted(open_notes, key=credit_note_order):
         if remaining_credit <= 0:
             break
         consumptions.append(

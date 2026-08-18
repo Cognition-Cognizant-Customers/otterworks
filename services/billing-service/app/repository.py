@@ -21,6 +21,7 @@ from app.domain import (
     RatingHistoryEntry,
     SubscriptionRow,
     UsageEvent,
+    credit_note_order,
 )
 
 ORIGIN = "billing_svc"
@@ -99,13 +100,17 @@ class MongoCustomersRepository:
         ]
 
     def find_tax_exempt(self, tenant_id: UUID) -> bool:
-        return self._document(tenant_id)["tax_exempt"]
+        return bool(self._document(tenant_id).get("tax_exempt", False))
 
     def find_credit_notes(self, tenant_id: UUID) -> list[CreditNote]:
         notes = [
             CreditNote(
                 credit_note_id=UUID(item["credit_note_id"]),
-                issued_on=item["issued_on"].date(),
+                issued_on=(
+                    item["issued_on"].date()
+                    if item.get("issued_on") is not None
+                    else None
+                ),
                 remaining_amount=(
                     _as_decimal(item["remaining_amount"])
                     if item.get("remaining_amount") is not None
@@ -114,7 +119,7 @@ class MongoCustomersRepository:
             )
             for item in self._document(tenant_id).get("credit_notes", [])
         ]
-        return sorted(notes, key=lambda note: (note.issued_on, note.credit_note_id))
+        return sorted(notes, key=credit_note_order)
 
     def apply_credit_consumptions(
         self, tenant_id: UUID, consumptions: list[CreditConsumption]
