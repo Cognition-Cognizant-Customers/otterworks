@@ -57,11 +57,12 @@ def split_records(data: bytes) -> list:
     return [(r[:-1] if r.endswith(b"\r") else r).decode("latin-1") for r in recs]
 
 
-def atomic_write(path: str, data: bytes, sha: str) -> None:
+def write_staging_tmp(path: str, data: bytes, sha: str) -> str:
+    """Write the payload to a hidden staging temp; publish later via os.rename."""
     tmp = os.path.join(STAGING, f"{os.path.basename(path)}.{sha[:16]}.tmp")
     with open(tmp, "wb") as fh:
         fh.write(data)
-    os.rename(tmp, path)
+    return tmp
 
 
 ingested = []
@@ -82,12 +83,18 @@ for name in sorted(os.listdir(DROP)):
 
     staged_path = os.path.join(INCOMING, name)
     archive_path = os.path.join(ARCHIVE, f"{name}.{sha[:16]}")
+    # write temps first, then re-confirm source stability, and only then
+    # rename into place — nothing is ever published for a torn read
+    staged_tmp = write_staging_tmp(staged_path, data, sha)
+    archive_tmp = write_staging_tmp(archive_path, data, sha)
     stat_publish = os.stat(src)
     if (stat_publish.st_size, stat_publish.st_mtime) != (stat_after.st_size, stat_after.st_mtime):
+        os.remove(staged_tmp)
+        os.remove(archive_tmp)
         print(f"skipping {name}: source changed before publish; leaving in drop for the next poll")
         continue
-    atomic_write(staged_path, data, sha)
-    atomic_write(archive_path, data, sha)
+    os.rename(staged_tmp, staged_path)
+    os.rename(archive_tmp, archive_path)
 
     # byte transparency: latin-1 is a lossless 1:1 byte->codepoint mapping
     lines = split_records(data)
@@ -123,20 +130,10 @@ for name in sorted(os.listdir(DROP)):
 
     stat_final = os.stat(src)
     if (stat_final.st_size, stat_final.st_mtime) != (stat_after.st_size, stat_after.st_mtime):
-        # roll back everything published for the torn read: staged + archive
-        # copies and both bronze registrations, then leave the source in drop
-        # for the next poll so no partial content stays visible anywhere
-        os.remove(staged_path)
-        os.remove(archive_path)
-        spark.sql(
-            f"DELETE FROM {FILES_TBL} WHERE ns = :ns AND file_name = :file_name AND sha256 = :sha256",
-            args={"ns": NS, "file_name": name, "sha256": sha},
-        )
-        spark.sql(
-            f"DELETE FROM {RAW_TBL} WHERE ns = :ns AND file_name = :file_name AND sha256 = :sha256",
-            args={"ns": NS, "file_name": name, "sha256": sha},
-        )
-        print(f"rolled back {name}: source changed after read; left in drop for the next poll")
+        # the published snapshot was stable through read and publish; the
+        # source has since changed, so keep the published state and leave the
+        # (new) source content in drop for the next poll to re-ingest
+        print(f"not deleting {name}: source changed after publish; next poll re-ingests the new content")
         continue
     os.remove(src)  # delete from drop only after stage+archive+registration
     ingested.append({"file_name": name, "sha256": sha, "bytes": len(data)})
