@@ -135,7 +135,7 @@ def main() -> int:
     expected_set = sorted(
         f"{a['kind']}:{a['count']}" for a in expected_anomalies)
     actual_set = sorted(
-        f"{kind}:{entry['count']}" for kind, entry in actual["detections"].items())
+        f"{key}:{entry['count']}" for key, entry in actual["detections"].items())
     missing = sorted(set(expected_set) - set(actual_set))
     unexpected = sorted(set(actual_set) - set(expected_set))
     if missing or unexpected:

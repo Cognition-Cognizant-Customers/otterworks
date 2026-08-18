@@ -219,7 +219,7 @@ def transform_row(ns: str, row: dict, eav: dict[str, list]) -> tuple[dict, list[
     doc["lineage"] = lineage
 
     attributes: dict[str, list] = {}
-    for attr_name, attr_value, attr_type, created_raw in eav.get(cust_id, []):
+    for eav_id, attr_name, attr_value, attr_type, created_raw in eav.get(cust_id, []):
         entry = {"type": attr_type}
         if attr_value is not None:
             entry["value"] = attr_value
@@ -228,7 +228,7 @@ def transform_row(ns: str, row: dict, eav: dict[str, list]) -> tuple[dict, list[
             entry["recorded_dt"] = created
         elif created_raw:
             quarantine.append(quarantine_doc(
-                ns, cust_id, f"CREATED_DT[{attr_name}]", created_raw,
+                ns, cust_id, f"CREATED_DT[{attr_name}#{eav_id}]", created_raw,
                 f"not a valid DD-MON-YY date: {created_raw!r}", "dirty_dates",
                 source_table="OW_BILLING.ENTITY_ATTR_VALUE"))
         attributes.setdefault(attr_name, []).append(entry)
@@ -270,7 +270,7 @@ def main() -> int:
         print(f"[migrate] ns={ns}: source namespace empty; nothing written")
         return 0
 
-    cur.execute("""SELECT eav.entity_id, eav.attr_name, eav.attr_value,
+    cur.execute("""SELECT eav.eav_id, eav.entity_id, eav.attr_name, eav.attr_value,
                           eav.attr_type, eav.created_dt
                      FROM entity_attr_value eav
                      JOIN customer_master cm ON cm.cust_id = eav.entity_id
@@ -279,8 +279,9 @@ def main() -> int:
                     ORDER BY eav.eav_id""", [batch_no])
     eav: dict[str, list] = {}
     n_eav = 0
-    for entity_id, attr_name, attr_value, attr_type, created_dt in cur:
-        eav.setdefault(entity_id, []).append((attr_name, attr_value, attr_type, created_dt))
+    for eav_id, entity_id, attr_name, attr_value, attr_type, created_dt in cur:
+        eav.setdefault(entity_id, []).append(
+            (eav_id, attr_name, attr_value, attr_type, created_dt))
         n_eav += 1
 
     client = MongoClient(args.mongodb_uri)
