@@ -299,6 +299,10 @@ def main() -> int:
     cur.execute(f"""SELECT {", ".join(COLUMNS)} FROM customer_master
                     WHERE conversion_batch_no = :1 ORDER BY cust_id""", [batch_no])
     n_docs = n_quar = 0
+    # Source-side non-NULL counts, persisted so recon can compare target shape
+    # against source expectations instead of the migration's own output.
+    src_counts = {"RELATED_ACCT_IDS": 0, "PROMO_CODES_CSV": 0,
+                  "SIGNUP_DT": 0, "LAST_ACTIVITY_DT": 0}
     doc_ops: list[ReplaceOne] = []
     quar_ops: list[ReplaceOne] = []
     while True:
@@ -307,6 +311,9 @@ def main() -> int:
             break
         for values in rows:
             row = dict(zip(COLUMNS, values))
+            for col in src_counts:
+                if row[col] is not None:
+                    src_counts[col] += 1
             doc, quar = transform_row(ns, row, eav)
             doc_ops.append(ReplaceOne({"_id": doc["_id"]}, doc, upsert=True))
             for q in quar:
@@ -319,6 +326,11 @@ def main() -> int:
             quarantine.bulk_write(quar_ops, ordered=False)
             n_quar += len(quar_ops)
             quar_ops = []
+
+    client[f"ow_tp_mongodb_{ns}"]["customers_migration_meta"].replace_one(
+        {"_id": ns},
+        {"_id": ns, "ns": ns, "source_nonnull_counts": src_counts},
+        upsert=True)
 
     customers.create_index("tenant_id")
     customers.create_index("cust_no", unique=True, sparse=True)

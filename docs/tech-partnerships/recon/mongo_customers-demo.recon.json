@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_customers",
   "namespace": "demo",
-  "generated_at": "2026-08-18T00:48:35Z",
+  "generated_at": "2026-08-18T00:56:25Z",
   "run_mode": "fixture",
   "checks": [
     {
@@ -28,16 +28,16 @@
     },
     {
       "id": "csv-to-arrays",
-      "expected": 0,
-      "actual": 0,
-      "source_of_truth": "no document carries a non-array related_acct_ids/promo_codes; malformed source lists are quarantined (see planted_anomaly_detections)",
+      "expected": 36712,
+      "actual": 36712,
+      "source_of_truth": "source non-NULL RELATED_ACCT_IDS/PROMO_CODES_CSV rows (persisted by migrate.py at extract time) minus quarantined malformed lists, vs array-valued fields recomputed from target documents",
       "result": "pass"
     },
     {
       "id": "dates-to-bson",
-      "expected": 0,
-      "actual": 0,
-      "source_of_truth": "no document carries a non-BSON-date signup_dt; dirty source dates are quarantined (see planted_anomaly_detections)",
+      "expected": 24950,
+      "actual": 24950,
+      "source_of_truth": "source non-NULL SIGNUP_DT rows (persisted by migrate.py at extract time) minus quarantined dirty dates, vs BSON-date signup_dt recomputed from target documents",
       "result": "pass"
     }
   ],
@@ -45,7 +45,7 @@
   "idempotency_rerun": {
     "performed": true,
     "result": "pass",
-    "evidence": "rerun of migrate.py --ns demo after review round 6 fixes reproduced identical counts/checksum/anomaly sets (25000 customers, checksum 4f92feef2ad58dbab30e289957931928, 81 quarantined)"
+    "evidence": "rerun of migrate.py --ns demo after review round 7 fixes reproduced identical counts/checksum/anomaly sets (25000 customers, checksum 4f92feef2ad58dbab30e289957931928, 81 quarantined)"
   },
   "planted_anomaly_detections": {
     "expected_set": [

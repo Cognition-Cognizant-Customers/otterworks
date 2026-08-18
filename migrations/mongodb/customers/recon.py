@@ -39,8 +39,8 @@ def recompute(client: MongoClient, ns: str) -> dict:
 
     ck = hashlib.md5()
     n_eav = 0
-    n_nonarray_csv = 0
-    n_nondate_signup = 0
+    n_array_csv = 0
+    n_date_signup = 0
     for doc in customers.find({"ns": ns}, sort=[("_id", 1)]):
         bal = doc.get("balances", {}).get("current")
         bal_s = f"{bal:.2f}" if bal is not None else ""
@@ -48,10 +48,10 @@ def recompute(client: MongoClient, ns: str) -> dict:
         for entries in doc.get("attributes", {}).values():
             n_eav += len(entries)
         for field in ("related_acct_ids", "promo_codes"):
-            if field in doc and not isinstance(doc[field], list):
-                n_nonarray_csv += 1
-        if "signup_dt" in doc and not isinstance(doc["signup_dt"], datetime.datetime):
-            n_nondate_signup += 1
+            if field in doc and isinstance(doc[field], list):
+                n_array_csv += 1
+        if "signup_dt" in doc and isinstance(doc["signup_dt"], datetime.datetime):
+            n_date_signup += 1
 
     detections: dict[str, dict] = {}
     for group in quarantine.aggregate([
@@ -68,12 +68,26 @@ def recompute(client: MongoClient, ns: str) -> dict:
         entry["count"] += group["count"]
         entry["fields"].add(field)
 
+    meta = client[f"ow_tp_mongodb_{ns}"]["customers_migration_meta"].find_one(
+        {"_id": ns}) or {}
+    src = meta.get("source_nonnull_counts", {})
+
+    def quarantined(field: str) -> int:
+        return quarantine.count_documents({"ns": ns, "field": field})
+
+    expected_arrays = (
+        src.get("RELATED_ACCT_IDS", 0) - quarantined("RELATED_ACCT_IDS")
+        + src.get("PROMO_CODES_CSV", 0) - quarantined("PROMO_CODES_CSV"))
+    expected_dates = src.get("SIGNUP_DT", 0) - quarantined("SIGNUP_DT")
+
     return {
         "customers": n_customers,
         "checksum": ck.hexdigest(),
         "eav_entries": n_eav,
-        "nonarray_csv": n_nonarray_csv,
-        "nondate_signup": n_nondate_signup,
+        "array_csv": n_array_csv,
+        "date_signup": n_date_signup,
+        "expected_arrays": expected_arrays,
+        "expected_dates": expected_dates,
         "detections": detections,
     }
 
@@ -124,12 +138,14 @@ def main() -> int:
               f"{manifest_src} (ordered PK+CUR_BAL_AMT md5, recomputed from target)"),
         check("eav-folded", m_eav["rows"], actual["eav_entries"],
               f"{manifest_src} (sum of attributes entries across documents)"),
-        check("csv-to-arrays", 0, actual["nonarray_csv"],
-              "no document carries a non-array related_acct_ids/promo_codes; "
-              "malformed source lists are quarantined (see planted_anomaly_detections)"),
-        check("dates-to-bson", 0, actual["nondate_signup"],
-              "no document carries a non-BSON-date signup_dt; dirty source dates "
-              "are quarantined (see planted_anomaly_detections)"),
+        check("csv-to-arrays", actual["expected_arrays"], actual["array_csv"],
+              "source non-NULL RELATED_ACCT_IDS/PROMO_CODES_CSV rows (persisted by "
+              "migrate.py at extract time) minus quarantined malformed lists, vs "
+              "array-valued fields recomputed from target documents"),
+        check("dates-to-bson", actual["expected_dates"], actual["date_signup"],
+              "source non-NULL SIGNUP_DT rows (persisted by migrate.py at extract "
+              "time) minus quarantined dirty dates, vs BSON-date signup_dt "
+              "recomputed from target documents"),
     ]
 
     expected_set = sorted(
