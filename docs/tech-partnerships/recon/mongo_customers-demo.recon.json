@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "mongo_customers",
   "namespace": "demo",
-  "generated_at": "2026-08-18T00:06:55Z",
+  "generated_at": "2026-08-18T00:13:34Z",
   "run_mode": "fixture",
   "checks": [
     {
@@ -45,7 +45,7 @@
   "idempotency_rerun": {
     "performed": true,
     "result": "pass",
-    "evidence": "second migrate run for ns=demo reproduced identical recon values (counts, checksum 4f92feef2ad58dbab30e289957931928, anomaly sets); full report diff excluding generated_at was empty; empty-input run (ns=emptyns) wrote nothing and left prior output untouched"
+    "evidence": "rerun of migrate.py --ns demo after review fixes reproduced identical counts/checksum/anomaly sets (25000 customers, checksum 4f92feef2ad58dbab30e289957931928, 81 quarantined)"
   },
   "planted_anomaly_detections": {
     "expected_set": [

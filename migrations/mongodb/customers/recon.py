@@ -98,6 +98,12 @@ def main() -> int:
                           if a["kind"] in ANOMALY_KINDS
                           and a["target"] == ANOMALY_KINDS[a["kind"]]]
 
+    if not args.idempotency_evidence and args.out is None:
+        print("[recon] refusing to write a schema-invalid report to the shared recon "
+              "directory without --idempotency-evidence; pass --out for a scratch run",
+              file=sys.stderr)
+        return 2
+
     client = MongoClient(args.mongodb_uri)
     actual = recompute(client, ns)
     client.close()

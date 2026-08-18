@@ -146,7 +146,10 @@ def transform_row(ns: str, row: dict, eav: dict[str, list]) -> tuple[dict, list[
     phones = []
     for num_col, type_col in (("PHONE1", "PHONE1_TYPE_CD"), ("PHONE2", "PHONE2_TYPE_CD")):
         if row[num_col] is not None:
-            phones.append({"number": row[num_col], "type_cd": int(row[type_col])})
+            phone = {"number": row[num_col]}
+            if row[type_col] is not None:
+                phone["type_cd"] = int(row[type_col])
+            phones.append(phone)
     if phones:
         doc["phones"] = phones
     put("email", row["EMAIL_1"])
@@ -171,10 +174,12 @@ def transform_row(ns: str, row: dict, eav: dict[str, list]) -> tuple[dict, list[
     if status:
         doc["status"] = status
 
-    flags = {"tax_exempt": row["TAX_EXEMPT_YN"] == "Y",
-             "credit_hold": row["CREDIT_HOLD_YN"] == "Y",
-             "vip": row["VIP_YN"] == "Y"}
-    doc["flags"] = flags
+    flags = {k: v == "Y" for k, v in {
+        "tax_exempt": row["TAX_EXEMPT_YN"], "credit_hold": row["CREDIT_HOLD_YN"],
+        "vip": row["VIP_YN"],
+    }.items() if v is not None}
+    if flags:
+        doc["flags"] = flags
 
     balances = {k: float(v) for k, v in {
         "current": row["CUR_BAL_AMT"], "past_due": row["PAST_DUE_AMT"],
