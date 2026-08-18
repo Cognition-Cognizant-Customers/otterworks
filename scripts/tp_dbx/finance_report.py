@@ -129,18 +129,13 @@ parsed_dir = f"{landing}/{input_subdir}"
 
 # COMMAND ----------
 # Silver load: replace this namespace's slice from the landed .psv files.
-# Only a missing input directory is the legal empty-input case (legacy wrote a
-# header-only report). Any other listing failure must abort before the
-# destructive slice DELETE below, like the legacy `opendir(...) || die`.
-try:
-    # Legacy input selection: grep { /^CUSTBILL.*\.psv$/ } readdir(D)
-    psv_files = [f for f in dbutils.fs.ls(parsed_dir)
-                 if f.name.startswith("CUSTBILL") and f.name.endswith(".psv")]
-except Exception as e:
-    if "FileNotFoundException" in str(e) or "NOT_FOUND" in str(e).upper():
-        psv_files = []
-    else:
-        raise
+# The legal empty-input case is an input directory that EXISTS and contains no
+# CUSTBILL files (`land --allow-empty` creates the empty directory). A missing
+# or unlistable directory aborts before the destructive slice DELETE below,
+# exactly like the legacy `opendir(...) || die`.
+# Legacy input selection: grep { /^CUSTBILL.*\.psv$/ } readdir(D)
+psv_files = [f for f in dbutils.fs.ls(parsed_dir)
+             if f.name.startswith("CUSTBILL") and f.name.endswith(".psv")]
 
 spark.sql(f"DELETE FROM {silver} WHERE ns = '{ns}' "
           f"AND (report_date = DATE'{report_date}' OR report_date IS NULL)")
@@ -272,6 +267,10 @@ def cmd_land(dbx: Databricks, args) -> int:
         dbx.put_file(target, f.read_bytes())
         print(f"landed {target} ({f.stat().st_size} bytes)")
     if not files:
+        # Materialise the empty directory so the job can tell an intended empty
+        # batch (directory exists, no files) from a misconfigured path (abort).
+        quoted = urllib.parse.quote(f"{n['landing']}/{args.subdir}", safe="/")
+        dbx.ok("PUT", f"/api/2.0/fs/directories{quoted}")
         print(f"landed nothing (empty-input case) under {n['landing']}/{args.subdir}/")
     return 0
 
