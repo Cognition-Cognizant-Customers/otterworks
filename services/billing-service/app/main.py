@@ -10,10 +10,24 @@ from fastapi import FastAPI, HTTPException, Path, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from app import documents
 from app.config import settings
 from app.db import connect, migrate, reset
-from app.domain import catalog, change_plan, entitlement
-from app.repository import PostgresPlansRepository
+from app.domain import (
+    NullUsageUnitsError,
+    SubscriptionNotFoundError,
+    catalog,
+    change_plan,
+    entitlement,
+    finalize_rating,
+    usage_rating,
+    usage_summary,
+)
+from app.repository import (
+    CustomerNotFoundError,
+    MongoCustomersRepository,
+    PostgresPlansRepository,
+)
 
 
 @asynccontextmanager
@@ -35,6 +49,19 @@ app.add_middleware(
 class PlanChange(BaseModel):
     plan_id: UUID
     effective_on: date
+
+
+class RatingFinalization(BaseModel):
+    period_start: date
+    period_end: date
+
+
+def _customers_repository() -> MongoCustomersRepository:
+    return MongoCustomersRepository(documents.database(), settings.mongodb_ns)
+
+
+def _money(value) -> str:
+    return f"{value:.2f}"
 
 
 @app.get("/health")
@@ -127,3 +154,99 @@ def change_tenant_plan(tenant_id: Annotated[UUID, Path()], request: PlanChange) 
             status_code=409,
             detail="this plan change has already been requested",
         ) from error
+
+
+@app.get("/api/tenants/{tenant_id}/usage-rating")
+def get_usage_rating(
+    tenant_id: Annotated[UUID, Path()],
+    period_start: Annotated[date, Query()],
+    period_end: Annotated[date, Query()],
+) -> dict:
+    repository = _customers_repository()
+    try:
+        rating = usage_rating(
+            tenant_id,
+            repository.find_subscriptions(tenant_id),
+            repository.find_usage_events(tenant_id),
+            repository.find_rating_history(tenant_id),
+            period_start,
+            period_end,
+        )
+    except (CustomerNotFoundError, SubscriptionNotFoundError) as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except NullUsageUnitsError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return {
+        "tenant_id": str(rating.tenant_id),
+        "period_start": rating.period_start.isoformat(),
+        "period_end": rating.period_end.isoformat(),
+        "used_units": rating.used_units,
+        "quota_units": rating.quota_units,
+        "rollover_units": rating.rollover_units,
+        "billable_units": rating.billable_units,
+        "first_tier_units": rating.first_tier_units,
+        "second_tier_units": rating.second_tier_units,
+        "overage_amount": _money(rating.overage_amount),
+    }
+
+
+@app.get("/api/tenants/{tenant_id}/usage-summary")
+def get_usage_summary(
+    tenant_id: Annotated[UUID, Path()],
+    period_start: Annotated[date, Query()],
+    period_end: Annotated[date, Query()],
+) -> list[dict]:
+    repository = _customers_repository()
+    try:
+        rows = usage_summary(
+            repository.find_usage_events(tenant_id), period_start, period_end
+        )
+    except CustomerNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except NullUsageUnitsError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return [
+        {"kind": row.kind, "event_count": row.event_count, "units": row.units}
+        for row in rows
+    ]
+
+
+@app.post("/api/tenants/{tenant_id}/rating-finalization")
+def finalize_tenant_rating(
+    tenant_id: Annotated[UUID, Path()], request: RatingFinalization
+) -> dict:
+    repository = _customers_repository()
+    try:
+        finalized = finalize_rating(
+            tenant_id,
+            repository.find_subscriptions(tenant_id),
+            repository.find_usage_events(tenant_id),
+            repository.find_rating_history(tenant_id),
+            request.period_start,
+            request.period_end,
+        )
+        stored = repository.upsert_rating_result(tenant_id, finalized)
+    except (CustomerNotFoundError, SubscriptionNotFoundError) as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except NullUsageUnitsError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    rows = [
+        {
+            "used_units": entry["used_units"],
+            "quota_units": entry["quota_units"],
+            "rollover_units": entry["rollover_units"],
+            "billable_units": entry["billable_units"],
+            "overage_amount": _money(entry["overage_amount"].to_decimal()),
+        }
+        for entry in stored
+    ]
+    return {
+        "period_id": str(finalized.period_id),
+        "result_id": str(finalized.result_id),
+        "used_units": finalized.used_units,
+        "quota_units": finalized.quota_units,
+        "rollover_units": finalized.rollover_units,
+        "billable_units": finalized.billable_units,
+        "overage_amount": _money(finalized.overage_amount),
+        "rating_result": rows,
+    }
