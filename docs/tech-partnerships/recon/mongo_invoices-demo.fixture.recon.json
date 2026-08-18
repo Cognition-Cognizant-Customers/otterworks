@@ -36,9 +36,9 @@
       "source_of_truth": "manifest INVOICE_LINE.rows; actual embedded + quarantined recomputed from the target"
     }
   ],
-  "generated_at": "2026-08-18T00:07:08Z",
+  "generated_at": "2026-08-18T00:14:33Z",
   "idempotency_rerun": {
-    "evidence": "migrate.py rerun for ns=demo; recon --emit-core recomputed from target identical before/after (sha256 7cd95e3a17e1ecd3); empty-input rerun (unseeded ns) left target untouched",
+    "evidence": "migrate.py rerun for ns=demo; recon --emit-core recomputed from target identical before/after (sha256 7cd95e3a17e1ecd3), incl. convergent prune of stale docs; empty-input rerun (unseeded ns) left target untouched",
     "performed": true,
     "result": "pass"
   },

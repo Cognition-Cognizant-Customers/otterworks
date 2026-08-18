@@ -122,6 +122,7 @@ def main() -> int:
     quarantine = client[f"ow_tp_mongodb_{ns}_quarantine"]["invoice_lines_quarantine"]
 
     n_embedded = n_quarantined = 0
+    quarantined_ids = []
     quarantine_ops = []
     cur.execute(f"SELECT {', '.join(LINE_COLS)} FROM invoice_line "
                 "WHERE batch_no = :1 ORDER BY line_id", [batch_no])
@@ -146,6 +147,7 @@ def main() -> int:
             }
             quarantine_ops.append(ReplaceOne({"_id": qdoc["_id"]}, qdoc,
                                              upsert=True))
+            quarantined_ids.append(qdoc["_id"])
             n_quarantined += 1
             if len(quarantine_ops) >= BATCH_SIZE:
                 quarantine.bulk_write(quarantine_ops, ordered=True)
@@ -167,6 +169,13 @@ def main() -> int:
             ops = []
     if ops:
         invoices.bulk_write(ops, ordered=True)
+
+    # Convergent rerun: prune documents from a prior run of this namespace
+    # whose source rows no longer exist or changed classification (e.g. a
+    # formerly-orphaned line whose header now exists). The empty-input no-op
+    # above returns before this point, so prior output stays untouched then.
+    invoices.delete_many({"ns": ns, "_id": {"$nin": list(headers)}})
+    quarantine.delete_many({"ns": ns, "_id": {"$nin": quarantined_ids}})
 
     invoices.create_index([("ns", 1), ("invoice_no", 1)], unique=True)
     invoices.create_index([("ns", 1), ("cust_id", 1)])

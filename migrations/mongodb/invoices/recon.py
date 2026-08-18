@@ -173,6 +173,8 @@ def main() -> int:
         Path(args.out).write_text(out)
     print(out)
     failed = [c["id"] for c in checks if c["result"] != "pass"]
+    if report["idempotency_rerun"]["result"] != "pass":
+        failed.append("idempotency-rerun")
     if failed or report["planted_anomaly_detections"]["missing"] \
             or report["planted_anomaly_detections"]["unexpected"]:
         print(f"[recon] FAIL: {failed}", file=sys.stderr)
