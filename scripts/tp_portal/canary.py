@@ -102,6 +102,12 @@ def cmd_deploy(args) -> int:
     canary = lam.publish_version(FunctionName=args.function,
                                  Description=args.description)["Version"]
     print(f"published canary version: {canary}")
+    # PublishVersion de-duplicates: with unchanged code and config it returns
+    # the existing version, and an alias may not weight-route to itself.
+    if canary == stable:
+        raise SystemExit(
+            f"nothing to deploy: publish returned the version already live (v{stable}); "
+            "update the code (--jar) or configuration (--env) first")
     wait_version_active(lam, args.function, canary)
 
     # Prove the gates exist and are quiet BEFORE any traffic moves.
