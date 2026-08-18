@@ -1,0 +1,161 @@
+module: rating
+rules:
+  - id: RATING-001
+    statement: >-
+      Rating selects the latest subscription overlapping the requested period
+      (starts on or before the period end and not ended before the period
+      start) and takes the quota and overage rate from that subscription's
+      plan.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [31, 41]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [quota_units]
+    confidence: high
+    scenarios: [RATING-001]
+    question: >-
+      What happens when no subscription overlaps the requested period? The
+      legacy function silently propagates NULLs through the calculation.
+    answer: >-
+      The extracted service fails closed with HTTP 404 instead of returning a
+      NULL-shaped rating row; no recorded scenario exercises the missing
+      subscription path.
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-18"
+      note: Approved for the MongoDB cutover extraction.
+  - id: RATING-002
+    statement: >-
+      Used units are the sum of usage-event units whose occurrence date falls
+      inside the period, defaulting to zero when the tenant has no events in
+      the period.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [43, 46]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [used_units]
+    confidence: high
+    scenarios: [RATING-001]
+    question: >-
+      How must a NULL usage-event units value be attributed? SQL sum() skips
+      NULL rows, which would let a NULL source amount fail open into a
+      valid-looking rating result.
+    answer: >-
+      A NULL units value inside the rated period fails closed: the extracted
+      service rejects the request with HTTP 422 rather than rating the tenant
+      as if the event were zero units.
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-18"
+      note: Approved for the MongoDB cutover extraction.
+  - id: RATING-003
+    statement: >-
+      Rollover credit is the sum of stored rollover units from finalized
+      periods starting within the three months before the rated period,
+      capped at twice the plan's included units.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [48, 56]
+    inputs: [tenant_id, period_start]
+    outputs: [rollover_units]
+    confidence: high
+    scenarios: [RATING-002]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-18"
+      note: Approved for the MongoDB cutover extraction.
+  - id: RATING-004
+    statement: >-
+      Billable units are used units minus rollover and included units,
+      floored at zero, with the first 101 billable units in the first tier
+      and the remainder in the second tier.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [57, 59]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [billable_units, first_tier_units, second_tier_units]
+    confidence: high
+    scenarios: [RATING-004, RATING-005]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-18"
+      note: Approved for the MongoDB cutover extraction.
+  - id: RATING-005
+    statement: >-
+      Overage is charged at the plan rate for first-tier units and 1.5 times
+      the plan rate for second-tier units, rounded half-up to two decimal
+      places.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [60, 60]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [overage_amount]
+    confidence: high
+    scenarios: [RATING-006]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-18"
+      note: Approved for the MongoDB cutover extraction.
+  - id: RATING-006
+    statement: >-
+      When the subscription is suspended inside the rated period, billable
+      units and the overage amount are prorated by the fraction of period
+      days on or after the suspension date; tier splits are not re-prorated.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [62, 72]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [billable_units, overage_amount]
+    confidence: high
+    scenarios: [RATING-003]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-18"
+      note: Approved for the MongoDB cutover extraction.
+  - id: RATING-007
+    statement: >-
+      The usage summary groups the period's usage events by kind, reporting
+      the event count and unit sum per kind, ordered by kind.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [79, 93]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [kind, event_count, units]
+    confidence: high
+    scenarios: [RATING-007]
+    question: >-
+      Does the summary share the NULL-units policy of usage rating even
+      though sum() would silently skip NULL rows?
+    answer: >-
+      Yes; a NULL units value inside the summarized period fails closed with
+      HTTP 422 so a summary can never silently under-report usage.
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-18"
+      note: Approved for the MongoDB cutover extraction.
+  - id: RATING-008
+    statement: >-
+      Finalization derives deterministic period and result identities from
+      the tenant and period start, upserts the period (updating the period
+      end) and the result (updating usage, rollover, billable, and overage),
+      and stores unused quota (quota minus used, floored at zero) as the
+      period's rollover units.
+    source:
+      file: services/legacy-billing/db/procs/rating.sql
+      lines: [95, 138]
+    inputs: [tenant_id, period_start, period_end]
+    outputs: [used_units, quota_units, rollover_units, billable_units, overage_amount]
+    confidence: high
+    scenarios: [RATING-008]
+    decision:
+      status: approved
+      reviewer: product-owner
+      date: "2026-08-18"
+      note: Approved for the MongoDB cutover extraction.
