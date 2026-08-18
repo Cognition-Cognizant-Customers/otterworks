@@ -86,7 +86,7 @@ def provision(n: Names) -> list[str]:
             COMMENT 'Silver: schema-validated CUSTBILL records (quarantined rows excluded)'""",
         f"""CREATE TABLE IF NOT EXISTS {n.quarantine} (
               source_file STRING, cust_id STRING, raw_line STRING,
-              reason STRING COMMENT 'invalid_cust_id | nonnumeric_amount | invalid_calendar_date | unknown_currency | unknown_record_type | trailer_count_mismatch',
+              reason STRING COMMENT 'invalid_cust_id | nonnumeric_amount | invalid_calendar_date | unknown_currency | unknown_record_type | trailer_count_mismatch | unparseable_trailer',
               detected_at TIMESTAMP)
             USING DELTA
             COMMENT 'Silver: records the legacy parser passed through or ignored silently'""",
@@ -166,15 +166,22 @@ def build_quarantine(n: Names) -> str:
     ),
     trailer_defects AS (
       SELECT b.source_file, '' AS cust_id,
-             concat('trailer=', CAST(b.trailer_count AS STRING), ' body=', CAST(b.body_count AS STRING)) AS raw_line,
-             'trailer_count_mismatch' AS reason
+             CASE WHEN b.trailer_count IS NULL
+                  THEN concat('trailer_raw=', b.trailer_raw, ' body=', CAST(b.body_count AS STRING))
+                  ELSE concat('trailer=', CAST(b.trailer_count AS STRING), ' body=', CAST(b.body_count AS STRING))
+             END AS raw_line,
+             CASE WHEN b.trailer_count IS NULL THEN 'unparseable_trailer'
+                  ELSE 'trailer_count_mismatch' END AS reason
       FROM (
         SELECT source_file,
-               max(CASE WHEN record_kind = 'TRL' THEN CAST(substr(raw_line, 4, 10) AS BIGINT) END) AS trailer_count,
+               max(CASE WHEN record_kind = 'TRL' THEN try_cast(substr(raw_line, 4, 10) AS BIGINT) END) AS trailer_count,
+               max(CASE WHEN record_kind = 'TRL' THEN substr(raw_line, 4, 10) END) AS trailer_raw,
+               count_if(record_kind = 'TRL') AS trailer_lines,
                count_if(record_kind = 'BODY') AS body_count
         FROM {n.bronze} GROUP BY source_file
       ) b
-      WHERE b.trailer_count IS NOT NULL AND b.trailer_count <> b.body_count
+      WHERE (b.trailer_count IS NOT NULL AND b.trailer_count <> b.body_count)
+         OR (b.trailer_lines > 0 AND b.trailer_count IS NULL)
     )
     SELECT source_file, cust_id, raw_line, reason, current_timestamp()
     FROM (SELECT * FROM row_defects UNION ALL SELECT * FROM trailer_defects)"""
