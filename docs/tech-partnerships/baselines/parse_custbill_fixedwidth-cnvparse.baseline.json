@@ -1,0 +1,78 @@
+{
+  "unit": "parse_custbill_fixedwidth",
+  "namespace": "cnvparse",
+  "generated_by": "scripts/tp_dbx/parse_unit.py baseline (deterministic legacy run, TZ=UTC LC_ALL=C)",
+  "seed": "gen_sample_data.pl cnvparse (deterministic per namespace) + parse_unit.py plant",
+  "planted_anomalies": [
+    {
+      "file": "CUSTBILL_CNVPARSE_001.dat",
+      "kind": "invalid_calendar_date",
+      "cust_id": "C000819323",
+      "body_row": 7,
+      "detail": "bill_date=20241131"
+    },
+    {
+      "file": "CUSTBILL_CNVPARSE_002.dat",
+      "kind": "nonnumeric_amount",
+      "cust_id": "C000547142",
+      "body_row": 13,
+      "detail": "amount=0000012X4567"
+    },
+    {
+      "file": "CUSTBILL_CNVPARSE_003.dat",
+      "kind": "trailer_count_mismatch",
+      "cust_id": "",
+      "body_row": null,
+      "detail": "trailer=53 body=50"
+    }
+  ],
+  "legacy_passthrough": [
+    {
+      "file": "CUSTBILL_CNVPARSE_001.dat",
+      "body_row": 7,
+      "legacy_emitted": "C000819323|INITECH INDUSTRIES|2024-11-31|4403.75|USD|01"
+    },
+    {
+      "file": "CUSTBILL_CNVPARSE_002.dat",
+      "body_row": 13,
+      "legacy_emitted": "C000547142|ACME GMBH|2024-09-08|0.12|USD|01"
+    }
+  ],
+  "files": {
+    "CUSTBILL_CNVPARSE_001.dat": {
+      "legacy_psv_rows": 50,
+      "legacy_psv_sha256_sorted": "ca0f3569a678bb7c8a008f3258ca59c44b89c5b260243c87372567008cd916dd",
+      "valid_rows": 49
+    },
+    "CUSTBILL_CNVPARSE_002.dat": {
+      "legacy_psv_rows": 50,
+      "legacy_psv_sha256_sorted": "c6aea316e45de7dc242738a7a4654d6175d20406dbc87e55b8b897af3e1cb147",
+      "valid_rows": 49
+    },
+    "CUSTBILL_CNVPARSE_003.dat": {
+      "legacy_psv_rows": 50,
+      "legacy_psv_sha256_sorted": "33c6091594ac30cb5b7fadba29cda4e0b6d09592ee566a05361808f01dde6e27",
+      "valid_rows": 50
+    }
+  },
+  "checks": {
+    "input_sha256/CUSTBILL_CNVPARSE_001.dat": "c587c3c37d2e632a38e3c2e9237ad42e776330bdc3074aec10fec558b2e24d61",
+    "file_valid_rows/CUSTBILL_CNVPARSE_001.dat": "49",
+    "file_valid_sha256/CUSTBILL_CNVPARSE_001.dat": "50309a7683e7cbf4f3afd3ef9fd245078349ec540caceb890c1d3235be0cd992",
+    "input_sha256/CUSTBILL_CNVPARSE_002.dat": "e09de04a9d87b88c61c626d1c7c712abb3d8f5e5cb7d00c107f5861c660f2b4c",
+    "file_valid_rows/CUSTBILL_CNVPARSE_002.dat": "49",
+    "file_valid_sha256/CUSTBILL_CNVPARSE_002.dat": "14fbc729f3421856f4c09049ed434d5ba66edd0675524d37e190fddacc6ccdb3",
+    "input_sha256/CUSTBILL_CNVPARSE_003.dat": "2ac9f36f2d3ad038658a112828488c17d68d0bb76051e15106742e2663a7e142",
+    "file_valid_rows/CUSTBILL_CNVPARSE_003.dat": "50",
+    "file_valid_sha256/CUSTBILL_CNVPARSE_003.dat": "33c6091594ac30cb5b7fadba29cda4e0b6d09592ee566a05361808f01dde6e27",
+    "totals/EUR/01": "39|17022759",
+    "totals/EUR/02": "8|4178239",
+    "totals/GBP/01": "39|18161816",
+    "totals/GBP/02": "12|7305353",
+    "totals/USD/01": "42|23312711",
+    "totals/USD/02": "8|2407794",
+    "grand_total": "148|72388672",
+    "files_ingested": "3",
+    "quarantine_rows": "3"
+  }
+}

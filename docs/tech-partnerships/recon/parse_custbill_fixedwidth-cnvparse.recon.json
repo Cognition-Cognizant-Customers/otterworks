@@ -1,0 +1,184 @@
+{
+  "kind": "recon-report",
+  "unit": "parse_custbill_fixedwidth",
+  "namespace": "cnvparse",
+  "generated_at": "2026-08-18T01:03:23Z",
+  "run_mode": "live",
+  "checks": [
+    {
+      "id": "file_valid_rows/CUSTBILL_CNVPARSE_001.dat",
+      "expected": "49",
+      "actual": "49",
+      "source_of_truth": "deterministic legacy run of parse_custbill_fixedwidth.sh (committed baseline)",
+      "result": "pass"
+    },
+    {
+      "id": "file_valid_rows/CUSTBILL_CNVPARSE_002.dat",
+      "expected": "49",
+      "actual": "49",
+      "source_of_truth": "deterministic legacy run of parse_custbill_fixedwidth.sh (committed baseline)",
+      "result": "pass"
+    },
+    {
+      "id": "file_valid_rows/CUSTBILL_CNVPARSE_003.dat",
+      "expected": "50",
+      "actual": "50",
+      "source_of_truth": "deterministic legacy run of parse_custbill_fixedwidth.sh (committed baseline)",
+      "result": "pass"
+    },
+    {
+      "id": "file_valid_sha256/CUSTBILL_CNVPARSE_001.dat",
+      "expected": "50309a7683e7cbf4f3afd3ef9fd245078349ec540caceb890c1d3235be0cd992",
+      "actual": "50309a7683e7cbf4f3afd3ef9fd245078349ec540caceb890c1d3235be0cd992",
+      "source_of_truth": "deterministic legacy run of parse_custbill_fixedwidth.sh (committed baseline)",
+      "result": "pass"
+    },
+    {
+      "id": "file_valid_sha256/CUSTBILL_CNVPARSE_002.dat",
+      "expected": "14fbc729f3421856f4c09049ed434d5ba66edd0675524d37e190fddacc6ccdb3",
+      "actual": "14fbc729f3421856f4c09049ed434d5ba66edd0675524d37e190fddacc6ccdb3",
+      "source_of_truth": "deterministic legacy run of parse_custbill_fixedwidth.sh (committed baseline)",
+      "result": "pass"
+    },
+    {
+      "id": "file_valid_sha256/CUSTBILL_CNVPARSE_003.dat",
+      "expected": "33c6091594ac30cb5b7fadba29cda4e0b6d09592ee566a05361808f01dde6e27",
+      "actual": "33c6091594ac30cb5b7fadba29cda4e0b6d09592ee566a05361808f01dde6e27",
+      "source_of_truth": "deterministic legacy run of parse_custbill_fixedwidth.sh (committed baseline)",
+      "result": "pass"
+    },
+    {
+      "id": "files_ingested",
+      "expected": "3",
+      "actual": "3",
+      "source_of_truth": "deterministic legacy run of parse_custbill_fixedwidth.sh (committed baseline)",
+      "result": "pass"
+    },
+    {
+      "id": "grand_total",
+      "expected": "148|72388672",
+      "actual": "148|72388672",
+      "source_of_truth": "deterministic legacy run of parse_custbill_fixedwidth.sh (committed baseline)",
+      "result": "pass"
+    },
+    {
+      "id": "input_sha256/CUSTBILL_CNVPARSE_001.dat",
+      "expected": "c587c3c37d2e632a38e3c2e9237ad42e776330bdc3074aec10fec558b2e24d61",
+      "actual": "c587c3c37d2e632a38e3c2e9237ad42e776330bdc3074aec10fec558b2e24d61",
+      "source_of_truth": "deterministic legacy run of parse_custbill_fixedwidth.sh (committed baseline)",
+      "result": "pass"
+    },
+    {
+      "id": "input_sha256/CUSTBILL_CNVPARSE_002.dat",
+      "expected": "e09de04a9d87b88c61c626d1c7c712abb3d8f5e5cb7d00c107f5861c660f2b4c",
+      "actual": "e09de04a9d87b88c61c626d1c7c712abb3d8f5e5cb7d00c107f5861c660f2b4c",
+      "source_of_truth": "deterministic legacy run of parse_custbill_fixedwidth.sh (committed baseline)",
+      "result": "pass"
+    },
+    {
+      "id": "input_sha256/CUSTBILL_CNVPARSE_003.dat",
+      "expected": "2ac9f36f2d3ad038658a112828488c17d68d0bb76051e15106742e2663a7e142",
+      "actual": "2ac9f36f2d3ad038658a112828488c17d68d0bb76051e15106742e2663a7e142",
+      "source_of_truth": "deterministic legacy run of parse_custbill_fixedwidth.sh (committed baseline)",
+      "result": "pass"
+    },
+    {
+      "id": "quarantine_rows",
+      "expected": "3",
+      "actual": "3",
+      "source_of_truth": "deterministic legacy run of parse_custbill_fixedwidth.sh (committed baseline)",
+      "result": "pass"
+    },
+    {
+      "id": "totals/EUR/01",
+      "expected": "39|17022759",
+      "actual": "39|17022759",
+      "source_of_truth": "deterministic legacy run of parse_custbill_fixedwidth.sh (committed baseline)",
+      "result": "pass"
+    },
+    {
+      "id": "totals/EUR/02",
+      "expected": "8|4178239",
+      "actual": "8|4178239",
+      "source_of_truth": "deterministic legacy run of parse_custbill_fixedwidth.sh (committed baseline)",
+      "result": "pass"
+    },
+    {
+      "id": "totals/GBP/01",
+      "expected": "39|18161816",
+      "actual": "39|18161816",
+      "source_of_truth": "deterministic legacy run of parse_custbill_fixedwidth.sh (committed baseline)",
+      "result": "pass"
+    },
+    {
+      "id": "totals/GBP/02",
+      "expected": "12|7305353",
+      "actual": "12|7305353",
+      "source_of_truth": "deterministic legacy run of parse_custbill_fixedwidth.sh (committed baseline)",
+      "result": "pass"
+    },
+    {
+      "id": "totals/USD/01",
+      "expected": "42|23312711",
+      "actual": "42|23312711",
+      "source_of_truth": "deterministic legacy run of parse_custbill_fixedwidth.sh (committed baseline)",
+      "result": "pass"
+    },
+    {
+      "id": "totals/USD/02",
+      "expected": "8|2407794",
+      "actual": "8|2407794",
+      "source_of_truth": "deterministic legacy run of parse_custbill_fixedwidth.sh (committed baseline)",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "bronze/silver/quarantine rebuilt end-to-end; all 18 checks byte-identical"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      [
+        "CUSTBILL_CNVPARSE_001.dat",
+        "invalid_calendar_date",
+        "C000819323"
+      ],
+      [
+        "CUSTBILL_CNVPARSE_002.dat",
+        "nonnumeric_amount",
+        "C000547142"
+      ],
+      [
+        "CUSTBILL_CNVPARSE_003.dat",
+        "trailer_count_mismatch",
+        ""
+      ]
+    ],
+    "actual_set": [
+      [
+        "CUSTBILL_CNVPARSE_001.dat",
+        "invalid_calendar_date",
+        "C000819323"
+      ],
+      [
+        "CUSTBILL_CNVPARSE_002.dat",
+        "nonnumeric_amount",
+        "C000547142"
+      ],
+      [
+        "CUSTBILL_CNVPARSE_003.dat",
+        "trailer_count_mismatch",
+        ""
+      ]
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "legacy stdout log line ('parsed N records (trailer says M)') is not reproduced; the trailer mismatch is a quarantine row instead",
+    "legacy output file ordering (input order) is not asserted; per-record bytes are compared as sorted sets via sha256",
+    "legacy .done rename and /tmp lockfile side effects have no platform equivalent"
+  ]
+}
