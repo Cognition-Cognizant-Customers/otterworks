@@ -33,7 +33,7 @@
   },
   "empty_input_semantics": {
     "action": "write-empty-result",
-    "details": "legacy writes a header-only report on an existing-but-empty parsed dir and exits 0, but dies on a missing dir (opendir || die); the converted job mirrors both: an existing input directory with no CUSTBILL files clears the (ns, report_date) summary slice, writes a header-only CSV artifact and records the delivery, while a missing or unlistable input directory fails the run before any destructive delete. land --allow-empty materialises the empty directory."
+    "details": "legacy runs mkdir -p on the parsed dir before opendir, so an empty OR missing parsed dir both yield a header-only report and exit 0 (the opendir die is only reachable for an existing-but-unlistable dir); the converted job mirrors this: it creates the input directory if absent, an input directory with no CUSTBILL files clears the (ns, report_date) summary slice, writes a header-only CSV artifact and records the delivery, and a directory that exists but cannot be listed fails the run before any destructive delete. land --allow-empty materialises the empty directory explicitly."
   },
   "trigger_granularity": "per-batch"
 }

@@ -129,11 +129,13 @@ parsed_dir = f"{landing}/{input_subdir}"
 
 # COMMAND ----------
 # Silver load: replace this namespace's slice from the landed .psv files.
-# The legal empty-input case is an input directory that EXISTS and contains no
-# CUSTBILL files (`land --allow-empty` creates the empty directory). A missing
-# or unlistable directory aborts before the destructive slice DELETE below,
-# exactly like the legacy `opendir(...) || die`.
+# Legacy parity: the Perl runs `mkdir -p $PARSED` before `opendir || die`, so a
+# missing parsed dir yields an empty file list and a header-only report, never
+# a die. Mirror that: create the directory if absent, then list it. A dir that
+# exists but cannot be listed (permissions) still aborts before the destructive
+# slice DELETE below, like the opendir die.
 # Legacy input selection: grep { /^CUSTBILL.*\.psv$/ } readdir(D)
+dbutils.fs.mkdirs(parsed_dir)
 psv_files = [f for f in dbutils.fs.ls(parsed_dir)
              if f.name.startswith("CUSTBILL") and f.name.endswith(".psv")]
 
