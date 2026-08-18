@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "finance_excel_report",
   "namespace": "cnvfinance",
-  "generated_at": "2026-08-18T00:59:46Z",
+  "generated_at": "2026-08-18T01:10:21Z",
   "run_mode": "live",
   "checks": [
     {
@@ -188,7 +188,7 @@
           "54737.57"
         ]
       ],
-      "source_of_truth": "jobs run 92313070241914 rerun then re-read ow_tp.gold.finance_billing_summary_cnvfinance",
+      "source_of_truth": "jobs run 162403868455142 rerun then re-read ow_tp.gold.finance_billing_summary_cnvfinance",
       "result": "pass"
     },
     {

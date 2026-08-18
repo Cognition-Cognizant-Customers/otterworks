@@ -204,7 +204,7 @@ rows = spark.sql(f"""
     SELECT currency, record_type, record_count, total_amount
     FROM {summary}
     WHERE ns = '{ns}' AND report_date = DATE'{report_date}'
-    ORDER BY currency, record_type_code
+    ORDER BY concat(currency, '|', record_type_code)
 """).collect()
 lines = ["Currency,RecordType,RecordCount,TotalAmount"]
 for r in rows:
@@ -364,7 +364,7 @@ def summary_grid(dbx: Databricks, n: dict, report_date: str) -> list[list]:
     return dbx.sql_ok(
         f"SELECT currency, record_type, record_count, CAST(total_amount AS STRING) "
         f"FROM {n['summary']} WHERE ns = '{n['ns']}' AND report_date = DATE'{report_date}' "
-        f"ORDER BY currency, record_type_code").rows
+        f"ORDER BY concat(currency, '|', record_type_code)").rows
 
 
 def cmd_recon(dbx: Databricks, args) -> int:
