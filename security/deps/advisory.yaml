@@ -1,0 +1,32 @@
+# The advisory the dependency remediation loop gates on.
+#
+# `vulnerable` is an interval: introduced <= version < fixed. The gate reads this
+# file only — it never hard-codes a version — so pointing the loop at a different
+# advisory is a data change, not a code change.
+id: CVE-2022-42889
+artifact: org.apache.commons:commons-text
+title: Apache Commons Text interpolation RCE ("Text4Shell")
+summary: >
+  StringSubstitutor's default interpolator resolves the script:, dns: and url:
+  prefixed lookups. A template built from attacker-influenced text can therefore
+  execute a script expression or reach the network, so any code path that feeds
+  untrusted or operator-editable text through the default interpolator is
+  exploitable.
+vulnerable:
+  introduced: "1.5"
+  fixed: "1.10.0"
+secure_candidates:
+  - version: "1.10.0"
+    note: >
+      Nearest non-vulnerable release. Keeps the createInterpolator() API and the
+      strict-undefined-variable setter; drops script:, dns: and url: from the
+      default lookup set (they must be opted into explicitly).
+  - version: "1.4"
+    note: >
+      Last release before the prefixed lookups were added to the default
+      interpolator. Downgrade target when a newer release cannot be taken:
+      createInterpolator() and setEnableUndefinedVariableException() do not exist
+      yet, so calling code has to be adapted.
+references:
+  - https://nvd.nist.gov/vuln/detail/CVE-2022-42889
+  - https://lists.apache.org/thread/n2bd4vob99gz0wqto9j5s5j5w9dhbb8t

@@ -11,6 +11,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +35,16 @@ public class CsvReportGenerator {
 
     private static final Logger logger = LoggerFactory.getLogger(CsvReportGenerator.class);
 
+    private final ReportHeaderRenderer headerRenderer;
+
+    public CsvReportGenerator() {
+        this(new ReportHeaderRenderer());
+    }
+
+    public CsvReportGenerator(ReportHeaderRenderer headerRenderer) {
+        this.headerRenderer = headerRenderer;
+    }
+
     /**
      * Generate a CSV report file.
      *
@@ -53,13 +64,19 @@ public class CsvReportGenerator {
                 Set<String> columns = new LinkedHashSet<>(data.get(0).keySet());
                 String[] header = columns.toArray(new String[0]);
 
-                // Write metadata comments
-                writer.writeNext(new String[]{"# OtterWorks Report: " + report.getReportName()});
-                writer.writeNext(new String[]{"# Generated: " + ReportDateUtils.toDisplayString(new Date())});
-                writer.writeNext(new String[]{"# Period: "
-                        + ReportDateUtils.toDisplayString(report.getDateFrom())
-                        + " to " + ReportDateUtils.toDisplayString(report.getDateTo())});
-                writer.writeNext(new String[]{"# Rows: " + data.size()});
+                // Write metadata comments from the configured banner templates
+                Map<String, String> bannerVars = new LinkedHashMap<String, String>();
+                bannerVars.put("reportName", report.getReportName());
+                bannerVars.put("generated", ReportDateUtils.toDisplayString(new Date()));
+                bannerVars.put("periodFrom", ReportDateUtils.toDisplayString(report.getDateFrom()));
+                bannerVars.put("periodTo", ReportDateUtils.toDisplayString(report.getDateTo()));
+                bannerVars.put("rows", String.valueOf(data.size()));
+
+                writer.writeNext(new String[]{headerRenderer.title(bannerVars)});
+                writer.writeNext(new String[]{headerRenderer.generated(bannerVars)});
+                writer.writeNext(new String[]{headerRenderer.period(bannerVars)});
+                writer.writeNext(new String[]{headerRenderer.rows(bannerVars)});
+                writer.writeNext(new String[]{headerRenderer.footer()});
                 writer.writeNext(new String[]{""});
 
                 // Write header row

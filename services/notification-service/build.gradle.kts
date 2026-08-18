@@ -29,6 +29,7 @@ val otelVersion = "1.36.0"
 val jedisVersion = "5.1.3"
 val kotlinVersion = "1.9.23"
 val mockkVersion = "1.13.10"
+val commonsTextVersion = "1.9"
 
 dependencies {
     // Ktor Server
@@ -53,6 +54,9 @@ dependencies {
     implementation("aws.sdk.kotlin:sns:$awsSdkVersion")
     implementation("aws.sdk.kotlin:ses:$awsSdkVersion")
     implementation("aws.sdk.kotlin:dynamodb:$awsSdkVersion")
+
+    // Notification template interpolation
+    implementation("org.apache.commons:commons-text:$commonsTextVersion")
 
     // Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
@@ -92,4 +96,9 @@ kotlin {
 
 tasks.withType<Test> {
     useJUnit()
+    // Passthrough for the dependency transcript harness (security/deps); without these
+    // properties the emitter test skips itself.
+    listOf("ow.deps.cases", "ow.deps.observed").forEach { key ->
+        System.getProperty(key)?.let { systemProperty(key, it) }
+    }
 }

@@ -1,0 +1,57 @@
+{
+  "module": "notification-service",
+  "advisory": "CVE-2022-42889",
+  "artifact": "org.apache.commons:commons-text",
+  "cases_sha256": "4f33c94623421e8289c7f1f5bfaa9ec58f9d25f248583142727cf269cdb24b7e",
+  "recorded_at": "2026-08-17T22:51:57.613323+00:00",
+  "reason": "baseline: commons-text 1.9 behavior before CVE-2022-42889 remediation",
+  "cases": [
+    {
+      "id": "notification-actor-variable",
+      "outcome": "ok",
+      "value": "A file has been shared with you by user user-17."
+    },
+    {
+      "id": "notification-two-variables",
+      "outcome": "ok",
+      "value": "User user-17 added a comment on document doc-9."
+    },
+    {
+      "id": "notification-unknown-variable-left-alone",
+      "outcome": "ok",
+      "value": "Hello {{missingVariable}}."
+    },
+    {
+      "id": "footer-base64-and-const",
+      "outcome": "ok",
+      "value": "<!-- This is an automated message | OtterWorks Notification Service -->"
+    },
+    {
+      "id": "configured-sys-property",
+      "outcome": "ok",
+      "value": "sep=/"
+    },
+    {
+      "id": "configured-file-lookup",
+      "outcome": "ok",
+      "value": "footer-from-file"
+    },
+    {
+      "id": "attack-script-lookup",
+      "outcome": "error",
+      "error_type": "java.lang.IllegalArgumentException",
+      "error_message": "Error in script engine [javascript] evaluating script [3+4]."
+    },
+    {
+      "id": "attack-dns-lookup",
+      "outcome": "ok",
+      "value": "127.0.0.1"
+    },
+    {
+      "id": "attack-url-lookup",
+      "outcome": "error",
+      "error_type": "java.lang.IllegalArgumentException",
+      "error_message": "Error looking up URL [http://127.0.0.1:1/otterworks] with Charset [UTF-8]."
+    }
+  ]
+}

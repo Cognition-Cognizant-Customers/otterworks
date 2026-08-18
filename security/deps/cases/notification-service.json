@@ -1,0 +1,71 @@
+{
+  "module": "notification-service",
+  "notes": [
+    "Templates use the service's own {{ }} delimiters.",
+    "policy=contract: byte-identical before and after remediation.",
+    "policy=attack: must stop resolving, leaving attack_marker literal in the output."
+  ],
+  "cases": [
+    {
+      "id": "notification-actor-variable",
+      "policy": "contract",
+      "kind": "notification",
+      "template": "A file has been shared with you by user {{actorId}}.",
+      "vars": { "actorId": "user-17" }
+    },
+    {
+      "id": "notification-two-variables",
+      "policy": "contract",
+      "kind": "notification",
+      "template": "User {{actorId}} added a comment on document {{documentId}}.",
+      "vars": { "actorId": "user-17", "documentId": "doc-9" }
+    },
+    {
+      "id": "notification-unknown-variable-left-alone",
+      "policy": "contract",
+      "kind": "notification",
+      "template": "Hello {{missingVariable}}.",
+      "vars": {}
+    },
+    {
+      "id": "footer-base64-and-const",
+      "policy": "contract",
+      "kind": "configured",
+      "template": "<!-- {{base64Decoder:VGhpcyBpcyBhbiBhdXRvbWF0ZWQgbWVzc2FnZQ==}} | {{const:com.otterworks.notification.template.NotificationTemplates.SIGNATURE}} -->"
+    },
+    {
+      "id": "configured-sys-property",
+      "policy": "contract",
+      "kind": "configured",
+      "template": "sep={{sys:file.separator}}"
+    },
+    {
+      "id": "configured-file-lookup",
+      "policy": "contract",
+      "kind": "configured",
+      "template": "{{file:UTF-8:@FIXTURE_PATH@}}",
+      "fixture_content": "footer-from-file"
+    },
+    {
+      "id": "attack-script-lookup",
+      "policy": "attack",
+      "kind": "configured",
+      "template": "{{script:javascript:3+4}}",
+      "attack_marker": "{{script:javascript:3+4}}"
+    },
+    {
+      "id": "attack-dns-lookup",
+      "policy": "attack",
+      "kind": "configured",
+      "template": "{{dns:address|127.0.0.1}}",
+      "attack_marker": "{{dns:address|127.0.0.1}}"
+    },
+    {
+      "id": "attack-url-lookup",
+      "policy": "attack",
+      "kind": "configured",
+      "template": "{{url:UTF-8:http://127.0.0.1:1/otterworks}}",
+      "attack_marker": "{{url:UTF-8:http://127.0.0.1:1/otterworks}}"
+    }
+  ]
+}

@@ -39,6 +39,8 @@
         <commons-io.version>2.6</commons-io.version>
         <!-- LEGACY: Guava 28.0 (2019, many CVEs). Upgrade target: 33+ -->
         <guava.version>28.0-jre</guava.version>
+        <!-- Commons Text 1.9 — report banner/footer interpolation -->
+        <commons-text.version>1.9</commons-text.version>
     </properties>
 
     <dependencies>
@@ -110,6 +112,13 @@
             <groupId>commons-lang</groupId>
             <artifactId>commons-lang</artifactId>
             <version>${commons-lang.version}</version>
+        </dependency>
+
+        <!-- Commons Text — report banner and footer interpolation -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-text</artifactId>
+            <version>${commons-text.version}</version>
         </dependency>
 
         <!-- LEGACY: Commons IO 2.6 (outdated) -->

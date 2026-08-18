@@ -1,6 +1,8 @@
 package com.otterworks.notification.template
 
 import com.otterworks.notification.model.SqsNotificationMessage
+import org.apache.commons.text.StringSubstitutor
+import org.apache.commons.text.lookup.StringLookupFactory
 
 data class RenderedNotification(
     val title: String,
@@ -9,7 +11,29 @@ data class RenderedNotification(
     val emailBody: String,
 )
 
+/**
+ * Renders notification bodies from operator-managed templates.
+ *
+ * Interpolation is delegated to Commons Text so that operators can use the prefixed
+ * lookups (dates, branding blobs, environment metadata) in a template without a code
+ * change; the `{{ }}` delimiters are kept for backwards compatibility with the
+ * templates that were hand-substituted before.
+ */
 object NotificationTemplates {
+
+    private const val TOKEN_PREFIX = "{{"
+    private const val TOKEN_SUFFIX = "}}"
+
+    /** Signature line appended to operator footers; referenced by templates via `const:`. */
+    const val SIGNATURE = "OtterWorks Notification Service"
+
+    /**
+     * Operator-managed email footer. No event variables are in scope here, only the
+     * default prefixed lookups.
+     */
+    private const val FOOTER_TEMPLATE =
+        "<!-- {{base64Decoder:VGhpcyBpcyBhbiBhdXRvbWF0ZWQgbWVzc2FnZQ==}}" +
+            " | {{const:com.otterworks.notification.template.NotificationTemplates.SIGNATURE}} -->"
 
     private data class Template(
         val titleTemplate: String,
@@ -105,15 +129,32 @@ object NotificationTemplates {
             title = replaceVariables(template.titleTemplate, variables),
             message = replaceVariables(template.messageTemplate, variables),
             emailSubject = replaceVariables(template.emailSubjectTemplate, variables),
-            emailBody = replaceVariables(template.emailBodyTemplate, variables),
+            emailBody = replaceVariables(template.emailBodyTemplate, variables) + "\n" + footer(),
         )
     }
 
-    private fun replaceVariables(template: String, variables: Map<String, String>): String {
-        var result = template
-        for ((key, value) in variables) {
-            result = result.replace("{{$key}}", value)
-        }
-        return result
+    /** Resolve the operator footer against the default prefixed lookups only. */
+    fun resolveOperatorString(template: String): String {
+        val substitutor = StringSubstitutor.createInterpolator()
+            .setVariablePrefix(TOKEN_PREFIX)
+            .setVariableSuffix(TOKEN_SUFFIX)
+        return substitutor.replace(template)
+    }
+
+    fun footer(): String = resolveOperatorString(FOOTER_TEMPLATE)
+
+    /**
+     * Render a notification template against event variables. Event-supplied values are
+     * inserted literally — a value that happens to contain `{{...}}` is data, not a
+     * template, so resolved values are never re-scanned.
+     */
+    fun replaceVariables(template: String, variables: Map<String, String>): String {
+        val substitutor = StringSubstitutor(
+            StringLookupFactory.INSTANCE.interpolatorStringLookup(variables),
+            TOKEN_PREFIX,
+            TOKEN_SUFFIX,
+            StringSubstitutor.DEFAULT_ESCAPE,
+        ).setDisableSubstitutionInValues(true)
+        return substitutor.replace(template)
     }
 }

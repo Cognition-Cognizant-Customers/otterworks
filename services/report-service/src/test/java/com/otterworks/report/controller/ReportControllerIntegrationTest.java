@@ -9,6 +9,7 @@ import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.junit4.SpringRunner;
@@ -17,6 +18,7 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import java.util.Date;
 
+import static org.junit.Assert.assertEquals;
 import static org.hamcrest.Matchers.anyOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
@@ -203,14 +205,19 @@ public class ReportControllerIntegrationTest {
         Long id = createReportAndReturnId("Download Pending Report",
                 ReportCategory.USAGE_ANALYTICS, ReportType.PDF, "integration-user-8");
 
+        MvcResult download = mockMvc.perform(get("/api/v1/reports/" + id + "/download"))
+                .andReturn();
+
+        // Status is read after the download so it cannot go stale in the wrong direction:
+        // generation only moves forward, so a report still pending here was pending during
+        // the download too.
         MvcResult result = mockMvc.perform(get("/api/v1/reports/" + id))
                 .andReturn();
         String statusVal = objectMapper.readTree(
                 result.getResponse().getContentAsString()).get("status").asText();
 
         if ("PENDING".equals(statusVal) || "GENERATING".equals(statusVal)) {
-            mockMvc.perform(get("/api/v1/reports/" + id + "/download"))
-                    .andExpect(status().isConflict());
+            assertEquals(HttpStatus.CONFLICT.value(), download.getResponse().getStatus());
         }
     }
 

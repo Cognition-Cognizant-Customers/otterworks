@@ -12,11 +12,18 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class HealthController {
 
+    private final PortalBrandingSettings branding;
+
+    public HealthController(PortalBrandingSettings branding) {
+        this.branding = branding;
+    }
+
     @GetMapping("/health")
     public Map<String, String> health() {
         Map<String, String> body = new LinkedHashMap<>();
         body.put("status", "UP");
         body.put("service", "legacy-portal");
+        body.put("banner", branding.bannerText());
         return body;
     }
 }
