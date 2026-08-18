@@ -1,0 +1,65 @@
+{
+  "kind": "recon-report",
+  "unit": "mongo_customers",
+  "namespace": "demo",
+  "generated_at": "2026-08-18T01:29:49Z",
+  "run_mode": "live",
+  "checks": [
+    {
+      "id": "customers-count",
+      "expected": 25000,
+      "actual": 25000,
+      "source_of_truth": "testdata/legacy/manifests/demo.json",
+      "result": "pass"
+    },
+    {
+      "id": "customers-checksum",
+      "expected": "4f92feef2ad58dbab30e289957931928",
+      "actual": "4f92feef2ad58dbab30e289957931928",
+      "source_of_truth": "testdata/legacy/manifests/demo.json (ordered PK+CUR_BAL_AMT md5, recomputed from target)",
+      "result": "pass"
+    },
+    {
+      "id": "eav-folded",
+      "expected": 8333,
+      "actual": 8333,
+      "source_of_truth": "testdata/legacy/manifests/demo.json (sum of attributes entries across documents)",
+      "result": "pass"
+    },
+    {
+      "id": "csv-to-arrays",
+      "expected": 36712,
+      "actual": 36712,
+      "source_of_truth": "source non-NULL RELATED_ACCT_IDS/PROMO_CODES_CSV rows (persisted by migrate.py at extract time) minus quarantined malformed lists, vs array-valued fields recomputed from target documents",
+      "result": "pass"
+    },
+    {
+      "id": "dates-to-bson",
+      "expected": 24950,
+      "actual": 24950,
+      "source_of_truth": "source non-NULL SIGNUP_DT rows (persisted by migrate.py at extract time) minus quarantined dirty dates, vs BSON-date signup_dt recomputed from target documents",
+      "result": "pass"
+    }
+  ],
+  "values_recomputed_from_target": true,
+  "idempotency_rerun": {
+    "performed": true,
+    "result": "pass",
+    "evidence": "actual live rerun 2026-08-18: all collection counts identical before/after (customers=25000, quarantine=81); migrate output identical"
+  },
+  "planted_anomaly_detections": {
+    "expected_set": [
+      "dirty_dates:50",
+      "malformed_csv_lists:31"
+    ],
+    "actual_set": [
+      "dirty_dates:50",
+      "malformed_csv_lists:31"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "unverified_paths": [
+    "invalid-UTF-8 quarantine path (invalid_encoding): no invalid bytes are planted in the estate and the Oracle driver decodes AL32UTF8 before the migration sees values, so this guard is untested end-to-end"
+  ]
+}

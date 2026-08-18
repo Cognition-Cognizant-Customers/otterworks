@@ -171,8 +171,9 @@ def main() -> int:
             "version_gaps": gap_docs,
             "orphaned_snapshots": orphaned,
         },
-        "unverified_paths": [
-            "live Atlas run (run_mode=live) — parent-owned validation window",
+        "unverified_paths": ([
+            "live Atlas run — parent-owned validation window",
+        ] if args.run_mode != "live" else []) + [
             "invalid-UTF-8 quarantine path — Postgres UTF-8 source cannot produce it; not exercised",
             "SCALE=full volumes — only SCALE=demo exercised",
         ],

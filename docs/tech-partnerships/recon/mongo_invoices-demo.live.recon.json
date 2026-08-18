@@ -1,0 +1,64 @@
+{
+  "checks": [
+    {
+      "actual": 18750,
+      "expected": 18750,
+      "id": "invoices-count",
+      "result": "pass",
+      "source_of_truth": "manifest demo.json targets.oracle.OW_BILLING.INVOICE_HEADER.rows; actual recomputed from target ow_tp_mongodb_demo.invoices"
+    },
+    {
+      "actual": 149963,
+      "expected": 149963,
+      "id": "lines-embedded",
+      "result": "pass",
+      "source_of_truth": "manifest INVOICE_LINE.rows minus manifest planted orphaned_rows count (contract acceptance check); actual recomputed by unwinding embedded lines from the target"
+    },
+    {
+      "actual": "88a66751f0b08b476b492105a2efc537",
+      "expected": "88a66751f0b08b476b492105a2efc537",
+      "id": "lines-checksum",
+      "result": "pass",
+      "source_of_truth": "manifest INVOICE_LINE.checksum; actual recomputed from the target as ordered md5 of sorted (line_id, amount) pairs over embedded lines + quarantined orphans (every source line exactly once)"
+    },
+    {
+      "actual": 37,
+      "expected": 37,
+      "id": "orphans-quarantined",
+      "result": "pass",
+      "source_of_truth": "manifest planted_anomalies orphaned_rows count; actual recomputed from ow_tp_mongodb_demo_quarantine.invoice_lines_quarantine"
+    },
+    {
+      "actual": 150000,
+      "expected": 150000,
+      "id": "all-lines-accounted-once",
+      "result": "pass",
+      "source_of_truth": "manifest INVOICE_LINE.rows; actual embedded + quarantined recomputed from the target"
+    }
+  ],
+  "generated_at": "2026-08-18T01:36:55Z",
+  "idempotency_rerun": {
+    "evidence": "run 1 vs rerun recomputed from target: invoices 18750==18750, embedded lines 149963==149963, line checksum 88a66751f0b08b476b492105a2efc537==88a66751f0b08b476b492105a2efc537, quarantined orphans 37==37",
+    "performed": true,
+    "result": "pass"
+  },
+  "kind": "recon-report",
+  "namespace": "demo",
+  "planted_anomaly_detections": {
+    "actual_set": [
+      "orphaned_rows:oracle.OW_BILLING.INVOICE_LINE:count=37"
+    ],
+    "expected_set": [
+      "orphaned_rows:oracle.OW_BILLING.INVOICE_LINE:count=37"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "run_mode": "live",
+  "unit": "mongo_invoices",
+  "unverified_paths": [
+    "invalid-UTF-8 byte quarantine path (unexercised: the seeded namespace contains no undecodable rows and the AL32UTF8 driver decode raises before any row-level quarantine could run)",
+    "NULL-amount quarantine path (seeded namespace contains no NULL amounts; policy implemented but unexercised)"
+  ],
+  "values_recomputed_from_target": true
+}

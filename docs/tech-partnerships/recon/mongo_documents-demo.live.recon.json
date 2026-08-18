@@ -1,0 +1,177 @@
+{
+  "anomaly_enumeration": {
+    "orphaned_snapshots": [
+      {
+        "document_id": "c708f278-f52a-4cdc-af0f-580df58b1c2e",
+        "snapshot_id": "60bfc8b6-ef1b-4ecf-bf98-49267e67054d"
+      },
+      {
+        "document_id": "e5c8ea48-bab7-4613-95be-1f728308e340",
+        "snapshot_id": "9e6c9aa9-2522-4008-b8de-d94a2964917c"
+      },
+      {
+        "document_id": "b74dd4d1-26ab-4214-8324-2d395106fed1",
+        "snapshot_id": "ae8c479d-8de3-46f8-bfc8-a942df697f2f"
+      },
+      {
+        "document_id": "7fdd092a-f910-409b-81d4-fda8d1abf9e2",
+        "snapshot_id": "cce98042-94a1-4e9a-98b9-4b1069a76fa1"
+      },
+      {
+        "document_id": "bd856a34-9754-40b6-8523-02b7a4aa3ea6",
+        "snapshot_id": "e0de8004-a5ec-472f-b008-150408e83560"
+      },
+      {
+        "document_id": "7d0902fa-48db-4295-b42d-d3ee00dce90d",
+        "snapshot_id": "e61553f8-e4ea-4caf-b7d7-863fa9547358"
+      }
+    ],
+    "version_gaps": [
+      {
+        "document_id": "4e73d26c-1b17-4c29-a972-723f6a81d5a6",
+        "missing_versions": [
+          3
+        ]
+      },
+      {
+        "document_id": "54f581c5-c84d-4e03-9d49-8a53205d5468",
+        "missing_versions": [
+          6
+        ]
+      },
+      {
+        "document_id": "55651142-8ab8-4fc3-93f7-2f53b8924e79",
+        "missing_versions": [
+          2
+        ]
+      },
+      {
+        "document_id": "5908ebb5-dbb7-45f5-b6c7-0e35421f3512",
+        "missing_versions": [
+          2
+        ]
+      },
+      {
+        "document_id": "83683854-d16e-42ff-a6cd-dba0778c8ebc",
+        "missing_versions": [
+          5
+        ]
+      },
+      {
+        "document_id": "91e0ef71-06e8-4176-8634-b3d37c66435b",
+        "missing_versions": [
+          3
+        ]
+      },
+      {
+        "document_id": "9e712908-6721-4e4a-837d-a235146eb26b",
+        "missing_versions": [
+          4
+        ]
+      },
+      {
+        "document_id": "cf385bde-c00f-43f4-ba79-5e734af2a082",
+        "missing_versions": [
+          3
+        ]
+      },
+      {
+        "document_id": "d03d71b1-a7e5-494a-bb12-c1e79866b084",
+        "missing_versions": [
+          9
+        ]
+      },
+      {
+        "document_id": "fb541d99-8a4a-4911-a0e3-934d4bbf312d",
+        "missing_versions": [
+          2
+        ]
+      }
+    ]
+  },
+  "checks": [
+    {
+      "actual": 2000,
+      "expected": 2000,
+      "id": "documents-count",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/demo.json vs recomputed from MongoDB (live)"
+    },
+    {
+      "actual": "e70001cf6110014dab6e1d80adb40285",
+      "expected": "e70001cf6110014dab6e1d80adb40285",
+      "id": "documents-checksum",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/demo.json vs recomputed from MongoDB (live)"
+    },
+    {
+      "actual": 13876,
+      "expected": 13876,
+      "id": "versions-embedded-count",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/demo.json vs recomputed from MongoDB (live)"
+    },
+    {
+      "actual": "13bc033b2780a0569d7f2217e85d7303",
+      "expected": "13bc033b2780a0569d7f2217e85d7303",
+      "id": "versions-checksum",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/demo.json vs recomputed from MongoDB (live)"
+    },
+    {
+      "actual": 390,
+      "expected": 390,
+      "id": "snapshots-count",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/demo.json vs recomputed from MongoDB (live)"
+    },
+    {
+      "actual": "abe69084205723d6ad79e825b8c752dd",
+      "expected": "abe69084205723d6ad79e825b8c752dd",
+      "id": "snapshots-checksum",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/demo.json vs recomputed from MongoDB (live)"
+    },
+    {
+      "actual": "version_gaps:10",
+      "expected": "version_gaps:10",
+      "id": "version-gaps-reported",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/demo.json planted_anomalies vs recomputed from MongoDB (live)"
+    },
+    {
+      "actual": "orphaned_snapshots:6",
+      "expected": "orphaned_snapshots:6",
+      "id": "orphaned-snapshots-reported",
+      "result": "pass",
+      "source_of_truth": "testdata/legacy/manifests/demo.json planted_anomalies vs recomputed from MongoDB (live)"
+    }
+  ],
+  "generated_at": "2026-08-01T00:00:00Z",
+  "idempotency_rerun": {
+    "evidence": "actual live rerun: counts and quarantine identical before/after (documents=2000, versions=13876, snapshots quarantined=6)",
+    "performed": true,
+    "result": "pass"
+  },
+  "kind": "recon-report",
+  "namespace": "demo",
+  "planted_anomaly_detections": {
+    "actual_set": [
+      "orphaned_snapshots:6",
+      "version_gaps:10"
+    ],
+    "expected_set": [
+      "orphaned_snapshots:6",
+      "version_gaps:10"
+    ],
+    "missing": [],
+    "unexpected": []
+  },
+  "run_mode": "live",
+  "unit": "mongo_documents",
+  "unverified_paths": [
+    "invalid-UTF-8 quarantine path \u2014 Postgres UTF-8 source cannot produce it; not exercised",
+    "SCALE=full volumes \u2014 only SCALE=demo exercised"
+  ],
+  "values_recomputed_from_target": true
+}

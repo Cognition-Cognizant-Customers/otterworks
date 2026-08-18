@@ -1,0 +1,20 @@
+# MongoDB data-migration wave rollup — NS=demo (run branch tp-run/mongodb-20260817T233337Z)
+
+Live validation window against Atlas cluster `otterworks-demo`, databases
+`ow_tp_mongodb_demo` / `ow_tp_mongodb_demo_quarantine`. All values recomputed
+from the target after migration; idempotency proven by an actual rerun
+(collection counts and checksums identical before/after). Recon reports are
+schema-gated (`make tp-validate-recon`) and committed alongside this file.
+
+| Workload | Documents migrated | Checksum match | Planted anomalies detected | Child session |
+|---|---|---|---|---|
+| customers | 25,000 (EAV folded: 8,333; quarantined: 81) | match (`4f92feef2ad58dbab30e289957931928`) | 2/2 exact set (malformed_csv_lists:31, dirty_dates:50) | [session](https://partner-workshops.devinenterprise.com/sessions/60ec93d12c8441899e524fa4e13d4a1e) — [PR #1162](https://github.com/Cognition-Partner-Workshops/otterworks/pull/1162) |
+| invoices | 18,750 (embedded lines: 149,963; quarantined orphans: 37) | match (`88a66751f0b08b476b492105a2efc537`, every source line accounted once) | 1/1 exact set (orphaned_rows:37) | [session](https://partner-workshops.devinenterprise.com/sessions/7f698e069bbf431a92cae0510b65448b) — [PR #1164](https://github.com/Cognition-Partner-Workshops/otterworks/pull/1164) |
+| documents | 2,000 (embedded versions: 13,876; snapshots: 384 embedded + 6 quarantined) | match (all three: docs `e70001cf…`, versions `13bc033b…`, snapshots `abe69084…`) | 2/2 exact set (version_gaps:10, orphaned_snapshots:6) | [session](https://partner-workshops.devinenterprise.com/sessions/171410ba3e6d49a5a79acf6e389feb53) — [PR #1163](https://github.com/Cognition-Partner-Workshops/otterworks/pull/1163) |
+| files | 10,000 (quarantined orphaned metadata: 40) | match (`db614663b2c6d41141cae82261b416d5`) | 1/1 exact set (orphaned_metadata:40); missing_hours:1 is a declared contractual coverage_gap (S3 events prefix not ingested by this track) | [session](https://partner-workshops.devinenterprise.com/sessions/539d2ea8e32d47aaaa7e59052775c638) — [PR #1166](https://github.com/Cognition-Partner-Workshops/otterworks/pull/1166) |
+
+Run-level anomaly attribution: 7 planted anomaly kinds in the baseline manifest;
+6 detected exactly by units, 1 (`missing_hours`) declared as a coverage gap in
+`mongo_files.json`. No missing, no unexpected detections in any unit.
+
+NS=demo is left up and browsable on Atlas per run policy.

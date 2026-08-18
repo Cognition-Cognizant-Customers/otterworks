@@ -167,9 +167,10 @@ def main() -> int:
             "missing": sorted(set(expected_set) - set(actual_set)),
             "unexpected": sorted(set(actual_set) - set(expected_set)),
         },
-        "unverified_paths": [
+        "unverified_paths": ([
             "live Atlas run (run_mode=fixture only; parent owns the live "
             "validation window)",
+        ] if args.run_mode != "live" else []) + [
             "invalid-UTF-8 byte quarantine path (unexercised: the seeded "
             "namespace contains no undecodable rows and the AL32UTF8 driver "
             "decode raises before any row-level quarantine could run)",
