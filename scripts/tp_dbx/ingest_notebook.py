@@ -75,8 +75,13 @@ for name in sorted(os.listdir(DROP)):
     src = os.path.join(DROP, name)
     if not os.path.isfile(src):
         continue
+    stat_before = os.stat(src)
     with open(src, "rb") as fh:
         data = fh.read()
+    stat_after = os.stat(src)
+    if (stat_before.st_size, stat_before.st_mtime) != (stat_after.st_size, stat_after.st_mtime) or stat_after.st_size != len(data):
+        print(f"skipping {name}: still being written (size/mtime changed during read)")
+        continue  # leave in drop for the next poll, like the legacy settle check
     sha = hashlib.sha256(data).hexdigest()
 
     staged_path = os.path.join(INCOMING, name)
@@ -104,6 +109,10 @@ for name in sorted(os.listdir(DROP)):
     )
     df.write.mode("append").saveAsTable(RAW_TBL)
 
+    stat_final = os.stat(src)
+    if (stat_final.st_size, stat_final.st_mtime) != (stat_after.st_size, stat_after.st_mtime):
+        print(f"not deleting {name}: source changed after read; staged copy is content-addressed, next poll re-ingests")
+        continue
     os.remove(src)  # delete from drop only after stage+archive+registration
     ingested.append({"file_name": name, "sha256": sha, "bytes": len(data)})
     print(f"ingested {name} ({len(data)} bytes, sha256={sha})")

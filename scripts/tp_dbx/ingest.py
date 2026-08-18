@@ -142,7 +142,7 @@ def collect_state(dbx: Databricks, ns: str, golden: dict, source_dir: Path) -> l
             "id": f"staged_sha/{name}",
             "expected": sha,
             "actual": actual_sha,
-            "source_of_truth": "golden baseline from deterministic legacy sftp_ingest_poll.ksh run (NS=cnvingest); actual sha256 recomputed from Files API GET of the staged volume file",
+            "source_of_truth": f"golden baseline from deterministic legacy sftp_ingest_poll.ksh run (NS={ns}); actual sha256 recomputed from Files API GET of the staged volume file",
             "result": "pass" if actual_sha == sha else "fail",
         })
         arc = f"{name}.{sha[:16]}"
@@ -157,7 +157,7 @@ def collect_state(dbx: Databricks, ns: str, golden: dict, source_dir: Path) -> l
         line_count = len(split_records(local.read_bytes()))
         row = dbx.sql_ok(
             f"SELECT sha256, bytes, line_count FROM ow_tp.bronze.custbill_ingest_files_{ns} "
-            f"WHERE ns = '{ns}' AND file_name = '{esc(name)}'"
+            f"WHERE ns = '{ns}' AND file_name = '{esc(name)}' AND sha256 = '{esc(sha)}'"
         ).rows
         expected_reg = f"{sha}|{item['bytes']}|{line_count}|1row"
         actual_reg = f"{row[0][0]}|{row[0][1]}|{row[0][2]}|{len(row)}row" if row else "MISSING"
@@ -170,7 +170,7 @@ def collect_state(dbx: Databricks, ns: str, golden: dict, source_dir: Path) -> l
         })
         raw = dbx.sql_ok(
             f"SELECT COUNT(*) FROM ow_tp.bronze.custbill_raw_{ns} "
-            f"WHERE ns = '{ns}' AND file_name = '{esc(name)}' AND sha256 = '{sha}'"
+            f"WHERE ns = '{ns}' AND file_name = '{esc(name)}' AND sha256 = '{esc(sha)}'"
         ).scalar()
         checks.append({
             "id": f"bronze_raw_count/{name}",
@@ -207,6 +207,10 @@ def cmd_recon(dbx: Databricks, args) -> int:
 
     # The rerun is not optional: the recon-report schema pins
     # idempotency_rerun.performed to true and requires a result.
+    drop_before_rerun = sorted(
+        e["name"] for e in dbx.list_dir(f"{base(args.ns)}/drop")
+        if e["name"].startswith("CUSTBILL") and e["name"].endswith(".dat")
+    )
     run_job(dbx, args.ns)
     rerun_checks = collect_state(dbx, args.ns, golden, source_dir)
     identical = [(c["id"], c["actual"]) for c in checks] == [(c["id"], c["actual"]) for c in rerun_checks]
@@ -214,7 +218,11 @@ def cmd_recon(dbx: Databricks, args) -> int:
     idempotency = {
         "performed": True,
         "result": "pass" if identical and rerun_green else "fail",
-        "evidence": f"job re-run with empty drop; all {len(rerun_checks)} checks recomputed from the platform and byte-identical to the first pass" if identical else "rerun state diverged from first pass",
+        "evidence": (
+            f"job re-run (drop contained {len(drop_before_rerun)} matching file(s) before rerun: {drop_before_rerun}); "
+            f"all {len(rerun_checks)} checks recomputed from the platform and byte-identical to the first pass"
+            if identical else "rerun state diverged from first pass"
+        ),
     }
 
     expected_set = [[p, "not_staged"] for p in ("NOTCUSTBILL_x.txt", "CUSTBILL_PARTIAL_999.dat.filepart")]

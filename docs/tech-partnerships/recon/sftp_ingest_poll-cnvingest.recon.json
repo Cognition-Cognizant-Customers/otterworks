@@ -2,7 +2,7 @@
   "kind": "recon-report",
   "unit": "sftp_ingest_poll",
   "namespace": "cnvingest",
-  "generated_at": "2026-08-18T00:21:26Z",
+  "generated_at": "2026-08-18T00:29:35Z",
   "run_mode": "live",
   "checks": [
     {
@@ -87,7 +87,7 @@
   "idempotency_rerun": {
     "performed": true,
     "result": "pass",
-    "evidence": "job re-run with empty drop; all 11 checks recomputed from the platform and byte-identical to the first pass"
+    "evidence": "job re-run (drop contained 0 matching file(s) before rerun: []); all 11 checks recomputed from the platform and byte-identical to the first pass"
   },
   "planted_anomaly_detections": {
     "expected_set": [
