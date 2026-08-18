@@ -1,0 +1,39 @@
+{
+  "unit": "finance_excel_report",
+  "source_artifact_path": "etl/legacy-extra/jobs/finance_excel_report.pl",
+  "target_objects": [
+    "ow_tp.silver.custbill_records_cnvfinance",
+    "ow_tp.gold.finance_billing_summary_cnvfinance",
+    "ow_tp.gold.finance_report_delivery_cnvfinance",
+    "/Volumes/ow_tp/bronze/landing/cnvfinance/finance_report/",
+    "job:ow_tp_finance_cnvfinance"
+  ],
+  "golden_baseline_location": "deterministic legacy run: OTTERWORKS_LEGACY_ROOT=<root> make legacy-etl-gen-data NS=cnvfinance; make legacy-etl-run JOB=sftp_ingest_poll; JOB=parse_custbill_fixedwidth; TP_FAKETIME='2026-01-15 00:00:00' JOB=finance_excel_report -> reports/finance_billing_20260115.csv (sha256 ef1ad83223ebf1e902d57b15126f63fed91510b3228e8883d3c1bb6f03cadde0); empty-input baseline: same finance job on a fresh empty root -> header-only CSV (sha256 4cbc4f1506b7f1cc335237cc23573b18944f38c349f11a94d47157ee464671ea)",
+  "acceptance_checks": [
+    {"id": "finance-01-grid-to-the-cent", "description": "gold.finance_billing_summary_cnvfinance for the report date contains exactly the golden CSV's currency x record-type grid: same 6 rows, record_count equal and total_amount equal to the cent (exact decimal comparison, no float tolerance)."},
+    {"id": "finance-02-crossfoot", "description": "gold totals equal an aggregation recomputed directly from silver.custbill_records_cnvfinance, and sum(record_count) equals the golden total (100), so gold cannot drift from silver."},
+    {"id": "finance-03-verified-delivery", "description": "gold.finance_report_delivery_cnvfinance has exactly one row per (ns, report_date) whose status records verified volume delivery and the explicit absence of a mail transport - never a pretended send."},
+    {"id": "finance-04-truthful-artifact", "description": "the emitted artifact is a real CSV with a .csv extension whose bytes equal the golden legacy report; the CSV-renamed-.xls defect is not reproduced."},
+    {"id": "finance-05-idempotent-rerun", "description": "an actual job rerun replaces the (ns, report_date) slice: the summary grid is identical before and after and row count does not grow."},
+    {"id": "finance-06-empty-input", "description": "a run over an empty input directory succeeds, yields zero summary rows for its report date and a header-only artifact byte-identical to the empty-input golden baseline."}
+  ],
+  "planted_anomalies": [
+    {"id": "unknown-record-type", "description": "record type outside 01/02 must surface as UNKNOWN(rt), as the legacy report did", "status": "coverage_gap", "reason": "gen_sample_data.pl emits only record types 01 and 02 for this namespace; the UNKNOWN(rt) mapping is implemented and covered by code but never exercised by planted data."},
+    {"id": "empty-customer-id", "description": "rows with an empty customer id are skipped and attributed, never aggregated", "status": "coverage_gap", "reason": "the deterministic generator never emits an empty customer id; the skip-and-count path is implemented but not exercised by planted data."}
+  ],
+  "encoding_policy": {
+    "input_encoding": "ASCII (parser output is 7-bit; generator emits ASCII only)",
+    "byte_transparency": "landing transport is byte-exact (Files API PUT of the .psv bytes); parsing decodes as UTF-8 which is a superset of the ASCII the chain produces",
+    "invalid_bytes": "none can occur from the deterministic generator; a genuinely invalid byte would surface as a malformed row and be counted, not silently coerced"
+  },
+  "malformed_record_policy": {
+    "extra_delimited_fields": "tolerate-and-attribute",
+    "null_attribution": "tolerate-and-attribute",
+    "details": "matching perl's list-assignment from split(/|/), fields beyond the sixth are ignored; rows with an empty/NULL customer id are skipped and counted in the delivery audit (legacy: next if $cust eq '') ; non-numeric amounts are excluded and counted rather than coerced to 0 the way perl += would - NULL or missing values never fail open into a plausible row."
+  },
+  "empty_input_semantics": {
+    "action": "write-empty-result",
+    "details": "legacy writes a header-only report on an empty parsed dir and exits 0; the converted job clears the (ns, report_date) summary slice, writes a header-only CSV artifact and records the delivery."
+  },
+  "trigger_granularity": "per-batch"
+}
